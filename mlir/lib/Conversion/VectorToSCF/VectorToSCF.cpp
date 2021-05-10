@@ -115,9 +115,11 @@ public:
         VectorType::get(vectorType.getShape().take_back(minorRank),
                         vectorType.getElementType());
     /// Memref of minor vector type is used for individual transfers.
-    memRefMinorVectorType = MemRefType::get(
-        majorVectorType.getShape(), minorVectorType, {},
-        xferOp.getShapedType().template cast<MemRefType>().getMemorySpace());
+    memRefMinorVectorType =
+        MemRefType::get(majorVectorType.getShape(), minorVectorType, {},
+                        xferOp.getShapedType()
+                            .template cast<MemRefType>()
+                            .getMemorySpaceAsInt());
   }
 
   LogicalResult doReplace();
@@ -713,7 +715,7 @@ struct ConvertVectorToSCFPass
     auto *context = getFunction().getContext();
     populateVectorToSCFConversionPatterns(
         patterns, context, VectorTransferToSCFOptions().setUnroll(fullUnroll));
-    applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
+    (void)applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
   }
 };
 

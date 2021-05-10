@@ -53,11 +53,13 @@ public:
     aarch64_be,     // AArch64 (big endian): aarch64_be
     aarch64_32,     // AArch64 (little endian) ILP32: aarch64_32
     arc,            // ARC: Synopsys ARC
+    aurora,         // Aurora: NEC's Aurora vector engine
     avr,            // AVR: Atmel AVR microcontroller
     bpfel,          // eBPF or extended BPF or 64-bit BPF (little endian)
     bpfeb,          // eBPF or extended BPF or 64-bit BPF (big endian)
     csky,           // CSKY: csky
     hexagon,        // Hexagon: hexagon
+    m68k,           // M68k: Motorola 680x0 family
     mips,           // MIPS: mips, mipsallegrex, mipsr6
     mipsel,         // MIPSEL: mipsel, mipsallegrexe, mipsr6el
     mips64,         // MIPS64: mips64, mips64r6, mipsn32, mipsn32r6
@@ -151,6 +153,7 @@ public:
     IBM,
     ImaginationTechnologies,
     MipsTechnologies,
+    NEC,
     NVIDIA,
     CSR,
     Myriad,
@@ -190,6 +193,7 @@ public:
     PS4,
     ELFIAMCU,
     TvOS,       // Apple tvOS
+    VEORT,      // NEC Aurora Vector Engine Offload
     WatchOS,    // Apple watchOS
     Mesa3D,
     Contiki,
@@ -209,6 +213,7 @@ public:
     GNUEABI,
     GNUEABIHF,
     GNUX32,
+    GNUILP32,
     CODE16,
     EABI,
     EABIHF,
@@ -728,7 +733,10 @@ public:
     assert(PointerWidth == 64 || PointerWidth == 32);
     if (!isAArch64())
       return false;
-    return isArch64Bit() ? PointerWidth == 64 : PointerWidth == 32;
+    return getArch() == Triple::aarch64_32 ||
+                   getEnvironment() == Triple::GNUILP32
+               ? PointerWidth == 32
+               : PointerWidth == 64;
   }
 
   /// Tests whether the target is MIPS 32-bit (little and big endian).

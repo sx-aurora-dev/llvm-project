@@ -919,7 +919,7 @@ namespace llvm {
 
     /// Returns true if the target allows unaligned memory accesses of the
     /// specified type. Returns whether it is "fast" in the last argument.
-    bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, unsigned Align,
+    bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, Align Alignment,
                                         MachineMemOperand::Flags Flags,
                                         bool *Fast) const override;
 
@@ -1408,6 +1408,8 @@ namespace llvm {
                                    SDValue Addr, SelectionDAG &DAG)
                                    const override;
 
+    Align getPrefLoopAlignment(MachineLoop *ML) const override;
+
   protected:
     std::pair<const TargetRegisterClass *, uint8_t>
     findRepresentativeClass(const TargetRegisterInfo *TRI,
@@ -1584,10 +1586,6 @@ namespace llvm {
     EmitVAARGWithCustomInserter(MachineInstr &MI, MachineBasicBlock *MBB) const;
 
     /// Utility function to emit the xmm reg save portion of va_start.
-    MachineBasicBlock *
-    EmitVAStartSaveXMMRegsWithCustomInserter(MachineInstr &BInstr,
-                                             MachineBasicBlock *BB) const;
-
     MachineBasicBlock *EmitLoweredCascadedSelect(MachineInstr &MI1,
                                                  MachineInstr &MI2,
                                                  MachineBasicBlock *BB) const;

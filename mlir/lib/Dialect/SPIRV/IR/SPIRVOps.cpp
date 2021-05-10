@@ -24,7 +24,10 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Interfaces/CallInterfaces.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/bit.h"
 
@@ -898,6 +901,16 @@ static void buildLogicalBinaryOp(OpBuilder &builder, OperationState &state,
   state.addOperands({lhs, rhs});
 }
 
+static void buildLogicalUnaryOp(OpBuilder &builder, OperationState &state,
+                                Value value) {
+  Type boolType = builder.getI1Type();
+  if (auto vecType = value.getType().dyn_cast<VectorType>())
+    boolType = VectorType::get(vecType.getShape(), boolType);
+  state.addTypes(boolType);
+
+  state.addOperands(value);
+}
+
 //===----------------------------------------------------------------------===//
 // spv.AccessChainOp
 //===----------------------------------------------------------------------===//
@@ -928,7 +941,7 @@ static Type getElementPtrType(Type type, ValueRange indices, Location baseLoc) {
       Operation *op = indexSSA.getDefiningOp();
       if (!op) {
         emitError(baseLoc, "'spv.AccessChain' op index must be an "
-                           "integer spv.constant to access "
+                           "integer spv.Constant to access "
                            "element of spv.struct");
         return nullptr;
       }
@@ -937,7 +950,7 @@ static Type getElementPtrType(Type type, ValueRange indices, Location baseLoc) {
       // integer literals of other bitwidths.
       if (failed(extractValueFromConstOp(op, index))) {
         emitError(baseLoc,
-                  "'spv.AccessChain' index must be an integer spv.constant to "
+                  "'spv.AccessChain' index must be an integer spv.Constant to "
                   "access element of spv.struct, but provided ")
             << op->getName();
         return nullptr;
@@ -1051,7 +1064,7 @@ static LogicalResult verify(spirv::AddressOfOp addressOfOp) {
       SymbolTable::lookupNearestSymbolFrom(addressOfOp->getParentOp(),
                                            addressOfOp.variable()));
   if (!varOp) {
-    return addressOfOp.emitOpError("expected spv.globalVariable symbol");
+    return addressOfOp.emitOpError("expected spv.GlobalVariable symbol");
   }
   if (addressOfOp.pointer().getType() != varOp.type()) {
     return addressOfOp.emitOpError(
@@ -1470,7 +1483,7 @@ static void print(spirv::CompositeInsertOp compositeInsertOp,
 }
 
 //===----------------------------------------------------------------------===//
-// spv.constant
+// spv.Constant
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseConstantOp(OpAsmParser &parser, OperationState &state) {
@@ -1581,6 +1594,25 @@ spirv::ConstantOp spirv::ConstantOp::getZero(Type type, Location loc,
     return builder.create<spirv::ConstantOp>(
         loc, type, builder.getIntegerAttr(type, APInt(width, 0)));
   }
+  if (auto floatType = type.dyn_cast<FloatType>()) {
+    return builder.create<spirv::ConstantOp>(
+        loc, type, builder.getFloatAttr(floatType, 0.0));
+  }
+  if (auto vectorType = type.dyn_cast<VectorType>()) {
+    Type elemType = vectorType.getElementType();
+    if (elemType.isa<IntegerType>()) {
+      return builder.create<spirv::ConstantOp>(
+          loc, type,
+          DenseElementsAttr::get(vectorType,
+                                 IntegerAttr::get(elemType, 0.0).getValue()));
+    }
+    if (elemType.isa<FloatType>()) {
+      return builder.create<spirv::ConstantOp>(
+          loc, type,
+          DenseFPElementsAttr::get(vectorType,
+                                   FloatAttr::get(elemType, 0.0).getValue()));
+    }
+  }
 
   llvm_unreachable("unimplemented types for ConstantOp::getZero()");
 }
@@ -1594,6 +1626,25 @@ spirv::ConstantOp spirv::ConstantOp::getOne(Type type, Location loc,
                                                builder.getBoolAttr(true));
     return builder.create<spirv::ConstantOp>(
         loc, type, builder.getIntegerAttr(type, APInt(width, 1)));
+  }
+  if (auto floatType = type.dyn_cast<FloatType>()) {
+    return builder.create<spirv::ConstantOp>(
+        loc, type, builder.getFloatAttr(floatType, 1.0));
+  }
+  if (auto vectorType = type.dyn_cast<VectorType>()) {
+    Type elemType = vectorType.getElementType();
+    if (elemType.isa<IntegerType>()) {
+      return builder.create<spirv::ConstantOp>(
+          loc, type,
+          DenseElementsAttr::get(vectorType,
+                                 IntegerAttr::get(elemType, 1.0).getValue()));
+    }
+    if (elemType.isa<FloatType>()) {
+      return builder.create<spirv::ConstantOp>(
+          loc, type,
+          DenseFPElementsAttr::get(vectorType,
+                                   FloatAttr::get(elemType, 1.0).getValue()));
+    }
   }
 
   llvm_unreachable("unimplemented types for ConstantOp::getOne()");
@@ -1908,7 +1959,7 @@ Operation::operand_range spirv::FunctionCallOp::getArgOperands() {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.globalVariable
+// spv.GlobalVariable
 //===----------------------------------------------------------------------===//
 
 void spirv::GlobalVariableOp::build(OpBuilder &builder, OperationState &state,
@@ -2016,7 +2067,7 @@ static LogicalResult verify(spirv::GlobalVariableOp varOp) {
     if (!initOp ||
         !isa<spirv::GlobalVariableOp, spirv::SpecConstantOp>(initOp)) {
       return varOp.emitOpError("initializer must be result of a "
-                               "spv.specConstant or spv.globalVariable op");
+                               "spv.SpecConstant or spv.GlobalVariable op");
     }
   }
 
@@ -2246,7 +2297,7 @@ static LogicalResult verify(spirv::LoadOp loadOp) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.loop
+// spv.mlir.loop
 //===----------------------------------------------------------------------===//
 
 void spirv::LoopOp::build(OpBuilder &builder, OperationState &state) {
@@ -2412,12 +2463,12 @@ static LogicalResult verify(spirv::MergeOp mergeOp) {
   auto *parentOp = mergeOp->getParentOp();
   if (!parentOp || !isa<spirv::SelectionOp, spirv::LoopOp>(parentOp))
     return mergeOp.emitOpError(
-        "expected parent op to be 'spv.selection' or 'spv.loop'");
+        "expected parent op to be 'spv.mlir.selection' or 'spv.mlir.loop'");
 
   Block &parentLastBlock = mergeOp->getParentRegion()->back();
   if (mergeOp.getOperation() != parentLastBlock.getTerminator())
-    return mergeOp.emitOpError(
-        "can only be used in the last block of 'spv.selection' or 'spv.loop'");
+    return mergeOp.emitOpError("can only be used in the last block of "
+                               "'spv.mlir.selection' or 'spv.mlir.loop'");
   return success();
 }
 
@@ -2505,7 +2556,7 @@ static void print(spirv::ModuleOp moduleOp, OpAsmPrinter &printer) {
     elidedAttrs.push_back(spirv::ModuleOp::getVCETripleAttrName());
   }
 
-  printer.printOptionalAttrDictWithKeyword(moduleOp.getAttrs(), elidedAttrs);
+  printer.printOptionalAttrDictWithKeyword(moduleOp->getAttrs(), elidedAttrs);
   printer.printRegion(moduleOp.body(), /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/false);
 }
@@ -2542,7 +2593,7 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
           auto variableOp =
               table.lookup<spirv::GlobalVariableOp>(varSymRef.getValue());
           if (!variableOp) {
-            return entryPointOp.emitError("expected spv.globalVariable "
+            return entryPointOp.emitError("expected spv.GlobalVariable "
                                           "symbol reference instead of'")
                    << varSymRef << "'";
           }
@@ -2593,7 +2644,7 @@ static LogicalResult verify(spirv::ReferenceOfOp referenceOfOp) {
 
   if (!specConstOp && !specConstCompositeOp)
     return referenceOfOp.emitOpError(
-        "expected spv.specConstant or spv.SpecConstantComposite symbol");
+        "expected spv.SpecConstant or spv.SpecConstantComposite symbol");
 
   if (referenceOfOp.reference().getType() != constType)
     return referenceOfOp.emitOpError("result type mismatch with the referenced "
@@ -2645,7 +2696,7 @@ static LogicalResult verify(spirv::SelectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.selection
+// spv.mlir.selection
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseSelectionOp(OpAsmParser &parser,
@@ -2763,7 +2814,7 @@ spirv::SelectionOp spirv::SelectionOp::createIfThen(
 }
 
 //===----------------------------------------------------------------------===//
-// spv.specConstant
+// spv.SpecConstant
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseSpecConstantOp(OpAsmParser &parser,
@@ -2949,7 +3000,7 @@ static LogicalResult verify(spirv::VariableOp varOp) {
   if (varOp.storage_class() != spirv::StorageClass::Function) {
     return varOp.emitOpError(
         "can only be used to model function-level variables. Use "
-        "spv.globalVariable for module-level variables.");
+        "spv.GlobalVariable for module-level variables.");
   }
 
   auto pointerType = varOp.pointer().getType().cast<spirv::PointerType>();
@@ -2965,7 +3016,7 @@ static LogicalResult verify(spirv::VariableOp varOp) {
                         spirv::ReferenceOfOp, // for spec constant
                         spirv::AddressOfOp>(initOp))
       return varOp.emitOpError("initializer must be the result of a "
-                               "constant or spv.globalVariable op");
+                               "constant or spv.GlobalVariable op");
   }
 
   // TODO: generate these strings using ODS.
@@ -2980,9 +3031,39 @@ static LogicalResult verify(spirv::VariableOp varOp) {
   for (const auto &attr : {descriptorSetName, bindingName, builtInName}) {
     if (op->getAttr(attr))
       return varOp.emitOpError("cannot have '")
-             << attr << "' attribute (only allowed in spv.globalVariable)";
+             << attr << "' attribute (only allowed in spv.GlobalVariable)";
   }
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// spv.VectorShuffle
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(spirv::VectorShuffleOp shuffleOp) {
+  VectorType resultType = shuffleOp.getType().cast<VectorType>();
+
+  size_t numResultElements = resultType.getNumElements();
+  if (numResultElements != shuffleOp.components().size())
+    return shuffleOp.emitOpError("result type element count (")
+           << numResultElements
+           << ") mismatch with the number of component selectors ("
+           << shuffleOp.components().size() << ")";
+
+  size_t totalSrcElements =
+      shuffleOp.vector1().getType().cast<VectorType>().getNumElements() +
+      shuffleOp.vector2().getType().cast<VectorType>().getNumElements();
+
+  for (const auto &selector :
+       shuffleOp.components().getAsValueRange<IntegerAttr>()) {
+    uint32_t index = selector.getZExtValue();
+    if (index >= totalSrcElements &&
+        index != std::numeric_limits<uint32_t>().max())
+      return shuffleOp.emitOpError("component selector ")
+             << index << " out of range: expected to be in [0, "
+             << totalSrcElements << ") or 0xffffffff";
+  }
   return success();
 }
 
@@ -3309,7 +3390,7 @@ static LogicalResult verifyMatrixTimesMatrix(spirv::MatrixTimesMatrixOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.specConstantComposite
+// spv.SpecConstantComposite
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseSpecConstantCompositeOp(OpAsmParser &parser,
@@ -3449,6 +3530,81 @@ static LogicalResult verify(spirv::SpecConstantOperationOp constOp) {
              spirv::SpecConstantOperationOp>(operand.getDefiningOp()))
       return constOp.emitOpError(
           "invalid operand, must be defined by a constant operation");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// spv.GLSL.FrexpStruct
+//===----------------------------------------------------------------------===//
+static LogicalResult
+verifyGLSLFrexpStructOp(spirv::GLSLFrexpStructOp frexpStructOp) {
+  spirv::StructType structTy =
+      frexpStructOp.result().getType().dyn_cast<spirv::StructType>();
+
+  if (structTy.getNumElements() != 2)
+    return frexpStructOp.emitError("result type must be a struct  type "
+                                   "with two memebers");
+
+  Type significandTy = structTy.getElementType(0);
+  Type exponentTy = structTy.getElementType(1);
+  VectorType exponentVecTy = exponentTy.dyn_cast<VectorType>();
+  IntegerType exponentIntTy = exponentTy.dyn_cast<IntegerType>();
+
+  Type operandTy = frexpStructOp.operand().getType();
+  VectorType operandVecTy = operandTy.dyn_cast<VectorType>();
+  FloatType operandFTy = operandTy.dyn_cast<FloatType>();
+
+  if (significandTy != operandTy)
+    return frexpStructOp.emitError("member zero of the resulting struct type "
+                                   "must be the same type as the operand");
+
+  if (exponentVecTy) {
+    IntegerType componentIntTy =
+        exponentVecTy.getElementType().dyn_cast<IntegerType>();
+    if (!(componentIntTy && componentIntTy.getWidth() == 32))
+      return frexpStructOp.emitError(
+          "member one of the resulting struct type must"
+          "be a scalar or vector of 32 bit integer type");
+  } else if (!(exponentIntTy && exponentIntTy.getWidth() == 32)) {
+    return frexpStructOp.emitError(
+        "member one of the resulting struct type "
+        "must be a scalar or vector of 32 bit integer type");
+  }
+
+  // Check that the two member types have the same number of components
+  if (operandVecTy && exponentVecTy &&
+      (exponentVecTy.getNumElements() == operandVecTy.getNumElements()))
+    return success();
+
+  if (operandFTy && exponentIntTy)
+    return success();
+
+  return frexpStructOp.emitError(
+      "member one of the resulting struct type "
+      "must have the same number of components as the operand type");
+}
+
+//===----------------------------------------------------------------------===//
+// spv.GLSL.Ldexp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(spirv::GLSLLdexpOp ldexpOp) {
+  Type significandType = ldexpOp.x().getType();
+  Type exponentType = ldexpOp.exp().getType();
+
+  if (significandType.isa<FloatType>() != exponentType.isa<IntegerType>())
+    return ldexpOp.emitOpError("operands must both be scalars or vectors");
+
+  auto getNumElements = [](Type type) -> unsigned {
+    if (auto vectorType = type.dyn_cast<VectorType>())
+      return vectorType.getNumElements();
+    return 1;
+  };
+
+  if (getNumElements(significandType) != getNumElements(exponentType))
+    return ldexpOp.emitOpError(
+        "operands must have the same number of elements");
 
   return success();
 }

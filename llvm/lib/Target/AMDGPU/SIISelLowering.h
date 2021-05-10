@@ -92,6 +92,7 @@ private:
   SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFastUnsafeFDIV(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerFastUnsafeFDIV64(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFDIV_FAST(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFDIV16(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFDIV32(SDValue Op, SelectionDAG &DAG) const;
@@ -282,7 +283,7 @@ public:
   }
 
   bool allowsMisalignedMemoryAccesses(
-      EVT VT, unsigned AS, unsigned Alignment,
+      EVT VT, unsigned AS, Align Alignment,
       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
       bool *IsFast = nullptr) const override;
 

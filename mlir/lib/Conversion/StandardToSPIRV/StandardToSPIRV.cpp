@@ -10,11 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h"
 #include "mlir/Dialect/SPIRV/Utils/LayoutUtils.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SetVector.h"
@@ -193,7 +195,7 @@ static bool isAllocationSupported(MemRefType t) {
   // shape and int or float or vector of int or float element type.
   if (!(t.hasStaticShape() &&
         SPIRVTypeConverter::getMemorySpaceForStorageClass(
-            spirv::StorageClass::Workgroup) == t.getMemorySpace()))
+            spirv::StorageClass::Workgroup) == t.getMemorySpaceAsInt()))
     return false;
   Type elementType = t.getElementType();
   if (auto vecType = elementType.dyn_cast<VectorType>())
@@ -206,7 +208,8 @@ static bool isAllocationSupported(MemRefType t) {
 /// type. Returns None on failure.
 static Optional<spirv::Scope> getAtomicOpScope(MemRefType t) {
   Optional<spirv::StorageClass> storageClass =
-      SPIRVTypeConverter::getStorageClassForMemorySpace(t.getMemorySpace());
+      SPIRVTypeConverter::getStorageClassForMemorySpace(
+          t.getMemorySpaceAsInt());
   if (!storageClass)
     return {};
   switch (*storageClass) {
@@ -248,7 +251,7 @@ public:
     // Get the SPIR-V type for the allocation.
     Type spirvType = getTypeConverter()->convertType(allocType);
 
-    // Insert spv.globalVariable for this allocation.
+    // Insert spv.GlobalVariable for this allocation.
     Operation *parent =
         SymbolTable::getNearestSymbolTable(operation->getParentOp());
     if (!parent)
@@ -263,9 +266,8 @@ public:
       std::string varName =
           std::string("__workgroup_mem__") +
           std::to_string(std::distance(varOps.begin(), varOps.end()));
-      varOp = rewriter.create<spirv::GlobalVariableOp>(
-          loc, TypeAttr::get(spirvType), varName,
-          /*initializer = */ nullptr);
+      varOp = rewriter.create<spirv::GlobalVariableOp>(loc, spirvType, varName,
+                                                       /*initializer=*/nullptr);
     }
 
     // Get pointer to global variable at the current scope.
@@ -355,7 +357,7 @@ public:
   }
 };
 
-/// Converts composite std.constant operation to spv.constant.
+/// Converts composite std.constant operation to spv.Constant.
 class ConstantCompositeOpPattern final
     : public OpConversionPattern<ConstantOp> {
 public:
@@ -366,7 +368,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override;
 };
 
-/// Converts scalar std.constant operation to spv.constant.
+/// Converts scalar std.constant operation to spv.Constant.
 class ConstantScalarOpPattern final : public OpConversionPattern<ConstantOp> {
 public:
   using OpConversionPattern<ConstantOp>::OpConversionPattern;
@@ -378,6 +380,28 @@ public:
 
 /// Converts floating-point comparison operations to SPIR-V ops.
 class CmpFOpPattern final : public OpConversionPattern<CmpFOp> {
+public:
+  using OpConversionPattern<CmpFOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CmpFOp cmpFOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
+/// Converts floating point NaN check to SPIR-V ops. This pattern requires
+/// Kernel capability.
+class CmpFOpNanKernelPattern final : public OpConversionPattern<CmpFOp> {
+public:
+  using OpConversionPattern<CmpFOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CmpFOp cmpFOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
+/// Converts floating point NaN check to SPIR-V ops. This pattern does not
+/// require additional capability.
+class CmpFOpNanNonePattern final : public OpConversionPattern<CmpFOp> {
 public:
   using OpConversionPattern<CmpFOp>::OpConversionPattern;
 
@@ -481,16 +505,120 @@ public:
     auto dstType =
         this->getTypeConverter()->convertType(op.getResult().getType());
     Location loc = op.getLoc();
-    Attribute zeroAttr, oneAttr;
-    if (auto vectorType = dstType.dyn_cast<VectorType>()) {
-      zeroAttr = DenseElementsAttr::get(vectorType, 0);
-      oneAttr = DenseElementsAttr::get(vectorType, 1);
-    } else {
-      zeroAttr = IntegerAttr::get(dstType, 0);
-      oneAttr = IntegerAttr::get(dstType, 1);
+    Value zero = spirv::ConstantOp::getZero(dstType, loc, rewriter);
+    Value one = spirv::ConstantOp::getOne(dstType, loc, rewriter);
+    rewriter.template replaceOpWithNewOp<spirv::SelectOp>(
+        op, dstType, operands.front(), one, zero);
+    return success();
+  }
+};
+
+/// Converts tensor.extract into loading using access chains from SPIR-V local
+/// variables.
+class TensorExtractPattern final
+    : public OpConversionPattern<tensor::ExtractOp> {
+public:
+  TensorExtractPattern(TypeConverter &typeConverter, MLIRContext *context,
+                       int64_t threshold, PatternBenefit benefit = 1)
+      : OpConversionPattern(typeConverter, context, benefit),
+        byteCountThreshold(threshold) {}
+
+  LogicalResult
+  matchAndRewrite(tensor::ExtractOp extractOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    TensorType tensorType = extractOp.tensor().getType().cast<TensorType>();
+
+    if (!tensorType.hasStaticShape())
+      return rewriter.notifyMatchFailure(extractOp, "non-static tensor");
+
+    if (tensorType.getNumElements() * tensorType.getElementTypeBitWidth() >
+        byteCountThreshold * 8)
+      return rewriter.notifyMatchFailure(extractOp,
+                                         "exceeding byte count threshold");
+
+    Location loc = extractOp.getLoc();
+    tensor::ExtractOp::Adaptor adaptor(operands);
+
+    int64_t rank = tensorType.getRank();
+    SmallVector<int64_t, 4> strides(rank, 1);
+    for (int i = rank - 2; i >= 0; --i) {
+      strides[i] = strides[i + 1] * tensorType.getDimSize(i + 1);
     }
-    Value zero = rewriter.create<ConstantOp>(loc, zeroAttr);
-    Value one = rewriter.create<ConstantOp>(loc, oneAttr);
+
+    Type varType = spirv::PointerType::get(adaptor.tensor().getType(),
+                                           spirv::StorageClass::Function);
+
+    spirv::VariableOp varOp;
+    if (adaptor.tensor().getDefiningOp<spirv::ConstantOp>()) {
+      varOp = rewriter.create<spirv::VariableOp>(
+          loc, varType, spirv::StorageClass::Function,
+          /*initializer=*/adaptor.tensor());
+    } else {
+      // Need to store the value to the local variable. It's questionable
+      // whether we want to support such case though.
+      return failure();
+    }
+
+    Value index = spirv::linearizeIndex(adaptor.indices(), strides,
+                                        /*offset=*/0, loc, rewriter);
+    auto acOp = rewriter.create<spirv::AccessChainOp>(loc, varOp, index);
+
+    rewriter.replaceOpWithNewOp<spirv::LoadOp>(extractOp, acOp);
+
+    return success();
+  }
+
+private:
+  int64_t byteCountThreshold;
+};
+
+/// Converts std.trunci to spv.Select if the type of result is i1 or vector of
+/// i1.
+class TruncI1Pattern final : public OpConversionPattern<TruncateIOp> {
+public:
+  using OpConversionPattern<TruncateIOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TruncateIOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType =
+        this->getTypeConverter()->convertType(op.getResult().getType());
+    if (!isBoolScalarOrVector(dstType))
+      return failure();
+
+    Location loc = op.getLoc();
+    auto srcType = operands.front().getType();
+    // Check if (x & 1) == 1.
+    Value mask = spirv::ConstantOp::getOne(srcType, loc, rewriter);
+    Value maskedSrc =
+        rewriter.create<spirv::BitwiseAndOp>(loc, srcType, operands[0], mask);
+    Value isOne = rewriter.create<spirv::IEqualOp>(loc, maskedSrc, mask);
+
+    Value zero = spirv::ConstantOp::getZero(dstType, loc, rewriter);
+    Value one = spirv::ConstantOp::getOne(dstType, loc, rewriter);
+    rewriter.replaceOpWithNewOp<spirv::SelectOp>(op, dstType, isOne, one, zero);
+    return success();
+  }
+};
+
+/// Converts std.uitofp to spv.Select if the type of source is i1 or vector of
+/// i1.
+class UIToFPI1Pattern final : public OpConversionPattern<UIToFPOp> {
+public:
+  using OpConversionPattern<UIToFPOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UIToFPOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto srcType = operands.front().getType();
+    if (!isBoolScalarOrVector(srcType))
+      return failure();
+
+    auto dstType =
+        this->getTypeConverter()->convertType(op.getResult().getType());
+    Location loc = op.getLoc();
+    Value zero = spirv::ConstantOp::getZero(dstType, loc, rewriter);
+    Value one = spirv::ConstantOp::getOne(dstType, loc, rewriter);
     rewriter.template replaceOpWithNewOp<spirv::SelectOp>(
         op, dstType, operands.front(), one, zero);
     return success();
@@ -508,10 +636,10 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     assert(operands.size() == 1);
     auto srcType = operands.front().getType();
-    if (isBoolScalarOrVector(srcType))
-      return failure();
     auto dstType =
         this->getTypeConverter()->convertType(operation.getResult().getType());
+    if (isBoolScalarOrVector(srcType) || isBoolScalarOrVector(dstType))
+      return failure();
     if (dstType == srcType) {
       // Due to type conversion, we are seeing the same source and target type.
       // Then we can just erase this operation by forwarding its operand.
@@ -554,6 +682,9 @@ LogicalResult SignedRemIOpPattern::matchAndRewrite(
 // ConstantOp with composite type.
 //===----------------------------------------------------------------------===//
 
+// TODO: This probably should be split into the vector case and tensor case,
+// so that the tensor case can be moved to TensorToSPIRV conversion. But,
+// std.constant is for the standard dialect though.
 LogicalResult ConstantCompositeOpPattern::matchAndRewrite(
     ConstantOp constOp, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
@@ -728,6 +859,47 @@ CmpFOpPattern::matchAndRewrite(CmpFOp cmpFOp, ArrayRef<Value> operands,
     break;
   }
   return failure();
+}
+
+LogicalResult CmpFOpNanKernelPattern::matchAndRewrite(
+    CmpFOp cmpFOp, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  CmpFOpAdaptor cmpFOpOperands(operands);
+
+  if (cmpFOp.getPredicate() == CmpFPredicate::ORD) {
+    rewriter.replaceOpWithNewOp<spirv::OrderedOp>(cmpFOp, cmpFOpOperands.lhs(),
+                                                  cmpFOpOperands.rhs());
+    return success();
+  }
+
+  if (cmpFOp.getPredicate() == CmpFPredicate::UNO) {
+    rewriter.replaceOpWithNewOp<spirv::UnorderedOp>(
+        cmpFOp, cmpFOpOperands.lhs(), cmpFOpOperands.rhs());
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult CmpFOpNanNonePattern::matchAndRewrite(
+    CmpFOp cmpFOp, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  if (cmpFOp.getPredicate() != CmpFPredicate::ORD &&
+      cmpFOp.getPredicate() != CmpFPredicate::UNO)
+    return failure();
+
+  CmpFOpAdaptor cmpFOpOperands(operands);
+  Location loc = cmpFOp.getLoc();
+
+  Value lhsIsNan = rewriter.create<spirv::IsNanOp>(loc, cmpFOpOperands.lhs());
+  Value rhsIsNan = rewriter.create<spirv::IsNanOp>(loc, cmpFOpOperands.rhs());
+
+  Value replace = rewriter.create<spirv::LogicalOrOp>(loc, lhsIsNan, rhsIsNan);
+  if (cmpFOp.getPredicate() == CmpFPredicate::ORD)
+    replace = rewriter.create<spirv::LogicalNotOp>(loc, replace);
+
+  rewriter.replaceOp(cmpFOp, replace);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1052,6 +1224,16 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
                                      SPIRVTypeConverter &typeConverter,
                                      OwningRewritePatternList &patterns) {
   patterns.insert<
+      // Math dialect operations.
+      // TODO: Move to separate pass.
+      UnaryAndBinaryOpPattern<math::CosOp, spirv::GLSLCosOp>,
+      UnaryAndBinaryOpPattern<math::ExpOp, spirv::GLSLExpOp>,
+      UnaryAndBinaryOpPattern<math::LogOp, spirv::GLSLLogOp>,
+      UnaryAndBinaryOpPattern<math::RsqrtOp, spirv::GLSLInverseSqrtOp>,
+      UnaryAndBinaryOpPattern<math::SinOp, spirv::GLSLSinOp>,
+      UnaryAndBinaryOpPattern<math::SqrtOp, spirv::GLSLSqrtOp>,
+      UnaryAndBinaryOpPattern<math::TanhOp, spirv::GLSLTanhOp>,
+
       // Unary and binary patterns
       BitwiseOpPattern<AndOp, spirv::LogicalAndOp, spirv::BitwiseAndOp>,
       BitwiseOpPattern<OrOp, spirv::LogicalOrOp, spirv::BitwiseOrOp>,
@@ -1059,32 +1241,25 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
       UnaryAndBinaryOpPattern<AddFOp, spirv::FAddOp>,
       UnaryAndBinaryOpPattern<AddIOp, spirv::IAddOp>,
       UnaryAndBinaryOpPattern<CeilFOp, spirv::GLSLCeilOp>,
-      UnaryAndBinaryOpPattern<CosOp, spirv::GLSLCosOp>,
       UnaryAndBinaryOpPattern<DivFOp, spirv::FDivOp>,
-      UnaryAndBinaryOpPattern<ExpOp, spirv::GLSLExpOp>,
       UnaryAndBinaryOpPattern<FloorFOp, spirv::GLSLFloorOp>,
-      UnaryAndBinaryOpPattern<LogOp, spirv::GLSLLogOp>,
       UnaryAndBinaryOpPattern<MulFOp, spirv::FMulOp>,
       UnaryAndBinaryOpPattern<MulIOp, spirv::IMulOp>,
       UnaryAndBinaryOpPattern<NegFOp, spirv::FNegateOp>,
       UnaryAndBinaryOpPattern<RemFOp, spirv::FRemOp>,
-      UnaryAndBinaryOpPattern<RsqrtOp, spirv::GLSLInverseSqrtOp>,
       UnaryAndBinaryOpPattern<ShiftLeftOp, spirv::ShiftLeftLogicalOp>,
       UnaryAndBinaryOpPattern<SignedDivIOp, spirv::SDivOp>,
       UnaryAndBinaryOpPattern<SignedShiftRightOp,
                               spirv::ShiftRightArithmeticOp>,
-      UnaryAndBinaryOpPattern<SinOp, spirv::GLSLSinOp>,
-      UnaryAndBinaryOpPattern<SqrtOp, spirv::GLSLSqrtOp>,
-      UnaryAndBinaryOpPattern<SubFOp, spirv::FSubOp>,
       UnaryAndBinaryOpPattern<SubIOp, spirv::ISubOp>,
-      UnaryAndBinaryOpPattern<TanhOp, spirv::GLSLTanhOp>,
+      UnaryAndBinaryOpPattern<SubFOp, spirv::FSubOp>,
       UnaryAndBinaryOpPattern<UnsignedDivIOp, spirv::UDivOp>,
       UnaryAndBinaryOpPattern<UnsignedRemIOp, spirv::UModOp>,
       UnaryAndBinaryOpPattern<UnsignedShiftRightOp, spirv::ShiftRightLogicalOp>,
       SignedRemIOpPattern, XOrOpPattern,
 
       // Comparison patterns
-      BoolCmpIOpPattern, CmpFOpPattern, CmpIOpPattern,
+      BoolCmpIOpPattern, CmpFOpPattern, CmpFOpNanNonePattern, CmpIOpPattern,
 
       // Constant patterns
       ConstantCompositeOpPattern, ConstantScalarOpPattern,
@@ -1096,13 +1271,30 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
       ReturnOpPattern, SelectOpPattern,
 
       // Type cast patterns
-      ZeroExtendI1Pattern, TypeCastingOpPattern<IndexCastOp, spirv::SConvertOp>,
+      UIToFPI1Pattern, ZeroExtendI1Pattern, TruncI1Pattern,
+      TypeCastingOpPattern<IndexCastOp, spirv::SConvertOp>,
       TypeCastingOpPattern<SIToFPOp, spirv::ConvertSToFOp>,
+      TypeCastingOpPattern<UIToFPOp, spirv::ConvertUToFOp>,
+      TypeCastingOpPattern<SignExtendIOp, spirv::SConvertOp>,
       TypeCastingOpPattern<ZeroExtendIOp, spirv::UConvertOp>,
       TypeCastingOpPattern<TruncateIOp, spirv::SConvertOp>,
       TypeCastingOpPattern<FPToSIOp, spirv::ConvertFToSOp>,
       TypeCastingOpPattern<FPExtOp, spirv::FConvertOp>,
       TypeCastingOpPattern<FPTruncOp, spirv::FConvertOp>>(typeConverter,
                                                           context);
+
+  // Give CmpFOpNanKernelPattern a higher benefit so it can prevail when Kernel
+  // capability is available.
+  patterns.insert<CmpFOpNanKernelPattern>(typeConverter, context,
+                                          /*benefit=*/2);
 }
+
+void populateTensorToSPIRVPatterns(MLIRContext *context,
+                                   SPIRVTypeConverter &typeConverter,
+                                   int64_t byteCountThreshold,
+                                   OwningRewritePatternList &patterns) {
+  patterns.insert<TensorExtractPattern>(typeConverter, context,
+                                        byteCountThreshold);
+}
+
 } // namespace mlir

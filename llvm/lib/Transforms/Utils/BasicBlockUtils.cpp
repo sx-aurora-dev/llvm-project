@@ -33,6 +33,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/PseudoProbe.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
@@ -124,11 +125,9 @@ bool llvm::EliminateUnreachableBlocks(Function &F, DomTreeUpdater *DTU,
 
   // Collect all dead blocks.
   std::vector<BasicBlock*> DeadBlocks;
-  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
-    if (!Reachable.count(&*I)) {
-      BasicBlock *BB = &*I;
-      DeadBlocks.push_back(BB);
-    }
+  for (BasicBlock &BB : F)
+    if (!Reachable.count(&BB))
+      DeadBlocks.push_back(&BB);
 
   // Delete the dead blocks.
   DeleteDeadBlocks(DeadBlocks, DTU, KeepOneInputPHIs);
@@ -209,9 +208,8 @@ bool llvm::MergeBlockIntoPredecessor(BasicBlock *BB, DomTreeUpdater *DTU,
 
   // Can't merge if there is PHI loop.
   for (PHINode &PN : BB->phis())
-    for (Value *IncValue : PN.incoming_values())
-      if (IncValue == &PN)
-        return false;
+    if (llvm::is_contained(PN.incoming_values(), &PN))
+      return false;
 
   LLVM_DEBUG(dbgs() << "Merging: " << BB->getName() << " into "
                     << PredBB->getName() << "\n");
@@ -409,7 +407,8 @@ static bool removeRedundantDbgInstrsUsingBackwardScan(BasicBlock *BB) {
 /// - Keep track of non-overlapping fragments.
 static bool removeRedundantDbgInstrsUsingForwardScan(BasicBlock *BB) {
   SmallVector<DbgValueInst *, 8> ToBeRemoved;
-  DenseMap<DebugVariable, std::pair<Value *, DIExpression *> > VariableMap;
+  DenseMap<DebugVariable, std::pair<SmallVector<Value *, 4>, DIExpression *>>
+      VariableMap;
   for (auto &I : *BB) {
     if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(&I)) {
       DebugVariable Key(DVI->getVariable(),
@@ -418,10 +417,10 @@ static bool removeRedundantDbgInstrsUsingForwardScan(BasicBlock *BB) {
       auto VMI = VariableMap.find(Key);
       // Update the map if we found a new value/expression describing the
       // variable, or if the variable wasn't mapped already.
-      if (VMI == VariableMap.end() ||
-          VMI->second.first != DVI->getValue() ||
+      SmallVector<Value *, 4> Values(DVI->getValues());
+      if (VMI == VariableMap.end() || VMI->second.first != Values ||
           VMI->second.second != DVI->getExpression()) {
-        VariableMap[Key] = { DVI->getValue(), DVI->getExpression() };
+        VariableMap[Key] = {Values, DVI->getExpression()};
         continue;
       }
       // Found an identical mapping. Remember the instruction for later removal.
@@ -435,7 +434,7 @@ static bool removeRedundantDbgInstrsUsingForwardScan(BasicBlock *BB) {
   return !ToBeRemoved.empty();
 }
 
-bool llvm::RemoveRedundantDbgInstrs(BasicBlock *BB) {
+bool llvm::RemoveRedundantDbgInstrs(BasicBlock *BB, bool RemovePseudoOp) {
   bool MadeChanges = false;
   // By using the "backward scan" strategy before the "forward scan" strategy we
   // can remove both dbg.value (2) and (3) in a situation like this:
@@ -450,6 +449,8 @@ bool llvm::RemoveRedundantDbgInstrs(BasicBlock *BB) {
   // already is described as having the value V1 at (1).
   MadeChanges |= removeRedundantDbgInstrsUsingBackwardScan(BB);
   MadeChanges |= removeRedundantDbgInstrsUsingForwardScan(BB);
+  if (RemovePseudoOp)
+    MadeChanges |= removeRedundantPseudoProbes(BB);
 
   if (MadeChanges)
     LLVM_DEBUG(dbgs() << "Removed redundant dbg instrs from: "
@@ -1083,9 +1084,8 @@ ReturnInst *llvm::FoldReturnIntoUncondBranch(ReturnInst *RI, BasicBlock *BB,
 
   // If the return instruction returns a value, and if the value was a
   // PHI node in "BB", propagate the right value into the return.
-  for (User::op_iterator i = NewRet->op_begin(), e = NewRet->op_end();
-       i != e; ++i) {
-    Value *V = *i;
+  for (Use &Op : NewRet->operands()) {
+    Value *V = Op;
     Instruction *NewBC = nullptr;
     if (BitCastInst *BCI = dyn_cast<BitCastInst>(V)) {
       // Return value might be bitcasted. Clone and insert it before the
@@ -1093,7 +1093,7 @@ ReturnInst *llvm::FoldReturnIntoUncondBranch(ReturnInst *RI, BasicBlock *BB,
       V = BCI->getOperand(0);
       NewBC = BCI->clone();
       Pred->getInstList().insert(NewRet->getIterator(), NewBC);
-      *i = NewBC;
+      Op = NewBC;
     }
 
     Instruction *NewEV = nullptr;
@@ -1105,7 +1105,7 @@ ReturnInst *llvm::FoldReturnIntoUncondBranch(ReturnInst *RI, BasicBlock *BB,
         Pred->getInstList().insert(NewBC->getIterator(), NewEV);
       } else {
         Pred->getInstList().insert(NewRet->getIterator(), NewEV);
-        *i = NewEV;
+        Op = NewEV;
       }
     }
 
@@ -1116,7 +1116,7 @@ ReturnInst *llvm::FoldReturnIntoUncondBranch(ReturnInst *RI, BasicBlock *BB,
         } else if (NewBC)
           NewBC->setOperand(0, PN->getIncomingValueForBlock(Pred));
         else
-          *i = PN->getIncomingValueForBlock(Pred);
+          Op = PN->getIncomingValueForBlock(Pred);
       }
     }
   }

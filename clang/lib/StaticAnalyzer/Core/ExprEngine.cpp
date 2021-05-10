@@ -1238,6 +1238,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::SEHExceptStmtClass:
     case Stmt::SEHLeaveStmtClass:
     case Stmt::SEHFinallyStmtClass:
+    case Stmt::OMPCanonicalLoopClass:
     case Stmt::OMPParallelDirectiveClass:
     case Stmt::OMPSimdDirectiveClass:
     case Stmt::OMPForDirectiveClass:
@@ -1292,6 +1293,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
     case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
     case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
+    case Stmt::OMPTileDirectiveClass:
     case Stmt::CapturedStmtClass: {
       const ExplodedNode *node = Bldr.generateSink(S, Pred, Pred->getState());
       Engine.addAbortedBlock(node, currBldrCtx->getBlock());

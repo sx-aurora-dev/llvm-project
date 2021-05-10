@@ -59,6 +59,7 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   // Target cpu features.
   bool HasAltivec = false;
   bool HasMMA = false;
+  bool HasROPProtection = false;
   bool HasVSX = false;
   bool HasP8Vector = false;
   bool HasP8Crypto = false;
@@ -427,7 +428,7 @@ public:
     }
 
     if (Triple.isOSAIX() || Triple.isOSLinux())
-      DataLayout += "-v256:256:256-v512:512:512";
+      DataLayout += "-S128-v256:256:256-v512:512:512";
     resetDataLayout(DataLayout);
 
     // PPC64 supports atomics up to 8 bytes.

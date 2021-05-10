@@ -324,6 +324,7 @@ class LangOpt<string name, code customCode = [{}]> {
 def MicrosoftExt : LangOpt<"MicrosoftExt">;
 def Borland : LangOpt<"Borland">;
 def CUDA : LangOpt<"CUDA">;
+def HIP : LangOpt<"HIP">;
 def SYCL : LangOpt<"SYCLIsDevice">;
 def COnly : LangOpt<"", "!LangOpts.CPlusPlus">;
 def CPlusPlus : LangOpt<"CPlusPlus">;
@@ -367,6 +368,7 @@ def TargetBPF : TargetArch<["bpfel", "bpfeb"]>;
 def TargetMips32 : TargetArch<["mips", "mipsel"]>;
 def TargetAnyMips : TargetArch<["mips", "mipsel", "mips64", "mips64el"]>;
 def TargetMSP430 : TargetArch<["msp430"]>;
+def TargetM68k : TargetArch<["m68k"]>;
 def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
@@ -771,8 +773,9 @@ def Annotate : InheritableParamAttr {
 }
 
 def ARMInterrupt : InheritableAttr, TargetSpecificAttr<TargetARM> {
-  // NOTE: If you add any additional spellings, MSP430Interrupt's,
-  // MipsInterrupt's and AnyX86Interrupt's spellings must match.
+  // NOTE: If you add any additional spellings, M68kInterrupt's,
+  // MSP430Interrupt's, MipsInterrupt's and AnyX86Interrupt's spellings
+  // must match.
   let Spellings = [GCC<"interrupt">];
   let Args = [EnumArgument<"Interrupt", "InterruptType",
                            ["IRQ", "FIQ", "SWI", "ABORT", "UNDEF", ""],
@@ -1115,6 +1118,13 @@ def CUDAHost : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def HIPManaged : InheritableAttr {
+  let Spellings = [GNU<"managed">, Declspec<"__managed__">];
+  let Subjects = SubjectList<[Var]>;
+  let LangOpts = [HIP];
+  let Documentation = [HIPManagedAttrDocs];
+}
+
 def CUDAInvalidTarget : InheritableAttr {
   let Spellings = [];
   let Subjects = SubjectList<[Function]>;
@@ -1170,8 +1180,10 @@ def OpenCLKernel : InheritableAttr {
   let SimpleHandler = 1;
 }
 
-def OpenCLUnrollHint : InheritableAttr {
+def OpenCLUnrollHint : StmtAttr {
   let Spellings = [GNU<"opencl_unroll_hint">];
+//  let Subjects = SubjectList<[ForStmt, CXXForRangeStmt, WhileStmt, DoStmt],
+//                             ErrorDiag, "'for', 'while', and 'do' statements">;
   let Args = [UnsignedArgument<"UnrollHint">];
   let Documentation = [OpenCLUnrollHintDocs];
 }
@@ -1514,8 +1526,8 @@ def MSABI : DeclOrTypeAttr {
 }
 
 def MSP430Interrupt : InheritableAttr, TargetSpecificAttr<TargetMSP430> {
-  // NOTE: If you add any additional spellings, ARMInterrupt's, MipsInterrupt's
-  // and AnyX86Interrupt's spellings must match.
+  // NOTE: If you add any additional spellings, ARMInterrupt's, M68kInterrupt's,
+  // MipsInterrupt's and AnyX86Interrupt's spellings must match.
   let Spellings = [GCC<"interrupt">];
   let Args = [UnsignedArgument<"Number">];
   let ParseKind = "Interrupt";
@@ -1531,7 +1543,8 @@ def Mips16 : InheritableAttr, TargetSpecificAttr<TargetMips32> {
 
 def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips32> {
   // NOTE: If you add any additional spellings, ARMInterrupt's,
-  // MSP430Interrupt's and AnyX86Interrupt's spellings must match.
+  // M68kInterrupt's, MSP430Interrupt's and AnyX86Interrupt's spellings
+  // must match.
   let Spellings = [GCC<"interrupt">];
   let Subjects = SubjectList<[Function]>;
   let Args = [EnumArgument<"Interrupt", "InterruptType",
@@ -1561,6 +1574,16 @@ def MipsShortCall : InheritableAttr, TargetSpecificAttr<TargetAnyMips> {
   let Spellings = [GCC<"short_call">, GCC<"near">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [MipsShortCallStyleDocs];
+}
+
+def M68kInterrupt : InheritableAttr, TargetSpecificAttr<TargetM68k> {
+  // NOTE: If you add any additional spellings, ARMInterrupt's, MipsInterrupt's
+  // MSP430Interrupt's and AnyX86Interrupt's spellings must match.
+  let Spellings = [GNU<"interrupt">];
+  let Args = [UnsignedArgument<"Number">];
+  let ParseKind = "Interrupt";
+  let HasCustomParsing = 1;
+  let Documentation = [Undocumented];
 }
 
 def Mode : Attr {
@@ -2391,6 +2414,16 @@ def SwiftAsync : InheritableAttr {
   let Documentation = [SwiftAsyncDocs];
 }
 
+def SwiftAsyncError : InheritableAttr {
+  let Spellings = [Clang<"swift_async_error">];
+  let Subjects = SubjectList<[Function, ObjCMethod]>;
+  let Args = [EnumArgument<"Convention", "ConventionKind",
+              ["none", "nonnull_error", "zero_argument", "nonzero_argument"],
+              ["None", "NonNullError", "ZeroArgument", "NonZeroArgument"]>,
+              UnsignedArgument<"HandlerParamIdx", /*opt=*/1>];
+  let Documentation = [SwiftAsyncErrorDocs];
+}
+
 def Suppress : StmtAttr {
   let Spellings = [CXX11<"gsl", "suppress">];
   let Args = [VariadicStringArgument<"DiagnosticIdentifiers">];
@@ -2628,7 +2661,14 @@ def Unused : InheritableAttr {
 def Used : InheritableAttr {
   let Spellings = [GCC<"used">];
   let Subjects = SubjectList<[NonLocalVar, Function, ObjCMethod]>;
-  let Documentation = [Undocumented];
+  let Documentation = [UsedDocs];
+  let SimpleHandler = 1;
+}
+
+def Retain : InheritableAttr {
+  let Spellings = [GCC<"retain">];
+  let Subjects = SubjectList<[NonLocalVar, Function, ObjCMethod]>;
+  let Documentation = [RetainDocs];
   let SimpleHandler = 1;
 }
 
@@ -2750,7 +2790,7 @@ def LTOVisibilityPublic : InheritableAttr {
 
 def AnyX86Interrupt : InheritableAttr, TargetSpecificAttr<TargetAnyX86> {
   // NOTE: If you add any additional spellings, ARMInterrupt's,
-  // MSP430Interrupt's and MipsInterrupt's spellings must match.
+  // M68kInterrupt's, MSP430Interrupt's and MipsInterrupt's spellings must match.
   let Spellings = [GCC<"interrupt">];
   let Subjects = SubjectList<[HasFunctionProto]>;
   let ParseKind = "Interrupt";

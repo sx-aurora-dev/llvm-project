@@ -186,12 +186,13 @@ Optional<VFInfo> tryDemangleForVFABI(StringRef MangledName, const Module &M);
 /// <isa> = "_LLVM_"
 /// <mask> = "N". Note: TLI does not support masked interfaces.
 /// <vlen> = Number of concurrent lanes, stored in the `VectorizationFactor`
-///          field of the `VecDesc` struct.
+///          field of the `VecDesc` struct. If the number of lanes is scalable
+///          then 'x' is printed instead.
 /// <vparams> = "v", as many as are the numArgs.
 /// <scalarname> = the name of the scalar function.
 /// <vectorname> = the name of the vector function.
 std::string mangleTLIVectorName(StringRef VectorName, StringRef ScalarName,
-                                unsigned numArgs, unsigned VF);
+                                unsigned numArgs, ElementCount VF);
 
 /// Retrieve the `VFParamKind` from a string token.
 VFParamKind getVFParamKindFromString(const StringRef Token);
@@ -304,7 +305,7 @@ typedef unsigned ID;
 /// the incoming type is void, we return void. If the EC represents a
 /// scalar, we return the scalar type.
 inline Type *ToVectorTy(Type *Scalar, ElementCount EC) {
-  if (Scalar->isVoidTy() || EC.isScalar())
+  if (Scalar->isVoidTy() || Scalar->isMetadataTy() || EC.isScalar())
     return Scalar;
   return VectorType::get(Scalar, EC);
 }

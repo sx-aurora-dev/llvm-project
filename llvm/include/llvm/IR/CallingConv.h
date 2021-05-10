@@ -244,6 +244,9 @@ namespace CallingConv {
     /// Calling convention used for AMD graphics targets.
     AMDGPU_Gfx = 100,
 
+    /// M68k_INTR - Calling convention used for M68k interrupt routines.
+    M68k_INTR = 101,
+
     /// Calling convention used for NEC SX-Aurora VE vec_expf intrinsic
     /// function.
     VE_VEC_EXPF = 150,

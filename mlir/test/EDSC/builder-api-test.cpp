@@ -11,6 +11,7 @@
 #include "mlir/Dialect/Affine/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Linalg/EDSC/Builders.h"
 #include "mlir/Dialect/Linalg/EDSC/Intrinsics.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/EDSC/Intrinsics.h"
 #include "mlir/Dialect/StandardOps/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Vector/EDSC/Intrinsics.h"
@@ -42,6 +43,7 @@ static MLIRContext &globalContext() {
     context.loadDialect<AffineDialect,
                         scf::SCFDialect,
                         linalg::LinalgDialect,
+                        math::MathDialect,
                         StandardOpsDialect,
                         vector::VectorDialect>();
     // clang-format on
@@ -91,7 +93,7 @@ TEST_FUNC(builder_dynamic_for_func_args) {
   // CHECK-LABEL: func @builder_dynamic_for_func_args(%{{.*}}: index, %{{.*}}: index) {
   //     CHECK:  affine.for %{{.*}} = affine_map<(d0) -> (d0)>(%{{.*}}) to affine_map<(d0) -> (d0)>(%{{.*}}) step 3 {
   //     CHECK:  {{.*}} = affine.apply affine_map<()[s0] -> (s0 * 3)>()[%{{.*}}]
-  //     CHECK:  {{.*}} = affine.apply affine_map<()[s0, s1] -> (s1 + s0 * 3)>()[%{{.*}}, %{{.*}}]
+  //     CHECK:  {{.*}} = affine.apply affine_map<()[s0, s1] -> (s0 * 3 + s1)>()[%{{.*}}, %{{.*}}]
   //     CHECK:  {{.*}} = affine.apply affine_map<()[s0] -> (s0 + 3)>()[%{{.*}}]
   //     CHECK:  affine.for %{{.*}} = affine_map<(d0) -> (d0)>(%{{.*}}) to affine_map<(d0) -> (d0)>(%{{.*}}) step 2 {
   //     CHECK:    {{.*}} = affine.apply affine_map<(d0, d1) -> ((d0 + d1 * 3) floordiv 32)>(%{{.*}}, %{{.*}})

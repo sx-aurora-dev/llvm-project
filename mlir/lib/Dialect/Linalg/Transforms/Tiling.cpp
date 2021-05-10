@@ -34,7 +34,6 @@ using namespace mlir::edsc::intrinsics;
 using namespace mlir::linalg;
 using namespace mlir::scf;
 
-using folded_affine_min = FoldedValueBuilder<AffineMinOp>;
 
 #define DEBUG_TYPE "linalg-tiling"
 
@@ -256,15 +255,15 @@ makeTiledShapes(OpBuilder &b, Location loc, LinalgOp linalgOp,
     }
 
     // Construct a new subview / subtensor for the tile.
-    SmallVector<Value, 4> offsets, sizes, strides;
+    SmallVector<OpFoldResult, 4> offsets, sizes, strides;
     offsets.reserve(rank);
     sizes.reserve(rank);
     strides.reserve(rank);
     for (unsigned r = 0; r < rank; ++r) {
       if (!isTiled(map.getSubMap({r}), tileSizes)) {
-        offsets.push_back(std_constant_index(0));
-        sizes.push_back(std_dim(shapedOp, r));
-        strides.push_back(std_constant_index(1));
+        offsets.push_back(b.getIndexAttr(0));
+        sizes.push_back(std_dim(shapedOp, r).value);
+        strides.push_back(b.getIndexAttr(1));
         continue;
       }
 
@@ -292,12 +291,13 @@ makeTiledShapes(OpBuilder &b, Location loc, LinalgOp linalgOp,
                  getAffineDimExpr(/*position=*/2, b.getContext())},
             b.getContext());
         auto d = std_dim(shapedOp, r);
-        size =
-            affine_min(b.getIndexType(), minMap, ValueRange{size, d, offset});
+        SmallVector<Value, 4> operands{size, d, offset};
+        fullyComposeAffineMapAndOperands(&minMap, &operands);
+        size = affine_min(b.getIndexType(), minMap, operands);
       }
 
       sizes.push_back(size);
-      strides.push_back(std_constant_index(1));
+      strides.push_back(b.getIndexAttr(1));
     }
 
     if (shapedType.isa<MemRefType>())
@@ -472,6 +472,9 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(
   b.setInsertionPoint(op);
   ScopedContext scope(b, op.getLoc());
 
+  if (!options.tileSizeComputationFunction)
+    return llvm::None;
+  
   // Enforce the convention that "tiling by zero" skips tiling a particular
   // dimension. This convention is significantly simpler to handle instead of
   // adjusting affine maps to account for missing dimensions.
@@ -536,7 +539,9 @@ public:
   static void insert(OwningRewritePatternList &patterns,
                      const LinalgTilingOptions &options, MLIRContext *ctx) {
     patterns.insert<LinalgTilingPattern<OpTy>>(
-        ctx, options, LinalgMarker({}, Identifier::get("tiled", ctx)));
+        ctx, options,
+        LinalgTransformationFilter(ArrayRef<Identifier>{},
+                                   Identifier::get("tiled", ctx)));
     RewritePatternList<OpTypes...>::insert(patterns, options, ctx);
   }
 };
@@ -586,12 +591,12 @@ static void applyTilingToLoopPatterns(LinalgTilingLoopType loopType,
   MLIRContext *ctx = funcOp.getContext();
   OwningRewritePatternList patterns;
   insertTilingPatterns(patterns, options, ctx);
-  applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
-  applyPatternsAndFoldGreedily(funcOp,
-                               getLinalgTilingCanonicalizationPatterns(ctx));
+  (void)applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(
+      funcOp, getLinalgTilingCanonicalizationPatterns(ctx));
   // Drop the marker.
   funcOp.walk([](LinalgOp op) {
-    op.removeAttr(LinalgTransforms::kLinalgTransformMarker);
+    op->removeAttr(LinalgTransforms::kLinalgTransformMarker);
   });
 }
 

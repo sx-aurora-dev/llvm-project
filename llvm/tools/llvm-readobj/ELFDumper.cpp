@@ -550,6 +550,7 @@ public:
   void printVersionDependencySection(const Elf_Shdr *Sec) override;
   void printHashHistograms() override;
   void printCGProfile() override;
+  void printBBAddrMaps() override;
   void printAddrsig() override;
   void printNotes() override;
   void printELFLinkerOptions() override;
@@ -660,6 +661,7 @@ public:
   void printVersionDependencySection(const Elf_Shdr *Sec) override;
   void printHashHistograms() override;
   void printCGProfile() override;
+  void printBBAddrMaps() override;
   void printAddrsig() override;
   void printNotes() override;
   void printELFLinkerOptions() override;
@@ -769,7 +771,9 @@ Expected<StringRef> ELFDumper<ELFT>::getSymbolVersion(const Elf_Sym &Sym,
       getVersionMap();
   if (!MapOrErr)
     return MapOrErr.takeError();
-  return Obj.getSymbolVersionByIndex(Version, IsDefault, **MapOrErr);
+
+  return Obj.getSymbolVersionByIndex(Version, IsDefault, **MapOrErr,
+                                     Sym.st_shndx == ELF::SHN_UNDEF);
 }
 
 template <typename ELFT>
@@ -1199,6 +1203,7 @@ static const EnumEntry<unsigned> ElfSectionFlags[] = {
   ENUM_ENT(SHF_GROUP,            "G"),
   ENUM_ENT(SHF_TLS,              "T"),
   ENUM_ENT(SHF_COMPRESSED,       "C"),
+  ENUM_ENT(SHF_GNU_RETAIN,       "R"),
   ENUM_ENT(SHF_EXCLUDE,          "E"),
 };
 
@@ -1463,6 +1468,7 @@ static const EnumEntry<unsigned> ElfHeaderAMDGPUFlags[] = {
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX906),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX908),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX909),
+  LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX90A),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX90C),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX1010),
   LLVM_READOBJ_ENUM_ENT(ELF, EF_AMDGPU_MACH_AMDGCN_GFX1011),
@@ -3481,15 +3487,14 @@ static void printSectionDescription(formatted_raw_ostream &OS,
   OS << "  L (link order), O (extra OS processing required), G (group), T "
         "(TLS),\n";
   OS << "  C (compressed), x (unknown), o (OS specific), E (exclude),\n";
+  OS << "  R (retain)";
 
   if (EMachine == EM_X86_64)
-    OS << "  l (large), ";
+    OS << ", l (large)";
   else if (EMachine == EM_ARM)
-    OS << "  y (purecode), ";
-  else
-    OS << "  ";
+    OS << ", y (purecode)";
 
-  OS << "p (processor specific)\n";
+  OS << ", p (processor specific)\n";
 }
 
 template <class ELFT> void GNUELFDumper<ELFT>::printSectionHeaders() {
@@ -3932,21 +3937,17 @@ template <class ELFT> void GNUELFDumper<ELFT>::printSectionDetails() {
 
     uint64_t Flags = S.sh_flags;
     uint64_t UnknownFlags = 0;
-    bool NeedsComma = false;
+    ListSeparator LS;
     while (Flags) {
       // Take the least significant bit as a flag.
       uint64_t Flag = Flags & -Flags;
       Flags -= Flag;
 
       auto It = FlagToName.find(Flag);
-      if (It != FlagToName.end()) {
-        if (NeedsComma)
-          OS << ", ";
-        NeedsComma = true;
-        OS << It->second;
-      } else {
+      if (It != FlagToName.end())
+        OS << LS << It->second;
+      else
         UnknownFlags |= Flag;
-      }
     }
 
     auto PrintUnknownFlags = [&](uint64_t Mask, StringRef Name) {
@@ -3954,12 +3955,9 @@ template <class ELFT> void GNUELFDumper<ELFT>::printSectionDetails() {
       if (!FlagsToPrint)
         return;
 
-      if (NeedsComma)
-        OS << ", ";
-      OS << Name << " ("
+      OS << LS << Name << " ("
          << to_string(format_hex_no_prefix(FlagsToPrint, AddrSize)) << ")";
       UnknownFlags &= ~Mask;
-      NeedsComma = true;
     };
 
     PrintUnknownFlags(SHF_MASKOS, "OS");
@@ -4384,8 +4382,8 @@ void GNUELFDumper<ELFT>::printVersionSymbolSection(const Elf_Shdr *Sec) {
     }
 
     bool IsDefault;
-    Expected<StringRef> NameOrErr =
-        this->Obj.getSymbolVersionByIndex(Ndx, IsDefault, *VersionMap);
+    Expected<StringRef> NameOrErr = this->Obj.getSymbolVersionByIndex(
+        Ndx, IsDefault, *VersionMap, /*IsSymHidden=*/None);
     if (!NameOrErr) {
       this->reportUniqueWarning("unable to get a version for entry " +
                                 Twine(I) + " of " + this->describe(*Sec) +
@@ -4619,6 +4617,10 @@ template <class ELFT> void GNUELFDumper<ELFT>::printHashHistograms() {
 
 template <class ELFT> void GNUELFDumper<ELFT>::printCGProfile() {
   OS << "GNUStyle::printCGProfile not implemented\n";
+}
+
+template <class ELFT> void GNUELFDumper<ELFT>::printBBAddrMaps() {
+  OS << "GNUStyle::printBBAddrMaps not implemented\n";
 }
 
 static Expected<std::vector<uint64_t>> toULEB128Array(ArrayRef<uint8_t> Data) {
@@ -4875,11 +4877,12 @@ static StringRef getGNUGoldVersion(ArrayRef<uint8_t> Desc) {
 }
 
 template <typename ELFT>
-static void printGNUNote(raw_ostream &OS, uint32_t NoteType,
+static bool printGNUNote(raw_ostream &OS, uint32_t NoteType,
                          ArrayRef<uint8_t> Desc) {
+  // Return true if we were able to pretty-print the note, false otherwise.
   switch (NoteType) {
   default:
-    return;
+    return false;
   case ELF::NT_GNU_ABI_TAG: {
     const GNUAbiTag &AbiTag = getGNUAbiTag<ELFT>(Desc);
     if (!AbiTag.IsValid)
@@ -4902,6 +4905,54 @@ static void printGNUNote(raw_ostream &OS, uint32_t NoteType,
     break;
   }
   OS << '\n';
+  return true;
+}
+
+static const EnumEntry<unsigned> FreeBSDFeatureCtlFlags[] = {
+    {"ASLR_DISABLE", NT_FREEBSD_FCTL_ASLR_DISABLE},
+    {"PROTMAX_DISABLE", NT_FREEBSD_FCTL_PROTMAX_DISABLE},
+    {"STKGAP_DISABLE", NT_FREEBSD_FCTL_STKGAP_DISABLE},
+    {"WXNEEDED", NT_FREEBSD_FCTL_WXNEEDED},
+    {"LA48", NT_FREEBSD_FCTL_LA48},
+    {"ASG_DISABLE", NT_FREEBSD_FCTL_ASG_DISABLE},
+};
+
+struct FreeBSDNote {
+  std::string Type;
+  std::string Value;
+};
+
+template <typename ELFT>
+static Optional<FreeBSDNote>
+getFreeBSDNote(uint32_t NoteType, ArrayRef<uint8_t> Desc, bool IsCore) {
+  if (IsCore)
+    return None; // No pretty-printing yet.
+  switch (NoteType) {
+  case ELF::NT_FREEBSD_ABI_TAG:
+    if (Desc.size() != 4)
+      return None;
+    return FreeBSDNote{
+        "ABI tag",
+        utostr(support::endian::read32<ELFT::TargetEndianness>(Desc.data()))};
+  case ELF::NT_FREEBSD_ARCH_TAG:
+    return FreeBSDNote{"Arch tag", toStringRef(Desc).str()};
+  case ELF::NT_FREEBSD_FEATURE_CTL: {
+    if (Desc.size() != 4)
+      return None;
+    unsigned Value =
+        support::endian::read32<ELFT::TargetEndianness>(Desc.data());
+    std::string FlagsStr;
+    raw_string_ostream OS(FlagsStr);
+    printFlags(Value, makeArrayRef(FreeBSDFeatureCtlFlags), OS);
+    if (OS.str().empty())
+      OS << "0x" << utohexstr(Value);
+    else
+      OS << "(0x" << utohexstr(Value) << ")";
+    return FreeBSDNote{"Feature flags", OS.str()};
+  }
+  default:
+    return None;
+  }
 }
 
 struct AMDNote {
@@ -4940,7 +4991,7 @@ static AMDGPUNote getAMDGPUNote(uint32_t NoteType, ArrayRef<uint8_t> Desc) {
         StringRef(reinterpret_cast<const char *>(Desc.data()), Desc.size());
     msgpack::Document MsgPackDoc;
     if (!MsgPackDoc.readFromBlob(MsgPackString, /*Multi=*/false))
-      return {"AMDGPU Metadata", "Invalid AMDGPU Metadata"};
+      return {"", ""};
 
     AMDGPU::HSAMD::V3::MetadataVerifier Verifier(true);
     std::string HSAMetadataString;
@@ -4948,8 +4999,14 @@ static AMDGPUNote getAMDGPUNote(uint32_t NoteType, ArrayRef<uint8_t> Desc) {
       HSAMetadataString = "Invalid AMDGPU Metadata\n";
 
     raw_string_ostream StrOS(HSAMetadataString);
+    if (MsgPackDoc.getRoot().isScalar()) {
+      // TODO: passing a scalar root to toYAML() asserts:
+      // (PolymorphicTraits<T>::getKind(Val) != NodeKind::Scalar &&
+      //    "plain scalar documents are not supported")
+      // To avoid this crash we print the raw data instead.
+      return {"", ""};
+    }
     MsgPackDoc.toYAML(StrOS);
-
     return {"AMDGPU Metadata", StrOS.str()};
   }
   }
@@ -5047,7 +5104,7 @@ static const NoteType GNUNoteTypes[] = {
     {ELF::NT_GNU_PROPERTY_TYPE_0, "NT_GNU_PROPERTY_TYPE_0 (property note)"},
 };
 
-static const NoteType FreeBSDNoteTypes[] = {
+static const NoteType FreeBSDCoreNoteTypes[] = {
     {ELF::NT_FREEBSD_THRMISC, "NT_THRMISC (thrmisc structure)"},
     {ELF::NT_FREEBSD_PROCSTAT_PROC, "NT_PROCSTAT_PROC (proc data)"},
     {ELF::NT_FREEBSD_PROCSTAT_FILES, "NT_PROCSTAT_FILES (files data)"},
@@ -5059,6 +5116,14 @@ static const NoteType FreeBSDNoteTypes[] = {
     {ELF::NT_FREEBSD_PROCSTAT_PSSTRINGS,
      "NT_PROCSTAT_PSSTRINGS (ps_strings data)"},
     {ELF::NT_FREEBSD_PROCSTAT_AUXV, "NT_PROCSTAT_AUXV (auxv data)"},
+};
+
+static const NoteType FreeBSDNoteTypes[] = {
+    {ELF::NT_FREEBSD_ABI_TAG, "NT_FREEBSD_ABI_TAG (ABI version tag)"},
+    {ELF::NT_FREEBSD_NOINIT_TAG, "NT_FREEBSD_NOINIT_TAG (no .init tag)"},
+    {ELF::NT_FREEBSD_ARCH_TAG, "NT_FREEBSD_ARCH_TAG (architecture tag)"},
+    {ELF::NT_FREEBSD_FEATURE_CTL,
+     "NT_FREEBSD_FEATURE_CTL (FreeBSD feature control)"},
 };
 
 static const NoteType AMDNoteTypes[] = {
@@ -5139,8 +5204,7 @@ static const NoteType CoreNoteTypes[] = {
 };
 
 template <class ELFT>
-const StringRef getNoteTypeName(const typename ELFT::Note &Note,
-                                unsigned ELFType) {
+StringRef getNoteTypeName(const typename ELFT::Note &Note, unsigned ELFType) {
   uint32_t Type = Note.getType();
   auto FindNote = [&](ArrayRef<NoteType> V) -> StringRef {
     for (const NoteType &N : V)
@@ -5152,8 +5216,17 @@ const StringRef getNoteTypeName(const typename ELFT::Note &Note,
   StringRef Name = Note.getName();
   if (Name == "GNU")
     return FindNote(GNUNoteTypes);
-  if (Name == "FreeBSD")
-    return FindNote(FreeBSDNoteTypes);
+  if (Name == "FreeBSD") {
+    if (ELFType == ELF::ET_CORE) {
+      // FreeBSD also places the generic core notes in the FreeBSD namespace.
+      StringRef Result = FindNote(FreeBSDCoreNoteTypes);
+      if (!Result.empty())
+        return Result;
+      return FindNote(CoreNoteTypes);
+    } else {
+      return FindNote(FreeBSDNoteTypes);
+    }
+  }
   if (Name == "AMD")
     return FindNote(AMDNoteTypes);
   if (Name == "AMDGPU")
@@ -5170,12 +5243,13 @@ static void printNotesHelper(
     llvm::function_ref<void(Optional<StringRef>, typename ELFT::Off,
                             typename ELFT::Addr)>
         StartNotesFn,
-    llvm::function_ref<Error(const typename ELFT::Note &)> ProcessNoteFn,
+    llvm::function_ref<Error(const typename ELFT::Note &, bool)> ProcessNoteFn,
     llvm::function_ref<void()> FinishNotesFn) {
   const ELFFile<ELFT> &Obj = Dumper.getElfObject().getELFFile();
+  bool IsCoreFile = Obj.getHeader().e_type == ELF::ET_CORE;
 
   ArrayRef<typename ELFT::Shdr> Sections = cantFail(Obj.sections());
-  if (Obj.getHeader().e_type != ELF::ET_CORE && !Sections.empty()) {
+  if (!IsCoreFile && !Sections.empty()) {
     for (const typename ELFT::Shdr &S : Sections) {
       if (S.sh_type != SHT_NOTE)
         continue;
@@ -5184,7 +5258,7 @@ static void printNotesHelper(
       Error Err = Error::success();
       size_t I = 0;
       for (const typename ELFT::Note Note : Obj.notes(S, Err)) {
-        if (Error E = ProcessNoteFn(Note))
+        if (Error E = ProcessNoteFn(Note, IsCoreFile))
           Dumper.reportUniqueWarning(
               "unable to read note with index " + Twine(I) + " from the " +
               describe(Obj, S) + ": " + toString(std::move(E)));
@@ -5215,7 +5289,7 @@ static void printNotesHelper(
     Error Err = Error::success();
     size_t Index = 0;
     for (const typename ELFT::Note Note : Obj.notes(P, Err)) {
-      if (Error E = ProcessNoteFn(Note))
+      if (Error E = ProcessNoteFn(Note, IsCoreFile))
         Dumper.reportUniqueWarning("unable to read note with index " +
                                    Twine(Index) +
                                    " from the PT_NOTE segment with index " +
@@ -5231,9 +5305,17 @@ static void printNotesHelper(
 }
 
 template <class ELFT> void GNUELFDumper<ELFT>::printNotes() {
+  bool IsFirstHeader = true;
   auto PrintHeader = [&](Optional<StringRef> SecName,
                          const typename ELFT::Off Offset,
                          const typename ELFT::Addr Size) {
+    // Print a newline between notes sections to match GNU readelf.
+    if (!IsFirstHeader) {
+      OS << '\n';
+    } else {
+      IsFirstHeader = false;
+    }
+
     OS << "Displaying notes found ";
 
     if (SecName)
@@ -5245,7 +5327,7 @@ template <class ELFT> void GNUELFDumper<ELFT>::printNotes() {
     OS << "  Owner                Data size \tDescription\n";
   };
 
-  auto ProcessNote = [&](const Elf_Note &Note) -> Error {
+  auto ProcessNote = [&](const Elf_Note &Note, bool IsCore) -> Error {
     StringRef Name = Note.getName();
     ArrayRef<uint8_t> Descriptor = Note.getDesc();
     Elf_Word Type = Note.getType();
@@ -5262,28 +5344,42 @@ template <class ELFT> void GNUELFDumper<ELFT>::printNotes() {
       OS << "Unknown note type: (" << format_hex(Type, 10) << ")\n";
 
     // Print the description, or fallback to printing raw bytes for unknown
-    // owners.
+    // owners/if we fail to pretty-print the contents.
     if (Name == "GNU") {
-      printGNUNote<ELFT>(OS, Type, Descriptor);
+      if (printGNUNote<ELFT>(OS, Type, Descriptor))
+        return Error::success();
+    } else if (Name == "FreeBSD") {
+      if (Optional<FreeBSDNote> N =
+              getFreeBSDNote<ELFT>(Type, Descriptor, IsCore)) {
+        OS << "    " << N->Type << ": " << N->Value << '\n';
+        return Error::success();
+      }
     } else if (Name == "AMD") {
       const AMDNote N = getAMDNote<ELFT>(Type, Descriptor);
-      if (!N.Type.empty())
+      if (!N.Type.empty()) {
         OS << "    " << N.Type << ":\n        " << N.Value << '\n';
+        return Error::success();
+      }
     } else if (Name == "AMDGPU") {
       const AMDGPUNote N = getAMDGPUNote<ELFT>(Type, Descriptor);
-      if (!N.Type.empty())
+      if (!N.Type.empty()) {
         OS << "    " << N.Type << ":\n        " << N.Value << '\n';
+        return Error::success();
+      }
     } else if (Name == "CORE") {
       if (Type == ELF::NT_FILE) {
         DataExtractor DescExtractor(Descriptor,
                                     ELFT::TargetEndianness == support::little,
                                     sizeof(Elf_Addr));
-        if (Expected<CoreNote> NoteOrErr = readCoreNote(DescExtractor))
+        if (Expected<CoreNote> NoteOrErr = readCoreNote(DescExtractor)) {
           printCoreNote<ELFT>(OS, *NoteOrErr);
-        else
+          return Error::success();
+        } else {
           return NoteOrErr.takeError();
+        }
       }
-    } else if (!Descriptor.empty()) {
+    }
+    if (!Descriptor.empty()) {
       OS << "   description data:";
       for (uint8_t B : Descriptor)
         OS << " " << format("%02x", B);
@@ -6430,6 +6526,34 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printCGProfile() {
   }
 }
 
+template <class ELFT> void LLVMELFDumper<ELFT>::printBBAddrMaps() {
+  for (const Elf_Shdr &Sec : cantFail(this->Obj.sections())) {
+    if (Sec.sh_type != SHT_LLVM_BB_ADDR_MAP)
+      continue;
+    ListScope L(W, "BBAddrMap");
+    Expected<std::vector<Elf_BBAddrMap>> BBAddrMapOrErr =
+        this->Obj.decodeBBAddrMap(Sec);
+    if (!BBAddrMapOrErr) {
+      this->reportUniqueWarning("unable to dump " + this->describe(Sec) + ": " +
+                                toString(BBAddrMapOrErr.takeError()));
+      continue;
+    }
+    for (const Elf_BBAddrMap &AM : *BBAddrMapOrErr) {
+      DictScope D(W, "Function");
+      W.printHex("At", AM.Addr);
+      ListScope L(W, "BB entries");
+      for (const typename Elf_BBAddrMap::BBEntry &BBE : AM.BBEntries) {
+        DictScope L(W);
+        W.printHex("Offset", BBE.Offset);
+        W.printHex("Size", BBE.Size);
+        W.printBoolean("HasReturn", BBE.HasReturn);
+        W.printBoolean("HasTailCall", BBE.HasTailCall);
+        W.printBoolean("IsEHPad", BBE.IsEHPad);
+      }
+    }
+  }
+}
+
 template <class ELFT> void LLVMELFDumper<ELFT>::printAddrsig() {
   ListScope L(W, "Addrsig");
   if (!this->DotAddrsigSec)
@@ -6447,15 +6571,17 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printAddrsig() {
 }
 
 template <typename ELFT>
-static void printGNUNoteLLVMStyle(uint32_t NoteType, ArrayRef<uint8_t> Desc,
+static bool printGNUNoteLLVMStyle(uint32_t NoteType, ArrayRef<uint8_t> Desc,
                                   ScopedPrinter &W) {
+  // Return true if we were able to pretty-print the note, false otherwise.
   switch (NoteType) {
   default:
-    return;
+    return false;
   case ELF::NT_GNU_ABI_TAG: {
     const GNUAbiTag &AbiTag = getGNUAbiTag<ELFT>(Desc);
     if (!AbiTag.IsValid) {
       W.printString("ABI", "<corrupt GNU_ABI_TAG>");
+      return false;
     } else {
       W.printString("OS", AbiTag.OSName);
       W.printString("ABI", AbiTag.ABI);
@@ -6475,6 +6601,7 @@ static void printGNUNoteLLVMStyle(uint32_t NoteType, ArrayRef<uint8_t> Desc,
       W.printString(Property);
     break;
   }
+  return true;
 }
 
 static void printCoreNoteLLVMStyle(const CoreNote &Note, ScopedPrinter &W) {
@@ -6503,7 +6630,7 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printNotes() {
 
   auto EndNotes = [&] { NoteScope.reset(); };
 
-  auto ProcessNote = [&](const Elf_Note &Note) -> Error {
+  auto ProcessNote = [&](const Elf_Note &Note, bool IsCore) -> Error {
     DictScope D2(W, "Note");
     StringRef Name = Note.getName();
     ArrayRef<uint8_t> Descriptor = Note.getDesc();
@@ -6522,28 +6649,42 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printNotes() {
                     "Unknown (" + to_string(format_hex(Type, 10)) + ")");
 
     // Print the description, or fallback to printing raw bytes for unknown
-    // owners.
+    // owners/if we fail to pretty-print the contents.
     if (Name == "GNU") {
-      printGNUNoteLLVMStyle<ELFT>(Type, Descriptor, W);
+      if (printGNUNoteLLVMStyle<ELFT>(Type, Descriptor, W))
+        return Error::success();
+    } else if (Name == "FreeBSD") {
+      if (Optional<FreeBSDNote> N =
+              getFreeBSDNote<ELFT>(Type, Descriptor, IsCore)) {
+        W.printString(N->Type, N->Value);
+        return Error::success();
+      }
     } else if (Name == "AMD") {
       const AMDNote N = getAMDNote<ELFT>(Type, Descriptor);
-      if (!N.Type.empty())
+      if (!N.Type.empty()) {
         W.printString(N.Type, N.Value);
+        return Error::success();
+      }
     } else if (Name == "AMDGPU") {
       const AMDGPUNote N = getAMDGPUNote<ELFT>(Type, Descriptor);
-      if (!N.Type.empty())
+      if (!N.Type.empty()) {
         W.printString(N.Type, N.Value);
+        return Error::success();
+      }
     } else if (Name == "CORE") {
       if (Type == ELF::NT_FILE) {
         DataExtractor DescExtractor(Descriptor,
                                     ELFT::TargetEndianness == support::little,
                                     sizeof(Elf_Addr));
-        if (Expected<CoreNote> Note = readCoreNote(DescExtractor))
-          printCoreNoteLLVMStyle(*Note, W);
-        else
-          return Note.takeError();
+        if (Expected<CoreNote> N = readCoreNote(DescExtractor)) {
+          printCoreNoteLLVMStyle(*N, W);
+          return Error::success();
+        } else {
+          return N.takeError();
+        }
       }
-    } else if (!Descriptor.empty()) {
+    }
+    if (!Descriptor.empty()) {
       W.printBinaryBlock("Description data", Descriptor);
     }
     return Error::success();

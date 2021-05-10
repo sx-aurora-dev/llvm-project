@@ -160,10 +160,10 @@ typedef enum {
   LLVMVectorTypeKind,    /**< Fixed width SIMD vector type */
   LLVMMetadataTypeKind,  /**< Metadata */
   LLVMX86_MMXTypeKind,   /**< X86 MMX */
-  LLVMX86_AMXTypeKind,   /**< X86 AMX */
   LLVMTokenTypeKind,     /**< Tokens */
   LLVMScalableVectorTypeKind, /**< Scalable SIMD vector type */
-  LLVMBFloatTypeKind     /**< 16 bit brain floating point type */
+  LLVMBFloatTypeKind,    /**< 16 bit brain floating point type */
+  LLVMX86_AMXTypeKind    /**< X86 AMX */
 } LLVMTypeKind;
 
 typedef enum {
@@ -270,7 +270,6 @@ typedef enum {
   LLVMConstantVectorValueKind,
 
   LLVMUndefValueValueKind,
-  LLVMPoisonValueValueKind,
   LLVMConstantAggregateZeroValueKind,
   LLVMConstantDataArrayValueKind,
   LLVMConstantDataVectorValueKind,
@@ -283,6 +282,7 @@ typedef enum {
   LLVMInlineAsmValueKind,
 
   LLVMInstructionValueKind,
+  LLVMPoisonValueValueKind
 } LLVMValueKind;
 
 typedef enum {
@@ -2249,6 +2249,8 @@ void LLVMSetUnnamedAddr(LLVMValueRef Global, LLVMBool HasUnnamedAddr);
  * @see llvm::AllocaInst::getAlignment()
  * @see llvm::LoadInst::getAlignment()
  * @see llvm::StoreInst::getAlignment()
+ * @see llvm::AtomicRMWInst::setAlignment()
+ * @see llvm::AtomicCmpXchgInst::setAlignment()
  * @see llvm::GlobalValue::getAlignment()
  */
 unsigned LLVMGetAlignment(LLVMValueRef V);
@@ -2258,6 +2260,8 @@ unsigned LLVMGetAlignment(LLVMValueRef V);
  * @see llvm::AllocaInst::setAlignment()
  * @see llvm::LoadInst::setAlignment()
  * @see llvm::StoreInst::setAlignment()
+ * @see llvm::AtomicRMWInst::setAlignment()
+ * @see llvm::AtomicCmpXchgInst::setAlignment()
  * @see llvm::GlobalValue::setAlignment()
  */
 void LLVMSetAlignment(LLVMValueRef V, unsigned Bytes);

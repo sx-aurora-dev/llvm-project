@@ -117,6 +117,9 @@ cl::alias PrintFileNameA("A", cl::desc("Alias for --print-file-name"),
 cl::alias PrintFileNameo("o", cl::desc("Alias for --print-file-name"),
                          cl::aliasopt(PrintFileName), cl::Grouping);
 
+cl::opt<bool> Quiet("quiet", cl::desc("Suppress 'no symbols' diagnostic"),
+                    cl::cat(NMCat));
+
 cl::opt<bool> DebugSyms("debug-syms",
                         cl::desc("Show all symbols, even debugger only"),
                         cl::cat(NMCat));
@@ -232,7 +235,7 @@ std::string ToolName;
 
 static void error(Twine Message, Twine Path = Twine()) {
   HadError = true;
-  WithColor::error(errs(), ToolName) << Path << ": " << Message << ".\n";
+  WithColor::error(errs(), ToolName) << Path << ": " << Message << "\n";
 }
 
 static bool error(std::error_code EC, Twine Path = Twine()) {
@@ -262,13 +265,13 @@ static void error(llvm::Error E, StringRef FileName, const Archive::Child &C,
     errs() << "(" << NameOrErr.get() << ")";
 
   if (!ArchitectureName.empty())
-    errs() << " (for architecture " << ArchitectureName << ") ";
+    errs() << " (for architecture " << ArchitectureName << ")";
 
   std::string Buf;
   raw_string_ostream OS(Buf);
   logAllUnhandledErrors(std::move(E), OS);
   OS.flush();
-  errs() << " " << Buf << "\n";
+  errs() << ": " << Buf << "\n";
 }
 
 // This version of error() prints the file name and which architecture slice it
@@ -281,13 +284,13 @@ static void error(llvm::Error E, StringRef FileName,
   WithColor::error(errs(), ToolName) << FileName;
 
   if (!ArchitectureName.empty())
-    errs() << " (for architecture " << ArchitectureName << ") ";
+    errs() << " (for architecture " << ArchitectureName << ")";
 
   std::string Buf;
   raw_string_ostream OS(Buf);
   logAllUnhandledErrors(std::move(E), OS);
   OS.flush();
-  errs() << " " << Buf << "\n";
+  errs() << ": " << Buf << "\n";
 }
 
 namespace {
@@ -1142,13 +1145,16 @@ static char getNMSectionTagAndName(SymbolicFile &Obj, basic_symbol_iterator I,
     }
   }
 
-  if ((Symflags & object::SymbolRef::SF_Weak) && !isa<MachOObjectFile>(Obj)) {
-    char Ret = isObject(Obj, I) ? 'v' : 'w';
-    return (!(Symflags & object::SymbolRef::SF_Undefined)) ? toupper(Ret) : Ret;
+  if (Symflags & object::SymbolRef::SF_Undefined) {
+    if (isa<MachOObjectFile>(Obj) || !(Symflags & object::SymbolRef::SF_Weak))
+      return 'U';
+    return isObject(Obj, I) ? 'v' : 'w';
   }
-
-  if (Symflags & object::SymbolRef::SF_Undefined)
-    return 'U';
+  if (isa<ELFObjectFileBase>(&Obj))
+    if (ELFSymbolRef(*I).getELFType() == ELF::STT_GNU_IFUNC)
+      return 'i';
+  if (!isa<MachOObjectFile>(Obj) && (Symflags & object::SymbolRef::SF_Weak))
+    return isObject(Obj, I) ? 'V' : 'W';
 
   if (Symflags & object::SymbolRef::SF_Common)
     return 'C';
@@ -1169,8 +1175,6 @@ static char getNMSectionTagAndName(SymbolicFile &Obj, basic_symbol_iterator I,
   else if (TapiFile *Tapi = dyn_cast<TapiFile>(&Obj))
     Ret = getSymbolNMTypeChar(*Tapi, I);
   else if (ELFObjectFileBase *ELF = dyn_cast<ELFObjectFileBase>(&Obj)) {
-    if (ELFSymbolRef(*I).getELFType() == ELF::STT_GNU_IFUNC)
-      return 'i';
     Ret = getSymbolNMTypeChar(*ELF, I);
     if (ELFSymbolRef(*I).getBinding() == ELF::STB_GNU_UNIQUE)
       return Ret;
@@ -1686,10 +1690,90 @@ static void dumpSymbolsFromDLInfoMachO(MachOObjectFile &MachO) {
   }
 }
 
+namespace {
+struct SymbolVersion {
+  std::string Name;
+  bool IsDefault;
+};
+} // namespace
+
+template <class ELFT>
+static Expected<std::vector<SymbolVersion>>
+readSymbolVersionsELF(const ELFFile<ELFT> &Obj, StringRef FileName,
+                      ELFObjectFileBase::elf_symbol_iterator_range Symbols) {
+  using Elf_Shdr = typename ELFT::Shdr;
+
+  // We called sections() earlier, so can't fail here.
+  typename ELFT::ShdrRange SectionsOrErr = cantFail(Obj.sections());
+  const Elf_Shdr *SymVerSec = nullptr;
+  const Elf_Shdr *SymVerNeedSec = nullptr;
+  const Elf_Shdr *SymVerDefSec = nullptr;
+  for (const Elf_Shdr &Sec : SectionsOrErr) {
+    if (Sec.sh_type == ELF::SHT_GNU_versym)
+      SymVerSec = &Sec;
+    else if (Sec.sh_type == ELF::SHT_GNU_verdef)
+      SymVerDefSec = &Sec;
+    else if (Sec.sh_type == ELF::SHT_GNU_verneed)
+      SymVerNeedSec = &Sec;
+  }
+
+  if (!SymVerSec)
+    return std::vector<SymbolVersion>{};
+
+  Expected<SmallVector<Optional<VersionEntry>, 0>> MapOrErr =
+      Obj.loadVersionMap(SymVerNeedSec, SymVerDefSec);
+  if (!MapOrErr)
+    return MapOrErr.takeError();
+
+  std::vector<SymbolVersion> Ret;
+  size_t I = 0;
+  for (auto It = Symbols.begin(), E = Symbols.end(); It != E; ++It) {
+    ++I;
+    Expected<const typename ELFT::Versym *> VerEntryOrErr =
+        Obj.template getEntry<typename ELFT::Versym>(*SymVerSec, I);
+    if (!VerEntryOrErr)
+      return createError("unable to read an entry with index " + Twine(I) +
+                         " from " + describe(Obj, *SymVerSec) + ": " +
+                         toString(VerEntryOrErr.takeError()));
+
+    Expected<uint32_t> FlagsOrErr = It->getFlags();
+    if (!FlagsOrErr)
+      return createError("unable to read flags for symbol with index " +
+                         Twine(I) + ": " + toString(FlagsOrErr.takeError()));
+
+    bool IsDefault;
+    Expected<StringRef> VerOrErr = Obj.getSymbolVersionByIndex(
+        (*VerEntryOrErr)->vs_index, IsDefault, *MapOrErr,
+        (*FlagsOrErr) & SymbolRef::SF_Undefined);
+    if (!VerOrErr)
+      return createError("unable to get a version for entry " + Twine(I) +
+                         " of " + describe(Obj, *SymVerSec) + ": " +
+                         toString(VerOrErr.takeError()));
+
+    Ret.push_back({(*VerOrErr).str(), IsDefault});
+  }
+
+  return Ret;
+}
+
+static Expected<std::vector<SymbolVersion>>
+readSymbolVersionsELF(const ELFObjectFileBase &Obj,
+                      ELFObjectFileBase::elf_symbol_iterator_range Symbols) {
+  if (const auto *ELF = dyn_cast<ELF32LEObjectFile>(&Obj))
+    return readSymbolVersionsELF(ELF->getELFFile(), Obj.getFileName(), Symbols);
+  else if (const auto *ELF = dyn_cast<ELF32BEObjectFile>(&Obj))
+    return readSymbolVersionsELF(ELF->getELFFile(), Obj.getFileName(), Symbols);
+  else if (const auto *ELF = dyn_cast<ELF64LEObjectFile>(&Obj))
+    return readSymbolVersionsELF(ELF->getELFFile(), Obj.getFileName(), Symbols);
+  return readSymbolVersionsELF(cast<ELF64BEObjectFile>(&Obj)->getELFFile(),
+                               Obj.getFileName(), Symbols);
+}
+
 static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
                                       StringRef ArchiveName = {},
                                       StringRef ArchitectureName = {}) {
   auto Symbols = Obj.symbols();
+  std::vector<SymbolVersion> SymbolVersions;
   if (DynamicSyms) {
     const auto *E = dyn_cast<ELFObjectFileBase>(&Obj);
     if (!E) {
@@ -1697,6 +1781,14 @@ static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
       return;
     }
     Symbols = E->getDynamicSymbolIterators();
+
+    if (Expected<std::vector<SymbolVersion>> VersionsOrErr =
+            readSymbolVersionsELF(*E, Symbols))
+      SymbolVersions = std::move(*VersionsOrErr);
+    else
+      WithColor::warning(errs(), ToolName)
+          << "unable to read symbol versions: "
+          << toString(VersionsOrErr.takeError()) << "\n";
   }
 
   // If a "-s segname sectname" option was specified and this is a Mach-O
@@ -1710,7 +1802,9 @@ static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
       return;
   }
   if (!(MachO && DyldInfoOnly)) {
+    size_t I = -1;
     for (BasicSymbolRef Sym : Symbols) {
+      ++I;
       Expected<uint32_t> SymFlagsOrErr = Sym.getFlags();
       if (!SymFlagsOrErr) {
         error(SymFlagsOrErr.takeError(), Obj.getFileName());
@@ -1750,6 +1844,10 @@ static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
         } else
           error(std::move(E), Obj.getFileName());
       }
+      if (!SymbolVersions.empty() && !SymbolVersions[I].Name.empty())
+        S.Name +=
+            (SymbolVersions[I].IsDefault ? "@@" : "@") + SymbolVersions[I].Name;
+
       S.Sym = Sym;
       SymbolList.push_back(S);
     }
@@ -1766,7 +1864,7 @@ static void dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
 
   CurrentFilename = Obj.getFileName();
 
-  if (Symbols.empty() && SymbolList.empty()) {
+  if (Symbols.empty() && SymbolList.empty() && !Quiet) {
     writeFileName(errs(), ArchiveName, ArchitectureName);
     errs() << "no symbols\n";
   }

@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -37,15 +38,23 @@ constexpr const char binding[] = "__binding";
 constexpr const char weakBinding[] = "__weak_binding";
 constexpr const char lazyBinding[] = "__lazy_binding";
 constexpr const char export_[] = "__export";
+constexpr const char functionStarts_[] = "__functionStarts";
 constexpr const char symbolTable[] = "__symbol_table";
 constexpr const char indirectSymbolTable[] = "__ind_sym_tab";
 constexpr const char stringTable[] = "__string_table";
+constexpr const char codeSignature[] = "__code_signature";
 constexpr const char got[] = "__got";
 constexpr const char threadPtrs[] = "__thread_ptrs";
 constexpr const char unwindInfo[] = "__unwind_info";
 // these are not synthetic, but in service of synthetic __unwind_info
 constexpr const char compactUnwind[] = "__compact_unwind";
 constexpr const char ehFrame[] = "__eh_frame";
+// these are not synthetic, but need to be sorted
+constexpr const char text[] = "__text";
+constexpr const char stubs[] = "__stubs";
+constexpr const char stubHelper[] = "__stub_helper";
+constexpr const char laSymbolPtr[] = "__la_symbol_ptr";
+constexpr const char data[] = "__data";
 
 } // namespace section_names
 
@@ -71,7 +80,7 @@ class LinkEditSection : public SyntheticSection {
 public:
   LinkEditSection(const char *segname, const char *name)
       : SyntheticSection(segname, name) {
-    align = WordSize;
+    align = WordSize; // mimic ld64
   }
 
   // Sections in __LINKEDIT are special: their offsets are recorded in the
@@ -88,7 +97,7 @@ public:
   // NOTE: This assumes that the extra bytes required for alignment can be
   // zero-valued bytes.
   uint64_t getSize() const override final {
-    return llvm::alignTo(getRawSize(), WordSize);
+    return llvm::alignTo(getRawSize(), align);
   }
 };
 
@@ -389,6 +398,17 @@ private:
   size_t size = 0;
 };
 
+class FunctionStartsSection : public LinkEditSection {
+public:
+  FunctionStartsSection();
+  void finalizeContents();
+  uint64_t getRawSize() const override { return contents.size(); }
+  void writeTo(uint8_t *buf) const override;
+
+private:
+  SmallVector<char, 128> contents;
+};
+
 // Stores the strings referenced by the symbol table.
 class StringTableSection : public LinkEditSection {
 public:
@@ -476,6 +496,32 @@ public:
   void writeTo(uint8_t *buf) const override;
 };
 
+// The code signature comes at the very end of the linked output file.
+class CodeSignatureSection : public LinkEditSection {
+public:
+  static constexpr uint8_t blockSizeShift = 12;
+  static constexpr size_t blockSize = (1 << blockSizeShift); // 4 KiB
+  static constexpr size_t hashSize = 256 / 8;
+  static constexpr size_t blobHeadersSize = llvm::alignTo<8>(
+      sizeof(llvm::MachO::CS_SuperBlob) + sizeof(llvm::MachO::CS_BlobIndex));
+  static constexpr uint32_t fixedHeadersSize =
+      blobHeadersSize + sizeof(llvm::MachO::CS_CodeDirectory);
+
+  uint32_t fileNamePad = 0;
+  uint32_t allHeadersSize = 0;
+  StringRef fileName;
+
+  CodeSignatureSection();
+  uint64_t getRawSize() const override;
+  bool isNeeded() const override { return true; }
+  void writeTo(uint8_t *buf) const override;
+  uint32_t getBlockCount() const;
+  void writeHashes(uint8_t *buf) const;
+};
+
+static_assert((CodeSignatureSection::blobHeadersSize % 8) == 0, "");
+static_assert((CodeSignatureSection::fixedHeadersSize % 8) == 0, "");
+
 struct InStruct {
   MachHeaderSection *header = nullptr;
   RebaseSection *rebase = nullptr;
@@ -483,6 +529,7 @@ struct InStruct {
   WeakBindingSection *weakBinding = nullptr;
   LazyBindingSection *lazyBinding = nullptr;
   ExportSection *exports = nullptr;
+  FunctionStartsSection *functionStarts = nullptr;
   GotSection *got = nullptr;
   TlvPointerSection *tlvPointers = nullptr;
   LazyPointerSection *lazyPointers = nullptr;

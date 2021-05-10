@@ -292,6 +292,9 @@ def SDTVecShuffle : SDTypeProfile<1, 2, [
 def SDTVShiftVP : SDTypeProfile<1, 4, [
   SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>
 ]>;
+def SDTVecSlice : SDTypeProfile<1, 3, [     // vector splice
+  SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>, SDTCisInt<3>
+]>;
 def SDTVecExtract : SDTypeProfile<1, 2, [   // vector extract
   SDTCisEltOfVec<0, 1>, SDTCisPtrTy<2>
 ]>;
@@ -311,6 +314,9 @@ def SDTFPVecReduce : SDTypeProfile<1, 1, [  // FP vector reduction
   SDTCisFP<0>, SDTCisVec<1>
 ]>;
 
+def SDTVecReverse : SDTypeProfile<1, 1, [  // vector reverse
+  SDTCisVec<0>, SDTCisSameAs<0,1>
+]>;
 
 def SDTSubVecExtract : SDTypeProfile<1, 2, [// subvector extract
   SDTCisSubVecOfVec<0,1>, SDTCisInt<2>
@@ -769,6 +775,8 @@ def ist        : SDNode<"ISD::STORE"      , SDTIStore,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 def vp_vshift : SDNode<"ISD::VP_VSHIFT", SDTVShiftVP, []>;
 def vector_shuffle : SDNode<"ISD::VECTOR_SHUFFLE", SDTVecShuffle, []>;
+def vector_reverse : SDNode<"ISD::VECTOR_REVERSE", SDTVecReverse>;
+def vector_splice : SDNode<"ISD::VECTOR_SPLICE", SDTVecSlice, []>;
 def build_vector : SDNode<"ISD::BUILD_VECTOR", SDTypeProfile<1, -1, []>, []>;
 def splat_vector : SDNode<"ISD::SPLAT_VECTOR", SDTypeProfile<1, 1, []>, []>;
 def scalar_to_vector : SDNode<"ISD::SCALAR_TO_VECTOR", SDTypeProfile<1, 1, []>,
@@ -1032,8 +1040,8 @@ def vtFP       : PatLeaf<(vt),  [{ return N->getVT().isFloatingPoint(); }]>;
 // bitcasts and check for either opcode, except when used as a pattern root.
 // When used as a pattern root, only fixed-length build_vector and scalable
 // splat_vector are supported.
-def immAllOnesV; // ISD::isConstantSplatVectorAllOnes
-def immAllZerosV; // ISD::isConstantSplatVectorAllZeros
+def immAllOnesV  : SDPatternOperator; // ISD::isConstantSplatVectorAllOnes
+def immAllZerosV : SDPatternOperator; // ISD::isConstantSplatVectorAllZeros
 
 // Other helper fragments.
 def not  : PatFrag<(ops node:$in), (xor node:$in, -1)>;

@@ -344,7 +344,9 @@ MemoryDependenceResults::getInvariantGroupPointerDependency(LoadInst *LI,
       // If we hit load/store with the same invariant.group metadata (and the
       // same pointer operand) we can assume that value pointed by pointer
       // operand didn't change.
-      if ((isa<LoadInst>(U) || isa<StoreInst>(U)) &&
+      if ((isa<LoadInst>(U) ||
+           (isa<StoreInst>(U) &&
+            cast<StoreInst>(U)->getPointerOperand() == Ptr)) &&
           U->hasMetadata(LLVMContext::MD_invariant_group))
         ClosestDependency = GetClosestDependency(ClosestDependency, U);
     }
@@ -752,8 +754,7 @@ MemoryDependenceResults::getNonLocalCallDependency(CallBase *QueryCall) {
   } else {
     // Seed DirtyBlocks with each of the preds of QueryInst's block.
     BasicBlock *QueryBB = QueryCall->getParent();
-    for (BasicBlock *Pred : PredCache.get(QueryBB))
-      DirtyBlocks.push_back(Pred);
+    append_range(DirtyBlocks, PredCache.get(QueryBB));
     ++NumUncacheNonLocal;
   }
 
@@ -767,8 +768,7 @@ MemoryDependenceResults::getNonLocalCallDependency(CallBase *QueryCall) {
 
   // Iterate while we still have blocks to update.
   while (!DirtyBlocks.empty()) {
-    BasicBlock *DirtyBB = DirtyBlocks.back();
-    DirtyBlocks.pop_back();
+    BasicBlock *DirtyBB = DirtyBlocks.pop_back_val();
 
     // Already processed this block?
     if (!Visited.insert(DirtyBB).second)
@@ -838,8 +838,7 @@ MemoryDependenceResults::getNonLocalCallDependency(CallBase *QueryCall) {
 
       // If the block *is* completely transparent to the load, we need to check
       // the predecessors of this block.  Add them to our worklist.
-      for (BasicBlock *Pred : PredCache.get(DirtyBB))
-        DirtyBlocks.push_back(Pred);
+      append_range(DirtyBlocks, PredCache.get(DirtyBB));
     }
   }
 

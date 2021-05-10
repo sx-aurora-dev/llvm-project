@@ -250,11 +250,11 @@ bool LoopVectorizationRequirements::doesNotMeet(
     Function *F, Loop *L, const LoopVectorizeHints &Hints) {
   const char *PassName = Hints.vectorizeAnalysisPassName();
   bool Failed = false;
-  if (UnsafeAlgebraInst && !Hints.allowReordering()) {
+  if (ExactFPMathInst && !Hints.allowReordering()) {
     ORE.emit([&]() {
       return OptimizationRemarkAnalysisFPCommute(
-                 PassName, "CantReorderFPOps", UnsafeAlgebraInst->getDebugLoc(),
-                 UnsafeAlgebraInst->getParent())
+                 PassName, "CantReorderFPOps", ExactFPMathInst->getDebugLoc(),
+                 ExactFPMathInst->getParent())
              << "loop not vectorized: cannot prove it is safe to reorder "
                 "floating-point operations";
     });
@@ -594,21 +594,23 @@ static bool isTLIScalarize(const TargetLibraryInfo &TLI, const CallInst &CI) {
   bool Scalarize = TLI.isFunctionVectorizable(ScalarName);
   // Check that all known VFs are not associated to a vector
   // function, i.e. the vector name is emty.
-  if (Scalarize)
-    for (unsigned VF = 2, WidestVF = TLI.getWidestVF(ScalarName);
-         VF <= WidestVF; VF *= 2) {
+  if (Scalarize) {
+    ElementCount WidestFixedVF, WidestScalableVF;
+    TLI.getWidestVF(ScalarName, WidestFixedVF, WidestScalableVF);
+    for (ElementCount VF = ElementCount::getFixed(2);
+         ElementCount::isKnownLE(VF, WidestFixedVF); VF *= 2)
       Scalarize &= !TLI.isFunctionVectorizable(ScalarName, VF);
-    }
+    for (ElementCount VF = ElementCount::getScalable(1);
+         ElementCount::isKnownLE(VF, WidestScalableVF); VF *= 2)
+      Scalarize &= !TLI.isFunctionVectorizable(ScalarName, VF);
+    assert((WidestScalableVF.isZero() || !Scalarize) &&
+           "Caller may decide to scalarize a variant using a scalable VF");
+  }
   return Scalarize;
 }
 
 bool LoopVectorizationLegality::canVectorizeInstrs() {
   BasicBlock *Header = TheLoop->getHeader();
-
-  // Look for the attribute signaling the absence of NaNs.
-  Function &F = *Header->getParent();
-  HasFunNoNaNAttr =
-      F.getFnAttribute("no-nans-fp-math").getValueAsString() == "true";
 
   // For each block in the loop.
   for (BasicBlock *BB : TheLoop->blocks()) {
@@ -649,8 +651,7 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
         RecurrenceDescriptor RedDes;
         if (RecurrenceDescriptor::isReductionPHI(Phi, TheLoop, RedDes, DB, AC,
                                                  DT)) {
-          if (RedDes.hasUnsafeAlgebra())
-            Requirements->addUnsafeAlgebraInst(RedDes.getUnsafeAlgebraInst());
+          Requirements->addExactFPMathInst(RedDes.getExactFPMathInst());
           AllowedExit.insert(RedDes.getLoopExitInstr());
           Reductions[Phi] = RedDes;
           continue;
@@ -673,8 +674,7 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
         InductionDescriptor ID;
         if (InductionDescriptor::isInductionPHI(Phi, TheLoop, PSE, ID)) {
           addInductionPhi(Phi, ID, AllowedExit);
-          if (ID.hasUnsafeAlgebra() && !HasFunNoNaNAttr)
-            Requirements->addUnsafeAlgebraInst(ID.getUnsafeAlgebraInst());
+          Requirements->addExactFPMathInst(ID.getExactFPMathInst());
           continue;
         }
 
@@ -943,6 +943,12 @@ bool LoopVectorizationLegality::blockCanBePredicated(
       ConditionalAssumes.insert(&I);
       continue;
     }
+
+    // Do not let llvm.experimental.noalias.scope.decl block the vectorization.
+    // TODO: there might be cases that it should block the vectorization. Let's
+    // ignore those for now.
+    if (isa<NoAliasScopeDeclInst>(&I))
+      continue;
 
     // We might be able to hoist the load.
     if (I.mayReadFromMemory()) {

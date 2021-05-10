@@ -223,6 +223,11 @@ bool SymbolCollector::shouldCollectSymbol(const NamedDecl &ND,
   if (!IsMainFileOnly && ND.isInAnonymousNamespace())
     return false;
 
+  // For function local symbols, index only classes and its member functions.
+  if (index::isFunctionLocalSymbol(&ND))
+    return isa<RecordDecl>(ND) ||
+           (ND.isCXXInstanceMember() && ND.isFunctionOrFunctionTemplate());
+
   // We want most things but not "local" symbols such as symbols inside
   // FunctionDecl, BlockDecl, ObjCMethodDecl and OMPDeclareReductionDecl.
   // FIXME: Need a matcher for ExportDecl in order to include symbols declared
@@ -427,7 +432,8 @@ bool SymbolCollector::handleMacroOccurrence(const IdentifierInfo *Name,
   const auto &SM = PP->getSourceManager();
   auto DefLoc = MI->getDefinitionLoc();
   // Also avoid storing predefined macros like __DBL_MIN__.
-  if (SM.isWrittenInBuiltinFile(DefLoc))
+  if (SM.isWrittenInBuiltinFile(DefLoc) ||
+      Name->getName() == "__GCC_HAVE_DWARF2_CFI_ASM")
     return true;
 
   auto ID = getSymbolID(Name->getName(), MI, SM);

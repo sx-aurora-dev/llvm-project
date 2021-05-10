@@ -725,9 +725,7 @@ public:
   bool use_empty() const { return UseList == nullptr; }
 
   /// Return true if there is exactly one use of this node.
-  bool hasOneUse() const {
-    return !use_empty() && std::next(use_begin()) == use_end();
-  }
+  bool hasOneUse() const { return hasSingleElement(uses()); }
 
   /// Return the number of uses of this node. This method takes
   /// time proportional to the number of uses.
@@ -976,7 +974,7 @@ public:
     return nullptr;
   }
 
-  const SDNodeFlags getFlags() const { return Flags; }
+  SDNodeFlags getFlags() const { return Flags; }
   void setFlags(SDNodeFlags NewFlags) { Flags = NewFlags; }
 
   /// Clear any flags in this node that aren't also set in Flags.
@@ -1696,12 +1694,12 @@ bool isNullOrNullSplat(SDValue V, bool AllowUndefs = false);
 /// Return true if the value is a constant 1 integer or a splatted vector of a
 /// constant 1 integer (with no undefs).
 /// Does not permit build vector implicit truncation.
-bool isOneOrOneSplat(SDValue V);
+bool isOneOrOneSplat(SDValue V, bool AllowUndefs = false);
 
 /// Return true if the value is a constant -1 integer or a splatted vector of a
 /// constant -1 integer (with no undefs).
 /// Does not permit build vector implicit truncation.
-bool isAllOnesOrAllOnesSplat(SDValue V);
+bool isAllOnesOrAllOnesSplat(SDValue V, bool AllowUndefs = false);
 
 class GlobalAddressSDNode : public SDNode {
   friend class SelectionDAG;

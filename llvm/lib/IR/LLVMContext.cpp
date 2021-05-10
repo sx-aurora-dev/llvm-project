@@ -78,6 +78,12 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "gc-transition operand bundle id drifted!");
   (void)GCLiveEntry;
 
+  auto *ClangAttachedCall =
+      pImpl->getOrInsertBundleTag("clang.arc.attachedcall");
+  assert(ClangAttachedCall->second == LLVMContext::OB_clang_arc_attachedcall &&
+         "clang.arc.attachedcall operand bundle id drifted!");
+  (void)ClangAttachedCall;
+
   auto *CFPRoundEntry = pImpl->getOrInsertBundleTag("cfp-round");
   assert(CFPRoundEntry->second == LLVMContext::OB_cfp_round &&
          "cfp-round operand bundle id drifted!");
@@ -114,26 +120,6 @@ void LLVMContext::removeModule(Module *M) {
 //===----------------------------------------------------------------------===//
 // Recoverable Backend Errors
 //===----------------------------------------------------------------------===//
-
-void LLVMContext::
-setInlineAsmDiagnosticHandler(InlineAsmDiagHandlerTy DiagHandler,
-                              void *DiagContext) {
-  pImpl->InlineAsmDiagHandler = DiagHandler;
-  pImpl->InlineAsmDiagContext = DiagContext;
-}
-
-/// getInlineAsmDiagnosticHandler - Return the diagnostic handler set by
-/// setInlineAsmDiagnosticHandler.
-LLVMContext::InlineAsmDiagHandlerTy
-LLVMContext::getInlineAsmDiagnosticHandler() const {
-  return pImpl->InlineAsmDiagHandler;
-}
-
-/// getInlineAsmDiagnosticContext - Return the diagnostic context set by
-/// setInlineAsmDiagnosticHandler.
-void *LLVMContext::getInlineAsmDiagnosticContext() const {
-  return pImpl->InlineAsmDiagContext;
-}
 
 void LLVMContext::setDiagnosticHandlerCallBack(
     DiagnosticHandler::DiagnosticHandlerTy DiagnosticHandler,

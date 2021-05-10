@@ -94,6 +94,8 @@ static void updateAndRemoveSymbols(const CopyConfig &Config, Object &Obj) {
   auto RemovePred = [Config, &Obj](const std::unique_ptr<SymbolEntry> &N) {
     if (N->Referenced)
       return false;
+    if (Config.KeepUndefined && N->isUndefinedSymbol())
+      return false;
     if (Config.StripAll)
       return true;
     if (Config.DiscardMode == DiscardType::All && !(N->n_type & MachO::N_EXT))
@@ -327,14 +329,12 @@ static Error isValidMachOCannonicalName(StringRef Name) {
 }
 
 static Error handleArgs(const CopyConfig &Config, Object &Obj) {
-  if (Config.AllowBrokenLinks || !Config.BuildIdLinkDir.empty() ||
-      Config.BuildIdLinkInput || Config.BuildIdLinkOutput ||
-      !Config.SplitDWO.empty() || !Config.SymbolsPrefix.empty() ||
-      !Config.AllocSectionsPrefix.empty() || !Config.KeepSection.empty() ||
-      Config.NewSymbolVisibility || !Config.SymbolsToGlobalize.empty() ||
-      !Config.SymbolsToKeep.empty() || !Config.SymbolsToLocalize.empty() ||
-      !Config.SymbolsToWeaken.empty() || !Config.SymbolsToKeepGlobal.empty() ||
-      !Config.SectionsToRename.empty() ||
+  if (Config.AllowBrokenLinks || !Config.SplitDWO.empty() ||
+      !Config.SymbolsPrefix.empty() || !Config.AllocSectionsPrefix.empty() ||
+      !Config.KeepSection.empty() || Config.NewSymbolVisibility ||
+      !Config.SymbolsToGlobalize.empty() || !Config.SymbolsToKeep.empty() ||
+      !Config.SymbolsToLocalize.empty() || !Config.SymbolsToWeaken.empty() ||
+      !Config.SymbolsToKeepGlobal.empty() || !Config.SectionsToRename.empty() ||
       !Config.UnneededSymbolsToRemove.empty() ||
       !Config.SetSectionAlignment.empty() || !Config.SetSectionFlags.empty() ||
       Config.ExtractDWO || Config.LocalizeHidden || Config.PreserveDates ||

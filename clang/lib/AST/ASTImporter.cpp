@@ -644,6 +644,7 @@ namespace clang {
     ExpectedStmt VisitSubstNonTypeTemplateParmExpr(SubstNonTypeTemplateParmExpr *E);
     ExpectedStmt VisitTypeTraitExpr(TypeTraitExpr *E);
     ExpectedStmt VisitCXXTypeidExpr(CXXTypeidExpr *E);
+    ExpectedStmt VisitCXXFoldExpr(CXXFoldExpr *E);
 
     template<typename IIter, typename OIter>
     Error ImportArrayChecked(IIter Ibegin, IIter Iend, OIter Obegin) {
@@ -1036,6 +1037,10 @@ ExpectedType ASTNodeImporter::VisitBuiltinType(const BuiltinType *T) {
   case BuiltinType::Id: \
     return Importer.getToContext().Id##Ty;
 #include "clang/Basic/PPCTypes.def"
+#define RVV_TYPE(Name, Id, SingletonId)                                        \
+  case BuiltinType::Id:                                                        \
+    return Importer.getToContext().SingletonId;
+#include "clang/Basic/RISCVVTypes.def"
 #define SHARED_SINGLETON_TYPE(Expansion)
 #define BUILTIN_TYPE(Id, SingletonId) \
   case BuiltinType::Id: return Importer.getToContext().SingletonId;
@@ -2847,6 +2852,8 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
         return CDeclOrErr.takeError();
       D2CXX->setLambdaMangling(DCXX->getLambdaManglingNumber(), *CDeclOrErr,
                                DCXX->hasKnownLambdaInternalLinkage());
+      D2CXX->setDeviceLambdaManglingNumber(
+          DCXX->getDeviceLambdaManglingNumber());
    } else if (DCXX->isInjectedClassName()) {
       // We have to be careful to do a similar dance to the one in
       // Sema::ActOnStartCXXMemberDeclarations
@@ -8011,6 +8018,25 @@ ExpectedStmt ASTNodeImporter::VisitCXXTypeidExpr(CXXTypeidExpr *E) {
       *ToTypeOrErr, *ToExprOperandOrErr, *ToSourceRangeOrErr);
 }
 
+ExpectedStmt ASTNodeImporter::VisitCXXFoldExpr(CXXFoldExpr *E) {
+  Error Err = Error::success();
+
+  QualType ToType = importChecked(Err, E->getType());
+  UnresolvedLookupExpr *ToCallee = importChecked(Err, E->getCallee());
+  SourceLocation ToLParenLoc = importChecked(Err, E->getLParenLoc());
+  Expr *ToLHS = importChecked(Err, E->getLHS());
+  SourceLocation ToEllipsisLoc = importChecked(Err, E->getEllipsisLoc());
+  Expr *ToRHS = importChecked(Err, E->getRHS());
+  SourceLocation ToRParenLoc = importChecked(Err, E->getRParenLoc());
+
+  if (Err)
+    return std::move(Err);
+
+  return new (Importer.getToContext())
+      CXXFoldExpr(ToType, ToCallee, ToLParenLoc, ToLHS, E->getOperator(),
+                  ToEllipsisLoc, ToRHS, ToRParenLoc, E->getNumExpansions());
+}
+
 Error ASTNodeImporter::ImportOverriddenMethods(CXXMethodDecl *ToMethod,
                                                CXXMethodDecl *FromMethod) {
   Error ImportErrors = Error::success();
@@ -8817,10 +8843,6 @@ Expected<FileID> ASTImporter::Import(FileID FromID, bool IsBuiltin) {
   assert(ToID.isValid() && "Unexpected invalid fileID was created.");
 
   ImportedFileIDs[FromID] = ToID;
-
-  if (FileIDImportHandler)
-    FileIDImportHandler(ToID, FromID);
-
   return ToID;
 }
 

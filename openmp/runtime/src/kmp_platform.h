@@ -70,14 +70,13 @@
 #define KMP_OS_HURD 1
 #endif
 
-#if (1 !=                                                                      \
-     KMP_OS_LINUX + KMP_OS_DRAGONFLY + KMP_OS_FREEBSD + KMP_OS_NETBSD +        \
-         KMP_OS_OPENBSD + KMP_OS_DARWIN + KMP_OS_WINDOWS + KMP_OS_HURD)
+#if (1 != KMP_OS_LINUX + KMP_OS_DRAGONFLY + KMP_OS_FREEBSD + KMP_OS_NETBSD +   \
+              KMP_OS_OPENBSD + KMP_OS_DARWIN + KMP_OS_WINDOWS + KMP_OS_HURD)
 #error Unknown OS
 #endif
 
 #if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
-        KMP_OS_OPENBSD || KMP_OS_DARWIN || KMP_OS_HURD
+    KMP_OS_OPENBSD || KMP_OS_DARWIN || KMP_OS_HURD
 #undef KMP_OS_UNIX
 #define KMP_OS_UNIX 1
 #endif

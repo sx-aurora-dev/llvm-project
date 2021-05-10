@@ -508,6 +508,7 @@ class StdLibraryFunctionsChecker
   mutable FunctionSummaryMapType FunctionSummaryMap;
 
   mutable std::unique_ptr<BugType> BT_InvalidArg;
+  mutable bool SummariesInitialized = false;
 
   static SVal getArgSVal(const CallEvent &Call, ArgNo ArgN) {
     return ArgN == Ret ? Call.getReturnValue() : Call.getArgSVal(ArgN);
@@ -742,7 +743,7 @@ bool StdLibraryFunctionsChecker::evalCall(const CallEvent &Call,
   case EvalCallAsPure: {
     ProgramStateRef State = C.getState();
     const LocationContext *LC = C.getLocationContext();
-    const auto *CE = cast_or_null<CallExpr>(Call.getOriginExpr());
+    const auto *CE = cast<CallExpr>(Call.getOriginExpr());
     SVal V = C.getSValBuilder().conjureSymbolVal(
         CE, LC, CE->getType().getCanonicalType(), C.blockCount());
     State = State->BindExpr(CE, LC, V);
@@ -823,7 +824,7 @@ StdLibraryFunctionsChecker::findFunctionSummary(const CallEvent &Call,
 
 void StdLibraryFunctionsChecker::initFunctionSummaries(
     CheckerContext &C) const {
-  if (!FunctionSummaryMap.empty())
+  if (SummariesInitialized)
     return;
 
   SValBuilder &SVB = C.getSValBuilder();
@@ -2485,6 +2486,8 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
         Signature(ArgTypes{VoidPtrRestrictTy}, RetType{VoidTy}),
         Summary(EvalCallAsPure));
   }
+
+  SummariesInitialized = true;
 }
 
 void ento::registerStdCLibraryFunctionsChecker(CheckerManager &mgr) {

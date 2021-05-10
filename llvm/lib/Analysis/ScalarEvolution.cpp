@@ -321,12 +321,9 @@ void SCEV::print(raw_ostream &OS) const {
       llvm_unreachable("There are no other nary expression types.");
     }
     OS << "(";
-    for (SCEVNAryExpr::op_iterator I = NAry->op_begin(), E = NAry->op_end();
-         I != E; ++I) {
-      OS << **I;
-      if (std::next(I) != E)
-        OS << OpStr;
-    }
+    ListSeparator LS(OpStr);
+    for (const SCEV *Op : NAry->operands())
+      OS << LS << *Op;
     OS << ")";
     switch (NAry->getSCEVType()) {
     case scAddExpr:
@@ -689,11 +686,13 @@ CompareValueComplexity(EquivalenceClasses<const Value *> &EqCacheValue,
 // Return negative, zero, or positive, if LHS is less than, equal to, or greater
 // than RHS, respectively. A three-way result allows recursive comparisons to be
 // more efficient.
-static int CompareSCEVComplexity(
-    EquivalenceClasses<const SCEV *> &EqCacheSCEV,
-    EquivalenceClasses<const Value *> &EqCacheValue,
-    const LoopInfo *const LI, const SCEV *LHS, const SCEV *RHS,
-    DominatorTree &DT, unsigned Depth = 0) {
+// If the max analysis depth was reached, return None, assuming we do not know
+// if they are equivalent for sure.
+static Optional<int>
+CompareSCEVComplexity(EquivalenceClasses<const SCEV *> &EqCacheSCEV,
+                      EquivalenceClasses<const Value *> &EqCacheValue,
+                      const LoopInfo *const LI, const SCEV *LHS,
+                      const SCEV *RHS, DominatorTree &DT, unsigned Depth = 0) {
   // Fast-path: SCEVs are uniqued so we can do a quick equality check.
   if (LHS == RHS)
     return 0;
@@ -703,8 +702,12 @@ static int CompareSCEVComplexity(
   if (LType != RType)
     return (int)LType - (int)RType;
 
-  if (Depth > MaxSCEVCompareDepth || EqCacheSCEV.isEquivalent(LHS, RHS))
+  if (EqCacheSCEV.isEquivalent(LHS, RHS))
     return 0;
+
+  if (Depth > MaxSCEVCompareDepth)
+    return None;
+
   // Aside from the getSCEVType() ordering, the particular ordering
   // isn't very important except that it's beneficial to be consistent,
   // so that (a + b) and (b + a) don't end up as different expressions.
@@ -759,9 +762,9 @@ static int CompareSCEVComplexity(
 
     // Lexicographically compare.
     for (unsigned i = 0; i != LNumOps; ++i) {
-      int X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI,
-                                    LA->getOperand(i), RA->getOperand(i), DT,
-                                    Depth + 1);
+      auto X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI,
+                                     LA->getOperand(i), RA->getOperand(i), DT,
+                                     Depth + 1);
       if (X != 0)
         return X;
     }
@@ -784,9 +787,9 @@ static int CompareSCEVComplexity(
       return (int)LNumOps - (int)RNumOps;
 
     for (unsigned i = 0; i != LNumOps; ++i) {
-      int X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI,
-                                    LC->getOperand(i), RC->getOperand(i), DT,
-                                    Depth + 1);
+      auto X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI,
+                                     LC->getOperand(i), RC->getOperand(i), DT,
+                                     Depth + 1);
       if (X != 0)
         return X;
     }
@@ -799,8 +802,8 @@ static int CompareSCEVComplexity(
     const SCEVUDivExpr *RC = cast<SCEVUDivExpr>(RHS);
 
     // Lexicographically compare udiv expressions.
-    int X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LC->getLHS(),
-                                  RC->getLHS(), DT, Depth + 1);
+    auto X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LC->getLHS(),
+                                   RC->getLHS(), DT, Depth + 1);
     if (X != 0)
       return X;
     X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LC->getRHS(),
@@ -818,9 +821,9 @@ static int CompareSCEVComplexity(
     const SCEVCastExpr *RC = cast<SCEVCastExpr>(RHS);
 
     // Compare cast expressions by operand.
-    int X = CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI,
-                                  LC->getOperand(), RC->getOperand(), DT,
-                                  Depth + 1);
+    auto X =
+        CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LC->getOperand(),
+                              RC->getOperand(), DT, Depth + 1);
     if (X == 0)
       EqCacheSCEV.unionSets(LHS, RHS);
     return X;
@@ -847,19 +850,25 @@ static void GroupByComplexity(SmallVectorImpl<const SCEV *> &Ops,
 
   EquivalenceClasses<const SCEV *> EqCacheSCEV;
   EquivalenceClasses<const Value *> EqCacheValue;
+
+  // Whether LHS has provably less complexity than RHS.
+  auto IsLessComplex = [&](const SCEV *LHS, const SCEV *RHS) {
+    auto Complexity =
+        CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LHS, RHS, DT);
+    return Complexity && *Complexity < 0;
+  };
   if (Ops.size() == 2) {
     // This is the common case, which also happens to be trivially simple.
     // Special case it.
     const SCEV *&LHS = Ops[0], *&RHS = Ops[1];
-    if (CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, RHS, LHS, DT) < 0)
+    if (IsLessComplex(RHS, LHS))
       std::swap(LHS, RHS);
     return;
   }
 
   // Do the rough sort by complexity.
   llvm::stable_sort(Ops, [&](const SCEV *LHS, const SCEV *RHS) {
-    return CompareSCEVComplexity(EqCacheSCEV, EqCacheValue, LI, LHS, RHS, DT) <
-           0;
+    return IsLessComplex(LHS, RHS);
   });
 
   // Now that we are sorted by complexity, group elements of the same
@@ -2177,7 +2186,7 @@ CollectAddOperandsWithScales(DenseMap<const SCEV *, APInt> &M,
       } else {
         // A multiplication of a constant with some other value. Update
         // the map.
-        SmallVector<const SCEV *, 4> MulOps(Mul->op_begin()+1, Mul->op_end());
+        SmallVector<const SCEV *, 4> MulOps(drop_begin(Mul->operands()));
         const SCEV *Key = SE.getMulExpr(MulOps);
         auto Pair = M.insert({Key, NewScale});
         if (Pair.second) {
@@ -5834,39 +5843,41 @@ ScalarEvolution::getRangeRef(const SCEV *S,
       ConservativeResult = ConservativeResult.intersectWith(MDRange.getValue(),
                                                             RangeType);
 
-    // Split here to avoid paying the compile-time cost of calling both
-    // computeKnownBits and ComputeNumSignBits.  This restriction can be lifted
-    // if needed.
+    // See if ValueTracking can give us a useful range.
     const DataLayout &DL = getDataLayout();
-    if (SignHint == ScalarEvolution::HINT_RANGE_UNSIGNED) {
-      // For a SCEVUnknown, ask ValueTracking.
-      KnownBits Known = computeKnownBits(U->getValue(), DL, 0, &AC, nullptr, &DT);
-      if (Known.getBitWidth() != BitWidth)
-        Known = Known.zextOrTrunc(BitWidth);
-      // If Known does not result in full-set, intersect with it.
-      if (Known.getMinValue() != Known.getMaxValue() + 1)
-        ConservativeResult = ConservativeResult.intersectWith(
-            ConstantRange(Known.getMinValue(), Known.getMaxValue() + 1),
-            RangeType);
-    } else {
-      assert(SignHint == ScalarEvolution::HINT_RANGE_SIGNED &&
-             "generalize as needed!");
-      unsigned NS = ComputeNumSignBits(U->getValue(), DL, 0, &AC, nullptr, &DT);
+    KnownBits Known = computeKnownBits(U->getValue(), DL, 0, &AC, nullptr, &DT);
+    if (Known.getBitWidth() != BitWidth)
+      Known = Known.zextOrTrunc(BitWidth);
+
+    // ValueTracking may be able to compute a tighter result for the number of
+    // sign bits than for the value of those sign bits.
+    unsigned NS = ComputeNumSignBits(U->getValue(), DL, 0, &AC, nullptr, &DT);
+    if (U->getType()->isPointerTy()) {
       // If the pointer size is larger than the index size type, this can cause
       // NS to be larger than BitWidth. So compensate for this.
-      if (U->getType()->isPointerTy()) {
-        unsigned ptrSize = DL.getPointerTypeSizeInBits(U->getType());
-        int ptrIdxDiff = ptrSize - BitWidth;
-        if (ptrIdxDiff > 0 && ptrSize > BitWidth && NS > (unsigned)ptrIdxDiff)
-          NS -= ptrIdxDiff;
-      }
-
-      if (NS > 1)
-        ConservativeResult = ConservativeResult.intersectWith(
-            ConstantRange(APInt::getSignedMinValue(BitWidth).ashr(NS - 1),
-                          APInt::getSignedMaxValue(BitWidth).ashr(NS - 1) + 1),
-            RangeType);
+      unsigned ptrSize = DL.getPointerTypeSizeInBits(U->getType());
+      int ptrIdxDiff = ptrSize - BitWidth;
+      if (ptrIdxDiff > 0 && ptrSize > BitWidth && NS > (unsigned)ptrIdxDiff)
+        NS -= ptrIdxDiff;
     }
+
+    if (NS > 1) {
+      // If we know any of the sign bits, we know all of the sign bits.
+      if (!Known.Zero.getHiBits(NS).isNullValue())
+        Known.Zero.setHighBits(NS);
+      if (!Known.One.getHiBits(NS).isNullValue())
+        Known.One.setHighBits(NS);
+    }
+
+    if (Known.getMinValue() != Known.getMaxValue() + 1)
+      ConservativeResult = ConservativeResult.intersectWith(
+          ConstantRange(Known.getMinValue(), Known.getMaxValue() + 1),
+          RangeType);
+    if (NS > 1)
+      ConservativeResult = ConservativeResult.intersectWith(
+          ConstantRange(APInt::getSignedMinValue(BitWidth).ashr(NS - 1),
+                        APInt::getSignedMaxValue(BitWidth).ashr(NS - 1) + 1),
+          RangeType);
 
     // A range of Phi is a subset of union of all ranges of its input.
     if (const PHINode *Phi = dyn_cast<PHINode>(U->getValue())) {
@@ -6875,7 +6886,8 @@ ScalarEvolution::getSmallConstantTripMultiple(const Loop *L,
     // Attempt to factor more general cases. Returns the greatest power of
     // two divisor. If overflow happens, the trip count expression is still
     // divisible by the greatest power of 2 divisor returned.
-    return 1U << std::min((uint32_t)31, GetMinTrailingZeros(TCExpr));
+    return 1U << std::min((uint32_t)31,
+                          GetMinTrailingZeros(applyLoopGuards(TCExpr, L)));
 
   ConstantInt *Result = TC->getValue();
 
@@ -7843,9 +7855,10 @@ ScalarEvolution::computeLoadConstantCompareExitLimit(
   Idx = getSCEVAtScope(Idx, L);
 
   // We can only recognize very limited forms of loop index expressions, in
-  // particular, only affine AddRec's like {C1,+,C2}.
+  // particular, only affine AddRec's like {C1,+,C2}<L>.
   const SCEVAddRecExpr *IdxExpr = dyn_cast<SCEVAddRecExpr>(Idx);
-  if (!IdxExpr || !IdxExpr->isAffine() || isLoopInvariant(IdxExpr, L) ||
+  if (!IdxExpr || IdxExpr->getLoop() != L || !IdxExpr->isAffine() ||
+      isLoopInvariant(IdxExpr, L) ||
       !isa<SCEVConstant>(IdxExpr->getOperand(0)) ||
       !isa<SCEVConstant>(IdxExpr->getOperand(1)))
     return getCouldNotCompute();
@@ -7982,7 +7995,7 @@ ScalarEvolution::ExitLimit ScalarEvolution::computeShiftCompareExitLimit(
     // {K,ashr,<positive-constant>} stabilizes to signum(K) in at most
     // bitwidth(K) iterations.
     Value *FirstValue = PN->getIncomingValueForBlock(Predecessor);
-    KnownBits Known = computeKnownBits(FirstValue, DL, 0, nullptr,
+    KnownBits Known = computeKnownBits(FirstValue, DL, 0, &AC,
                                        Predecessor->getTerminator(), &DT);
     auto *Ty = cast<IntegerType>(RHS->getType());
     if (Known.isNonNegative())
@@ -13151,6 +13164,11 @@ bool ScalarEvolution::matchURem(const SCEV *Expr, const SCEV *&LHS,
   if (const auto *ZExt = dyn_cast<SCEVZeroExtendExpr>(Expr))
     if (const auto *Trunc = dyn_cast<SCEVTruncateExpr>(ZExt->getOperand(0))) {
       LHS = Trunc->getOperand();
+      // Bail out if the type of the LHS is larger than the type of the
+      // expression for now.
+      if (getTypeSizeInBits(LHS->getType()) >
+          getTypeSizeInBits(Expr->getType()))
+        return false;
       if (LHS->getType() != Expr->getType())
         LHS = getZeroExtendExpr(LHS, Expr->getType());
       RHS = getConstant(APInt(getTypeSizeInBits(Expr->getType()), 1)
@@ -13241,6 +13259,27 @@ public:
 const SCEV *ScalarEvolution::applyLoopGuards(const SCEV *Expr, const Loop *L) {
   auto CollectCondition = [&](ICmpInst::Predicate Predicate, const SCEV *LHS,
                               const SCEV *RHS, ValueToSCEVMapTy &RewriteMap) {
+    // If we have LHS == 0, check if LHS is computing a property of some unknown
+    // SCEV %v which we can rewrite %v to express explicitly.
+    const SCEVConstant *RHSC = dyn_cast<SCEVConstant>(RHS);
+    if (Predicate == CmpInst::ICMP_EQ && RHSC &&
+        RHSC->getValue()->isNullValue()) {
+      // If LHS is A % B, i.e. A % B == 0, rewrite A to (A /u B) * B to
+      // explicitly express that.
+      const SCEV *URemLHS = nullptr;
+      const SCEV *URemRHS = nullptr;
+      if (matchURem(LHS, URemLHS, URemRHS)) {
+        if (const SCEVUnknown *LHSUnknown = dyn_cast<SCEVUnknown>(URemLHS)) {
+          Value *V = LHSUnknown->getValue();
+          auto Multiple =
+              getMulExpr(getUDivExpr(URemLHS, URemRHS), URemRHS,
+                         (SCEV::NoWrapFlags)(SCEV::FlagNUW | SCEV::FlagNSW));
+          RewriteMap[V] = Multiple;
+          return;
+        }
+      }
+    }
+
     if (!isa<SCEVUnknown>(LHS)) {
       std::swap(LHS, RHS);
       Predicate = CmpInst::getSwappedPredicate(Predicate);

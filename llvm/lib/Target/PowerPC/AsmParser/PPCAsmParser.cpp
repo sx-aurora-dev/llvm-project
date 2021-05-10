@@ -11,7 +11,6 @@
 #include "PPCTargetStreamer.h"
 #include "TargetInfo/PowerPCTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -1131,29 +1130,6 @@ void PPCAsmParser::ProcessInstruction(MCInst &Inst,
       assert(Inst.getNumOperands() == 2 && "Expecting two operands");
       Inst.setOpcode(PPC::MFSPR);
     }
-    break;
-  }
-  case PPC::CP_COPYx:
-  case PPC::CP_COPY_FIRST: {
-    MCInst TmpInst;
-    TmpInst.setOpcode(PPC::CP_COPY);
-    TmpInst.addOperand(Inst.getOperand(0));
-    TmpInst.addOperand(Inst.getOperand(1));
-    TmpInst.addOperand(MCOperand::createImm(Opcode == PPC::CP_COPYx ? 0 : 1));
-
-    Inst = TmpInst;
-    break;
-  }
-  case PPC::CP_PASTEx :
-  case PPC::CP_PASTE_LAST: {
-    MCInst TmpInst;
-    TmpInst.setOpcode(Opcode == PPC::CP_PASTEx ? PPC::CP_PASTE
-                                               : PPC::CP_PASTE_rec);
-    TmpInst.addOperand(Inst.getOperand(0));
-    TmpInst.addOperand(Inst.getOperand(1));
-    TmpInst.addOperand(MCOperand::createImm(Opcode == PPC::CP_PASTEx ? 0 : 1));
-
-    Inst = TmpInst;
     break;
   }
   }

@@ -22,6 +22,7 @@ vector signed long long vsll = { 255LL, -937LL };
 vector unsigned long long vull = { 1447LL, 2894LL };
 double d = 23.4;
 signed long long sll = 618LL;
+unsigned long long ull = 618ULL;
 float af[4] = {23.4f, 56.7f, 89.0f, 12.3f};
 double ad[2] = {23.4, 56.7};
 signed char asc[16] = { -8,  9, -10, 11, -12, 13, -14, 15,
@@ -91,6 +92,34 @@ void test1() {
   res_vd = vec_add(vd, vd);
 // CHECK: fadd <2 x double>
 // CHECK-LE: fadd <2 x double>
+
+  res_i = vec_all_nle(vf, vf);
+// CHECK: @llvm.ppc.vsx.xvcmpgesp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpgesp.p
+
+  res_i = vec_all_nle(vd, vd);
+// CHECK: @llvm.ppc.vsx.xvcmpgedp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpgedp.p
+
+  res_i = vec_all_nlt(vf, vf);
+// CHECK: @llvm.ppc.vsx.xvcmpgtsp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpgtsp.p
+
+  res_i = vec_all_nlt(vd, vd);
+// CHECK: @llvm.ppc.vsx.xvcmpgtdp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpgtdp.p
+
+  res_i = vec_all_numeric(vf);
+// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
+
+  res_i = vec_all_numeric(vd);
+// CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
+// CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
+
+  dummy();
+// CHECK: call void @dummy()
+// CHECK-LE: call void @dummy()
 
   res_vd = vec_and(vbll, vd);
 // CHECK: and <2 x i64>
@@ -1851,6 +1880,24 @@ res_vsc = vec_xxsldwi(vsc, vsc, 0);
 res_vuc = vec_xxsldwi(vuc, vuc, 1);
 // CHECK: shufflevector <4 x i32> %{{[0-9]+}}, <4 x i32> %{{[0-9]+}}, <4 x i32> <i32 1, i32 2, i32 3, i32 4>
 // CHECK-LE: shufflevector <4 x i32> %{{[0-9]+}}, <4 x i32> %{{[0-9]+}}, <4 x i32> <i32 7, i32 0, i32 1, i32 2>
+
+res_vd = vec_promote(d, 0);
+// CHECK: store <2 x double> zeroinitializer
+// CHECK: insertelement <2 x double>
+// CHECK-LE: store <2 x double> zeroinitializer
+// CHECK-LE: insertelement <2 x double>
+
+res_vsll = vec_promote(sll, 0);
+// CHECK: store <2 x i64> zeroinitializer
+// CHECK: insertelement <2 x i64>
+// CHECK-LE: store <2 x i64> zeroinitializer
+// CHECK-LE: insertelement <2 x i64>
+
+res_vull = vec_promote(ull, 0);
+// CHECK: store <2 x i64> zeroinitializer
+// CHECK: insertelement <2 x i64>
+// CHECK-LE: store <2 x i64> zeroinitializer
+// CHECK-LE: insertelement <2 x i64>
 }
 
 // The return type of the call expression may be different from the return type of the shufflevector.

@@ -93,7 +93,7 @@ template <class T> struct ArgTypeTraits<ast_matchers::internal::Matcher<T>> {
   }
 
   static ArgKind getKind() {
-    return ArgKind(ASTNodeKind::getFromNodeKind<T>());
+    return ArgKind::MakeMatcherArg(ASTNodeKind::getFromNodeKind<T>());
   }
 
   static llvm::Optional<std::string> getBestGuess(const VariantValue &) {
@@ -309,6 +309,16 @@ public:
                                 ArrayRef<ParserValue> Args,
                                 Diagnostics *Error) const = 0;
 
+  virtual ASTNodeKind nodeMatcherType() const { return ASTNodeKind(); }
+
+  virtual bool isBuilderMatcher() const { return false; }
+
+  virtual std::unique_ptr<MatcherDescriptor>
+  buildMatcherCtor(SourceRange NameRange, ArrayRef<ParserValue> Args,
+                   Diagnostics *Error) const {
+    return {};
+  }
+
   /// Returns whether the matcher is variadic. Variadic matchers can take any
   /// number of arguments, but they must be of the same type.
   virtual bool isVariadic() const = 0;
@@ -343,7 +353,8 @@ inline bool isRetKindConvertibleTo(ArrayRef<ASTNodeKind> RetKinds,
                                    ASTNodeKind Kind, unsigned *Specificity,
                                    ASTNodeKind *LeastDerivedKind) {
   for (const ASTNodeKind &NodeKind : RetKinds) {
-    if (ArgKind(NodeKind).isConvertibleTo(Kind, Specificity)) {
+    if (ArgKind::MakeMatcherArg(NodeKind).isConvertibleTo(
+            ArgKind::MakeMatcherArg(Kind), Specificity)) {
       if (LeastDerivedKind)
         *LeastDerivedKind = NodeKind;
       return true;
@@ -575,6 +586,8 @@ public:
                                   LeastDerivedKind);
   }
 
+  ASTNodeKind nodeMatcherType() const override { return RetKinds[0]; }
+
 private:
   const RunFunc Func;
   const std::string MatcherName;
@@ -609,6 +622,8 @@ public:
       return false;
     }
   }
+
+  ASTNodeKind nodeMatcherType() const override { return DerivedKind; }
 
 private:
   const ASTNodeKind DerivedKind;
@@ -904,7 +919,7 @@ public:
 
   void getArgKinds(ASTNodeKind ThisKind, unsigned ArgNo,
                    std::vector<ArgKind> &Kinds) const override {
-    Kinds.push_back(ThisKind);
+    Kinds.push_back(ArgKind::MakeMatcherArg(ThisKind));
   }
 
   bool isConvertibleTo(ASTNodeKind Kind, unsigned *Specificity,
@@ -925,32 +940,50 @@ private:
   const StringRef MatcherName;
 };
 
-template <typename CladeType, typename... MatcherT>
 class MapAnyOfMatcherDescriptor : public MatcherDescriptor {
-  std::vector<DynCastAllOfMatcherDescriptor> Funcs;
+  ASTNodeKind CladeNodeKind;
+  std::vector<ASTNodeKind> NodeKinds;
 
 public:
-  MapAnyOfMatcherDescriptor(StringRef MatcherName)
-      : Funcs{DynCastAllOfMatcherDescriptor(
-            ast_matchers::internal::VariadicDynCastAllOfMatcher<CladeType,
-                                                                MatcherT>{},
-            MatcherName)...} {}
+  MapAnyOfMatcherDescriptor(ASTNodeKind CladeNodeKind,
+                            std::vector<ASTNodeKind> NodeKinds)
+      : CladeNodeKind(CladeNodeKind), NodeKinds(NodeKinds) {}
 
   VariantMatcher create(SourceRange NameRange, ArrayRef<ParserValue> Args,
                         Diagnostics *Error) const override {
-    std::vector<VariantMatcher> InnerArgs;
 
-    for (auto const &F : Funcs) {
-      InnerArgs.push_back(F.create(NameRange, Args, Error));
-      if (!Error->errors().empty())
-        return {};
+    std::vector<DynTypedMatcher> NodeArgs;
+
+    for (auto NK : NodeKinds) {
+      std::vector<DynTypedMatcher> InnerArgs;
+
+      for (const auto &Arg : Args) {
+        if (!Arg.Value.isMatcher())
+          return {};
+        const VariantMatcher &VM = Arg.Value.getMatcher();
+        if (VM.hasTypedMatcher(NK)) {
+          auto DM = VM.getTypedMatcher(NK);
+          InnerArgs.push_back(DM);
+        }
+      }
+
+      if (InnerArgs.empty()) {
+        NodeArgs.push_back(
+            DynTypedMatcher::trueMatcher(NK).dynCastTo(CladeNodeKind));
+      } else {
+        NodeArgs.push_back(
+            DynTypedMatcher::constructVariadic(
+                ast_matchers::internal::DynTypedMatcher::VO_AllOf, NK,
+                InnerArgs)
+                .dynCastTo(CladeNodeKind));
+      }
     }
-    return VariantMatcher::SingleMatcher(
-        ast_matchers::internal::BindableMatcher<CladeType>(
-            VariantMatcher::VariadicOperatorMatcher(
-                ast_matchers::internal::DynTypedMatcher::VO_AnyOf,
-                std::move(InnerArgs))
-                .getTypedMatcher<CladeType>()));
+
+    auto Result = DynTypedMatcher::constructVariadic(
+        ast_matchers::internal::DynTypedMatcher::VO_AnyOf, CladeNodeKind,
+        NodeArgs);
+    Result.setAllowBind(true);
+    return VariantMatcher::SingleMatcher(Result);
   }
 
   bool isVariadic() const override { return true; }
@@ -958,15 +991,73 @@ public:
 
   void getArgKinds(ASTNodeKind ThisKind, unsigned,
                    std::vector<ArgKind> &Kinds) const override {
-    Kinds.push_back(ThisKind);
+    Kinds.push_back(ArgKind::MakeMatcherArg(ThisKind));
   }
 
   bool isConvertibleTo(ASTNodeKind Kind, unsigned *Specificity,
                        ASTNodeKind *LeastDerivedKind) const override {
-    return llvm::all_of(Funcs, [=](const auto &F) {
-      return F.isConvertibleTo(Kind, Specificity, LeastDerivedKind);
-    });
+    if (Specificity)
+      *Specificity = 1;
+    if (LeastDerivedKind)
+      *LeastDerivedKind = CladeNodeKind;
+    return true;
   }
+};
+
+class MapAnyOfBuilderDescriptor : public MatcherDescriptor {
+public:
+  VariantMatcher create(SourceRange, ArrayRef<ParserValue>,
+                        Diagnostics *) const override {
+    return {};
+  }
+
+  bool isBuilderMatcher() const override { return true; }
+
+  std::unique_ptr<MatcherDescriptor>
+  buildMatcherCtor(SourceRange, ArrayRef<ParserValue> Args,
+                   Diagnostics *) const override {
+
+    std::vector<ASTNodeKind> NodeKinds;
+    for (auto Arg : Args) {
+      if (!Arg.Value.isNodeKind())
+        return {};
+      NodeKinds.push_back(Arg.Value.getNodeKind());
+    }
+
+    if (NodeKinds.empty())
+      return {};
+
+    ASTNodeKind CladeNodeKind = NodeKinds.front().getCladeKind();
+
+    for (auto NK : NodeKinds)
+    {
+      if (!NK.getCladeKind().isSame(CladeNodeKind))
+        return {};
+    }
+
+    return std::make_unique<MapAnyOfMatcherDescriptor>(CladeNodeKind,
+                                                       NodeKinds);
+  }
+
+  bool isVariadic() const override { return true; }
+
+  unsigned getNumArgs() const override { return 0; }
+
+  void getArgKinds(ASTNodeKind ThisKind, unsigned,
+                   std::vector<ArgKind> &ArgKinds) const override {
+    ArgKinds.push_back(ArgKind::MakeNodeArg(ThisKind));
+    return;
+  }
+  bool isConvertibleTo(ASTNodeKind Kind, unsigned *Specificity = nullptr,
+                       ASTNodeKind *LeastDerivedKind = nullptr) const override {
+    if (Specificity)
+      *Specificity = 1;
+    if (LeastDerivedKind)
+      *LeastDerivedKind = Kind;
+    return true;
+  }
+
+  bool isPolymorphic() const override { return false; }
 };
 
 /// Helper functions to select the appropriate marshaller functions.
@@ -1077,8 +1168,9 @@ template <typename CladeType, typename... MatcherT>
 std::unique_ptr<MatcherDescriptor> makeMatcherAutoMarshall(
     ast_matchers::internal::MapAnyOfMatcherImpl<CladeType, MatcherT...>,
     StringRef MatcherName) {
-  return std::make_unique<MapAnyOfMatcherDescriptor<CladeType, MatcherT...>>(
-      MatcherName);
+  return std::make_unique<MapAnyOfMatcherDescriptor>(
+      ASTNodeKind::getFromNodeKind<CladeType>(),
+      std::vector<ASTNodeKind>{ASTNodeKind::getFromNodeKind<MatcherT>()...});
 }
 
 } // namespace internal

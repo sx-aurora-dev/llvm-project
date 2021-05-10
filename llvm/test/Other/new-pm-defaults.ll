@@ -98,6 +98,9 @@
 ; CHECK-O-NEXT: Running pass: InstCombinePass
 ; CHECK-O-NEXT: Running analysis: OptimizationRemarkEmitterAnalysis
 ; CHECK-O-NEXT: Running analysis: AAManager
+; CHECK-O-NEXT: Running analysis: BasicAA
+; CHECK-O-NEXT: Running analysis: ScopedNoAliasAA
+; CHECK-O-NEXT: Running analysis: TypeBasedAA
 ; CHECK-O-NEXT: Running analysis: OuterAnalysisManagerProxy
 ; CHECK-EP-PEEPHOLE-NEXT: Running pass: NoOpFunctionPass
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
@@ -176,9 +179,7 @@
 ; CHECK-O23SZ-NEXT: Running pass: GVN
 ; CHECK-O23SZ-NEXT: Running analysis: MemoryDependenceAnalysis
 ; CHECK-O23SZ-NEXT: Running analysis: PhiValuesAnalysis
-; CHECK-O-NEXT: Running pass: MemCpyOptPass
-; CHECK-O1-NEXT: Running analysis: MemoryDependenceAnalysis
-; CHECK-O1-NEXT: Running analysis: PhiValuesAnalysis
+; CHECK-O1-NEXT: Running pass: MemCpyOptPass
 ; CHECK-O-NEXT: Running pass: SCCPPass
 ; CHECK-O-NEXT: Running pass: BDCEPass
 ; CHECK-O-NEXT: Running analysis: DemandedBitsAnalysis
@@ -190,6 +191,7 @@
 ; CHECK-O23SZ-NEXT: Invalidating analysis: LazyValueAnalysis
 ; CHECK-O-NEXT: Running pass: ADCEPass
 ; CHECK-O-NEXT: Running analysis: PostDominatorTreeAnalysis
+; CHECK-O23SZ-NEXT: Running pass: MemCpyOptPass
 ; CHECK-O23SZ-NEXT: Running pass: DSEPass
 ; CHECK-O23SZ-NEXT: Starting llvm::Function pass manager run.
 ; CHECK-O23SZ-NEXT: Running pass: LoopSimplifyPass

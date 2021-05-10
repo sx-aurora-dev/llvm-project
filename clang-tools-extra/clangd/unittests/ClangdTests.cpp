@@ -348,7 +348,8 @@ TEST(ClangdServerTest, RespectsConfig) {
   } CfgProvider;
 
   auto Opts = ClangdServer::optsForTest();
-  Opts.ConfigProvider = &CfgProvider;
+  Opts.ContextProvider =
+      ClangdServer::createConfiguredContextProvider(&CfgProvider, nullptr);
   OverlayCDB CDB(/*Base=*/nullptr, /*FallbackFlags=*/{},
                  tooling::ArgumentsAdjuster(CommandMangler::forTests()));
   MockFS FS;
@@ -944,7 +945,7 @@ void f() {}
   FS.Files[Path] = Code;
   runAddDocument(Server, Path, Code);
 
-  auto Replaces = runFormatFile(Server, Path, Code);
+  auto Replaces = runFormatFile(Server, Path, /*Rng=*/llvm::None);
   EXPECT_TRUE(static_cast<bool>(Replaces));
   auto Changed = tooling::applyAllReplacements(Code, *Replaces);
   EXPECT_TRUE(static_cast<bool>(Changed));

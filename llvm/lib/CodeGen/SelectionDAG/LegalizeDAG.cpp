@@ -181,8 +181,6 @@ private:
                              SmallVectorImpl<SDValue> &Results);
   SDValue PromoteLegalFP_TO_INT_SAT(SDNode *Node, const SDLoc &dl);
 
-  SDValue ExpandBITREVERSE(SDValue Op, const SDLoc &dl);
-  SDValue ExpandBSWAP(SDValue Op, const SDLoc &dl);
   SDValue ExpandPARITY(SDValue Op, const SDLoc &dl);
 
   SDValue ExpandExtractFromVectorThroughStack(SDValue Op);
@@ -2791,122 +2789,6 @@ SDValue SelectionDAGLegalize::PromoteLegalFP_TO_INT_SAT(SDNode *Node,
   return DAG.getNode(ISD::TRUNCATE, dl, Node->getValueType(0), Result);
 }
 
-/// Legalize a BITREVERSE scalar/vector operation as a series of mask + shifts.
-SDValue SelectionDAGLegalize::ExpandBITREVERSE(SDValue Op, const SDLoc &dl) {
-  EVT VT = Op.getValueType();
-  EVT SHVT = TLI.getShiftAmountTy(VT, DAG.getDataLayout());
-  unsigned Sz = VT.getScalarSizeInBits();
-
-  SDValue Tmp, Tmp2, Tmp3;
-
-  // If we can, perform BSWAP first and then the mask+swap the i4, then i2
-  // and finally the i1 pairs.
-  // TODO: We can easily support i4/i2 legal types if any target ever does.
-  if (Sz >= 8 && isPowerOf2_32(Sz)) {
-    // Create the masks - repeating the pattern every byte.
-    APInt MaskHi4 = APInt::getSplat(Sz, APInt(8, 0xF0));
-    APInt MaskHi2 = APInt::getSplat(Sz, APInt(8, 0xCC));
-    APInt MaskHi1 = APInt::getSplat(Sz, APInt(8, 0xAA));
-    APInt MaskLo4 = APInt::getSplat(Sz, APInt(8, 0x0F));
-    APInt MaskLo2 = APInt::getSplat(Sz, APInt(8, 0x33));
-    APInt MaskLo1 = APInt::getSplat(Sz, APInt(8, 0x55));
-
-    // BSWAP if the type is wider than a single byte.
-    Tmp = (Sz > 8 ? DAG.getNode(ISD::BSWAP, dl, VT, Op) : Op);
-
-    // swap i4: ((V & 0xF0) >> 4) | ((V & 0x0F) << 4)
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskHi4, dl, VT));
-    Tmp3 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskLo4, dl, VT));
-    Tmp2 = DAG.getNode(ISD::SRL, dl, VT, Tmp2, DAG.getConstant(4, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::SHL, dl, VT, Tmp3, DAG.getConstant(4, dl, SHVT));
-    Tmp = DAG.getNode(ISD::OR, dl, VT, Tmp2, Tmp3);
-
-    // swap i2: ((V & 0xCC) >> 2) | ((V & 0x33) << 2)
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskHi2, dl, VT));
-    Tmp3 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskLo2, dl, VT));
-    Tmp2 = DAG.getNode(ISD::SRL, dl, VT, Tmp2, DAG.getConstant(2, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::SHL, dl, VT, Tmp3, DAG.getConstant(2, dl, SHVT));
-    Tmp = DAG.getNode(ISD::OR, dl, VT, Tmp2, Tmp3);
-
-    // swap i1: ((V & 0xAA) >> 1) | ((V & 0x55) << 1)
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskHi1, dl, VT));
-    Tmp3 = DAG.getNode(ISD::AND, dl, VT, Tmp, DAG.getConstant(MaskLo1, dl, VT));
-    Tmp2 = DAG.getNode(ISD::SRL, dl, VT, Tmp2, DAG.getConstant(1, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::SHL, dl, VT, Tmp3, DAG.getConstant(1, dl, SHVT));
-    Tmp = DAG.getNode(ISD::OR, dl, VT, Tmp2, Tmp3);
-    return Tmp;
-  }
-
-  Tmp = DAG.getConstant(0, dl, VT);
-  for (unsigned I = 0, J = Sz-1; I < Sz; ++I, --J) {
-    if (I < J)
-      Tmp2 =
-          DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(J - I, dl, SHVT));
-    else
-      Tmp2 =
-          DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(I - J, dl, SHVT));
-
-    APInt Shift(Sz, 1);
-    Shift <<= J;
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp2, DAG.getConstant(Shift, dl, VT));
-    Tmp = DAG.getNode(ISD::OR, dl, VT, Tmp, Tmp2);
-  }
-
-  return Tmp;
-}
-
-/// Open code the operations for BSWAP of the specified operation.
-SDValue SelectionDAGLegalize::ExpandBSWAP(SDValue Op, const SDLoc &dl) {
-  EVT VT = Op.getValueType();
-  EVT SHVT = TLI.getShiftAmountTy(VT, DAG.getDataLayout());
-  SDValue Tmp1, Tmp2, Tmp3, Tmp4, Tmp5, Tmp6, Tmp7, Tmp8;
-  switch (VT.getSimpleVT().getScalarType().SimpleTy) {
-  default: llvm_unreachable("Unhandled Expand type in BSWAP!");
-  case MVT::i16:
-    // Use a rotate by 8. This can be further expanded if necessary.
-    return DAG.getNode(ISD::ROTL, dl, VT, Op, DAG.getConstant(8, dl, SHVT));
-  case MVT::i32:
-    Tmp4 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(24, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(8, dl, SHVT));
-    Tmp2 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(8, dl, SHVT));
-    Tmp1 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(24, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::AND, dl, VT, Tmp3,
-                       DAG.getConstant(0xFF0000, dl, VT));
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp2, DAG.getConstant(0xFF00, dl, VT));
-    Tmp4 = DAG.getNode(ISD::OR, dl, VT, Tmp4, Tmp3);
-    Tmp2 = DAG.getNode(ISD::OR, dl, VT, Tmp2, Tmp1);
-    return DAG.getNode(ISD::OR, dl, VT, Tmp4, Tmp2);
-  case MVT::i64:
-    Tmp8 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(56, dl, SHVT));
-    Tmp7 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(40, dl, SHVT));
-    Tmp6 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(24, dl, SHVT));
-    Tmp5 = DAG.getNode(ISD::SHL, dl, VT, Op, DAG.getConstant(8, dl, SHVT));
-    Tmp4 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(8, dl, SHVT));
-    Tmp3 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(24, dl, SHVT));
-    Tmp2 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(40, dl, SHVT));
-    Tmp1 = DAG.getNode(ISD::SRL, dl, VT, Op, DAG.getConstant(56, dl, SHVT));
-    Tmp7 = DAG.getNode(ISD::AND, dl, VT, Tmp7,
-                       DAG.getConstant(255ULL<<48, dl, VT));
-    Tmp6 = DAG.getNode(ISD::AND, dl, VT, Tmp6,
-                       DAG.getConstant(255ULL<<40, dl, VT));
-    Tmp5 = DAG.getNode(ISD::AND, dl, VT, Tmp5,
-                       DAG.getConstant(255ULL<<32, dl, VT));
-    Tmp4 = DAG.getNode(ISD::AND, dl, VT, Tmp4,
-                       DAG.getConstant(255ULL<<24, dl, VT));
-    Tmp3 = DAG.getNode(ISD::AND, dl, VT, Tmp3,
-                       DAG.getConstant(255ULL<<16, dl, VT));
-    Tmp2 = DAG.getNode(ISD::AND, dl, VT, Tmp2,
-                       DAG.getConstant(255ULL<<8 , dl, VT));
-    Tmp8 = DAG.getNode(ISD::OR, dl, VT, Tmp8, Tmp7);
-    Tmp6 = DAG.getNode(ISD::OR, dl, VT, Tmp6, Tmp5);
-    Tmp4 = DAG.getNode(ISD::OR, dl, VT, Tmp4, Tmp3);
-    Tmp2 = DAG.getNode(ISD::OR, dl, VT, Tmp2, Tmp1);
-    Tmp8 = DAG.getNode(ISD::OR, dl, VT, Tmp8, Tmp6);
-    Tmp4 = DAG.getNode(ISD::OR, dl, VT, Tmp4, Tmp2);
-    return DAG.getNode(ISD::OR, dl, VT, Tmp8, Tmp4);
-  }
-}
-
 /// Open code the operations for PARITY of the specified operation.
 SDValue SelectionDAGLegalize::ExpandPARITY(SDValue Op, const SDLoc &dl) {
   EVT VT = Op.getValueType();
@@ -2955,10 +2837,12 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
       Results.push_back(Tmp1);
     break;
   case ISD::BITREVERSE:
-    Results.push_back(ExpandBITREVERSE(Node->getOperand(0), dl));
+    if ((Tmp1 = TLI.expandBITREVERSE(Node, DAG)))
+      Results.push_back(Tmp1);
     break;
   case ISD::BSWAP:
-    Results.push_back(ExpandBSWAP(Node->getOperand(0), dl));
+    if ((Tmp1 = TLI.expandBSWAP(Node, DAG)))
+      Results.push_back(Tmp1);
     break;
   case ISD::PARITY:
     Results.push_back(ExpandPARITY(Node->getOperand(0), dl));
@@ -3331,6 +3215,10 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     // We may have changed the BUILD_VECTOR type. Cast it back to the Node type.
     Tmp1 = DAG.getNode(ISD::BITCAST, dl, Node->getValueType(0), Tmp1);
     Results.push_back(Tmp1);
+    break;
+  }
+  case ISD::VECTOR_SPLICE: {
+    Results.push_back(TLI.expandVectorSplice(Node, DAG));
     break;
   }
   case ISD::EXTRACT_ELEMENT: {
@@ -4602,11 +4490,12 @@ void SelectionDAGLegalize::PromoteNode(SDNode *Node) {
       Node->getOpcode() == ISD::STRICT_FSETCC ||
       Node->getOpcode() == ISD::STRICT_FSETCCS)
     OVT = Node->getOperand(1).getSimpleValueType();
-  if (Node->getOpcode() == ISD::BR_CC)
+  if (Node->getOpcode() == ISD::BR_CC ||
+      Node->getOpcode() == ISD::SELECT_CC)
     OVT = Node->getOperand(2).getSimpleValueType();
   MVT NVT = TLI.getTypeToPromoteTo(Node->getOpcode(), OVT);
   SDLoc dl(Node);
-  SDValue Tmp1, Tmp2, Tmp3;
+  SDValue Tmp1, Tmp2, Tmp3, Tmp4;
   switch (Node->getOpcode()) {
   case ISD::CTTZ:
   case ISD::CTTZ_ZERO_UNDEF:
@@ -4795,6 +4684,51 @@ void SelectionDAGLegalize::PromoteNode(SDNode *Node) {
     // Convert the shuffle mask to the right # elements.
     Tmp1 = ShuffleWithNarrowerEltType(NVT, OVT, dl, Tmp1, Tmp2, Mask);
     Tmp1 = DAG.getNode(ISD::BITCAST, dl, OVT, Tmp1);
+    Results.push_back(Tmp1);
+    break;
+  }
+  case ISD::VECTOR_SPLICE: {
+    Tmp1 = DAG.getNode(ISD::ANY_EXTEND, dl, NVT, Node->getOperand(0));
+    Tmp2 = DAG.getNode(ISD::ANY_EXTEND, dl, NVT, Node->getOperand(1));
+    Tmp3 = DAG.getNode(ISD::VECTOR_SPLICE, dl, NVT, Tmp1, Tmp2,
+                       Node->getOperand(2));
+    Results.push_back(DAG.getNode(ISD::TRUNCATE, dl, OVT, Tmp3));
+    break;
+  }
+  case ISD::SELECT_CC: {
+    SDValue Cond = Node->getOperand(4);
+    ISD::CondCode CCCode = cast<CondCodeSDNode>(Cond)->get();
+    // Type of the comparison operands.
+    MVT CVT = Node->getSimpleValueType(0);
+    assert(CVT == OVT && "not handled");
+
+    unsigned ExtOp = ISD::FP_EXTEND;
+    if (NVT.isInteger()) {
+      ExtOp = isSignedIntSetCC(CCCode) ? ISD::SIGN_EXTEND : ISD::ZERO_EXTEND;
+    }
+
+    // Promote the comparison operands, if needed.
+    if (TLI.isCondCodeLegal(CCCode, CVT)) {
+      Tmp1 = Node->getOperand(0);
+      Tmp2 = Node->getOperand(1);
+    } else {
+      Tmp1 = DAG.getNode(ExtOp, dl, NVT, Node->getOperand(0));
+      Tmp2 = DAG.getNode(ExtOp, dl, NVT, Node->getOperand(1));
+    }
+    // Cast the true/false operands.
+    Tmp3 = DAG.getNode(ExtOp, dl, NVT, Node->getOperand(2));
+    Tmp4 = DAG.getNode(ExtOp, dl, NVT, Node->getOperand(3));
+
+    Tmp1 = DAG.getNode(ISD::SELECT_CC, dl, NVT, {Tmp1, Tmp2, Tmp3, Tmp4, Cond},
+                       Node->getFlags());
+
+    // Cast the result back to the original type.
+    if (ExtOp != ISD::FP_EXTEND)
+      Tmp1 = DAG.getNode(ISD::TRUNCATE, dl, OVT, Tmp1);
+    else
+      Tmp1 = DAG.getNode(ISD::FP_ROUND, dl, OVT, Tmp1,
+                         DAG.getIntPtrConstant(0, dl));
+
     Results.push_back(Tmp1);
     break;
   }

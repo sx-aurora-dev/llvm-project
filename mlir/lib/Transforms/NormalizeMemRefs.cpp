@@ -329,7 +329,7 @@ void NormalizeMemRefs::normalizeFuncOpMemRefs(FuncOp funcOp,
   SmallVector<AllocOp, 4> allocOps;
   funcOp.walk([&](AllocOp op) { allocOps.push_back(op); });
   for (AllocOp allocOp : allocOps)
-    normalizeMemRef(allocOp);
+    (void)normalizeMemRef(allocOp);
 
   // We use this OpBuilder to create new memref layout later.
   OpBuilder b(funcOp);
@@ -512,6 +512,10 @@ Operation *NormalizeMemRefs::createOpResultsNormalized(FuncOp funcOp,
   // affine map, `oldOp` is returned without modification.
   if (resultTypeNormalized) {
     OpBuilder bb(oldOp);
+    for (auto &oldRegion : oldOp->getRegions()) {
+      Region *newRegion = result.addRegion();
+      newRegion->takeBody(oldRegion);
+    }
     return bb.createOperation(result);
   } else
     return oldOp;

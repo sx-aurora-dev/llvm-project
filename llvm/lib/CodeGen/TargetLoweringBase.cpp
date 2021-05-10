@@ -849,6 +849,9 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::VECREDUCE_FMIN, VT, Expand);
     setOperationAction(ISD::VECREDUCE_SEQ_FADD, VT, Expand);
     setOperationAction(ISD::VECREDUCE_SEQ_FMUL, VT, Expand);
+
+    // Named vector shuffles default to expand.
+    setOperationAction(ISD::VECTOR_SPLICE, VT, Expand);
   }
 
   // Most targets ignore the @llvm.prefetch intrinsic.
@@ -1224,36 +1227,6 @@ TargetLoweringBase::emitPatchPoint(MachineInstr &InitialMI,
   }
   MBB->insert(MachineBasicBlock::iterator(MI), MIB);
   MI->eraseFromParent();
-  return MBB;
-}
-
-MachineBasicBlock *
-TargetLoweringBase::emitXRayCustomEvent(MachineInstr &MI,
-                                        MachineBasicBlock *MBB) const {
-  assert(MI.getOpcode() == TargetOpcode::PATCHABLE_EVENT_CALL &&
-         "Called emitXRayCustomEvent on the wrong MI!");
-  auto &MF = *MI.getMF();
-  auto MIB = BuildMI(MF, MI.getDebugLoc(), MI.getDesc());
-  for (unsigned OpIdx = 0; OpIdx != MI.getNumOperands(); ++OpIdx)
-    MIB.add(MI.getOperand(OpIdx));
-
-  MBB->insert(MachineBasicBlock::iterator(MI), MIB);
-  MI.eraseFromParent();
-  return MBB;
-}
-
-MachineBasicBlock *
-TargetLoweringBase::emitXRayTypedEvent(MachineInstr &MI,
-                                       MachineBasicBlock *MBB) const {
-  assert(MI.getOpcode() == TargetOpcode::PATCHABLE_TYPED_EVENT_CALL &&
-         "Called emitXRayTypedEvent on the wrong MI!");
-  auto &MF = *MI.getMF();
-  auto MIB = BuildMI(MF, MI.getDebugLoc(), MI.getDesc());
-  for (unsigned OpIdx = 0; OpIdx != MI.getNumOperands(); ++OpIdx)
-    MIB.add(MI.getOperand(OpIdx));
-
-  MBB->insert(MachineBasicBlock::iterator(MI), MIB);
-  MI.eraseFromParent();
   return MBB;
 }
 
@@ -1728,8 +1701,7 @@ bool TargetLoweringBase::allowsMemoryAccessForAlignment(
   }
 
   // This is a misaligned access.
-  return allowsMisalignedMemoryAccesses(VT, AddrSpace, Alignment.value(), Flags,
-                                        Fast);
+  return allowsMisalignedMemoryAccesses(VT, AddrSpace, Alignment, Flags, Fast);
 }
 
 bool TargetLoweringBase::allowsMemoryAccessForAlignment(
@@ -1754,6 +1726,14 @@ bool TargetLoweringBase::allowsMemoryAccess(LLVMContext &Context,
                                             bool *Fast) const {
   return allowsMemoryAccess(Context, DL, VT, MMO.getAddrSpace(), MMO.getAlign(),
                             MMO.getFlags(), Fast);
+}
+
+bool TargetLoweringBase::allowsMemoryAccess(LLVMContext &Context,
+                                            const DataLayout &DL, LLT Ty,
+                                            const MachineMemOperand &MMO,
+                                            bool *Fast) const {
+  return allowsMemoryAccess(Context, DL, getMVTForLLT(Ty), MMO.getAddrSpace(),
+                            MMO.getAlign(), MMO.getFlags(), Fast);
 }
 
 BranchProbability TargetLoweringBase::getPredictableBranchThreshold() const {
@@ -2069,7 +2049,7 @@ static bool parseRefinementStep(StringRef In, size_t &Position,
   // step parameter.
   if (RefStepString.size() == 1) {
     char RefStepChar = RefStepString[0];
-    if (RefStepChar >= '0' && RefStepChar <= '9') {
+    if (isDigit(RefStepChar)) {
       Value = RefStepChar - '0';
       return true;
     }

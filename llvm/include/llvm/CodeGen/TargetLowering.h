@@ -1328,6 +1328,10 @@ public:
             getIndexedMaskedStoreAction(IdxMode, VT.getSimpleVT()) == Custom);
   }
 
+  /// Returns true if the index type for a masked gather/scatter requires
+  /// extending
+  virtual bool shouldExtendGSIndex(EVT VT, EVT &EltTy) const { return false; }
+
   // Returns true if VT is a legal index type for masked gathers/scatters
   // on this target
   virtual bool shouldRemoveExtendFromGSIndex(EVT VT) const { return false; }
@@ -1617,7 +1621,7 @@ public:
   /// helps to ensure that such replacements don't generate code that causes an
   /// alignment error (trap) on the target machine.
   virtual bool allowsMisalignedMemoryAccesses(
-      EVT, unsigned AddrSpace = 0, unsigned Align = 1,
+      EVT, unsigned AddrSpace = 0, Align Alignment = Align(1),
       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
       bool * /*Fast*/ = nullptr) const {
     return false;
@@ -1665,6 +1669,11 @@ public:
   /// final parameter returns if the access is also fast (as defined by the
   /// target).
   bool allowsMemoryAccess(LLVMContext &Context, const DataLayout &DL, EVT VT,
+                          const MachineMemOperand &MMO,
+                          bool *Fast = nullptr) const;
+
+  /// LLT handling variant.
+  bool allowsMemoryAccess(LLVMContext &Context, const DataLayout &DL, LLT Ty,
                           const MachineMemOperand &MMO,
                           bool *Fast = nullptr) const;
 
@@ -2712,6 +2721,13 @@ public:
     return isOperationLegal(ISD::FMAD, N->getValueType(0));
   }
 
+  // Return true when the decision to generate FMA's (or FMS, FMLA etc) rather
+  // than FMUL and ADD is delegated to the machine combiner.
+  virtual bool generateFMAsInMachineCombiner(EVT VT,
+                                             CodeGenOpt::Level OptLevel) const {
+    return false;
+  }
+
   /// Return true if it's profitable to narrow operations of type VT1 to
   /// VT2. e.g. on x86, it's profitable to narrow from i32 to i8 but not from
   /// i32 to i16.
@@ -2789,6 +2805,10 @@ public:
   virtual bool shouldAvoidTransformToShift(EVT VT, unsigned Amount) const {
     return false;
   }
+
+  /// Does this target require the clearing of high-order bits in a register
+  /// passed to the fp16 to fp conversion library function.
+  virtual bool shouldKeepZExtForFP16Conv() const { return false; }
 
   //===--------------------------------------------------------------------===//
   // Runtime Library hooks
@@ -3121,16 +3141,6 @@ protected:
   /// sequence of memory operands that is recognized by PrologEpilogInserter.
   MachineBasicBlock *emitPatchPoint(MachineInstr &MI,
                                     MachineBasicBlock *MBB) const;
-
-  /// Replace/modify the XRay custom event operands with target-dependent
-  /// details.
-  MachineBasicBlock *emitXRayCustomEvent(MachineInstr &MI,
-                                         MachineBasicBlock *MBB) const;
-
-  /// Replace/modify the XRay typed event operands with target-dependent
-  /// details.
-  MachineBasicBlock *emitXRayTypedEvent(MachineInstr &MI,
-                                        MachineBasicBlock *MBB) const;
 
   bool IsStrictFPEnabled;
 };
@@ -4299,9 +4309,7 @@ public:
   /// comparison may check if the operand is NAN, INF, zero, normal, etc. The
   /// result should be used as the condition operand for a select or branch.
   virtual SDValue getSqrtInputTest(SDValue Operand, SelectionDAG &DAG,
-                                   const DenormalMode &Mode) const {
-    return SDValue();
-  }
+                                   const DenormalMode &Mode) const;
 
   /// Return a target-dependent result if the input operand is not suitable for
   /// use with a square root estimate calculation.
@@ -4429,6 +4437,18 @@ public:
   bool expandABS(SDNode *N, SDValue &Result, SelectionDAG &DAG,
                  bool IsNegative = false) const;
 
+  /// Expand BSWAP nodes. Expands scalar/vector BSWAP nodes with i16/i32/i64
+  /// scalar types. Returns SDValue() if expand fails.
+  /// \param N Node to expand
+  /// \returns The expansion result or SDValue() if it fails.
+  SDValue expandBSWAP(SDNode *N, SelectionDAG &DAG) const;
+
+  /// Expand BITREVERSE nodes. Expands scalar/vector BITREVERSE nodes.
+  /// Returns SDValue() if expand fails.
+  /// \param N Node to expand
+  /// \returns The expansion result or SDValue() if it fails.
+  SDValue expandBITREVERSE(SDNode *N, SelectionDAG &DAG) const;
+
   /// Turn load of vector type into a load of the individual elements.
   /// \param LD load to expand
   /// \returns BUILD_VECTOR and TokenFactor nodes.
@@ -4518,6 +4538,10 @@ public:
   /// Expand an SREM or UREM using SDIV/UDIV or SDIVREM/UDIVREM, if legal.
   /// Returns true if the expansion was successful.
   bool expandREM(SDNode *Node, SDValue &Result, SelectionDAG &DAG) const;
+
+  /// Method for building the DAG expansion of ISD::VECTOR_SPLICE. This
+  /// method accepts vectors as its arguments.
+  SDValue expandVectorSplice(SDNode *Node, SelectionDAG &DAG) const;
 
   //===--------------------------------------------------------------------===//
   // Instruction Emitting Hooks

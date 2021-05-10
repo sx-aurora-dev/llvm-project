@@ -692,6 +692,7 @@ bool VETargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
 /// copy/move/set is converted to a sequence of store operations. Its use
 /// helps to ensure that such replacements don't generate code that causes an
 /// alignment error (trap) on the target machine.
+#if 0
 bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
                                                       unsigned AddrSpace,
                                                       unsigned Align,
@@ -703,6 +704,7 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
   }
   return true;
 }
+#endif
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                         const SelectionDAG &DAG) const {

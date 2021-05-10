@@ -1120,12 +1120,14 @@ Instruction *InstCombinerImpl::foldSelectValueEquivalence(SelectInst &Sel,
 
     // Even if TrueVal does not simplify, we can directly replace a use of
     // CmpLHS with CmpRHS, as long as the instruction is not used anywhere
-    // else. Only do this if CmpRHS is a constant, as profitability is not
-    // clear for other cases.
+    // else and is safe to speculatively execute (we may end up executing it
+    // with different operands, which should not cause side-effects or trigger
+    // undefined behavior). Only do this if CmpRHS is a constant, as
+    // profitability is not clear for other cases.
     // FIXME: The replacement could be performed recursively.
-    if (isa<Constant>(CmpRHS) && !isa<ConstantExpr>(CmpRHS))
+    if (match(CmpRHS, m_ImmConstant()) && !match(CmpLHS, m_ImmConstant()))
       if (auto *I = dyn_cast<Instruction>(TrueVal))
-        if (I->hasOneUse())
+        if (I->hasOneUse() && isSafeToSpeculativelyExecute(I))
           for (Use &U : I->operands())
             if (U == CmpLHS) {
               replaceUse(U, CmpRHS);
@@ -2888,7 +2890,7 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
       // shortening paths for the values (this helps getUnderlyingObjects() for
       // example).
       if (TrueSI->getFalseValue() == FalseVal && TrueSI->hasOneUse()) {
-        Value *And = Builder.CreateAnd(CondVal, TrueSI->getCondition());
+        Value *And = Builder.CreateLogicalAnd(CondVal, TrueSI->getCondition());
         replaceOperand(SI, 0, And);
         replaceOperand(SI, 1, TrueSI->getTrueValue());
         return &SI;
@@ -2905,7 +2907,7 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
       }
       // select(C0, a, select(C1, a, b)) -> select(C0|C1, a, b)
       if (FalseSI->getTrueValue() == TrueVal && FalseSI->hasOneUse()) {
-        Value *Or = Builder.CreateOr(CondVal, FalseSI->getCondition());
+        Value *Or = Builder.CreateLogicalOr(CondVal, FalseSI->getCondition());
         replaceOperand(SI, 0, Or);
         replaceOperand(SI, 2, FalseSI->getFalseValue());
         return &SI;

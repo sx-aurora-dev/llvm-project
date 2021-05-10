@@ -935,10 +935,13 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     .widenScalarToNextPow2(0, 32)
     .widenScalarToNextPow2(1, 32);
 
+  // S64 is only legal on SALU, and needs to be broken into 32-bit elements in
+  // RegBankSelect.
   getActionDefinitionsBuilder(G_BITREVERSE)
-    .legalFor({S32})
-    .clampScalar(0, S32, S32)
-    .scalarize(0);
+    .legalFor({S32, S64})
+    .clampScalar(0, S32, S64)
+    .scalarize(0)
+    .widenScalarToNextPow2(0);
 
   if (ST.has16BitInsts()) {
     getActionDefinitionsBuilder(G_BSWAP)
@@ -1287,8 +1290,10 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
   }
 
   if (ST.hasLDSFPAtomics()) {
-    getActionDefinitionsBuilder(G_ATOMICRMW_FADD)
+    auto &Atomic = getActionDefinitionsBuilder(G_ATOMICRMW_FADD)
       .legalFor({{S32, LocalPtr}, {S32, RegionPtr}});
+    if (ST.hasGFX90AInsts())
+      Atomic.legalFor({{S64, LocalPtr}});
   }
 
   // BUFFER/FLAT_ATOMIC_CMP_SWAP on GCN GPUs needs input marshalling, and output
@@ -2752,9 +2757,6 @@ bool AMDGPULegalizerInfo::legalizeFDIV(MachineInstr &MI,
   LLT S32 = LLT::scalar(32);
   LLT S64 = LLT::scalar(64);
 
-  if (legalizeFastUnsafeFDIV(MI, MRI, B))
-    return true;
-
   if (DstTy == S16)
     return legalizeFDIV16(MI, MRI, B);
   if (DstTy == S32)
@@ -3092,9 +3094,49 @@ bool AMDGPULegalizerInfo::legalizeFastUnsafeFDIV(MachineInstr &MI,
   return true;
 }
 
+bool AMDGPULegalizerInfo::legalizeFastUnsafeFDIV64(MachineInstr &MI,
+                                                   MachineRegisterInfo &MRI,
+                                                   MachineIRBuilder &B) const {
+  Register Res = MI.getOperand(0).getReg();
+  Register X = MI.getOperand(1).getReg();
+  Register Y = MI.getOperand(2).getReg();
+  uint16_t Flags = MI.getFlags();
+  LLT ResTy = MRI.getType(Res);
+
+  const MachineFunction &MF = B.getMF();
+  bool AllowInaccurateRcp = MF.getTarget().Options.UnsafeFPMath ||
+                            MI.getFlag(MachineInstr::FmAfn);
+
+  if (!AllowInaccurateRcp)
+    return false;
+
+  auto NegY = B.buildFNeg(ResTy, Y);
+  auto One = B.buildFConstant(ResTy, 1.0);
+
+  auto R = B.buildIntrinsic(Intrinsic::amdgcn_rcp, {ResTy}, false)
+    .addUse(Y)
+    .setMIFlags(Flags);
+
+  auto Tmp0 = B.buildFMA(ResTy, NegY, R, One);
+  R = B.buildFMA(ResTy, Tmp0, R, R);
+
+  auto Tmp1 = B.buildFMA(ResTy, NegY, R, One);
+  R = B.buildFMA(ResTy, Tmp1, R, R);
+
+  auto Ret = B.buildFMul(ResTy, X, R);
+  auto Tmp2 = B.buildFMA(ResTy, NegY, Ret, X);
+
+  B.buildFMA(Res, Tmp2, R, Ret);
+  MI.eraseFromParent();
+  return true;
+}
+
 bool AMDGPULegalizerInfo::legalizeFDIV16(MachineInstr &MI,
                                          MachineRegisterInfo &MRI,
                                          MachineIRBuilder &B) const {
+  if (legalizeFastUnsafeFDIV(MI, MRI, B))
+    return true;
+
   Register Res = MI.getOperand(0).getReg();
   Register LHS = MI.getOperand(1).getReg();
   Register RHS = MI.getOperand(2).getReg();
@@ -3157,6 +3199,9 @@ static void toggleSPDenormMode(bool Enable,
 bool AMDGPULegalizerInfo::legalizeFDIV32(MachineInstr &MI,
                                          MachineRegisterInfo &MRI,
                                          MachineIRBuilder &B) const {
+  if (legalizeFastUnsafeFDIV(MI, MRI, B))
+    return true;
+
   Register Res = MI.getOperand(0).getReg();
   Register LHS = MI.getOperand(1).getReg();
   Register RHS = MI.getOperand(2).getReg();
@@ -3223,6 +3268,9 @@ bool AMDGPULegalizerInfo::legalizeFDIV32(MachineInstr &MI,
 bool AMDGPULegalizerInfo::legalizeFDIV64(MachineInstr &MI,
                                          MachineRegisterInfo &MRI,
                                          MachineIRBuilder &B) const {
+  if (legalizeFastUnsafeFDIV64(MI, MRI, B))
+    return true;
+
   Register Res = MI.getOperand(0).getReg();
   Register LHS = MI.getOperand(1).getReg();
   Register RHS = MI.getOperand(2).getReg();
@@ -3475,11 +3523,16 @@ AMDGPULegalizerInfo::splitBufferOffsets(MachineIRBuilder &B,
   Register BaseReg;
   unsigned TotalConstOffset;
   const LLT S32 = LLT::scalar(32);
+  MachineRegisterInfo &MRI = *B.getMRI();
 
   std::tie(BaseReg, TotalConstOffset) =
-      AMDGPU::getBaseWithConstantOffset(*B.getMRI(), OrigOffset);
+      AMDGPU::getBaseWithConstantOffset(MRI, OrigOffset);
 
   unsigned ImmOffset = TotalConstOffset;
+
+  // If BaseReg is a pointer, convert it to int.
+  if (MRI.getType(BaseReg).isPointer())
+    BaseReg = B.buildPtrToInt(MRI.getType(OrigOffset), BaseReg).getReg(0);
 
   // If the immediate value is too big for the immoffset field, put the value
   // and -4096 into the immoffset field so that the value that is copied/added
@@ -3855,9 +3908,16 @@ static unsigned getBufferAtomicPseudo(Intrinsic::ID IntrID) {
   case Intrinsic::amdgcn_raw_buffer_atomic_cmpswap:
   case Intrinsic::amdgcn_struct_buffer_atomic_cmpswap:
     return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_CMPSWAP;
+  case Intrinsic::amdgcn_buffer_atomic_fadd:
   case Intrinsic::amdgcn_raw_buffer_atomic_fadd:
   case Intrinsic::amdgcn_struct_buffer_atomic_fadd:
     return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD;
+  case Intrinsic::amdgcn_raw_buffer_atomic_fmin:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fmin:
+    return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMIN;
+  case Intrinsic::amdgcn_raw_buffer_atomic_fmax:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fmax:
+    return AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMAX;
   default:
     llvm_unreachable("unhandled atomic opcode");
   }
@@ -4767,6 +4827,11 @@ bool AMDGPULegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
   case Intrinsic::amdgcn_struct_buffer_atomic_fadd:
   case Intrinsic::amdgcn_raw_buffer_atomic_cmpswap:
   case Intrinsic::amdgcn_struct_buffer_atomic_cmpswap:
+  case Intrinsic::amdgcn_buffer_atomic_fadd:
+  case Intrinsic::amdgcn_raw_buffer_atomic_fmin:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fmin:
+  case Intrinsic::amdgcn_raw_buffer_atomic_fmax:
+  case Intrinsic::amdgcn_struct_buffer_atomic_fmax:
     return legalizeBufferAtomic(MI, B, IntrID);
   case Intrinsic::amdgcn_atomic_inc:
     return legalizeAtomicIncDec(MI, B, true);

@@ -229,13 +229,13 @@ TEST(MemIndexTest, IndexedFiles) {
   RefSlab Refs;
   auto Size = Symbols.bytes() + Refs.bytes();
   auto Data = std::make_pair(std::move(Symbols), std::move(Refs));
-  llvm::StringSet<> Files = {testPath("foo.cc"), testPath("bar.cc")};
+  llvm::StringSet<> Files = {"unittest:///foo.cc", "unittest:///bar.cc"};
   MemIndex I(std::move(Data.first), std::move(Data.second), RelationSlab(),
-             std::move(Files), std::move(Data), Size);
+             std::move(Files), IndexContents::All, std::move(Data), Size);
   auto ContainsFile = I.indexedFiles();
-  EXPECT_TRUE(ContainsFile("unittest:///foo.cc"));
-  EXPECT_TRUE(ContainsFile("unittest:///bar.cc"));
-  EXPECT_FALSE(ContainsFile("unittest:///foobar.cc"));
+  EXPECT_EQ(ContainsFile("unittest:///foo.cc"), IndexContents::All);
+  EXPECT_EQ(ContainsFile("unittest:///bar.cc"), IndexContents::All);
+  EXPECT_EQ(ContainsFile("unittest:///foobar.cc"), IndexContents::None);
 }
 
 TEST(MemIndexTest, TemplateSpecialization) {
@@ -506,25 +506,26 @@ TEST(MergeIndexTest, IndexedFiles) {
   RefSlab DynRefs;
   auto DynSize = DynSymbols.bytes() + DynRefs.bytes();
   auto DynData = std::make_pair(std::move(DynSymbols), std::move(DynRefs));
-  llvm::StringSet<> DynFiles = {testPath("foo.cc")};
+  llvm::StringSet<> DynFiles = {"unittest:///foo.cc"};
   MemIndex DynIndex(std::move(DynData.first), std::move(DynData.second),
-                    RelationSlab(), std::move(DynFiles), std::move(DynData),
-                    DynSize);
+                    RelationSlab(), std::move(DynFiles), IndexContents::Symbols,
+                    std::move(DynData), DynSize);
   SymbolSlab StaticSymbols;
   RefSlab StaticRefs;
   auto StaticData =
       std::make_pair(std::move(StaticSymbols), std::move(StaticRefs));
-  llvm::StringSet<> StaticFiles = {testPath("bar.cc")};
-  MemIndex StaticIndex(std::move(StaticData.first),
-                       std::move(StaticData.second), RelationSlab(),
-                       std::move(StaticFiles), std::move(StaticData),
-                       StaticSymbols.bytes() + StaticRefs.bytes());
+  llvm::StringSet<> StaticFiles = {"unittest:///foo.cc", "unittest:///bar.cc"};
+  MemIndex StaticIndex(
+      std::move(StaticData.first), std::move(StaticData.second), RelationSlab(),
+      std::move(StaticFiles), IndexContents::References, std::move(StaticData),
+      StaticSymbols.bytes() + StaticRefs.bytes());
   MergedIndex Merge(&DynIndex, &StaticIndex);
 
   auto ContainsFile = Merge.indexedFiles();
-  EXPECT_TRUE(ContainsFile("unittest:///foo.cc"));
-  EXPECT_TRUE(ContainsFile("unittest:///bar.cc"));
-  EXPECT_FALSE(ContainsFile("unittest:///foobar.cc"));
+  EXPECT_EQ(ContainsFile("unittest:///foo.cc"),
+            IndexContents::Symbols | IndexContents::References);
+  EXPECT_EQ(ContainsFile("unittest:///bar.cc"), IndexContents::References);
+  EXPECT_EQ(ContainsFile("unittest:///foobar.cc"), IndexContents::None);
 }
 
 TEST(MergeIndexTest, NonDocumentation) {

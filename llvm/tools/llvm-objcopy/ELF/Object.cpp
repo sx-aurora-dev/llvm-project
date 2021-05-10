@@ -1290,8 +1290,9 @@ void BinaryELFBuilder::addData(SymbolTableSection *SymTab) {
   DataSection.Flags = ELF::SHF_ALLOC | ELF::SHF_WRITE;
 
   std::string SanitizedFilename = MemBuf->getBufferIdentifier().str();
-  std::replace_if(std::begin(SanitizedFilename), std::end(SanitizedFilename),
-                  [](char C) { return !isalnum(C); }, '_');
+  std::replace_if(
+      std::begin(SanitizedFilename), std::end(SanitizedFilename),
+      [](char C) { return !isAlnum(C); }, '_');
   Twine Prefix = Twine("_binary_") + SanitizedFilename;
 
   SymTab->addSymbol(Prefix + "_start", STB_GLOBAL, STT_NOTYPE, &DataSection,
@@ -2450,9 +2451,11 @@ template <class ELFT> Error ELFWriter<ELFT>::finalize() {
   bool NeedsLargeIndexes = false;
   if (Obj.sections().size() >= SHN_LORESERVE) {
     SectionTableRef Sections = Obj.sections();
+    // Sections doesn't include the null section header, so account for this
+    // when skipping the first N sections.
     NeedsLargeIndexes =
-        std::any_of(Sections.begin() + SHN_LORESERVE, Sections.end(),
-                    [](const SectionBase &Sec) { return Sec.HasSymbol; });
+        any_of(drop_begin(Sections, SHN_LORESERVE - 1),
+               [](const SectionBase &Sec) { return Sec.HasSymbol; });
     // TODO: handle case where only one section needs the large index table but
     // only needs it because the large index table hasn't been removed yet.
   }
@@ -2553,7 +2556,7 @@ Error BinaryWriter::finalize() {
     if (Sec.ParentSegment != nullptr)
       Sec.Addr =
           Sec.Offset - Sec.ParentSegment->Offset + Sec.ParentSegment->PAddr;
-    if (Sec.Size > 0)
+    if (Sec.Type != SHT_NOBITS && Sec.Size > 0)
       MinAddr = std::min(MinAddr, Sec.Addr);
   }
 

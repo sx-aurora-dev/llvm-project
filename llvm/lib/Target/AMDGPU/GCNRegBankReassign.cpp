@@ -31,7 +31,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "AMDGPUSubtarget.h"
+#include "GCNSubtarget.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
@@ -47,6 +47,11 @@ static cl::opt<unsigned> VerifyStallCycles("amdgpu-verify-regbanks-reassign",
   cl::desc("Verify stall cycles in the regbanks reassign pass"),
   cl::value_desc("0|1|2"),
   cl::init(0), cl::Hidden);
+
+// Threshold to keep compile time reasonable.
+static cl::opt<unsigned> VRegThresh("amdgpu-regbanks-reassign-threshold",
+  cl::desc("Max number of vregs to run the regbanks reassign pass"),
+  cl::init(100000), cl::Hidden);
 
 #define DEBUG_TYPE "amdgpu-regbanks-reassign"
 
@@ -471,6 +476,14 @@ bool GCNRegBankReassign::isReassignable(Register Reg) const {
   if (Reg.isPhysical() || !VRM->isAssignedReg(Reg))
     return false;
 
+  // InlineSpiller does not call LRM::assign() after an LI split leaving it
+  // in an inconsistent state, so we cannot call LRM::unassign().
+  // See llvm bug #48911.
+  // Skip reassign if a register has originated from such split.
+  // FIXME: Remove the workaround when bug #48911 is fixed.
+  if (VRM->getPreSplitReg(Reg))
+    return false;
+
   const MachineInstr *Def = MRI->getUniqueVRegDef(Reg);
 
   Register PhysReg = VRM->getPhys(Reg);
@@ -799,6 +812,16 @@ bool GCNRegBankReassign::runOnMachineFunction(MachineFunction &MF) {
     return false;
 
   MRI = &MF.getRegInfo();
+
+  LLVM_DEBUG(dbgs() << "=== RegBanks reassign analysis on function " << MF.getName()
+                    << "\nNumVirtRegs = " << MRI->getNumVirtRegs() << "\n\n");
+
+  if (MRI->getNumVirtRegs() > VRegThresh) {
+    LLVM_DEBUG(dbgs() << "NumVirtRegs > " << VRegThresh
+                      << " threshold, skipping function.\n\n");
+    return false;
+  }
+
   TRI = ST->getRegisterInfo();
   MLI = &getAnalysis<MachineLoopInfo>();
   VRM = &getAnalysis<VirtRegMap>();
@@ -817,9 +840,6 @@ bool GCNRegBankReassign::runOnMachineFunction(MachineFunction &MF) {
                          // Not a tight bound
                          AMDGPU::SReg_32RegClass.getNumRegs() / 2 + 1;
   RegsUsed.resize(NumRegBanks);
-
-  LLVM_DEBUG(dbgs() << "=== RegBanks reassign analysis on function " << MF.getName()
-               << '\n');
 
   unsigned StallCycles = collectCandidates(MF);
   NumStallsDetected += StallCycles;

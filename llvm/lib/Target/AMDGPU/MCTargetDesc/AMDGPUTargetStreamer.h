@@ -23,6 +23,7 @@ class MCSymbol;
 class MDNode;
 class Module;
 class Type;
+class formatted_raw_ostream;
 
 namespace AMDGPU {
 namespace HSAMD {
@@ -84,7 +85,7 @@ public:
   virtual bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) = 0;
 
   /// \returns True on success, false on failure.
-  virtual bool EmitCodeEnd() = 0;
+  virtual bool EmitCodeEnd(const MCSubtargetInfo &STI) = 0;
 
   virtual void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -128,7 +129,7 @@ public:
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
 
   /// \returns True on success, false on failure.
-  bool EmitCodeEnd() override;
+  bool EmitCodeEnd(const MCSubtargetInfo &STI) override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,
@@ -176,7 +177,7 @@ public:
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
 
   /// \returns True on success, false on failure.
-  bool EmitCodeEnd() override;
+  bool EmitCodeEnd(const MCSubtargetInfo &STI) override;
 
   void EmitAmdhsaKernelDescriptor(
       const MCSubtargetInfo &STI, StringRef KernelName,

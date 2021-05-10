@@ -36,6 +36,8 @@ struct ImageDimIntrinsicInfo;
 class AMDGPUInstrInfo;
 class AMDGPURegisterBankInfo;
 class AMDGPUTargetMachine;
+class BlockFrequencyInfo;
+class ProfileSummaryInfo;
 class GCNSubtarget;
 class MachineInstr;
 class MachineIRBuilder;
@@ -45,6 +47,7 @@ class RegisterBank;
 class SIInstrInfo;
 class SIMachineFunctionInfo;
 class SIRegisterInfo;
+class TargetRegisterClass;
 
 class AMDGPUInstructionSelector final : public InstructionSelector {
 private:
@@ -59,8 +62,9 @@ public:
   bool select(MachineInstr &I) override;
   static const char *getName();
 
-  void setupMF(MachineFunction &MF, GISelKnownBits &KB,
-               CodeGenCoverage &CoverageInfo) override;
+  void setupMF(MachineFunction &MF, GISelKnownBits *KB,
+               CodeGenCoverage &CoverageInfo, ProfileSummaryInfo *PSI,
+               BlockFrequencyInfo *BFI) override;
 
 private:
   struct GEPInfo {
@@ -274,26 +278,6 @@ private:
   void renderTruncTImm(MachineInstrBuilder &MIB, const MachineInstr &MI,
                        int OpIdx) const;
 
-  void renderTruncTImm1(MachineInstrBuilder &MIB, const MachineInstr &MI,
-                        int OpIdx) const {
-    renderTruncTImm(MIB, MI, OpIdx);
-  }
-
-  void renderTruncTImm8(MachineInstrBuilder &MIB, const MachineInstr &MI,
-                        int OpIdx) const {
-    renderTruncTImm(MIB, MI, OpIdx);
-  }
-
-  void renderTruncTImm16(MachineInstrBuilder &MIB, const MachineInstr &MI,
-                        int OpIdx) const {
-    renderTruncTImm(MIB, MI, OpIdx);
-  }
-
-  void renderTruncTImm32(MachineInstrBuilder &MIB, const MachineInstr &MI,
-                        int OpIdx) const {
-    renderTruncTImm(MIB, MI, OpIdx);
-  }
-
   void renderNegateImm(MachineInstrBuilder &MIB, const MachineInstr &MI,
                        int OpIdx) const;
 
@@ -310,6 +294,9 @@ private:
                         int OpIdx) const;
   void renderExtractSWZ(MachineInstrBuilder &MIB, const MachineInstr &MI,
                         int OpIdx) const;
+  void renderExtractSCCB(MachineInstrBuilder &MIB, const MachineInstr &MI,
+                         int OpIdx) const;
+
   void renderFrameIndex(MachineInstrBuilder &MIB, const MachineInstr &MI,
                         int OpIdx) const;
 

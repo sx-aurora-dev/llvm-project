@@ -70,6 +70,8 @@ private:
                 raw_ostream &O);
   void printDLC(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
                 raw_ostream &O);
+  void printSCCB(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
+                 raw_ostream &O);
   void printGLC(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
                 raw_ostream &O);
   void printSLC(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
@@ -179,10 +181,8 @@ private:
   void printDefaultVccOperand(unsigned OpNo, const MCSubtargetInfo &STI,
                               raw_ostream &O);
 
-
-  template <unsigned N>
-  void printExpSrcN(const MCInst *MI, unsigned OpNo,
-                    const MCSubtargetInfo &STI, raw_ostream &O);
+  void printExpSrcN(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
+                    raw_ostream &O, unsigned N);
   void printExpSrc0(const MCInst *MI, unsigned OpNo,
                     const MCSubtargetInfo &STI, raw_ostream &O);
   void printExpSrc1(const MCInst *MI, unsigned OpNo,

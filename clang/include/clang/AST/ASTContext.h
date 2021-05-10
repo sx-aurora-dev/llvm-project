@@ -34,9 +34,10 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Linkage.h"
+#include "clang/Basic/NoSanitizeList.h"
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/PartialDiagnostic.h"
-#include "clang/Basic/SanitizerBlacklist.h"
+#include "clang/Basic/ProfileList.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/XRayLists.h"
@@ -298,6 +299,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
   /// This is lazily created.  This is intentionally not serialized.
   mutable llvm::StringMap<StringLiteral *> StringLiteralCache;
 
+  /// MD5 hash of CUID. It is calculated when first used and cached by this
+  /// data member.
+  mutable std::string CUIDHash;
+
   /// Representation of a "canonical" template template parameter that
   /// is used in canonical template names.
   class CanonicalTemplateTemplateParm : public llvm::FoldingSetNode {
@@ -537,6 +542,9 @@ private:
   /// need them (like static local vars).
   llvm::MapVector<const NamedDecl *, unsigned> MangleNumbers;
   llvm::MapVector<const VarDecl *, unsigned> StaticLocalNumbers;
+  /// Mapping the associated device lambda mangling number if present.
+  mutable llvm::DenseMap<const CXXRecordDecl *, unsigned>
+      DeviceLambdaManglingNumbers;
 
   /// Mapping that stores parameterIndex values for ParmVarDecls when
   /// that value exceeds the bitfield size of ParmVarDeclBits.ParameterIndex.
@@ -558,13 +566,17 @@ private:
   ///  this ASTContext object.
   LangOptions &LangOpts;
 
-  /// Blacklist object that is used by sanitizers to decide which
+  /// NoSanitizeList object that is used by sanitizers to decide which
   /// entities should not be instrumented.
-  std::unique_ptr<SanitizerBlacklist> SanitizerBL;
+  std::unique_ptr<NoSanitizeList> NoSanitizeL;
 
   /// Function filtering mechanism to determine whether a given function
   /// should be imbued with the XRay "always" or "never" attributes.
   std::unique_ptr<XRayFunctionFilter> XRayFilter;
+
+  /// ProfileList object that is used by the profile instrumentation
+  /// to decide which entities should be instrumented.
+  std::unique_ptr<ProfileList> ProfList;
 
   /// The allocator used to create AST objects.
   ///
@@ -683,13 +695,13 @@ public:
     return LangOpts.CPlusPlus || LangOpts.RecoveryAST;
   }
 
-  const SanitizerBlacklist &getSanitizerBlacklist() const {
-    return *SanitizerBL;
-  }
+  const NoSanitizeList &getNoSanitizeList() const { return *NoSanitizeL; }
 
   const XRayFunctionFilter &getXRayFilter() const {
     return *XRayFilter;
   }
+
+  const ProfileList &getProfileList() const { return *ProfList; }
 
   DiagnosticsEngine &getDiagnostics() const;
 
@@ -1010,6 +1022,9 @@ public:
 #define PPC_VECTOR_TYPE(Name, Id, Size) \
   CanQualType Id##Ty;
 #include "clang/Basic/PPCTypes.def"
+#define RVV_TYPE(Name, Id, SingletonId) \
+  CanQualType SingletonId;
+#include "clang/Basic/RISCVVTypes.def"
 
   // Types for deductions in C++0x [stmt.ranged]'s desugaring. Built on demand.
   mutable QualType AutoDeductTy;     // Deduction against 'auto'.
@@ -2401,12 +2416,10 @@ public:
         return (*SuperTnullability == NullabilityKind::NonNull &&
                 *SubTnullability == NullabilityKind::Nullable);
       }
-      else {
-        // For the return type, it's okay for the superclass method to specify
-        // "nullable" and the subclass method specify "nonnull"
-        return (*SuperTnullability == NullabilityKind::Nullable &&
-                *SubTnullability == NullabilityKind::NonNull);
-      }
+      // For the return type, it's okay for the superclass method to specify
+      // "nullable" and the subclass method specify "nonnull"
+      return (*SuperTnullability == NullabilityKind::Nullable &&
+              *SubTnullability == NullabilityKind::NonNull);
     }
     return true;
   }
@@ -3107,6 +3120,8 @@ public:
 
   /// Whether a C++ static variable should be externalized.
   bool shouldExternalizeStaticVar(const Decl *D) const;
+
+  StringRef getCUIDHash() const;
 
 private:
   /// All OMPTraitInfo objects live in this collection, one per
