@@ -16,6 +16,8 @@
 #include "llvm/Support/Path.h"
 #include <cstdlib> // ::getenv
 
+#include "llvm/Support/VirtualFileSystem.h"
+
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
 using namespace clang;
@@ -43,6 +45,9 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   // Re-add C++ library dir.
   if (auto CXXStdlibPath = getCXXStdlibPath())
     getFilePaths().push_back(*CXXStdlibPath);
+
+  if (auto RuntimePath = getRuntimePath())
+    getLibraryPaths().push_back(*RuntimePath);
 
   getFilePaths().push_back(getArchSpecificLibPath());
   getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/lib");
@@ -124,6 +129,49 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   SmallString<128> P(getDriver().ResourceDir);
   llvm::sys::path::append(P, "/../../../include/c++/v1");
   addSystemInclude(DriverArgs, CC1Args, P);
+}
+
+Optional<std::string> VEToolChain::getRuntimePath() const {
+  SmallString<128> P;
+
+  // First try the triple passed to driver as --target=<triple>.
+#if 0
+  // FIXME: This is the host' in OMPT.. don't even bother
+  P.assign(getDriver().ResourceDir);
+  llvm::sys::path::append(P, "lib", D.getTargetTriple());
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(std::string(P.str()));
+#endif
+
+  // Second try the normalized triple.
+  P.assign(getDriver().ResourceDir);
+  llvm::sys::path::append(P, "lib", "ve-linux");
+  if (getDriver().getVFS().exists(P))
+    return llvm::Optional<std::string>(std::string(P.str()));
+
+  return None;
+}
+
+Optional<std::string> VEToolChain::getCXXStdlibPath() const {
+  SmallString<128> P;
+
+  // First try the triple passed to driver as --target=<triple>.
+#if 0
+  // FIXME: D.getTargetTriple() is the host's in OMPT.
+  // Don't even bother and use the hard-wired "standard" path below.
+  P.assign(D.Dir);
+  llvm::sys::path::append(P, "..", "lib", D.getTargetTriple(), "c++");
+  if (getVFS().exists(P))
+    return llvm::Optional<std::string>(std::string(P.str()));
+#endif
+
+  // Try the standard tuple.
+  P.assign(getDriver().Dir);
+  llvm::sys::path::append(P, "..", "lib", "ve-linux", "c++");
+  if (getDriver().getVFS().exists(P))
+    return llvm::Optional<std::string>(std::string(P.str()));
+
+  return None;
 }
 
 void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,

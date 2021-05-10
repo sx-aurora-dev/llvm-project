@@ -48,6 +48,9 @@ public:
   llvm::ExceptionHandling
   GetExceptionModel(const llvm::opt::ArgList &Args) const override;
 
+  Optional<std::string> getRuntimePath() const override;
+  Optional<std::string> getCXXStdlibPath() const override;
+
   CXXStdlibType
   GetCXXStdlibType(const llvm::opt::ArgList &Args) const override {
     return ToolChain::CST_Libcxx;
