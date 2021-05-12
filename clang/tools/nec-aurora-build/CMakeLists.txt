@@ -26,7 +26,8 @@ find_program(NECAURORA_TARGET_COMPILER_NCC
 if (NECAURORA_TARGET_COMPILER_NCC)
     set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
 else()
-    message(WARNING "Could not find ncc compiler. ncc will not be available as VE target compiler")
+    set(TARGET_COMPILER_NCC "/opt/nec/ve/bin/ncc")
+    message(WARNING "- sotoc: Could not find ncc compiler. Defaulting to path ${TARGET_COMPILER_NCC}")
 endif()
 
 # Set Clang and RVClang target compiler variables
@@ -44,7 +45,7 @@ set(NECAURORA_DEFAULT_TARGET_COMPILER
     "ncc"
     CACHE STRING
     "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
-message("OMPT for SX-Aurora: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
+message("- sotoc: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
 
   find_library(
       NECAURORA_LIBAVEOVE_STATIC
@@ -94,7 +95,7 @@ endif()
 
 find_package(NECAURORA_LIBELF)
 if(NOT NECAURORA_LIBELF_FOUND)
-  message(FATAL_ERROR "LIBELF not found.")
+  message(FATAL_ERROR "- sotoc: LIBELF not found.")
 endif()
 
 configure_file(config.h.in config.h @ONLY)
