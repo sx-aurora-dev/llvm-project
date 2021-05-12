@@ -3300,6 +3300,9 @@ bool CodeGenFunction::EmitOMPWorksharingLoop(
               } else if (const auto *C = S.getSingleClause<OMPOrderClause>()) {
                 if (C->getKind() == OMPC_ORDER_concurrent)
                   CGF.LoopStack.setParallel(/*Enable=*/true);
+              } else {
+                // TODO: This may not be legal
+                CGF.LoopStack.setParallel(/*Enable=*/true);
               }
             },
             [IVSize, IVSigned, Ordered, IL, LB, UB, ST, StaticChunkedOne, Chunk,
