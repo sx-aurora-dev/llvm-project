@@ -140,13 +140,15 @@ such example is when using [`PDL`-based](Dialects/PDLOps.md)
 runtime. In these situations, a pass may override the following hook to
 initialize this heavy state:
 
-*   `void initialize(MLIRContext *context)`
+*   `LogicalResult initialize(MLIRContext *context)`
 
 This hook is executed once per run of a full pass pipeline, meaning that it does
 not have access to the state available during a `runOnOperation` call. More
 concretely, all necessary accesses to an `MLIRContext` should be driven via the
 provided `context` parameter, and methods that utilize "per-run" state such as
 `getContext`/`getOperation`/`getAnalysis`/etc. must not be used.
+In case of an error during initialization, the pass is expected to emit an error
+diagnostic and return a `failure()` which will abort the pass pipeline execution.
 
 ## Analysis Management
 
@@ -1135,7 +1137,7 @@ func @simple_constant() -> (i32, i32) {
 ## Crash and Failure Reproduction
 
 The [pass manager](#pass-manager) in MLIR contains a builtin mechanism to
-generate reproducibles in the even of a crash, or a
+generate reproducibles in the event of a crash, or a
 [pass failure](#pass-failure). This functionality can be enabled via
 `PassManager::enableCrashReproducerGeneration` or via the command line flag
 `pass-pipeline-crash-reproducer`. In either case, an argument is provided that
@@ -1145,8 +1147,7 @@ was executing, as well as the initial IR before any passes were run. A potential
 reproducible may have the form:
 
 ```mlir
-// configuration: -pass-pipeline='func(cse,canonicalize),inline'
-// note: verifyPasses=false
+// configuration: -pass-pipeline='func(cse,canonicalize),inline' -verify-each
 
 module {
   func @foo() {
@@ -1158,6 +1159,10 @@ module {
 The configuration dumped can be passed to `mlir-opt` by specifying
 `-run-reproducer` flag. This will result in parsing the first line configuration
 of the reproducer and adding those to the command line options.
+
+Beyond specifying a filename, one can also register a `ReproducerStreamFactory`
+function that would be invoked in the case of a crash and the reproducer written
+to its stream.
 
 ### Local Reproducer Generation
 
@@ -1174,8 +1179,7 @@ For example, if the failure in the previous example came from `canonicalize`,
 the following reproducer will be generated:
 
 ```mlir
-// configuration: -pass-pipeline='func(canonicalize)'
-// note: verifyPasses=false
+// configuration: -pass-pipeline='func(canonicalize)' -verify-each
 
 module {
   func @foo() {

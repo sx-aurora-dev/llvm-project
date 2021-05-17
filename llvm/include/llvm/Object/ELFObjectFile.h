@@ -670,8 +670,8 @@ ELFObjectFile<ELFT>::getSymbolType(DataRefImpl Symb) const {
     return SymbolRef::ST_Function;
   case ELF::STT_OBJECT:
   case ELF::STT_COMMON:
-  case ELF::STT_TLS:
     return SymbolRef::ST_Data;
+  case ELF::STT_TLS:
   default:
     return SymbolRef::ST_Other;
   }
@@ -1141,6 +1141,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
   switch (EF.getHeader().e_ident[ELF::EI_CLASS]) {
   case ELF::ELFCLASS32:
     switch (EF.getHeader().e_machine) {
+    case ELF::EM_68K:
+      return "elf32-m68k";
     case ELF::EM_386:
       return "elf32-i386";
     case ELF::EM_IAMCU:
@@ -1209,6 +1211,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
 template <class ELFT> Triple::ArchType ELFObjectFile<ELFT>::getArch() const {
   bool IsLittleEndian = ELFT::TargetEndianness == support::little;
   switch (EF.getHeader().e_machine) {
+  case ELF::EM_68K:
+    return Triple::m68k;
   case ELF::EM_386:
   case ELF::EM_IAMCU:
     return Triple::x86;

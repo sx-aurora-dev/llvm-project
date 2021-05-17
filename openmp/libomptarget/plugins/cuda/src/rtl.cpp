@@ -229,7 +229,7 @@ public:
     const std::lock_guard<std::mutex> Lock(*StreamMtx[DeviceId]);
     int &Id = NextStreamId[DeviceId];
     // No CUstream left in the pool, we need to request from CUDA RT
-    if (Id == StreamPool[DeviceId].size()) {
+    if (Id == static_cast<int>(StreamPool[DeviceId].size())) {
       // By default we double the stream pool every time
       resizeStreamPool(DeviceId, Id * 2);
     }
@@ -263,7 +263,7 @@ public:
     resizeStreamPool(DeviceId, EnvNumInitialStreams);
 
     // Check the size of stream pool
-    if (StreamPool[DeviceId].size() != EnvNumInitialStreams)
+    if (static_cast<int>(StreamPool[DeviceId].size()) != EnvNumInitialStreams)
       return false;
 
     // Check whether each stream is valid
@@ -401,6 +401,11 @@ public:
     DP("Start initializing CUDA\n");
 
     CUresult Err = cuInit(0);
+    if (Err == CUDA_ERROR_INVALID_HANDLE) {
+      // Can't call cuGetErrorString if dlsym failed
+      DP("Failed to load CUDA shared library\n");
+      return;
+    }
     if (!checkResult(Err, "Error returned from cuInit\n")) {
       return;
     }
@@ -580,7 +585,7 @@ public:
       DeviceData[DeviceId].BlocksPerGrid = EnvTeamLimit;
     }
 
-    INFO(DeviceId,
+    INFO(OMP_INFOTYPE_PLUGIN_KERNEL, DeviceId,
          "Device supports up to %d CUDA blocks and %d threads with a "
          "warp size of %d\n",
          DeviceData[DeviceId].BlocksPerGrid,
@@ -1004,7 +1009,7 @@ public:
       CudaBlocksPerGrid = TeamNum;
     }
 
-    INFO(DeviceId,
+    INFO(OMP_INFOTYPE_PLUGIN_KERNEL, DeviceId,
          "Launching kernel %s with %d blocks and %d threads in %s "
          "mode\n",
          (getOffloadEntry(DeviceId, TgtEntryPtr))

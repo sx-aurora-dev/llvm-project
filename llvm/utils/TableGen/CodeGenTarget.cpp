@@ -658,6 +658,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
   isWillReturn = false;
   isCold = false;
   isNoDuplicate = false;
+  isNoMerge = false;
   isConvergent = false;
   isSpeculatable = false;
   hasSideEffects = false;
@@ -847,6 +848,8 @@ void CodeGenIntrinsic::setProperty(Record *R) {
     canThrow = true;
   else if (R->getName() == "IntrNoDuplicate")
     isNoDuplicate = true;
+  else if (R->getName() == "IntrNoMerge")
+    isNoMerge = true;
   else if (R->getName() == "IntrConvergent")
     isConvergent = true;
   else if (R->getName() == "IntrNoReturn")

@@ -328,6 +328,34 @@ def int_wasm_prefetch_nt :
              ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>],
             "", [SDNPMemOperand]>;
 
+// TODO: Remove these if possible if they are merged to the spec.
+def int_wasm_convert_low_signed :
+  Intrinsic<[llvm_v2f64_ty], [llvm_v4i32_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_convert_low_unsigned :
+  Intrinsic<[llvm_v2f64_ty], [llvm_v4i32_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_trunc_saturate_zero_signed :
+  Intrinsic<[llvm_v4i32_ty], [llvm_v2f64_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_trunc_saturate_zero_unsigned :
+  Intrinsic<[llvm_v4i32_ty], [llvm_v2f64_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_demote_zero :
+  Intrinsic<[llvm_v4f32_ty], [llvm_v2f64_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_promote_low :
+  Intrinsic<[llvm_v2f64_ty], [llvm_v4f32_ty],
+            [IntrNoMem, IntrSpeculatable]>;
+
+// TODO: Remove these if possible if they are merged to the spec.
+def int_wasm_widen_signed :
+  Intrinsic<[llvm_v4i32_ty], [llvm_v16i8_ty, llvm_i32_ty],
+            [IntrNoMem, IntrSpeculatable, ImmArg<ArgIndex<1>>]>;
+def int_wasm_widen_unsigned :
+  Intrinsic<[llvm_v4i32_ty], [llvm_v16i8_ty, llvm_i32_ty],
+            [IntrNoMem, IntrSpeculatable, ImmArg<ArgIndex<1>>]>;
+
 //===----------------------------------------------------------------------===//
 // Thread-local storage intrinsics
 //===----------------------------------------------------------------------===//

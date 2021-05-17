@@ -213,6 +213,10 @@ ProcessGDBRemote::CreateInstance(lldb::TargetSP target_sp,
   return process_sp;
 }
 
+std::chrono::seconds ProcessGDBRemote::GetPacketTimeout() {
+  return std::chrono::seconds(GetGlobalPluginProperties()->GetPacketTimeout());
+}
+
 bool ProcessGDBRemote::CanDebug(lldb::TargetSP target_sp,
                                 bool plugin_specified_by_name) {
   if (plugin_specified_by_name)
@@ -1602,8 +1606,8 @@ bool ProcessGDBRemote::UpdateThreadIDList() {
   return true;
 }
 
-bool ProcessGDBRemote::UpdateThreadList(ThreadList &old_thread_list,
-                                        ThreadList &new_thread_list) {
+bool ProcessGDBRemote::DoUpdateThreadList(ThreadList &old_thread_list,
+                                          ThreadList &new_thread_list) {
   // locker will keep a mutex locked until it goes out of scope
   Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_THREAD));
   LLDB_LOGV(log, "pid = {0}", GetID());
@@ -1748,7 +1752,9 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
     if (thread_sp) {
       ThreadGDBRemote *gdb_thread =
           static_cast<ThreadGDBRemote *>(thread_sp.get());
-      gdb_thread->GetRegisterContext()->InvalidateIfNeeded(true);
+      RegisterContextSP gdb_reg_ctx_sp(gdb_thread->GetRegisterContext());
+
+      gdb_reg_ctx_sp->InvalidateIfNeeded(true);
 
       auto iter = std::find(m_thread_ids.begin(), m_thread_ids.end(), tid);
       if (iter != m_thread_ids.end()) {
@@ -1760,7 +1766,23 @@ ThreadSP ProcessGDBRemote::SetThreadStopInfo(
         DataBufferSP buffer_sp(new DataBufferHeap(
             reg_value_extractor.GetStringRef().size() / 2, 0));
         reg_value_extractor.GetHexBytes(buffer_sp->GetData(), '\xcc');
-        gdb_thread->PrivateSetRegisterValue(pair.first, buffer_sp->GetData());
+        uint32_t lldb_regnum =
+            gdb_reg_ctx_sp->ConvertRegisterKindToRegisterNumber(
+                eRegisterKindProcessPlugin, pair.first);
+        gdb_thread->PrivateSetRegisterValue(lldb_regnum, buffer_sp->GetData());
+      }
+
+      // AArch64 SVE specific code below calls AArch64SVEReconfigure to update
+      // SVE register sizes and offsets if value of VG register has changed
+      // since last stop.
+      const ArchSpec &arch = GetTarget().GetArchitecture();
+      if (arch.IsValid() && arch.GetTriple().isAArch64()) {
+        GDBRemoteRegisterContext *reg_ctx_sp =
+            static_cast<GDBRemoteRegisterContext *>(
+                gdb_thread->GetRegisterContext().get());
+
+        if (reg_ctx_sp)
+          reg_ctx_sp->AArch64SVEReconfigure();
       }
 
       thread_sp->SetName(thread_name.empty() ? nullptr : thread_name.c_str());

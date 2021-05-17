@@ -1210,8 +1210,7 @@ static bool isPoisonShift(Value *Amount, const SimplifyQuery &Q) {
 
   // Shifting by the bitwidth or more is undefined.
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C))
-    if (CI->getValue().getLimitedValue() >=
-        CI->getType()->getScalarSizeInBits())
+    if (CI->getValue().uge(CI->getType()->getScalarSizeInBits()))
       return true;
 
   // If all lanes of a vector shift are undefined the whole shift is.
@@ -1230,7 +1229,8 @@ static bool isPoisonShift(Value *Amount, const SimplifyQuery &Q) {
 /// Given operands for an Shl, LShr or AShr, see if we can fold the result.
 /// If not, this returns null.
 static Value *SimplifyShift(Instruction::BinaryOps Opcode, Value *Op0,
-                            Value *Op1, const SimplifyQuery &Q, unsigned MaxRecurse) {
+                            Value *Op1, bool IsNSW, const SimplifyQuery &Q,
+                            unsigned MaxRecurse) {
   if (Constant *C = foldOrCommuteConstant(Opcode, Op0, Op1, Q))
     return C;
 
@@ -1264,15 +1264,30 @@ static Value *SimplifyShift(Instruction::BinaryOps Opcode, Value *Op0,
 
   // If any bits in the shift amount make that value greater than or equal to
   // the number of bits in the type, the shift is undefined.
-  KnownBits Known = computeKnownBits(Op1, Q.DL, 0, Q.AC, Q.CxtI, Q.DT);
-  if (Known.One.getLimitedValue() >= Known.getBitWidth())
+  KnownBits KnownAmt = computeKnownBits(Op1, Q.DL, 0, Q.AC, Q.CxtI, Q.DT);
+  if (KnownAmt.getMinValue().uge(KnownAmt.getBitWidth()))
     return PoisonValue::get(Op0->getType());
 
   // If all valid bits in the shift amount are known zero, the first operand is
   // unchanged.
-  unsigned NumValidShiftBits = Log2_32_Ceil(Known.getBitWidth());
-  if (Known.countMinTrailingZeros() >= NumValidShiftBits)
+  unsigned NumValidShiftBits = Log2_32_Ceil(KnownAmt.getBitWidth());
+  if (KnownAmt.countMinTrailingZeros() >= NumValidShiftBits)
     return Op0;
+
+  // Check for nsw shl leading to a poison value.
+  if (IsNSW) {
+    assert(Opcode == Instruction::Shl && "Expected shl for nsw instruction");
+    KnownBits KnownVal = computeKnownBits(Op0, Q.DL, 0, Q.AC, Q.CxtI, Q.DT);
+    KnownBits KnownShl = KnownBits::shl(KnownVal, KnownAmt);
+
+    if (KnownVal.Zero.isSignBitSet())
+      KnownShl.Zero.setSignBit();
+    if (KnownVal.One.isSignBitSet())
+      KnownShl.One.setSignBit();
+
+    if (KnownShl.hasConflict())
+      return PoisonValue::get(Op0->getType());
+  }
 
   return nullptr;
 }
@@ -1282,7 +1297,8 @@ static Value *SimplifyShift(Instruction::BinaryOps Opcode, Value *Op0,
 static Value *SimplifyRightShift(Instruction::BinaryOps Opcode, Value *Op0,
                                  Value *Op1, bool isExact, const SimplifyQuery &Q,
                                  unsigned MaxRecurse) {
-  if (Value *V = SimplifyShift(Opcode, Op0, Op1, Q, MaxRecurse))
+  if (Value *V =
+          SimplifyShift(Opcode, Op0, Op1, /*IsNSW*/ false, Q, MaxRecurse))
     return V;
 
   // X >> X -> 0
@@ -1308,7 +1324,8 @@ static Value *SimplifyRightShift(Instruction::BinaryOps Opcode, Value *Op0,
 /// If not, this returns null.
 static Value *SimplifyShlInst(Value *Op0, Value *Op1, bool isNSW, bool isNUW,
                               const SimplifyQuery &Q, unsigned MaxRecurse) {
-  if (Value *V = SimplifyShift(Instruction::Shl, Op0, Op1, Q, MaxRecurse))
+  if (Value *V =
+          SimplifyShift(Instruction::Shl, Op0, Op1, isNSW, Q, MaxRecurse))
     return V;
 
   // undef << X -> 0
@@ -2128,12 +2145,21 @@ static Value *SimplifyAndInst(Value *Op0, Value *Op1, const SimplifyQuery &Q,
                                         Instruction::Xor, Q, MaxRecurse))
     return V;
 
-  // If the operation is with the result of a select instruction, check whether
-  // operating on either branch of the select always yields the same value.
-  if (isa<SelectInst>(Op0) || isa<SelectInst>(Op1))
+  if (isa<SelectInst>(Op0) || isa<SelectInst>(Op1)) {
+    if (Op0->getType()->isIntOrIntVectorTy(1)) {
+      // A & (A && B) -> A && B
+      if (match(Op1, m_Select(m_Specific(Op0), m_Value(), m_Zero())))
+        return Op1;
+      else if (match(Op0, m_Select(m_Specific(Op1), m_Value(), m_Zero())))
+        return Op0;
+    }
+    // If the operation is with the result of a select instruction, check
+    // whether operating on either branch of the select always yields the same
+    // value.
     if (Value *V = ThreadBinOpOverSelect(Instruction::And, Op0, Op1, Q,
                                          MaxRecurse))
       return V;
+  }
 
   // If the operation is with the result of a phi instruction, check whether
   // operating on all incoming values of the phi always yields the same value.
@@ -2304,12 +2330,21 @@ static Value *SimplifyOrInst(Value *Op0, Value *Op1, const SimplifyQuery &Q,
                                         Instruction::And, Q, MaxRecurse))
     return V;
 
-  // If the operation is with the result of a select instruction, check whether
-  // operating on either branch of the select always yields the same value.
-  if (isa<SelectInst>(Op0) || isa<SelectInst>(Op1))
+  if (isa<SelectInst>(Op0) || isa<SelectInst>(Op1)) {
+    if (Op0->getType()->isIntOrIntVectorTy(1)) {
+      // A | (A || B) -> A || B
+      if (match(Op1, m_Select(m_Specific(Op0), m_One(), m_Value())))
+        return Op1;
+      else if (match(Op0, m_Select(m_Specific(Op1), m_One(), m_Value())))
+        return Op0;
+    }
+    // If the operation is with the result of a select instruction, check
+    // whether operating on either branch of the select always yields the same
+    // value.
     if (Value *V = ThreadBinOpOverSelect(Instruction::Or, Op0, Op1, Q,
                                          MaxRecurse))
       return V;
+  }
 
   // (A & C1)|(B & C2)
   const APInt *C1, *C2;
@@ -5375,21 +5410,17 @@ static Value *simplifyUnaryIntrinsic(Function *F, Value *Op0,
       return Op0;
     break;
   }
+  case Intrinsic::experimental_vector_reverse:
+    // experimental.vector.reverse(experimental.vector.reverse(x)) -> x
+    if (match(Op0,
+              m_Intrinsic<Intrinsic::experimental_vector_reverse>(m_Value(X))))
+      return X;
+    break;
   default:
     break;
   }
 
   return nullptr;
-}
-
-static Intrinsic::ID getMaxMinOpposite(Intrinsic::ID IID) {
-  switch (IID) {
-  case Intrinsic::smax: return Intrinsic::smin;
-  case Intrinsic::smin: return Intrinsic::smax;
-  case Intrinsic::umax: return Intrinsic::umin;
-  case Intrinsic::umin: return Intrinsic::umax;
-  default: llvm_unreachable("Unexpected intrinsic");
-  }
 }
 
 static APInt getMaxMinLimit(Intrinsic::ID IID, unsigned BitWidth) {
@@ -5431,7 +5462,7 @@ static Value *foldMinMaxSharedOp(Intrinsic::ID IID, Value *Op0, Value *Op1) {
     if (IID0 == IID)
       return MM0;
     // max (min X, Y), X --> X
-    if (IID0 == getMaxMinOpposite(IID))
+    if (IID0 == getInverseMinMaxIntrinsic(IID))
       return Op1;
   }
   return nullptr;
@@ -5451,6 +5482,12 @@ static Value *simplifyBinaryIntrinsic(Function *F, Value *Op0, Value *Op1,
       return Op0;
     break;
 
+  case Intrinsic::cttz: {
+    Value *X;
+    if (match(Op0, m_Shl(m_One(), m_Value(X))))
+      return X;
+    break;
+  }
   case Intrinsic::smax:
   case Intrinsic::smin:
   case Intrinsic::umax:
@@ -5477,7 +5514,7 @@ static Value *simplifyBinaryIntrinsic(Function *F, Value *Op0, Value *Op1,
       // If the constant op is the opposite of the limit value, the other must
       // be larger/smaller or equal. For example:
       // umin(i8 %x, i8 255) --> %x
-      if (*C == getMaxMinLimit(getMaxMinOpposite(IID), BitWidth))
+      if (*C == getMaxMinLimit(getInverseMinMaxIntrinsic(IID), BitWidth))
         return Op0;
 
       // Remove nested call if constant operands allow it. Example:

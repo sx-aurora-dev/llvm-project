@@ -56,6 +56,24 @@ static cl::opt<unsigned> UnrollMaxBlockToAnalyze(
     cl::desc("Inner loop block size threshold to analyze in unroll for AMDGPU"),
     cl::init(32), cl::Hidden);
 
+static cl::opt<unsigned> ArgAllocaCost("amdgpu-inline-arg-alloca-cost",
+                                       cl::Hidden, cl::init(4000),
+                                       cl::desc("Cost of alloca argument"));
+
+// If the amount of scratch memory to eliminate exceeds our ability to allocate
+// it into registers we gain nothing by aggressively inlining functions for that
+// heuristic.
+static cl::opt<unsigned>
+    ArgAllocaCutoff("amdgpu-inline-arg-alloca-cutoff", cl::Hidden,
+                    cl::init(256),
+                    cl::desc("Maximum alloca size to use for inline cost"));
+
+// Inliner constraint to achieve reasonable compilation time.
+static cl::opt<size_t> InlineMaxBB(
+    "amdgpu-inline-max-bb", cl::Hidden, cl::init(1100),
+    cl::desc("Maximum number of BBs allowed in a function after inlining"
+             " (compile time constraint)"));
+
 static bool dependsOnLocalPhi(const Loop *L, const Value *Cond,
                               unsigned Depth = 0) {
   const Instruction *I = dyn_cast<Instruction>(Cond);
@@ -239,6 +257,26 @@ void AMDGPUTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
   BaseT::getPeelingPreferences(L, SE, PP);
 }
 
+const FeatureBitset GCNTTIImpl::InlineFeatureIgnoreList = {
+    // Codegen control options which don't matter.
+    AMDGPU::FeatureEnableLoadStoreOpt, AMDGPU::FeatureEnableSIScheduler,
+    AMDGPU::FeatureEnableUnsafeDSOffsetFolding, AMDGPU::FeatureFlatForGlobal,
+    AMDGPU::FeaturePromoteAlloca, AMDGPU::FeatureUnalignedScratchAccess,
+    AMDGPU::FeatureUnalignedAccessMode,
+
+    AMDGPU::FeatureAutoWaitcntBeforeBarrier,
+
+    // Property of the kernel/environment which can't actually differ.
+    AMDGPU::FeatureSGPRInitBug, AMDGPU::FeatureXNACK,
+    AMDGPU::FeatureTrapHandler,
+
+    // The default assumption needs to be ecc is enabled, but no directly
+    // exposed operations depend on it, so it can be safely inlined.
+    AMDGPU::FeatureSRAMECC,
+
+    // Perf-tuning features
+    AMDGPU::FeatureFastFMAF32, AMDGPU::HalfRate64Ops};
+
 GCNTTIImpl::GCNTTIImpl(const AMDGPUTargetMachine *TM, const Function &F)
     : BaseT(TM, F.getParent()->getDataLayout()),
       ST(static_cast<const GCNSubtarget *>(TM->getSubtargetImpl(F))),
@@ -273,7 +311,7 @@ unsigned GCNTTIImpl::getNumberOfRegisters(unsigned RCID) const {
 }
 
 unsigned GCNTTIImpl::getRegisterBitWidth(bool Vector) const {
-  return 32;
+  return (Vector && ST->hasPackedFP32Ops()) ? 64 : 32;
 }
 
 unsigned GCNTTIImpl::getMinVectorRegisterBitWidth() const {
@@ -283,7 +321,9 @@ unsigned GCNTTIImpl::getMinVectorRegisterBitWidth() const {
 unsigned GCNTTIImpl::getMaximumVF(unsigned ElemWidth, unsigned Opcode) const {
   if (Opcode == Instruction::Load || Opcode == Instruction::Store)
     return 32 * 4 / ElemWidth;
-  return (ElemWidth == 16 && ST->has16BitInsts()) ? 2 : 1;
+  return (ElemWidth == 16 && ST->has16BitInsts()) ? 2
+       : (ElemWidth == 32 && ST->hasPackedFP32Ops()) ? 2
+       : 1;
 }
 
 unsigned GCNTTIImpl::getLoadVectorFactor(unsigned VF, unsigned LoadSize,
@@ -509,7 +549,8 @@ int GCNTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
           Opd1PropInfo, Opd2PropInfo, Args, CxtI);
       // Return the cost of multiple scalar invocation plus the cost of
       // inserting and extracting the values.
-      return getScalarizationOverhead(VTy, Args) + Num * Cost;
+      SmallVector<Type *> Tys(Args.size(), Ty);
+      return getScalarizationOverhead(VTy, Args, Tys) + Num * Cost;
     }
 
     // We don't know anything about this scalar instruction.
@@ -590,6 +631,8 @@ int GCNTTIImpl::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
     LLVM_FALLTHROUGH;
   case ISD::FADD:
   case ISD::FSUB:
+    if (ST->hasPackedFP32Ops() && SLT == MVT::f32)
+      NElts = (NElts + 1) / 2;
     if (SLT == MVT::f64)
       return LT.first * NElts * get64BitInstrCost(CostKind);
 
@@ -693,40 +736,29 @@ int GCNTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
     if (ICA.isTypeBasedOnly())
       return getTypeBasedIntrinsicInstrCost(ICA, CostKind);
 
-    Type *RetTy = ICA.getReturnType();
-    unsigned VF = ICA.getVectorFactor().getFixedValue();
     unsigned RetVF =
         (RetTy->isVectorTy() ? cast<FixedVectorType>(RetTy)->getNumElements()
                              : 1);
-    assert((RetVF == 1 || VF == 1) && "VF > 1 and RetVF is a vector type");
     const IntrinsicInst *I = ICA.getInst();
     const SmallVectorImpl<const Value *> &Args = ICA.getArgs();
     FastMathFlags FMF = ICA.getFlags();
     // Assume that we need to scalarize this intrinsic.
-    SmallVector<Type *, 4> Types;
-    for (const Value *Op : Args) {
-      Type *OpTy = Op->getType();
-      assert(VF == 1 || !OpTy->isVectorTy());
-      Types.push_back(VF == 1 ? OpTy : FixedVectorType::get(OpTy, VF));
-    }
-
-    if (VF > 1 && !RetTy->isVoidTy())
-      RetTy = FixedVectorType::get(RetTy, VF);
 
     // Compute the scalarization overhead based on Args for a vector
     // intrinsic. A vectorizer will pass a scalar RetTy and VF > 1, while
     // CostModel will pass a vector RetTy and VF is 1.
     unsigned ScalarizationCost = std::numeric_limits<unsigned>::max();
-    if (RetVF > 1 || VF > 1) {
+    if (RetVF > 1) {
       ScalarizationCost = 0;
       if (!RetTy->isVoidTy())
         ScalarizationCost +=
             getScalarizationOverhead(cast<VectorType>(RetTy), true, false);
-      ScalarizationCost += getOperandsScalarizationOverhead(Args, VF);
+      ScalarizationCost +=
+          getOperandsScalarizationOverhead(Args, ICA.getArgTypes());
     }
 
-    IntrinsicCostAttributes Attrs(ICA.getID(), RetTy, Types, FMF,
-                                  ScalarizationCost, I);
+    IntrinsicCostAttributes Attrs(ICA.getID(), RetTy, ICA.getArgTypes(), FMF, I,
+                                  ScalarizationCost);
     return getIntrinsicInstrCost(Attrs, CostKind);
   }
 
@@ -741,14 +773,26 @@ int GCNTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
   if (SLT == MVT::f64)
     return LT.first * NElts * get64BitInstrCost(CostKind);
 
-  if (ST->has16BitInsts() && SLT == MVT::f16)
+  if ((ST->has16BitInsts() && SLT == MVT::f16) ||
+      (ST->hasPackedFP32Ops() && SLT == MVT::f32))
     NElts = (NElts + 1) / 2;
 
   // TODO: Get more refined intrinsic costs?
   unsigned InstRate = getQuarterRateInstrCost(CostKind);
-  if (ICA.getID() == Intrinsic::fma) {
+
+  switch (ICA.getID()) {
+  case Intrinsic::fma:
     InstRate = ST->hasFastFMAF32() ? getHalfRateInstrCost(CostKind)
                                    : getQuarterRateInstrCost(CostKind);
+    break;
+  case Intrinsic::uadd_sat:
+  case Intrinsic::usub_sat:
+  case Intrinsic::sadd_sat:
+  case Intrinsic::ssub_sat:
+    static const auto ValidSatTys = {MVT::v2i16, MVT::v4i16};
+    if (any_of(ValidSatTys, [&LT](MVT M) { return M == LT.second; }))
+      NElts = 1;
+    break;
   }
 
   return LT.first * NElts * InstRate;
@@ -1100,7 +1144,53 @@ bool GCNTTIImpl::areInlineCompatible(const Function *Caller,
   // no way to support merge for backend defined attributes.
   AMDGPU::SIModeRegisterDefaults CallerMode(*Caller);
   AMDGPU::SIModeRegisterDefaults CalleeMode(*Callee);
-  return CallerMode.isInlineCompatible(CalleeMode);
+  if (!CallerMode.isInlineCompatible(CalleeMode))
+    return false;
+
+  if (Callee->hasFnAttribute(Attribute::AlwaysInline) ||
+      Callee->hasFnAttribute(Attribute::InlineHint))
+    return true;
+
+  // Hack to make compile times reasonable.
+  if (InlineMaxBB) {
+    // Single BB does not increase total BB amount.
+    if (Callee->size() == 1)
+      return true;
+    size_t BBSize = Caller->size() + Callee->size() - 1;
+    return BBSize <= InlineMaxBB;
+  }
+
+  return true;
+}
+
+unsigned GCNTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
+  // If we have a pointer to private array passed into a function
+  // it will not be optimized out, leaving scratch usage.
+  // Increase the inline threshold to allow inlining in this case.
+  uint64_t AllocaSize = 0;
+  SmallPtrSet<const AllocaInst *, 8> AIVisited;
+  for (Value *PtrArg : CB->args()) {
+    PointerType *Ty = dyn_cast<PointerType>(PtrArg->getType());
+    if (!Ty || (Ty->getAddressSpace() != AMDGPUAS::PRIVATE_ADDRESS &&
+                Ty->getAddressSpace() != AMDGPUAS::FLAT_ADDRESS))
+      continue;
+
+    PtrArg = getUnderlyingObject(PtrArg);
+    if (const AllocaInst *AI = dyn_cast<AllocaInst>(PtrArg)) {
+      if (!AI->isStaticAlloca() || !AIVisited.insert(AI).second)
+        continue;
+      AllocaSize += DL.getTypeAllocSize(AI->getAllocatedType());
+      // If the amount of stack memory is excessive we will not be able
+      // to get rid of the scratch anyway, bail out.
+      if (AllocaSize > ArgAllocaCutoff) {
+        AllocaSize = 0;
+        break;
+      }
+    }
+  }
+  if (AllocaSize)
+    return ArgAllocaCost;
+  return 0;
 }
 
 void GCNTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
@@ -1111,6 +1201,13 @@ void GCNTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
 void GCNTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
                                        TTI::PeelingPreferences &PP) {
   CommonTTI.getPeelingPreferences(L, SE, PP);
+}
+
+int GCNTTIImpl::get64BitInstrCost(TTI::TargetCostKind CostKind) const {
+  return ST->hasFullRate64Ops()
+             ? getFullRateInstrCost()
+             : ST->hasHalfRate64Ops() ? getHalfRateInstrCost(CostKind)
+                                      : getQuarterRateInstrCost(CostKind);
 }
 
 R600TTIImpl::R600TTIImpl(const AMDGPUTargetMachine *TM, const Function &F)

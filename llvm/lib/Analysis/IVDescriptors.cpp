@@ -190,7 +190,7 @@ static void collectCastsToIgnore(Loop *TheLoop, Instruction *Exit,
 }
 
 bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurKind Kind,
-                                           Loop *TheLoop, bool HasFunNoNaNAttr,
+                                           Loop *TheLoop, FastMathFlags FuncFMF,
                                            RecurrenceDescriptor &RedDes,
                                            DemandedBits *DB,
                                            AssumptionCache *AC,
@@ -243,11 +243,14 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurKind Kind,
   if (RecurrenceType->isFloatingPointTy()) {
     if (!isFloatingPointRecurrenceKind(Kind))
       return false;
-  } else {
+  } else if (RecurrenceType->isIntegerTy()) {
     if (!isIntegerRecurrenceKind(Kind))
       return false;
     if (isArithmeticRecurrenceKind(Kind))
       Start = lookThroughAnd(Phi, RecurrenceType, VisitedInsts, CastInsts);
+  } else {
+    // Pointer min/max may exist, but it is not supported as a reduction op.
+    return false;
   }
 
   Worklist.push_back(Start);
@@ -273,8 +276,7 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurKind Kind,
   //      * An instruction type other than PHI or the reduction operation.
   //      * A PHI in the header other than the initial PHI.
   while (!Worklist.empty()) {
-    Instruction *Cur = Worklist.back();
-    Worklist.pop_back();
+    Instruction *Cur = Worklist.pop_back_val();
 
     // No Users.
     // If the instruction has no users then this is a broken chain and can't be
@@ -299,12 +301,22 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurKind Kind,
     // the starting value (the Phi or an AND instruction if the Phi has been
     // type-promoted).
     if (Cur != Start) {
-      ReduxDesc = isRecurrenceInstr(Cur, Kind, ReduxDesc, HasFunNoNaNAttr);
+      ReduxDesc = isRecurrenceInstr(Cur, Kind, ReduxDesc, FuncFMF);
       if (!ReduxDesc.isRecurrence())
         return false;
       // FIXME: FMF is allowed on phi, but propagation is not handled correctly.
-      if (isa<FPMathOperator>(ReduxDesc.getPatternInst()) && !IsAPhi)
-        FMF &= ReduxDesc.getPatternInst()->getFastMathFlags();
+      if (isa<FPMathOperator>(ReduxDesc.getPatternInst()) && !IsAPhi) {
+        FastMathFlags CurFMF = ReduxDesc.getPatternInst()->getFastMathFlags();
+        if (auto *Sel = dyn_cast<SelectInst>(ReduxDesc.getPatternInst())) {
+          // Accept FMF on either fcmp or select of a min/max idiom.
+          // TODO: This is a hack to work-around the fact that FMF may not be
+          //       assigned/propagated correctly. If that problem is fixed or we
+          //       standardize on fmin/fmax via intrinsics, this can be removed.
+          if (auto *FCmp = dyn_cast<FCmpInst>(Sel->getCondition()))
+            CurFMF |= FCmp->getFastMathFlags();
+        }
+        FMF &= CurFMF;
+      }
       // Update this reduction kind if we matched a new instruction.
       // TODO: Can we eliminate the need for a 2nd InstDesc by keeping 'Kind'
       //       state accurate while processing the worklist?
@@ -457,7 +469,7 @@ bool RecurrenceDescriptor::AddReductionVar(PHINode *Phi, RecurKind Kind,
 
   // Save the description of this reduction variable.
   RecurrenceDescriptor RD(RdxStart, ExitInstruction, Kind, FMF,
-                          ReduxDesc.getUnsafeAlgebraInst(), RecurrenceType,
+                          ReduxDesc.getExactFPMathInst(), RecurrenceType,
                           IsSigned, CastInsts);
   RedDes = RD;
 
@@ -552,16 +564,12 @@ RecurrenceDescriptor::isConditionalRdxPattern(RecurKind Kind, Instruction *I) {
 
 RecurrenceDescriptor::InstDesc
 RecurrenceDescriptor::isRecurrenceInstr(Instruction *I, RecurKind Kind,
-                                        InstDesc &Prev, bool HasFunNoNaNAttr) {
-  Instruction *UAI = Prev.getUnsafeAlgebraInst();
-  if (!UAI && isa<FPMathOperator>(I) && !I->hasAllowReassoc())
-    UAI = I; // Found an unsafe (unvectorizable) algebra instruction.
-
+                                        InstDesc &Prev, FastMathFlags FMF) {
   switch (I->getOpcode()) {
   default:
     return InstDesc(false, I);
   case Instruction::PHI:
-    return InstDesc(I, Prev.getRecKind(), Prev.getUnsafeAlgebraInst());
+    return InstDesc(I, Prev.getRecKind(), Prev.getExactFPMathInst());
   case Instruction::Sub:
   case Instruction::Add:
     return InstDesc(Kind == RecurKind::Add, I);
@@ -575,20 +583,22 @@ RecurrenceDescriptor::isRecurrenceInstr(Instruction *I, RecurKind Kind,
     return InstDesc(Kind == RecurKind::Xor, I);
   case Instruction::FDiv:
   case Instruction::FMul:
-    return InstDesc(Kind == RecurKind::FMul, I, UAI);
+    return InstDesc(Kind == RecurKind::FMul, I,
+                    I->hasAllowReassoc() ? nullptr : I);
   case Instruction::FSub:
   case Instruction::FAdd:
-    return InstDesc(Kind == RecurKind::FAdd, I, UAI);
+    return InstDesc(Kind == RecurKind::FAdd, I,
+                    I->hasAllowReassoc() ? nullptr : I);
   case Instruction::Select:
     if (Kind == RecurKind::FAdd || Kind == RecurKind::FMul)
       return isConditionalRdxPattern(Kind, I);
     LLVM_FALLTHROUGH;
   case Instruction::FCmp:
   case Instruction::ICmp:
-    if (!isIntMinMaxRecurrenceKind(Kind) &&
-        (!HasFunNoNaNAttr || !isFPMinMaxRecurrenceKind(Kind)))
-      return InstDesc(false, I);
-    return isMinMaxSelectCmpPattern(I, Prev);
+    if (isIntMinMaxRecurrenceKind(Kind) ||
+        (FMF.noNaNs() && FMF.noSignedZeros() && isFPMinMaxRecurrenceKind(Kind)))
+      return isMinMaxSelectCmpPattern(I, Prev);
+    return InstDesc(false, I);
   }
 }
 
@@ -596,9 +606,8 @@ bool RecurrenceDescriptor::hasMultipleUsesOf(
     Instruction *I, SmallPtrSetImpl<Instruction *> &Insts,
     unsigned MaxNumUses) {
   unsigned NumUses = 0;
-  for (User::op_iterator Use = I->op_begin(), E = I->op_end(); Use != E;
-       ++Use) {
-    if (Insts.count(dyn_cast<Instruction>(*Use)))
+  for (const Use &U : I->operands()) {
+    if (Insts.count(dyn_cast<Instruction>(U)))
       ++NumUses;
     if (NumUses > MaxNumUses)
       return true;
@@ -613,71 +622,61 @@ bool RecurrenceDescriptor::isReductionPHI(PHINode *Phi, Loop *TheLoop,
 
   BasicBlock *Header = TheLoop->getHeader();
   Function &F = *Header->getParent();
-  bool HasFunNoNaNAttr =
-      F.getFnAttribute("no-nans-fp-math").getValueAsString() == "true";
+  FastMathFlags FMF;
+  FMF.setNoNaNs(
+      F.getFnAttribute("no-nans-fp-math").getValueAsString() == "true");
+  FMF.setNoSignedZeros(
+      F.getFnAttribute("no-signed-zeros-fp-math").getValueAsString() == "true");
 
-  if (AddReductionVar(Phi, RecurKind::Add, TheLoop, HasFunNoNaNAttr, RedDes, DB,
-                      AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::Add, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found an ADD reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::Mul, TheLoop, HasFunNoNaNAttr, RedDes, DB,
-                      AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::Mul, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a MUL reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::Or, TheLoop, HasFunNoNaNAttr, RedDes, DB,
-                      AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::Or, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found an OR reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::And, TheLoop, HasFunNoNaNAttr, RedDes, DB,
-                      AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::And, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found an AND reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::Xor, TheLoop, HasFunNoNaNAttr, RedDes, DB,
-                      AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::Xor, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a XOR reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::SMax, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::SMax, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a SMAX reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::SMin, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::SMin, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a SMIN reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::UMax, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::UMax, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a UMAX reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::UMin, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::UMin, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a UMIN reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::FMul, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::FMul, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found an FMult reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::FAdd, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::FAdd, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found an FAdd reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::FMax, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::FMax, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a float MAX reduction PHI." << *Phi << "\n");
     return true;
   }
-  if (AddReductionVar(Phi, RecurKind::FMin, TheLoop, HasFunNoNaNAttr, RedDes,
-                      DB, AC, DT)) {
+  if (AddReductionVar(Phi, RecurKind::FMin, TheLoop, FMF, RedDes, DB, AC, DT)) {
     LLVM_DEBUG(dbgs() << "Found a float MIN reduction PHI." << *Phi << "\n");
     return true;
   }

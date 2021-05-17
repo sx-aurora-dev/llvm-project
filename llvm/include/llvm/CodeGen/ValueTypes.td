@@ -178,29 +178,30 @@ def nxv4f16  : ValueType<64 , 143>; // n x  4 x f16 vector value
 def nxv8f16  : ValueType<128, 144>; // n x  8 x f16 vector value
 def nxv16f16  : ValueType<256,145>; // n x  16 x f16 vector value
 def nxv32f16  : ValueType<512,146>; // n x  32 x f16 vector value
-def nxv2bf16 : ValueType<32 , 147>; // n x  2 x bf16 vector value
-def nxv4bf16 : ValueType<64 , 148>; // n x  4 x bf16 vector value
-def nxv8bf16 : ValueType<128, 149>; // n x  8 x bf16 vector value
-def nxv1f32  : ValueType<32 , 150>; // n x  1 x f32 vector value
-def nxv2f32  : ValueType<64 , 151>; // n x  2 x f32 vector value
-def nxv4f32  : ValueType<128, 152>; // n x  4 x f32 vector value
-def nxv8f32  : ValueType<256, 153>; // n x  8 x f32 vector value
-def nxv16f32 : ValueType<512, 154>; // n x 16 x f32 vector value
-def nxv1f64  : ValueType<64,  155>; // n x  1 x f64 vector value
-def nxv2f64  : ValueType<128, 156>; // n x  2 x f64 vector value
-def nxv4f64  : ValueType<256, 157>; // n x  4 x f64 vector value
-def nxv8f64  : ValueType<512, 158>; // n x  8 x f64 vector value
+def nxv1bf16 : ValueType<16 , 147>; // n x  1 x bf16 vector value
+def nxv2bf16 : ValueType<32 , 148>; // n x  2 x bf16 vector value
+def nxv4bf16 : ValueType<64 , 149>; // n x  4 x bf16 vector value
+def nxv8bf16 : ValueType<128, 150>; // n x  8 x bf16 vector value
+def nxv1f32  : ValueType<32 , 151>; // n x  1 x f32 vector value
+def nxv2f32  : ValueType<64 , 152>; // n x  2 x f32 vector value
+def nxv4f32  : ValueType<128, 153>; // n x  4 x f32 vector value
+def nxv8f32  : ValueType<256, 154>; // n x  8 x f32 vector value
+def nxv16f32 : ValueType<512, 155>; // n x 16 x f32 vector value
+def nxv1f64  : ValueType<64,  156>; // n x  1 x f64 vector value
+def nxv2f64  : ValueType<128, 157>; // n x  2 x f64 vector value
+def nxv4f64  : ValueType<256, 158>; // n x  4 x f64 vector value
+def nxv8f64  : ValueType<512, 159>; // n x  8 x f64 vector value
 
-def x86mmx : ValueType<64 , 159>;   // X86 MMX value
-def FlagVT : ValueType<0  , 160>;   // Pre-RA sched glue
-def isVoid : ValueType<0  , 161>;   // Produces no value
-def untyped: ValueType<8  , 162>;   // Produces an untyped value
-def funcref : ValueType<0  , 163>;   // WebAssembly's funcref type
-def externref : ValueType<0  , 164>;   // WebAssembly's externref type
-def x86amx : ValueType<8192, 165>;   // X86 AMX value
+def x86mmx : ValueType<64 , 160>;   // X86 MMX value
+def FlagVT : ValueType<0  , 161>;   // Pre-RA sched glue
+def isVoid : ValueType<0  , 162>;   // Produces no value
+def untyped: ValueType<8  , 163>;   // Produces an untyped value
+def funcref : ValueType<0  , 164>;   // WebAssembly's funcref type
+def externref : ValueType<0  , 165>;   // WebAssembly's externref type
+def x86amx : ValueType<8192, 166>;   // X86 AMX value
 
 def token  : ValueType<0  , 248>;   // TokenTy
-def MetadataVT: ValueType<0, 249>;  // Metadata
+def MetadataVT: ValueType<0,249>;   // Metadata
 
 // Pseudo valuetype mapped to the current pointer size to any address space.
 // Should only be used in TableGen.

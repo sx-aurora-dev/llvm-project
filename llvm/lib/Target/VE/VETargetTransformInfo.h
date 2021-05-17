@@ -231,9 +231,18 @@ public:
     return VecTy->getNumElements();
   }
 
-  unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                            unsigned VF) const {
-    return Args.size() * VF;
+  static unsigned getVF(ArrayRef<Type *> Tys) {
+    for (auto *Ty : Tys) {
+      auto *VecTy = dyn_cast<FixedVectorType>(Ty);
+      if (!VecTy)
+        continue;
+      return VecTy->getNumElements();
+    }
+    return 1;
+  }
+
+  unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args, ArrayRef<Type *> Tys) const {
+    return Args.size() * getVF(Tys);
   }
 
   unsigned getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,

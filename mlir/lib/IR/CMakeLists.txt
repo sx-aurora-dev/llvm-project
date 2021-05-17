@@ -33,12 +33,16 @@ add_mlir_library(MLIRIR
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/IR
 
   DEPENDS
+  MLIRBuiltinAttributesIncGen
   MLIRBuiltinDialectIncGen
+  MLIRBuiltinLocationAttributesIncGen
   MLIRBuiltinOpsIncGen
   MLIRBuiltinTypesIncGen
   MLIRCallInterfacesIncGen
+  MLIRCastInterfacesIncGen
   MLIROpAsmInterfaceIncGen
   MLIRRegionKindInterfaceIncGen
+  MLIRSideEffectInterfacesIncGen
   MLIRSymbolInterfacesIncGen
 
   LINK_LIBS PUBLIC

@@ -161,6 +161,24 @@ static const Instruction *safeCxtI(const Value *V, const Instruction *CxtI) {
   return nullptr;
 }
 
+static const Instruction *safeCxtI(const Value *V1, const Value *V2, const Instruction *CxtI) {
+  // If we've been provided with a context instruction, then use that (provided
+  // it has been inserted).
+  if (CxtI && CxtI->getParent())
+    return CxtI;
+
+  // If the value is really an already-inserted instruction, then use that.
+  CxtI = dyn_cast<Instruction>(V1);
+  if (CxtI && CxtI->getParent())
+    return CxtI;
+
+  CxtI = dyn_cast<Instruction>(V2);
+  if (CxtI && CxtI->getParent())
+    return CxtI;
+
+  return nullptr;
+}
+
 static bool getShuffleDemandedElts(const ShuffleVectorInst *Shuf,
                                    const APInt &DemandedElts,
                                    APInt &DemandedLHS, APInt &DemandedRHS) {
@@ -358,7 +376,7 @@ bool llvm::isKnownNonEqual(const Value *V1, const Value *V2,
                            const Instruction *CxtI, const DominatorTree *DT,
                            bool UseInstrInfo) {
   return ::isKnownNonEqual(V1, V2, 0,
-                           Query(DL, AC, safeCxtI(V1, safeCxtI(V2, CxtI)), DT,
+                           Query(DL, AC, safeCxtI(V2, V1, CxtI), DT,
                                  UseInstrInfo, /*ORE=*/nullptr));
 }
 
@@ -509,9 +527,7 @@ static bool isEphemeralValueOf(const Instruction *I, const Value *E) {
       if (V == I || isSafeToSpeculativelyExecute(V)) {
        EphValues.insert(V);
        if (const User *U = dyn_cast<User>(V))
-         for (User::const_op_iterator J = U->op_begin(), JE = U->op_end();
-              J != JE; ++J)
-           WorkSet.push_back(*J);
+         append_range(WorkSet, U->operands());
       }
     }
   }
@@ -521,26 +537,8 @@ static bool isEphemeralValueOf(const Instruction *I, const Value *E) {
 
 // Is this an intrinsic that cannot be speculated but also cannot trap?
 bool llvm::isAssumeLikeIntrinsic(const Instruction *I) {
-  if (const CallInst *CI = dyn_cast<CallInst>(I))
-    if (Function *F = CI->getCalledFunction())
-      switch (F->getIntrinsicID()) {
-      default: break;
-      // FIXME: This list is repeated from NoTTI::getIntrinsicCost.
-      case Intrinsic::assume:
-      case Intrinsic::sideeffect:
-      case Intrinsic::pseudoprobe:
-      case Intrinsic::dbg_declare:
-      case Intrinsic::dbg_value:
-      case Intrinsic::dbg_label:
-      case Intrinsic::invariant_start:
-      case Intrinsic::invariant_end:
-      case Intrinsic::lifetime_start:
-      case Intrinsic::lifetime_end:
-      case Intrinsic::objectsize:
-      case Intrinsic::ptr_annotation:
-      case Intrinsic::var_annotation:
-        return true;
-      }
+  if (const IntrinsicInst *CI = dyn_cast<IntrinsicInst>(I))
+    return CI->isAssumeLikeIntrinsic();
 
   return false;
 }
@@ -571,8 +569,12 @@ bool llvm::isValidAssumeForContext(const Instruction *Inv,
     // The context comes first, but they're both in the same block.
     // Make sure there is nothing in between that might interrupt
     // the control flow, not even CxtI itself.
+    // We limit the scan distance between the assume and its context instruction
+    // to avoid a compile-time explosion. This limit is chosen arbitrarily, so
+    // it can be adjusted if needed (could be turned into a cl::opt).
+    unsigned ScanLimit = 15;
     for (BasicBlock::const_iterator I(CxtI), IE(Inv); I != IE; ++I)
-      if (!isGuaranteedToTransferExecutionToSuccessor(&*I))
+      if (!isGuaranteedToTransferExecutionToSuccessor(&*I) || --ScanLimit == 0)
         return false;
 
     return !isEphemeralValueOf(Inv, CxtI);
@@ -1230,6 +1232,10 @@ static void computeKnownBitsFromOperator(const Operator *I,
     };
     computeKnownBitsFromShiftOperator(I, DemandedElts, Known, Known2, Depth, Q,
                                       KF);
+    // Trailing zeros of a right-shifted constant never decrease.
+    const APInt *C;
+    if (match(I->getOperand(0), m_APInt(C)))
+      Known.Zero.setLowBits(C->countTrailingZeros());
     break;
   }
   case Instruction::LShr: {
@@ -1238,6 +1244,10 @@ static void computeKnownBitsFromOperator(const Operator *I,
     };
     computeKnownBitsFromShiftOperator(I, DemandedElts, Known, Known2, Depth, Q,
                                       KF);
+    // Leading zeros of a left-shifted constant never decrease.
+    const APInt *C;
+    if (match(I->getOperand(0), m_APInt(C)))
+      Known.Zero.setHighBits(C->countLeadingZeros());
     break;
   }
   case Instruction::AShr: {
@@ -1361,91 +1371,115 @@ static void computeKnownBitsFromOperator(const Operator *I,
   }
   case Instruction::PHI: {
     const PHINode *P = cast<PHINode>(I);
-    // Handle the case of a simple two-predecessor recurrence PHI.
-    // There's a lot more that could theoretically be done here, but
-    // this is sufficient to catch some interesting cases.
-    if (P->getNumIncomingValues() == 2) {
-      for (unsigned i = 0; i != 2; ++i) {
-        Value *L = P->getIncomingValue(i);
-        Value *R = P->getIncomingValue(!i);
-        Instruction *RInst = P->getIncomingBlock(!i)->getTerminator();
-        Instruction *LInst = P->getIncomingBlock(i)->getTerminator();
-        Operator *LU = dyn_cast<Operator>(L);
-        if (!LU)
-          continue;
-        unsigned Opcode = LU->getOpcode();
-        // Check for operations that have the property that if
-        // both their operands have low zero bits, the result
-        // will have low zero bits.
-        if (Opcode == Instruction::Add ||
-            Opcode == Instruction::Sub ||
-            Opcode == Instruction::And ||
-            Opcode == Instruction::Or ||
-            Opcode == Instruction::Mul) {
-          Value *LL = LU->getOperand(0);
-          Value *LR = LU->getOperand(1);
-          // Find a recurrence.
-          if (LL == I)
-            L = LR;
-          else if (LR == I)
-            L = LL;
-          else
-            continue; // Check for recurrence with L and R flipped.
+    BinaryOperator *BO = nullptr;
+    Value *R = nullptr, *L = nullptr;
+    if (matchSimpleRecurrence(P, BO, R, L)) {
+      // Handle the case of a simple two-predecessor recurrence PHI.
+      // There's a lot more that could theoretically be done here, but
+      // this is sufficient to catch some interesting cases.
+      unsigned Opcode = BO->getOpcode();
 
-          // Change the context instruction to the "edge" that flows into the
-          // phi. This is important because that is where the value is actually
-          // "evaluated" even though it is used later somewhere else. (see also
-          // D69571).
-          Query RecQ = Q;
+      // If this is a shift recurrence, we know the bits being shifted in.
+      // We can combine that with information about the start value of the
+      // recurrence to conclude facts about the result.
+      if ((Opcode == Instruction::LShr || Opcode == Instruction::AShr ||
+           Opcode == Instruction::Shl) &&
+          BO->getOperand(0) == I) {
 
-          // Ok, we have a PHI of the form L op= R. Check for low
-          // zero bits.
-          RecQ.CxtI = RInst;
-          computeKnownBits(R, Known2, Depth + 1, RecQ);
+        // We have matched a recurrence of the form:
+        // %iv = [R, %entry], [%iv.next, %backedge]
+        // %iv.next = shift_op %iv, L
 
-          // We need to take the minimum number of known bits
-          KnownBits Known3(BitWidth);
-          RecQ.CxtI = LInst;
-          computeKnownBits(L, Known3, Depth + 1, RecQ);
+        // Recurse with the phi context to avoid concern about whether facts
+        // inferred hold at original context instruction.  TODO: It may be
+        // correct to use the original context.  IF warranted, explore and
+        // add sufficient tests to cover.
+        Query RecQ = Q;
+        RecQ.CxtI = P;
+        computeKnownBits(R, DemandedElts, Known2, Depth + 1, RecQ);
+        switch (Opcode) {
+        case Instruction::Shl:
+          // A shl recurrence will only increase the tailing zeros
+          Known.Zero.setLowBits(Known2.countMinTrailingZeros());
+          break;
+        case Instruction::LShr:
+          // A lshr recurrence will preserve the leading zeros of the
+          // start value
+          Known.Zero.setHighBits(Known2.countMinLeadingZeros());
+          break;
+        case Instruction::AShr:
+          // An ashr recurrence will extend the initial sign bit
+          Known.Zero.setHighBits(Known2.countMinLeadingZeros());
+          Known.One.setHighBits(Known2.countMinLeadingOnes());
+          break;
+        };
+      }
 
-          Known.Zero.setLowBits(std::min(Known2.countMinTrailingZeros(),
-                                         Known3.countMinTrailingZeros()));
+      // Check for operations that have the property that if
+      // both their operands have low zero bits, the result
+      // will have low zero bits.
+      if (Opcode == Instruction::Add ||
+          Opcode == Instruction::Sub ||
+          Opcode == Instruction::And ||
+          Opcode == Instruction::Or ||
+          Opcode == Instruction::Mul) {
+        // Change the context instruction to the "edge" that flows into the
+        // phi. This is important because that is where the value is actually
+        // "evaluated" even though it is used later somewhere else. (see also
+        // D69571).
+        Query RecQ = Q;
 
-          auto *OverflowOp = dyn_cast<OverflowingBinaryOperator>(LU);
-          if (OverflowOp && Q.IIQ.hasNoSignedWrap(OverflowOp)) {
-            // If initial value of recurrence is nonnegative, and we are adding
-            // a nonnegative number with nsw, the result can only be nonnegative
-            // or poison value regardless of the number of times we execute the
-            // add in phi recurrence. If initial value is negative and we are
-            // adding a negative number with nsw, the result can only be
-            // negative or poison value. Similar arguments apply to sub and mul.
-            //
-            // (add non-negative, non-negative) --> non-negative
-            // (add negative, negative) --> negative
-            if (Opcode == Instruction::Add) {
-              if (Known2.isNonNegative() && Known3.isNonNegative())
-                Known.makeNonNegative();
-              else if (Known2.isNegative() && Known3.isNegative())
-                Known.makeNegative();
-            }
+        unsigned OpNum = P->getOperand(0) == R ? 0 : 1;
+        Instruction *RInst = P->getIncomingBlock(OpNum)->getTerminator();
+        Instruction *LInst = P->getIncomingBlock(1-OpNum)->getTerminator();
 
-            // (sub nsw non-negative, negative) --> non-negative
-            // (sub nsw negative, non-negative) --> negative
-            else if (Opcode == Instruction::Sub && LL == I) {
-              if (Known2.isNonNegative() && Known3.isNegative())
-                Known.makeNonNegative();
-              else if (Known2.isNegative() && Known3.isNonNegative())
-                Known.makeNegative();
-            }
+        // Ok, we have a PHI of the form L op= R. Check for low
+        // zero bits.
+        RecQ.CxtI = RInst;
+        computeKnownBits(R, Known2, Depth + 1, RecQ);
 
-            // (mul nsw non-negative, non-negative) --> non-negative
-            else if (Opcode == Instruction::Mul && Known2.isNonNegative() &&
-                     Known3.isNonNegative())
+        // We need to take the minimum number of known bits
+        KnownBits Known3(BitWidth);
+        RecQ.CxtI = LInst;
+        computeKnownBits(L, Known3, Depth + 1, RecQ);
+
+        Known.Zero.setLowBits(std::min(Known2.countMinTrailingZeros(),
+                                       Known3.countMinTrailingZeros()));
+
+        auto *OverflowOp = dyn_cast<OverflowingBinaryOperator>(BO);
+        if (OverflowOp && Q.IIQ.hasNoSignedWrap(OverflowOp)) {
+          // If initial value of recurrence is nonnegative, and we are adding
+          // a nonnegative number with nsw, the result can only be nonnegative
+          // or poison value regardless of the number of times we execute the
+          // add in phi recurrence. If initial value is negative and we are
+          // adding a negative number with nsw, the result can only be
+          // negative or poison value. Similar arguments apply to sub and mul.
+          //
+          // (add non-negative, non-negative) --> non-negative
+          // (add negative, negative) --> negative
+          if (Opcode == Instruction::Add) {
+            if (Known2.isNonNegative() && Known3.isNonNegative())
               Known.makeNonNegative();
+            else if (Known2.isNegative() && Known3.isNegative())
+              Known.makeNegative();
           }
 
-          break;
+          // (sub nsw non-negative, negative) --> non-negative
+          // (sub nsw negative, non-negative) --> negative
+          else if (Opcode == Instruction::Sub && BO->getOperand(0) == I) {
+            if (Known2.isNonNegative() && Known3.isNegative())
+              Known.makeNonNegative();
+            else if (Known2.isNegative() && Known3.isNonNegative())
+              Known.makeNegative();
+          }
+
+          // (mul nsw non-negative, non-negative) --> non-negative
+          else if (Opcode == Instruction::Mul && Known2.isNonNegative() &&
+                   Known3.isNonNegative())
+            Known.makeNonNegative();
         }
+
+        break;
       }
     }
 
@@ -2087,7 +2121,8 @@ static bool isKnownNonNullFromDominatingCondition(const Value *V,
       if (auto *CalledFunc = CB->getCalledFunction())
         for (const Argument &Arg : CalledFunc->args())
           if (CB->getArgOperand(Arg.getArgNo()) == V &&
-              Arg.hasNonNullAttr() && DT->dominates(CB, CtxI))
+              Arg.hasNonNullAttr(/* AllowUndefOrPoison */ false) &&
+              DT->dominates(CB, CtxI))
             return true;
 
     // If the value is used as a load/store, then the pointer must be non null.
@@ -2728,6 +2763,8 @@ static unsigned ComputeNumSignBitsImpl(const Value *V,
     }
 
     case Instruction::SRem: {
+      Tmp = ComputeNumSignBits(U->getOperand(0), Depth + 1, Q);
+
       const APInt *Denominator;
       // srem X, C -> we know that the result is within [-C+1,C) when C is a
       // positive constant.  This let us put a lower bound on the number of sign
@@ -2735,30 +2772,25 @@ static unsigned ComputeNumSignBitsImpl(const Value *V,
       if (match(U->getOperand(1), m_APInt(Denominator))) {
 
         // Ignore non-positive denominator.
-        if (!Denominator->isStrictlyPositive())
-          break;
+        if (Denominator->isStrictlyPositive()) {
+          // Calculate the leading sign bit constraints by examining the
+          // denominator.  Given that the denominator is positive, there are two
+          // cases:
+          //
+          //  1. The numerator is positive. The result range is [0,C) and
+          //     [0,C) u< (1 << ceilLogBase2(C)).
+          //
+          //  2. The numerator is negative. Then the result range is (-C,0] and
+          //     integers in (-C,0] are either 0 or >u (-1 << ceilLogBase2(C)).
+          //
+          // Thus a lower bound on the number of sign bits is `TyBits -
+          // ceilLogBase2(C)`.
 
-        // Calculate the incoming numerator bits. SRem by a positive constant
-        // can't lower the number of sign bits.
-        unsigned NumrBits = ComputeNumSignBits(U->getOperand(0), Depth + 1, Q);
-
-        // Calculate the leading sign bit constraints by examining the
-        // denominator.  Given that the denominator is positive, there are two
-        // cases:
-        //
-        //  1. the numerator is positive. The result range is [0,C) and [0,C) u<
-        //     (1 << ceilLogBase2(C)).
-        //
-        //  2. the numerator is negative. Then the result range is (-C,0] and
-        //     integers in (-C,0] are either 0 or >u (-1 << ceilLogBase2(C)).
-        //
-        // Thus a lower bound on the number of sign bits is `TyBits -
-        // ceilLogBase2(C)`.
-
-        unsigned ResBits = TyBits - Denominator->ceilLogBase2();
-        return std::max(NumrBits, ResBits);
+          unsigned ResBits = TyBits - Denominator->ceilLogBase2();
+          Tmp = std::max(Tmp, ResBits);
+        }
       }
-      break;
+      return Tmp;
     }
 
     case Instruction::AShr: {
@@ -4130,18 +4162,18 @@ static bool isSameUnderlyingObjectInLoop(const PHINode *PN,
   return true;
 }
 
-Value *llvm::getUnderlyingObject(Value *V, unsigned MaxLookup) {
+const Value *llvm::getUnderlyingObject(const Value *V, unsigned MaxLookup) {
   if (!V->getType()->isPointerTy())
     return V;
   for (unsigned Count = 0; MaxLookup == 0 || Count < MaxLookup; ++Count) {
-    if (GEPOperator *GEP = dyn_cast<GEPOperator>(V)) {
+    if (auto *GEP = dyn_cast<GEPOperator>(V)) {
       V = GEP->getPointerOperand();
     } else if (Operator::getOpcode(V) == Instruction::BitCast ||
                Operator::getOpcode(V) == Instruction::AddrSpaceCast) {
       V = cast<Operator>(V)->getOperand(0);
       if (!V->getType()->isPointerTy())
         return V;
-    } else if (GlobalAlias *GA = dyn_cast<GlobalAlias>(V)) {
+    } else if (auto *GA = dyn_cast<GlobalAlias>(V)) {
       if (GA->isInterposable())
         return V;
       V = GA->getAliasee();
@@ -4207,8 +4239,7 @@ void llvm::getUnderlyingObjects(const Value *V,
       // underlying objects.
       if (!LI || !LI->isLoopHeader(PN->getParent()) ||
           isSameUnderlyingObjectInLoop(PN, LI))
-        for (Value *IncValue : PN->incoming_values())
-          Worklist.push_back(IncValue);
+        append_range(Worklist, PN->incoming_values());
       continue;
     }
 
@@ -4806,62 +4837,59 @@ bool llvm::canCreatePoison(const Operator *Op) {
   return ::canCreateUndefOrPoison(Op, /*PoisonOnly=*/true);
 }
 
-bool llvm::impliesPoison(const Value *ValAssumedPoison, const Value *V) {
-  // Construct a set of values which are known to be poison from the knowledge
-  // that ValAssumedPoison is poison.
-  SmallPtrSet<const Value *, 4> PoisonValues;
-  PoisonValues.insert(ValAssumedPoison);
-  const Instruction *PoisonI = dyn_cast<Instruction>(ValAssumedPoison);
-  unsigned Depth = 0;
-  const unsigned MaxDepth = 2;
-
-  while (PoisonI && Depth < MaxDepth) {
-    // We'd like to know whether an operand of PoisonI is also poison.
-    if (canCreatePoison(cast<Operator>(PoisonI)))
-      // PoisonI can be a poison-generating instruction, so don't look further
-      break;
-
-    const Value *NextVal = nullptr;
-    bool MoreThanOneCandidate = false;
-    // See which operand can be poison
-    for (const auto &Op : PoisonI->operands()) {
-      if (!isGuaranteedNotToBeUndefOrPoison(Op.get())) {
-        // Op can be poison.
-        if (NextVal) {
-          // There is more than one operand that can make PoisonI poison.
-          MoreThanOneCandidate = true;
-          break;
-        }
-        NextVal = Op.get();
-      }
-    }
-
-    if (NextVal == nullptr) {
-      // All operands are non-poison, so PoisonI cannot be poison.
-      // Since assumption is false, return true
-      return true;
-    } else if (MoreThanOneCandidate)
-      break;
-
-    Depth++;
-    PoisonValues.insert(NextVal);
-    PoisonI = dyn_cast<Instruction>(NextVal);
-  }
-
-  if (PoisonValues.contains(V))
+static bool directlyImpliesPoison(const Value *ValAssumedPoison,
+                                  const Value *V, unsigned Depth) {
+  if (ValAssumedPoison == V)
     return true;
 
-  // Let's look one level further, by seeing its arguments if I was an
-  // instruction.
-  // This happens when I is e.g. 'icmp X, const' where X is in PoisonValues.
-  const auto *I = dyn_cast<Instruction>(V);
-  if (I && propagatesPoison(cast<Operator>(I))) {
-    for (const auto &Op : I->operands())
-      if (PoisonValues.count(Op.get()))
-        return true;
-  }
+  const unsigned MaxDepth = 2;
+  if (Depth >= MaxDepth)
+    return false;
 
+  if (const auto *I = dyn_cast<Instruction>(V)) {
+    if (propagatesPoison(cast<Operator>(I)))
+      return any_of(I->operands(), [=](const Value *Op) {
+        return directlyImpliesPoison(ValAssumedPoison, Op, Depth + 1);
+      });
+
+    // 'select ValAssumedPoison, _, _' is poison.
+    if (const auto *SI = dyn_cast<SelectInst>(I))
+      return directlyImpliesPoison(ValAssumedPoison, SI->getCondition(),
+                                   Depth + 1);
+    // V  = extractvalue V0, idx
+    // V2 = extractvalue V0, idx2
+    // V0's elements are all poison or not. (e.g., add_with_overflow)
+    const WithOverflowInst *II;
+    if (match(I, m_ExtractValue(m_WithOverflowInst(II))) &&
+        match(ValAssumedPoison, m_ExtractValue(m_Specific(II))))
+      return true;
+  }
   return false;
+}
+
+static bool impliesPoison(const Value *ValAssumedPoison, const Value *V,
+                          unsigned Depth) {
+  if (isGuaranteedNotToBeUndefOrPoison(ValAssumedPoison))
+    return true;
+
+  if (directlyImpliesPoison(ValAssumedPoison, V, /* Depth */ 0))
+    return true;
+
+  const unsigned MaxDepth = 2;
+  if (Depth >= MaxDepth)
+    return false;
+
+  const auto *I = dyn_cast<Instruction>(ValAssumedPoison);
+  if (I && !canCreatePoison(cast<Operator>(I))) {
+    return all_of(I->operands(), [=](const Value *Op) {
+      return impliesPoison(Op, V, Depth + 1);
+    });
+  }
+  return false;
+}
+
+bool llvm::impliesPoison(const Value *ValAssumedPoison, const Value *V) {
+  return ::impliesPoison(ValAssumedPoison, V, /* Depth */ 0);
 }
 
 static bool programUndefinedIfUndefOrPoison(const Value *V,
@@ -5034,56 +5062,21 @@ bool llvm::isGuaranteedToTransferExecutionToSuccessor(const Instruction *I) {
   // arbitrary length of time, but programs aren't allowed to rely on that.
 
   // If there is no successor, then execution can't transfer to it.
-  if (const auto *CRI = dyn_cast<CleanupReturnInst>(I))
-    return !CRI->unwindsToCaller();
-  if (const auto *CatchSwitch = dyn_cast<CatchSwitchInst>(I))
-    return !CatchSwitch->unwindsToCaller();
-  if (isa<ResumeInst>(I))
-    return false;
   if (isa<ReturnInst>(I))
     return false;
   if (isa<UnreachableInst>(I))
     return false;
 
-  // Calls can throw, or contain an infinite loop, or kill the process.
-  if (const auto *CB = dyn_cast<CallBase>(I)) {
-    // Call sites that throw have implicit non-local control flow.
-    if (!CB->doesNotThrow())
-      return false;
-
-    // A function which doens't throw and has "willreturn" attribute will
-    // always return.
-    if (CB->hasFnAttr(Attribute::WillReturn))
-      return true;
-
-    // Non-throwing call sites can loop infinitely, call exit/pthread_exit
-    // etc. and thus not return.  However, LLVM already assumes that
-    //
-    //  - Thread exiting actions are modeled as writes to memory invisible to
-    //    the program.
-    //
-    //  - Loops that don't have side effects (side effects are volatile/atomic
-    //    stores and IO) always terminate (see http://llvm.org/PR965).
-    //    Furthermore IO itself is also modeled as writes to memory invisible to
-    //    the program.
-    //
-    // We rely on those assumptions here, and use the memory effects of the call
-    // target as a proxy for checking that it always returns.
-
-    // FIXME: This isn't aggressive enough; a call which only writes to a global
-    // is guaranteed to return.
-    return CB->onlyReadsMemory() || CB->onlyAccessesArgMemory();
-  }
-
-  // Other instructions return normally.
-  return true;
+  // An instruction that returns without throwing must transfer control flow
+  // to a successor.
+  return !I->mayThrow() && I->willReturn();
 }
 
 bool llvm::isGuaranteedToTransferExecutionToSuccessor(const BasicBlock *BB) {
   // TODO: This is slightly conservative for invoke instruction since exiting
   // via an exception *is* normal control for them.
-  for (auto I = BB->begin(), E = BB->end(); I != E; ++I)
-    if (!isGuaranteedToTransferExecutionToSuccessor(&*I))
+  for (const Instruction &I : *BB)
+    if (!isGuaranteedToTransferExecutionToSuccessor(&I))
       return false;
   return true;
 }
@@ -5124,8 +5117,8 @@ bool llvm::propagatesPoison(const Operator *I) {
   }
 }
 
-void llvm::getGuaranteedNonPoisonOps(const Instruction *I,
-                                     SmallPtrSetImpl<const Value *> &Operands) {
+void llvm::getGuaranteedWellDefinedOps(
+    const Instruction *I, SmallPtrSetImpl<const Value *> &Operands) {
   switch (I->getOpcode()) {
     case Instruction::Store:
       Operands.insert(cast<StoreInst>(I)->getPointerOperand());
@@ -5135,6 +5128,8 @@ void llvm::getGuaranteedNonPoisonOps(const Instruction *I,
       Operands.insert(cast<LoadInst>(I)->getPointerOperand());
       break;
 
+    // Since dereferenceable attribute imply noundef, atomic operations
+    // also implicitly have noundef pointers too
     case Instruction::AtomicCmpXchg:
       Operands.insert(cast<AtomicCmpXchgInst>(I)->getPointerOperand());
       break;
@@ -5143,20 +5138,14 @@ void llvm::getGuaranteedNonPoisonOps(const Instruction *I,
       Operands.insert(cast<AtomicRMWInst>(I)->getPointerOperand());
       break;
 
-    case Instruction::UDiv:
-    case Instruction::SDiv:
-    case Instruction::URem:
-    case Instruction::SRem:
-      Operands.insert(I->getOperand(1));
-      break;
-
     case Instruction::Call:
     case Instruction::Invoke: {
       const CallBase *CB = cast<CallBase>(I);
       if (CB->isIndirectCall())
         Operands.insert(CB->getCalledOperand());
       for (unsigned i = 0; i < CB->arg_size(); ++i) {
-        if (CB->paramHasAttr(i, Attribute::NoUndef))
+        if (CB->paramHasAttr(i, Attribute::NoUndef) ||
+            CB->paramHasAttr(i, Attribute::Dereferenceable))
           Operands.insert(CB->getArgOperand(i));
       }
       break;
@@ -5164,6 +5153,23 @@ void llvm::getGuaranteedNonPoisonOps(const Instruction *I,
 
     default:
       break;
+  }
+}
+
+void llvm::getGuaranteedNonPoisonOps(const Instruction *I,
+                                     SmallPtrSetImpl<const Value *> &Operands) {
+  getGuaranteedWellDefinedOps(I, Operands);
+  switch (I->getOpcode()) {
+  // Divisors of these operations are allowed to be partially undef.
+  case Instruction::UDiv:
+  case Instruction::SDiv:
+  case Instruction::URem:
+  case Instruction::SRem:
+    Operands.insert(I->getOperand(1));
+    break;
+
+  default:
+    break;
   }
 }
 
@@ -5204,19 +5210,16 @@ static bool programUndefinedIfUndefOrPoison(const Value *V,
   BasicBlock::const_iterator End = BB->end();
 
   if (!PoisonOnly) {
-    // Be conservative & just check whether a value is passed to a noundef
-    // argument.
-    // Instructions that raise UB with a poison operand are well-defined
-    // or have unclear semantics when the input is partially undef.
-    // For example, 'udiv x, (undef | 1)' isn't UB.
+    // Since undef does not propagate eagerly, be conservative & just check
+    // whether a value is directly passed to an instruction that must take
+    // well-defined operands.
 
     for (auto &I : make_range(Begin, End)) {
-      if (const auto *CB = dyn_cast<CallBase>(&I)) {
-        for (unsigned i = 0; i < CB->arg_size(); ++i) {
-          if (CB->paramHasAttr(i, Attribute::NoUndef) &&
-              CB->getArgOperand(i) == V)
-            return true;
-        }
+      SmallPtrSet<const Value *, 4> WellDefinedOps;
+      getGuaranteedWellDefinedOps(&I, WellDefinedOps);
+      for (auto *Op : WellDefinedOps) {
+        if (Op == V)
+          return true;
       }
       if (!isGuaranteedToTransferExecutionToSuccessor(&I))
         break;
@@ -5989,6 +5992,16 @@ SelectPatternFlavor llvm::getInverseMinMaxFlavor(SelectPatternFlavor SPF) {
   llvm_unreachable("unhandled!");
 }
 
+Intrinsic::ID llvm::getInverseMinMaxIntrinsic(Intrinsic::ID MinMaxID) {
+  switch (MinMaxID) {
+  case Intrinsic::smax: return Intrinsic::smin;
+  case Intrinsic::smin: return Intrinsic::smax;
+  case Intrinsic::umax: return Intrinsic::umin;
+  case Intrinsic::umin: return Intrinsic::umax;
+  default: llvm_unreachable("Unexpected intrinsic");
+  }
+}
+
 CmpInst::Predicate llvm::getInverseMinMaxPred(SelectPatternFlavor SPF) {
   return getMinMaxPred(getInverseMinMaxFlavor(SPF));
 }
@@ -6031,6 +6044,71 @@ llvm::canConvertToMinOrMaxIntrinsic(ArrayRef<Value *> VL) {
     }
   }
   return {Intrinsic::not_intrinsic, false};
+}
+
+bool llvm::matchSimpleRecurrence(const PHINode *P, BinaryOperator *&BO,
+                                 Value *&Start, Value *&Step) {
+  // Handle the case of a simple two-predecessor recurrence PHI.
+  // There's a lot more that could theoretically be done here, but
+  // this is sufficient to catch some interesting cases.
+  if (P->getNumIncomingValues() != 2)
+    return false;
+
+  for (unsigned i = 0; i != 2; ++i) {
+    Value *L = P->getIncomingValue(i);
+    Value *R = P->getIncomingValue(!i);
+    Operator *LU = dyn_cast<Operator>(L);
+    if (!LU)
+      continue;
+    unsigned Opcode = LU->getOpcode();
+
+    switch (Opcode) {
+    default:
+      continue;
+    // TODO: Expand list -- xor, div, gep, uaddo, etc..
+    case Instruction::LShr:
+    case Instruction::AShr:
+    case Instruction::Shl:
+    case Instruction::Add:
+    case Instruction::Sub:
+    case Instruction::And:
+    case Instruction::Or:
+    case Instruction::Mul: {
+      Value *LL = LU->getOperand(0);
+      Value *LR = LU->getOperand(1);
+      // Find a recurrence.
+      if (LL == P)
+        L = LR;
+      else if (LR == P)
+        L = LL;
+      else
+        continue; // Check for recurrence with L and R flipped.
+
+      break; // Match!
+    }
+    };
+
+    // We have matched a recurrence of the form:
+    //   %iv = [R, %entry], [%iv.next, %backedge]
+    //   %iv.next = binop %iv, L
+    // OR
+    //   %iv = [R, %entry], [%iv.next, %backedge]
+    //   %iv.next = binop L, %iv
+    BO = cast<BinaryOperator>(LU);
+    Start = R;
+    Step = L;
+    return true;
+  }
+  return false;
+}
+
+bool llvm::matchSimpleRecurrence(const BinaryOperator *I, PHINode *&P,
+                                 Value *&Start, Value *&Step) {
+  BinaryOperator *BO = nullptr;
+  P = dyn_cast<PHINode>(I->getOperand(0));
+  if (!P)
+    P = dyn_cast<PHINode>(I->getOperand(1));
+  return P && matchSimpleRecurrence(P, BO, Start, Step) && BO == I;
 }
 
 /// Return true if "icmp Pred LHS RHS" is always true.

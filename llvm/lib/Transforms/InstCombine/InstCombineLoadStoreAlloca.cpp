@@ -753,8 +753,7 @@ static bool isObjectSizeLessThanOrEq(Value *V, uint64_t MaxSize,
     }
 
     if (PHINode *PN = dyn_cast<PHINode>(P)) {
-      for (Value *IncValue : PN->incoming_values())
-        Worklist.push_back(IncValue);
+      append_range(Worklist, PN->incoming_values());
       continue;
     }
 
@@ -957,10 +956,8 @@ Instruction *InstCombinerImpl::visitLoadInst(LoadInst &LI) {
   // Do really simple store-to-load forwarding and load CSE, to catch cases
   // where there are several consecutive memory accesses to the same location,
   // separated by a few arithmetic operations.
-  BasicBlock::iterator BBI(LI);
   bool IsLoadCSE = false;
-  if (Value *AvailableVal = FindAvailableLoadedValue(
-          &LI, LI.getParent(), BBI, DefMaxInstsToScan, AA, &IsLoadCSE)) {
+  if (Value *AvailableVal = FindAvailableLoadedValue(&LI, *AA, &IsLoadCSE)) {
     if (IsLoadCSE)
       combineMetadataForCSE(cast<LoadInst>(AvailableVal), &LI, false);
 

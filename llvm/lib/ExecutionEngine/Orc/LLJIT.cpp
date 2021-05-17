@@ -12,8 +12,8 @@
 #include "llvm/ExecutionEngine/Orc/MachOPlatform.h"
 #include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/Orc/ObjectTransformLayer.h"
-#include "llvm/ExecutionEngine/Orc/OrcError.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
 #include "llvm/ExecutionEngine/Orc/TargetProcessControl.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -239,7 +239,7 @@ public:
       });
       for (auto DeinitFnAddr : *Deinitializers) {
         LLVM_DEBUG({
-          dbgs() << "  Running init " << formatv("{0:x16}", DeinitFnAddr)
+          dbgs() << "  Running deinit " << formatv("{0:x16}", DeinitFnAddr)
                  << "...\n";
         });
         auto *DeinitFn = jitTargetAddressToFunction<void (*)()>(DeinitFnAddr);
@@ -922,7 +922,8 @@ Error LLJITBuilderState::prepareForConstruction() {
   }
 
   LLVM_DEBUG({
-    dbgs() << "  JITTargetMachineBuilder is " << JTMB << "\n"
+    dbgs() << "  JITTargetMachineBuilder is "
+           << JITTargetMachineBuilderPrinter(*JTMB, "  ")
            << "  Pre-constructed ExecutionSession: " << (ES ? "Yes" : "No")
            << "\n"
            << "  DataLayout: ";
@@ -1022,18 +1023,18 @@ LLJIT::createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES) {
   // Otherwise default to creating an RTDyldObjectLinkingLayer that constructs
   // a new SectionMemoryManager for each object.
   auto GetMemMgr = []() { return std::make_unique<SectionMemoryManager>(); };
-  auto ObjLinkingLayer =
+  auto Layer =
       std::make_unique<RTDyldObjectLinkingLayer>(ES, std::move(GetMemMgr));
 
   if (S.JTMB->getTargetTriple().isOSBinFormatCOFF()) {
-    ObjLinkingLayer->setOverrideObjectFlagsWithResponsibilityFlags(true);
-    ObjLinkingLayer->setAutoClaimResponsibilityForObjectSymbols(true);
+    Layer->setOverrideObjectFlagsWithResponsibilityFlags(true);
+    Layer->setAutoClaimResponsibilityForObjectSymbols(true);
   }
 
   // FIXME: Explicit conversion to std::unique_ptr<ObjectLayer> added to silence
   //        errors from some GCC / libstdc++ bots. Remove this conversion (i.e.
   //        just return ObjLinkingLayer) once those bots are upgraded.
-  return std::unique_ptr<ObjectLayer>(std::move(ObjLinkingLayer));
+  return std::unique_ptr<ObjectLayer>(std::move(Layer));
 }
 
 Expected<std::unique_ptr<IRCompileLayer::IRCompiler>>

@@ -15,9 +15,10 @@
 #include "flang/Common/reference.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include <array>
+#include <functional>
 #include <list>
 #include <optional>
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace llvm {
@@ -356,7 +357,7 @@ private:
 };
 
 // Record the USE of a symbol: location is where (USE statement or renaming);
-// symbol is the USEd module.
+// symbol is in the USEd module.
 class UseDetails {
 public:
   UseDetails(const SourceName &location, const Symbol &symbol)
@@ -502,7 +503,7 @@ public:
       // OpenMP data-mapping attribute
       OmpMapTo, OmpMapFrom, OmpMapAlloc, OmpMapRelease, OmpMapDelete,
       // OpenMP data-copying attribute
-      OmpCopyIn,
+      OmpCopyIn, OmpCopyPrivate,
       // OpenMP miscellaneous flags
       OmpCommonBlock, OmpReduction, OmpAllocate, OmpDeclareSimd,
       OmpDeclareTarget, OmpThreadprivate, OmpDeclareReduction, OmpFlushed,
@@ -595,8 +596,8 @@ public:
   bool operator==(const Symbol &that) const { return this == &that; }
   bool operator!=(const Symbol &that) const { return !(*this == that); }
   bool operator<(const Symbol &that) const {
-    // For sets of symbols: collate them by source location
-    return name_.begin() < that.name_.begin();
+    // Used to collate symbols by creation order
+    return sortIndex_ < that.sortIndex_;
   }
 
   int Rank() const {
@@ -653,6 +654,7 @@ public:
 private:
   const Scope *owner_;
   SourceName name_;
+  std::size_t sortIndex_; // to implement "operator<" platform independently
   Attrs attrs_;
   Flags flags_;
   Scope *scope_{nullptr};
@@ -687,6 +689,7 @@ public:
     Symbol &symbol = Get();
     symbol.owner_ = &owner;
     symbol.name_ = name;
+    symbol.sortIndex_ = ++symbolCount_;
     symbol.attrs_ = attrs;
     symbol.details_ = std::move(details);
     return symbol;
@@ -697,6 +700,7 @@ private:
   std::list<blockType *> blocks_;
   std::size_t nextIndex_{0};
   blockType *currBlock_{nullptr};
+  std::size_t symbolCount_ = 0;
 
   Symbol &Get() {
     if (nextIndex_ == 0) {
@@ -765,7 +769,13 @@ inline bool operator<(SymbolRef x, SymbolRef y) { return *x < *y; }
 inline bool operator<(MutableSymbolRef x, MutableSymbolRef y) {
   return *x < *y;
 }
-using SymbolSet = std::set<SymbolRef>;
+struct SymbolHash {
+  std::size_t operator()(SymbolRef symRef) const {
+    std::hash<std::string> hasher;
+    return hasher(symRef->name().ToString());
+  }
+};
+using SymbolSet = std::unordered_set<SymbolRef, SymbolHash>;
 
 } // namespace Fortran::semantics
 

@@ -565,7 +565,7 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_aggregate_bases", "201603L");
     Builder.defineMacro("__cpp_structured_bindings", "201606L");
     Builder.defineMacro("__cpp_nontype_template_args",
-                        LangOpts.CPlusPlus20 ? "201911L" : "201411L");
+                        "201411L"); // (not latest)
     Builder.defineMacro("__cpp_fold_expressions", "201603L");
     Builder.defineMacro("__cpp_guaranteed_copy_elision", "201606L");
     Builder.defineMacro("__cpp_nontype_template_parameter_auto", "201606L");
@@ -1120,10 +1120,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
 
   // OpenCL definitions.
   if (LangOpts.OpenCL) {
-#define OPENCLEXT(Ext)                                                         \
-  if (TI.getSupportedOpenCLOpts().isSupported(#Ext, LangOpts))                 \
-    Builder.defineMacro(#Ext);
-#include "clang/Basic/OpenCLExtensions.def"
+    TI.getOpenCLFeatureDefines(LangOpts, Builder);
 
     if (TI.getTriple().isSPIR())
       Builder.defineMacro("__IMAGE_SUPPORT__");

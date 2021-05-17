@@ -643,16 +643,15 @@ TEST(VPRecipeTest, CastVPReductionRecipeToVPUser) {
   VPValue ChainOp;
   VPValue VecOp;
   VPValue CondOp;
-  VPReductionRecipe Recipe(nullptr, nullptr, &ChainOp, &CondOp, &VecOp, false,
+  VPReductionRecipe Recipe(nullptr, nullptr, &ChainOp, &CondOp, &VecOp,
                            nullptr);
   EXPECT_TRUE(isa<VPUser>(&Recipe));
   VPRecipeBase *BaseR = &Recipe;
   EXPECT_TRUE(isa<VPUser>(BaseR));
 }
 
-struct VPDoubleValueDef : public VPRecipeBase, public VPUser {
-  VPDoubleValueDef(ArrayRef<VPValue *> Operands)
-      : VPRecipeBase(99), VPUser(Operands) {
+struct VPDoubleValueDef : public VPRecipeBase {
+  VPDoubleValueDef(ArrayRef<VPValue *> Operands) : VPRecipeBase(99, Operands) {
     new VPValue(nullptr, this);
     new VPValue(nullptr, this);
   }

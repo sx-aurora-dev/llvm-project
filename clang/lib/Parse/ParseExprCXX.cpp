@@ -1302,6 +1302,17 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
     }
   }
 
+  // Implement WG21 P2173, which allows attributes immediately before the
+  // lambda declarator and applies them to the corresponding function operator
+  // or operator template declaration. We accept this as a conforming extension
+  // in all language modes that support lambdas.
+  if (isCXX11AttributeSpecifier()) {
+    Diag(Tok, getLangOpts().CPlusPlus2b
+                  ? diag::warn_cxx20_compat_decl_attrs_on_lambda
+                  : diag::ext_decl_attrs_on_lambda);
+    MaybeParseCXX11Attributes(D);
+  }
+
   TypeResult TrailingReturnType;
   SourceLocation TrailingReturnTypeLoc;
   if (Tok.is(tok::l_paren)) {
@@ -1338,12 +1349,9 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
     SourceLocation DeclEndLoc = RParenLoc;
 
     // GNU-style attributes must be parsed before the mutable specifier to be
-    // compatible with GCC.
-    MaybeParseGNUAttributes(Attr, &DeclEndLoc);
-
-    // MSVC-style attributes must be parsed before the mutable specifier to be
-    // compatible with MSVC.
-    MaybeParseMicrosoftDeclSpecs(Attr, &DeclEndLoc);
+    // compatible with GCC. MSVC-style attributes must be parsed before the
+    // mutable specifier to be compatible with MSVC.
+    MaybeParseAttributes(PAKM_GNU | PAKM_Declspec, Attr);
 
     // Parse mutable-opt and/or constexpr-opt or consteval-opt, and update the
     // DeclEndLoc.

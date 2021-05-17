@@ -139,6 +139,14 @@ public:
 
   int getVectorInstrCost(unsigned Opcode, Type *Val, unsigned Index);
 
+  int getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
+                             bool IsPairwise, bool IsUnsigned,
+                             TTI::TargetCostKind CostKind);
+
+  int getArithmeticReductionCostSVE(unsigned Opcode, VectorType *ValTy,
+                                    bool IsPairwiseForm,
+                                    TTI::TargetCostKind CostKind);
+
   int getArithmeticInstrCost(
       unsigned Opcode, Type *Ty,
       TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput,
@@ -178,16 +186,14 @@ public:
 
   bool getTgtMemIntrinsic(IntrinsicInst *Inst, MemIntrinsicInfo &Info);
 
-  bool isLegalMaskedLoadStore(Type *DataType, Align Alignment) {
-    if (!isa<ScalableVectorType>(DataType) || !ST->hasSVE())
-      return false;
-
-    Type *Ty = cast<ScalableVectorType>(DataType)->getElementType();
+  bool isLegalElementTypeForSVE(Type *Ty) const {
     if (Ty->isPointerTy())
       return true;
 
-    if (Ty->isBFloatTy() || Ty->isHalfTy() ||
-        Ty->isFloatTy() || Ty->isDoubleTy())
+    if (Ty->isBFloatTy() && ST->hasBF16())
+      return true;
+
+    if (Ty->isHalfTy() || Ty->isFloatTy() || Ty->isDoubleTy())
       return true;
 
     if (Ty->isIntegerTy(8) || Ty->isIntegerTy(16) ||
@@ -197,12 +203,33 @@ public:
     return false;
   }
 
+  bool isLegalMaskedLoadStore(Type *DataType, Align Alignment) {
+    if (isa<FixedVectorType>(DataType) || !ST->hasSVE())
+      return false;
+
+    return isLegalElementTypeForSVE(DataType->getScalarType());
+  }
+
   bool isLegalMaskedLoad(Type *DataType, Align Alignment) {
     return isLegalMaskedLoadStore(DataType, Alignment);
   }
 
   bool isLegalMaskedStore(Type *DataType, Align Alignment) {
     return isLegalMaskedLoadStore(DataType, Alignment);
+  }
+
+  bool isLegalMaskedGatherScatter(Type *DataType) const {
+    if (isa<FixedVectorType>(DataType) || !ST->hasSVE())
+      return false;
+
+    return isLegalElementTypeForSVE(DataType->getScalarType());
+  }
+
+  bool isLegalMaskedGather(Type *DataType, Align Alignment) const {
+    return isLegalMaskedGatherScatter(DataType);
+  }
+  bool isLegalMaskedScatter(Type *DataType, Align Alignment) const {
+    return isLegalMaskedGatherScatter(DataType);
   }
 
   bool isLegalNTStore(Type *DataType, Align Alignment) {
@@ -241,8 +268,8 @@ public:
 
   bool supportsScalableVectors() const { return ST->hasSVE(); }
 
-  bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
-                             TTI::ReductionFlags Flags) const;
+  bool isLegalToVectorizeReduction(RecurrenceDescriptor RdxDesc,
+                                   ElementCount VF) const;
 
   int getArithmeticReductionCost(unsigned Opcode, VectorType *Ty,
                                  bool IsPairwiseForm,

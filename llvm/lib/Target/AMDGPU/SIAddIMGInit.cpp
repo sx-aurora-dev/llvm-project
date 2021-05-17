@@ -16,7 +16,8 @@
 //
 
 #include "AMDGPU.h"
-#include "AMDGPUSubtarget.h"
+#include "GCNSubtarget.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 #define DEBUG_TYPE "si-img-init"
@@ -76,7 +77,7 @@ bool SIAddIMGInit::runOnMachineFunction(MachineFunction &MF) {
         if (!TFE && !LWE) // intersect_ray
           continue;
 
-        unsigned TFEVal = TFE->getImm();
+        unsigned TFEVal = TFE ? TFE->getImm() : 0;
         unsigned LWEVal = LWE->getImm();
         unsigned D16Val = D16 ? D16->getImm() : 0;
 

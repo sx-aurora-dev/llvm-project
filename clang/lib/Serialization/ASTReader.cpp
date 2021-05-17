@@ -114,6 +114,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -812,6 +813,31 @@ void PCHValidator::ReadCounter(const ModuleFile &M, unsigned Value) {
 // AST reader implementation
 //===----------------------------------------------------------------------===//
 
+static uint64_t readULEB(const unsigned char *&P) {
+  unsigned Length = 0;
+  const char *Error = nullptr;
+
+  uint64_t Val = llvm::decodeULEB128(P, &Length, nullptr, &Error);
+  if (Error)
+    llvm::report_fatal_error(Error);
+  P += Length;
+  return Val;
+}
+
+/// Read ULEB-encoded key length and data length.
+static std::pair<unsigned, unsigned>
+readULEBKeyDataLength(const unsigned char *&P) {
+  unsigned KeyLen = readULEB(P);
+  if ((unsigned)KeyLen != KeyLen)
+    llvm::report_fatal_error("key too large");
+
+  unsigned DataLen = readULEB(P);
+  if ((unsigned)DataLen != DataLen)
+    llvm::report_fatal_error("data too large");
+
+  return std::make_pair(KeyLen, DataLen);
+}
+
 void ASTReader::setDeserializationListener(ASTDeserializationListener *Listener,
                                            bool TakeOwnership) {
   DeserializationListener = Listener;
@@ -824,11 +850,7 @@ unsigned ASTSelectorLookupTrait::ComputeHash(Selector Sel) {
 
 std::pair<unsigned, unsigned>
 ASTSelectorLookupTrait::ReadKeyDataLength(const unsigned char*& d) {
-  using namespace llvm::support;
-
-  unsigned KeyLen = endian::readNext<uint16_t, little, unaligned>(d);
-  unsigned DataLen = endian::readNext<uint16_t, little, unaligned>(d);
-  return std::make_pair(KeyLen, DataLen);
+  return readULEBKeyDataLength(d);
 }
 
 ASTSelectorLookupTrait::internal_key_type
@@ -894,11 +916,7 @@ unsigned ASTIdentifierLookupTraitBase::ComputeHash(const internal_key_type& a) {
 
 std::pair<unsigned, unsigned>
 ASTIdentifierLookupTraitBase::ReadKeyDataLength(const unsigned char*& d) {
-  using namespace llvm::support;
-
-  unsigned DataLen = endian::readNext<uint16_t, little, unaligned>(d);
-  unsigned KeyLen = endian::readNext<uint16_t, little, unaligned>(d);
-  return std::make_pair(KeyLen, DataLen);
+  return readULEBKeyDataLength(d);
 }
 
 ASTIdentifierLookupTraitBase::internal_key_type
@@ -1086,11 +1104,7 @@ ASTDeclContextNameLookupTrait::ReadFileRef(const unsigned char *&d) {
 
 std::pair<unsigned, unsigned>
 ASTDeclContextNameLookupTrait::ReadKeyDataLength(const unsigned char *&d) {
-  using namespace llvm::support;
-
-  unsigned KeyLen = endian::readNext<uint16_t, little, unaligned>(d);
-  unsigned DataLen = endian::readNext<uint16_t, little, unaligned>(d);
-  return std::make_pair(KeyLen, DataLen);
+  return readULEBKeyDataLength(d);
 }
 
 ASTDeclContextNameLookupTrait::internal_key_type
@@ -1499,7 +1513,7 @@ bool ASTReader::ReadSLocEntry(int ID) {
     // we will also try to fail gracefully by setting up the SLocEntry.
     unsigned InputID = Record[4];
     InputFile IF = getInputFile(*F, InputID);
-    const FileEntry *File = IF.getFile();
+    Optional<FileEntryRef> File = IF.getFile();
     bool OverriddenBuffer = IF.isOverridden();
 
     // Note that we only check if a File was returned. If it was out-of-date
@@ -1515,9 +1529,8 @@ bool ASTReader::ReadSLocEntry(int ID) {
     }
     SrcMgr::CharacteristicKind
       FileCharacter = (SrcMgr::CharacteristicKind)Record[2];
-    // FIXME: The FileID should be created from the FileEntryRef.
-    FileID FID = SourceMgr.createFileID(File, IncludeLoc, FileCharacter,
-                                        ID, BaseOffset + Record[0]);
+    FileID FID = SourceMgr.createFileID(*File, IncludeLoc, FileCharacter, ID,
+                                        BaseOffset + Record[0]);
     SrcMgr::FileInfo &FileInfo =
           const_cast<SrcMgr::FileInfo&>(SourceMgr.getSLocEntry(FID).getFile());
     FileInfo.NumCreatedFIDs = Record[5];
@@ -1533,14 +1546,14 @@ bool ASTReader::ReadSLocEntry(int ID) {
     }
 
     const SrcMgr::ContentCache &ContentCache =
-        SourceMgr.getOrCreateContentCache(File, isSystem(FileCharacter));
+        SourceMgr.getOrCreateContentCache(*File, isSystem(FileCharacter));
     if (OverriddenBuffer && !ContentCache.BufferOverridden &&
         ContentCache.ContentsEntry == ContentCache.OrigEntry &&
         !ContentCache.getBufferIfLoaded()) {
       auto Buffer = ReadBuffer(SLocEntryCursor, File->getName());
       if (!Buffer)
         return true;
-      SourceMgr.overrideFileContents(File, std::move(Buffer));
+      SourceMgr.overrideFileContents(*File, std::move(Buffer));
     }
 
     break;
@@ -1848,11 +1861,7 @@ bool HeaderFileInfoTrait::EqualKey(internal_key_ref a, internal_key_ref b) {
 
 std::pair<unsigned, unsigned>
 HeaderFileInfoTrait::ReadKeyDataLength(const unsigned char*& d) {
-  using namespace llvm::support;
-
-  unsigned KeyLen = (unsigned) endian::readNext<uint16_t, little, unaligned>(d);
-  unsigned DataLen = (unsigned) *d++;
-  return std::make_pair(KeyLen, DataLen);
+  return readULEBKeyDataLength(d);
 }
 
 HeaderFileInfoTrait::internal_key_type
@@ -1915,8 +1924,7 @@ HeaderFileInfoTrait::ReadData(internal_key_ref key, const unsigned char *d,
     // FIXME: This is not always the right filename-as-written, but we're not
     // going to use this information to rebuild the module, so it doesn't make
     // a lot of difference.
-    Module::Header H = {std::string(key.Filename),
-                        *FileMgr.getOptionalFileRef(Filename)};
+    Module::Header H = {std::string(key.Filename), *FileMgr.getFile(Filename)};
     ModMap.addHeader(Mod, H, HeaderRole, /*Imported*/true);
     HFI.isModuleHeader |= !(HeaderRole & ModuleMap::TextualHeader);
   }
@@ -2211,6 +2219,29 @@ void ASTReader::resolvePendingMacro(IdentifierInfo *II,
     PP.setLoadedMacroDirective(II, Earliest, Latest);
 }
 
+bool ASTReader::shouldDisableValidationForFile(
+    const serialization::ModuleFile &M) const {
+  if (DisableValidationKind == DisableValidationForModuleKind::None)
+    return false;
+
+  // If a PCH is loaded and validation is disabled for PCH then disable
+  // validation for the PCH and the modules it loads.
+  ModuleKind K = CurrentDeserializingModuleKind.getValueOr(M.Kind);
+
+  switch (K) {
+  case MK_MainFile:
+  case MK_Preamble:
+  case MK_PCH:
+    return bool(DisableValidationKind & DisableValidationForModuleKind::PCH);
+  case MK_ImplicitModule:
+  case MK_ExplicitModule:
+  case MK_PrebuiltModule:
+    return bool(DisableValidationKind & DisableValidationForModuleKind::Module);
+  }
+
+  return false;
+}
+
 ASTReader::InputFileInfo
 ASTReader::readInputFileInfo(ModuleFile &F, unsigned ID) {
   // Go find this input file.
@@ -2357,7 +2388,7 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
   auto HasInputFileChanged = [&]() {
     if (StoredSize != File->getSize())
       return ModificationType::Size;
-    if (!DisableValidation && StoredTime &&
+    if (!shouldDisableValidationForFile(F) && StoredTime &&
         StoredTime != File->getModificationTime()) {
       // In case the modification time changes but not the content,
       // accept the cached file as legit.
@@ -2573,6 +2604,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
     return Success;
   };
 
+  bool DisableValidation = shouldDisableValidationForFile(F);
+
   // Read all of the records and blocks in the control block.
   RecordData Record;
   unsigned NumInputs = 0;
@@ -2726,9 +2759,16 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       }
 
       bool hasErrors = Record[6];
-      if (hasErrors && !DisableValidation && !AllowASTWithCompilerErrors) {
-        Diag(diag::err_pch_with_compiler_errors);
-        return HadErrors;
+      if (hasErrors && !DisableValidation) {
+        // If requested by the caller, mark modules on error as out-of-date.
+        if (F.Kind == MK_ImplicitModule &&
+            (ClientLoadCapabilities & ARR_TreatModuleWithErrorsAsOutOfDate))
+          return OutOfDate;
+
+        if (!AllowASTWithCompilerErrors) {
+          Diag(diag::err_pch_with_compiler_errors);
+          return HadErrors;
+        }
       }
       if (hasErrors) {
         Diags.ErrorOccurred = true;
@@ -2871,7 +2911,8 @@ ASTReader::ReadControlBlock(ModuleFile &F,
         // If we're implicitly loading a module, the base directory can't
         // change between the build and use.
         // Don't emit module relocation error if we have -fno-validate-pch
-        if (!PP.getPreprocessorOpts().DisablePCHValidation &&
+        if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
+                  DisableValidationForModuleKind::Module) &&
             F.Kind != MK_ExplicitModule && F.Kind != MK_PrebuiltModule) {
           auto BuildDir = PP.getFileManager().getDirectory(Blob);
           if (!BuildDir || *BuildDir != M->Directory) {
@@ -3156,12 +3197,13 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     }
 
     case IDENTIFIER_TABLE:
-      F.IdentifierTableData = Blob.data();
+      F.IdentifierTableData =
+          reinterpret_cast<const unsigned char *>(Blob.data());
       if (Record[0]) {
         F.IdentifierLookupTable = ASTIdentifierLookupTable::Create(
-            (const unsigned char *)F.IdentifierTableData + Record[0],
-            (const unsigned char *)F.IdentifierTableData + sizeof(uint32_t),
-            (const unsigned char *)F.IdentifierTableData,
+            F.IdentifierTableData + Record[0],
+            F.IdentifierTableData + sizeof(uint32_t),
+            F.IdentifierTableData,
             ASTIdentifierLookupTrait(*this, F));
 
         PP.getIdentifierTable().setExternalIdentifierLookup(this);
@@ -3583,11 +3625,13 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     case OPENCL_EXTENSIONS:
       for (unsigned I = 0, E = Record.size(); I != E; ) {
         auto Name = ReadString(Record, I);
-        auto &Opt = OpenCLExtensions.OptMap[Name];
-        Opt.Supported = Record[I++] != 0;
-        Opt.Enabled = Record[I++] != 0;
-        Opt.Avail = Record[I++];
-        Opt.Core = Record[I++];
+        auto &OptInfo = OpenCLExtensions.OptMap[Name];
+        OptInfo.Supported = Record[I++] != 0;
+        OptInfo.Enabled = Record[I++] != 0;
+        OptInfo.WithPragma = Record[I++] != 0;
+        OptInfo.Avail = Record[I++];
+        OptInfo.Core = Record[I++];
+        OptInfo.Opt = Record[I++];
       }
       break;
 
@@ -3903,7 +3947,9 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     auto &Map = PP.getHeaderSearchInfo().getModuleMap();
     const FileEntry *ModMap = M ? Map.getModuleMapFileForUniquing(M) : nullptr;
     // Don't emit module relocation error if we have -fno-validate-pch
-    if (!PP.getPreprocessorOpts().DisablePCHValidation && !ModMap) {
+    if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
+              DisableValidationForModuleKind::Module) &&
+        !ModMap) {
       if ((ClientLoadCapabilities & ARR_OutOfDate) == 0) {
         if (auto ASTFE = M ? M->getASTFile() : None) {
           // This module was defined by an imported (explicit) module.
@@ -4189,6 +4235,8 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
                                             SmallVectorImpl<ImportedSubmodule> *Imported) {
   llvm::SaveAndRestore<SourceLocation>
     SetCurImportLocRAII(CurrentImportLoc, ImportLoc);
+  llvm::SaveAndRestore<Optional<ModuleKind>> SetCurModuleKindRAII(
+      CurrentDeserializingModuleKind, Type);
 
   // Defer any pending actions until we get to the end of reading the AST file.
   Deserializing AnASTFile(this);
@@ -4283,8 +4331,7 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
     // Preload all the pending interesting identifiers by marking them out of
     // date.
     for (auto Offset : F.PreloadIdentifierOffsets) {
-      const unsigned char *Data = reinterpret_cast<const unsigned char *>(
-          F.IdentifierTableData + Offset);
+      const unsigned char *Data = F.IdentifierTableData + Offset;
 
       ASTIdentifierLookupTrait Trait(*this, F);
       auto KeyDataLen = Trait.ReadKeyDataLength(Data);
@@ -4623,6 +4670,7 @@ ASTReader::readUnhashedControlBlock(ModuleFile &F, bool WasImportedBy,
       PP.getHeaderSearchInfo().getHeaderSearchOpts();
   bool AllowCompatibleConfigurationMismatch =
       F.Kind == MK_ExplicitModule || F.Kind == MK_PrebuiltModule;
+  bool DisableValidation = shouldDisableValidationForFile(F);
 
   ASTReadResult Result = readUnhashedControlBlockImpl(
       &F, F.Data, ClientLoadCapabilities, AllowCompatibleConfigurationMismatch,
@@ -5514,7 +5562,8 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       if (!ParentModule) {
         if (const FileEntry *CurFile = CurrentModule->getASTFile()) {
           // Don't emit module relocation error if we have -fno-validate-pch
-          if (!PP.getPreprocessorOpts().DisablePCHValidation &&
+          if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
+                    DisableValidationForModuleKind::Module) &&
               CurFile != F.File) {
             Error(diag::err_module_file_conflict,
                   CurrentModule->getTopLevelModuleName(), CurFile->getName(),
@@ -5565,7 +5614,7 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     case SUBMODULE_UMBRELLA_HEADER: {
       std::string Filename = std::string(Blob);
       ResolveImportedPath(F, Filename);
-      if (auto Umbrella = PP.getFileManager().getOptionalFileRef(Filename)) {
+      if (auto Umbrella = PP.getFileManager().getFile(Filename)) {
         if (!CurrentModule->getUmbrellaHeader())
           ModMap.setUmbrellaHeader(CurrentModule, *Umbrella, Blob);
         else if (CurrentModule->getUmbrellaHeader().Entry != *Umbrella) {
@@ -5598,8 +5647,7 @@ ASTReader::ReadSubmoduleBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     case SUBMODULE_UMBRELLA_DIR: {
       std::string Dirname = std::string(Blob);
       ResolveImportedPath(F, Dirname);
-      if (auto Umbrella =
-              PP.getFileManager().getOptionalDirectoryRef(Dirname)) {
+      if (auto Umbrella = PP.getFileManager().getDirectory(Dirname)) {
         if (!CurrentModule->getUmbrellaDir())
           ModMap.setUmbrellaDir(CurrentModule, *Umbrella, Blob);
         else if (CurrentModule->getUmbrellaDir().Entry != *Umbrella) {
@@ -7030,6 +7078,11 @@ QualType ASTReader::GetType(TypeID ID) {
       T = Context.Id##Ty; \
       break;
 #include "clang/Basic/PPCTypes.def"
+#define RVV_TYPE(Name, Id, SingletonId) \
+    case PREDEF_TYPE_##Id##_ID: \
+      T = Context.SingletonId; \
+      break;
+#include "clang/Basic/RISCVVTypes.def"
     }
 
     assert(!T.isNull() && "Unknown predefined type");
@@ -7836,7 +7889,7 @@ void ASTReader::InitializeSema(Sema &S) {
         NewOverrides.applyOverrides(SemaObj->getLangOpts());
   }
 
-  SemaObj->OpenCLFeatures.copy(OpenCLExtensions);
+  SemaObj->OpenCLFeatures = OpenCLExtensions;
   SemaObj->OpenCLTypeExtMap = OpenCLTypeExtMap;
   SemaObj->OpenCLDeclExtMap = OpenCLDeclExtMap;
 
@@ -8480,17 +8533,13 @@ IdentifierInfo *ASTReader::DecodeIdentifierInfo(IdentifierID ID) {
     assert(I != GlobalIdentifierMap.end() && "Corrupted global identifier map");
     ModuleFile *M = I->second;
     unsigned Index = ID - M->BaseIdentifierID;
-    const char *Str = M->IdentifierTableData + M->IdentifierOffsets[Index];
+    const unsigned char *Data =
+        M->IdentifierTableData + M->IdentifierOffsets[Index];
 
-    // All of the strings in the AST file are preceded by a 16-bit length.
-    // Extract that 16-bit length to avoid having to execute strlen().
-    // NOTE: 'StrLenPtr' is an 'unsigned char*' so that we load bytes as
-    //  unsigned integers.  This is important to avoid integer overflow when
-    //  we cast them to 'unsigned'.
-    const unsigned char *StrLenPtr = (const unsigned char*) Str - 2;
-    unsigned StrLen = (((unsigned) StrLenPtr[0])
-                       | (((unsigned) StrLenPtr[1]) << 8)) - 1;
-    auto &II = PP.getIdentifierTable().get(StringRef(Str, StrLen));
+    ASTIdentifierLookupTrait Trait(*this, *M);
+    auto KeyDataLen = Trait.ReadKeyDataLength(Data);
+    auto Key = Trait.ReadKey(Data, KeyDataLen.first);
+    auto &II = PP.getIdentifierTable().get(Key);
     IdentifiersLoaded[ID] = &II;
     markIdentifierFromAST(*this,  II);
     if (DeserializationListener)
@@ -8705,25 +8754,18 @@ ASTReader::getGlobalSelectorID(ModuleFile &M, unsigned LocalID) const {
 
 DeclarationNameLoc
 ASTRecordReader::readDeclarationNameLoc(DeclarationName Name) {
-  DeclarationNameLoc DNLoc;
   switch (Name.getNameKind()) {
   case DeclarationName::CXXConstructorName:
   case DeclarationName::CXXDestructorName:
   case DeclarationName::CXXConversionFunctionName:
-    DNLoc.NamedType.TInfo = readTypeSourceInfo();
-    break;
+    return DeclarationNameLoc::makeNamedTypeLoc(readTypeSourceInfo());
 
   case DeclarationName::CXXOperatorName:
-    DNLoc.CXXOperatorName.BeginOpNameLoc
-      = readSourceLocation().getRawEncoding();
-    DNLoc.CXXOperatorName.EndOpNameLoc
-      = readSourceLocation().getRawEncoding();
-    break;
+    return DeclarationNameLoc::makeCXXOperatorNameLoc(readSourceRange());
 
   case DeclarationName::CXXLiteralOperatorName:
-    DNLoc.CXXLiteralOperatorName.OpNameLoc
-      = readSourceLocation().getRawEncoding();
-    break;
+    return DeclarationNameLoc::makeCXXLiteralOperatorNameLoc(
+        readSourceLocation());
 
   case DeclarationName::Identifier:
   case DeclarationName::ObjCZeroArgSelector:
@@ -8733,7 +8775,7 @@ ASTRecordReader::readDeclarationNameLoc(DeclarationName Name) {
   case DeclarationName::CXXDeductionGuideName:
     break;
   }
-  return DNLoc;
+  return DeclarationNameLoc();
 }
 
 DeclarationNameInfo ASTRecordReader::readDeclarationNameInfo() {
@@ -11601,12 +11643,13 @@ ASTReader::ASTReader(Preprocessor &PP, InMemoryModuleCache &ModuleCache,
                      ASTContext *Context,
                      const PCHContainerReader &PCHContainerRdr,
                      ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
-                     StringRef isysroot, bool DisableValidation,
+                     StringRef isysroot,
+                     DisableValidationForModuleKind DisableValidationKind,
                      bool AllowASTWithCompilerErrors,
                      bool AllowConfigurationMismatch, bool ValidateSystemInputs,
                      bool ValidateASTInputFilesContent, bool UseGlobalIndex,
                      std::unique_ptr<llvm::Timer> ReadTimer)
-    : Listener(DisableValidation
+    : Listener(bool(DisableValidationKind &DisableValidationForModuleKind::PCH)
                    ? cast<ASTReaderListener>(new SimpleASTReaderListener(PP))
                    : cast<ASTReaderListener>(new PCHValidator(PP, *this))),
       SourceMgr(PP.getSourceManager()), FileMgr(PP.getFileManager()),
@@ -11614,7 +11657,7 @@ ASTReader::ASTReader(Preprocessor &PP, InMemoryModuleCache &ModuleCache,
       ContextObj(Context), ModuleMgr(PP.getFileManager(), ModuleCache,
                                      PCHContainerRdr, PP.getHeaderSearchInfo()),
       DummyIdResolver(PP), ReadTimer(std::move(ReadTimer)), isysroot(isysroot),
-      DisableValidation(DisableValidation),
+      DisableValidationKind(DisableValidationKind),
       AllowASTWithCompilerErrors(AllowASTWithCompilerErrors),
       AllowConfigurationMismatch(AllowConfigurationMismatch),
       ValidateSystemInputs(ValidateSystemInputs),
@@ -11697,6 +11740,11 @@ OMPClause *OMPClauseReader::readClause() {
   case llvm::omp::OMPC_simdlen:
     C = new (Context) OMPSimdlenClause();
     break;
+  case llvm::omp::OMPC_sizes: {
+    unsigned NumSizes = Record.readInt();
+    C = OMPSizesClause::CreateEmpty(Context, NumSizes);
+    break;
+  }
   case llvm::omp::OMPC_allocator:
     C = new (Context) OMPAllocatorClause();
     break;
@@ -11985,6 +12033,12 @@ void OMPClauseReader::VisitOMPSafelenClause(OMPSafelenClause *C) {
 
 void OMPClauseReader::VisitOMPSimdlenClause(OMPSimdlenClause *C) {
   C->setSimdlen(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void OMPClauseReader::VisitOMPSizesClause(OMPSizesClause *C) {
+  for (Expr *&E : C->getSizesRefs())
+    E = Record.readSubExpr();
   C->setLParenLoc(Record.readSourceLocation());
 }
 

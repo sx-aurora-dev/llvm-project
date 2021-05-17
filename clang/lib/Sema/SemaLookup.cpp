@@ -677,9 +677,43 @@ LLVM_DUMP_METHOD void LookupResult::dump() {
     D->dump();
 }
 
+/// Diagnose a missing builtin type.
+static QualType diagOpenCLBuiltinTypeError(Sema &S, llvm::StringRef TypeClass,
+                                           llvm::StringRef Name) {
+  S.Diag(SourceLocation(), diag::err_opencl_type_not_found)
+      << TypeClass << Name;
+  return S.Context.VoidTy;
+}
+
+/// Lookup an OpenCL enum type.
+static QualType getOpenCLEnumType(Sema &S, llvm::StringRef Name) {
+  LookupResult Result(S, &S.Context.Idents.get(Name), SourceLocation(),
+                      Sema::LookupTagName);
+  S.LookupName(Result, S.TUScope);
+  if (Result.empty())
+    return diagOpenCLBuiltinTypeError(S, "enum", Name);
+  EnumDecl *Decl = Result.getAsSingle<EnumDecl>();
+  if (!Decl)
+    return diagOpenCLBuiltinTypeError(S, "enum", Name);
+  return S.Context.getEnumType(Decl);
+}
+
+/// Lookup an OpenCL typedef type.
+static QualType getOpenCLTypedefType(Sema &S, llvm::StringRef Name) {
+  LookupResult Result(S, &S.Context.Idents.get(Name), SourceLocation(),
+                      Sema::LookupOrdinaryName);
+  S.LookupName(Result, S.TUScope);
+  if (Result.empty())
+    return diagOpenCLBuiltinTypeError(S, "typedef", Name);
+  TypedefNameDecl *Decl = Result.getAsSingle<TypedefNameDecl>();
+  if (!Decl)
+    return diagOpenCLBuiltinTypeError(S, "typedef", Name);
+  return S.Context.getTypedefType(Decl);
+}
+
 /// Get the QualType instances of the return type and arguments for an OpenCL
 /// builtin function signature.
-/// \param Context (in) The Context instance.
+/// \param S (in) The Sema instance.
 /// \param OpenCLBuiltin (in) The signature currently handled.
 /// \param GenTypeMaxCnt (out) Maximum number of types contained in a generic
 ///        type used as return type or as argument.
@@ -689,20 +723,20 @@ LLVM_DUMP_METHOD void LookupResult::dump() {
 ///        argument, ArgTypes contains QualTypes for the Cartesian product
 ///        of (vector sizes) x (types) .
 static void GetQualTypesForOpenCLBuiltin(
-    ASTContext &Context, const OpenCLBuiltinStruct &OpenCLBuiltin,
-    unsigned &GenTypeMaxCnt, SmallVector<QualType, 1> &RetTypes,
+    Sema &S, const OpenCLBuiltinStruct &OpenCLBuiltin, unsigned &GenTypeMaxCnt,
+    SmallVector<QualType, 1> &RetTypes,
     SmallVector<SmallVector<QualType, 1>, 5> &ArgTypes) {
   // Get the QualType instances of the return types.
   unsigned Sig = SignatureTable[OpenCLBuiltin.SigTableIndex];
-  OCL2Qual(Context, TypeTable[Sig], RetTypes);
+  OCL2Qual(S, TypeTable[Sig], RetTypes);
   GenTypeMaxCnt = RetTypes.size();
 
   // Get the QualType instances of the arguments.
   // First type is the return type, skip it.
   for (unsigned Index = 1; Index < OpenCLBuiltin.NumTypes; Index++) {
     SmallVector<QualType, 1> Ty;
-    OCL2Qual(Context,
-        TypeTable[SignatureTable[OpenCLBuiltin.SigTableIndex + Index]], Ty);
+    OCL2Qual(S, TypeTable[SignatureTable[OpenCLBuiltin.SigTableIndex + Index]],
+             Ty);
     GenTypeMaxCnt = (Ty.size() > GenTypeMaxCnt) ? Ty.size() : GenTypeMaxCnt;
     ArgTypes.push_back(std::move(Ty));
   }
@@ -721,7 +755,8 @@ static void GetOpenCLBuiltinFctOverloads(
     ASTContext &Context, unsigned GenTypeMaxCnt,
     std::vector<QualType> &FunctionList, SmallVector<QualType, 1> &RetTypes,
     SmallVector<SmallVector<QualType, 1>, 5> &ArgTypes) {
-  FunctionProtoType::ExtProtoInfo PI;
+  FunctionProtoType::ExtProtoInfo PI(
+      Context.getDefaultCallingConvention(false, false, true));
   PI.Variadic = false;
 
   // Create FunctionTypes for each (gen)type.
@@ -741,18 +776,6 @@ static void GetOpenCLBuiltinFctOverloads(
     FunctionList.push_back(Context.getFunctionType(
         RetTypes[(RetTypes.size() != 1) ? IGenType : 0], ArgList, PI));
   }
-}
-
-/// Add extensions to the function declaration.
-/// \param S (in/out) The Sema instance.
-/// \param BIDecl (in) Description of the builtin.
-/// \param FDecl (in/out) FunctionDecl instance.
-static void AddOpenCLExtensions(Sema &S, const OpenCLBuiltinStruct &BIDecl,
-                                FunctionDecl *FDecl) {
-  // Fetch extension associated with a function prototype.
-  StringRef E = FunctionExtensionTable[BIDecl.Extension];
-  if (E != "")
-    S.setOpenCLExtensionForDecl(FDecl, E);
 }
 
 /// When trying to resolve a function name, if isOpenCLBuiltin() returns a
@@ -790,12 +813,30 @@ static void InsertOCLBuiltinDeclarationsFromTable(Sema &S, LookupResult &LR,
         (OpenCLVersion >= OpenCLBuiltin.MaxVersion))
       continue;
 
+    // Ignore this builtin function if it carries an extension macro that is
+    // not defined. This indicates that the extension is not supported by the
+    // target, so the builtin function should not be available.
+    StringRef Extensions = FunctionExtensionTable[OpenCLBuiltin.Extension];
+    if (!Extensions.empty()) {
+      SmallVector<StringRef, 2> ExtVec;
+      Extensions.split(ExtVec, " ");
+      bool AllExtensionsDefined = true;
+      for (StringRef Ext : ExtVec) {
+        if (!S.getPreprocessor().isMacroDefined(Ext)) {
+          AllExtensionsDefined = false;
+          break;
+        }
+      }
+      if (!AllExtensionsDefined)
+        continue;
+    }
+
     SmallVector<QualType, 1> RetTypes;
     SmallVector<SmallVector<QualType, 1>, 5> ArgTypes;
 
     // Obtain QualType lists for the function signature.
-    GetQualTypesForOpenCLBuiltin(Context, OpenCLBuiltin, GenTypeMaxCnt,
-                                 RetTypes, ArgTypes);
+    GetQualTypesForOpenCLBuiltin(S, OpenCLBuiltin, GenTypeMaxCnt, RetTypes,
+                                 ArgTypes);
     if (GenTypeMaxCnt > 1) {
       HasGenType = true;
     }
@@ -842,8 +883,6 @@ static void InsertOCLBuiltinDeclarationsFromTable(Sema &S, LookupResult &LR,
 
       if (!S.getLangOpts().OpenCLCPlusPlus)
         NewOpenCLBuiltin->addAttr(OverloadableAttr::CreateImplicit(Context));
-
-      AddOpenCLExtensions(S, OpenCLBuiltin, NewOpenCLBuiltin);
 
       LR.addDecl(NewOpenCLBuiltin);
     }

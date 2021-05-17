@@ -453,6 +453,10 @@ namespace llvm {
   /// predicate mask.
   FunctionPass *createExpandVectorPredicationPass();
 
+  // This pass replaces intrinsics operating on vector operands with calls to
+  // the corresponding function in a vector library (e.g., SVML, libmvec).
+  FunctionPass *createReplaceWithVeclibLegacyPass();
+
   // This pass expands memcmp() to load/stores.
   FunctionPass *createExpandMemCmpPass();
 
@@ -468,6 +472,10 @@ namespace llvm {
   /// Creates CFGuard longjmp target identification pass.
   /// \see CFGuardLongjmp.cpp
   FunctionPass *createCFGuardLongjmpPass();
+
+  /// Creates EHContGuard catchret target identification pass.
+  /// \see EHContGuardCatchret.cpp
+  FunctionPass *createEHContGuardCatchretPass();
 
   /// Create Hardware Loop pass. \see HardwareLoops.cpp
   FunctionPass *createHardwareLoopsPass();

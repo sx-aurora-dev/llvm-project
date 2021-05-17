@@ -21,6 +21,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -281,10 +282,10 @@ instructionClobbersQuery(const MemoryDef *MD, const MemoryLocation &UseLoc,
     // clobbers where they don't really exist at all. Please see D43269 for
     // context.
     switch (II->getIntrinsicID()) {
-    case Intrinsic::lifetime_end:
     case Intrinsic::invariant_start:
     case Intrinsic::invariant_end:
     case Intrinsic::assume:
+    case Intrinsic::experimental_noalias_scope_decl:
       return {false, NoAlias};
     case Intrinsic::dbg_addr:
     case Intrinsic::dbg_declare:
@@ -356,22 +357,6 @@ struct UpwardsMemoryQuery {
 };
 
 } // end anonymous namespace
-
-static bool lifetimeEndsAt(MemoryDef *MD, const MemoryLocation &Loc,
-                           BatchAAResults &AA) {
-  Instruction *Inst = MD->getMemoryInst();
-  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(Inst)) {
-    switch (II->getIntrinsicID()) {
-    case Intrinsic::lifetime_end: {
-      MemoryLocation ArgLoc = MemoryLocation::getAfter(II->getArgOperand(1));
-      return AA.alias(ArgLoc, Loc) == MustAlias;
-    }
-    default:
-      return false;
-    }
-  }
-  return false;
-}
 
 template <typename AliasAnalysisType>
 static bool isUseTriviallyOptimizableToLiveOnEntry(AliasAnalysisType &AA,
@@ -1464,15 +1449,6 @@ void MemorySSA::OptimizeUses::optimizeUsesInBlock(
       }
 
       MemoryDef *MD = cast<MemoryDef>(VersionStack[UpperBound]);
-      // If the lifetime of the pointer ends at this instruction, it's live on
-      // entry.
-      if (!UseMLOC.IsCall && lifetimeEndsAt(MD, UseMLOC.getLoc(), *AA)) {
-        // Reset UpperBound to liveOnEntryDef's place in the stack
-        UpperBound = 0;
-        FoundClobberResult = true;
-        LocInfo.AR = MustAlias;
-        break;
-      }
       ClobberAlias CA = instructionClobbersQuery(MD, MU, UseMLOC, *AA);
       if (CA.IsClobber) {
         FoundClobberResult = true;
@@ -1767,9 +1743,15 @@ MemoryUseOrDef *MemorySSA::createNewAccess(Instruction *I,
   // dependencies here.
   // FIXME: Replace this special casing with a more accurate modelling of
   // assume's control dependency.
-  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I))
-    if (II->getIntrinsicID() == Intrinsic::assume)
+  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
+    switch (II->getIntrinsicID()) {
+    default:
+      break;
+    case Intrinsic::assume:
+    case Intrinsic::experimental_noalias_scope_decl:
       return nullptr;
+    }
+  }
 
   // Using a nonstandard AA pipelines might leave us with unexpected modref
   // results for I, so add a check to not model instructions that may not read
@@ -2190,17 +2172,13 @@ void MemoryDef::print(raw_ostream &OS) const {
 }
 
 void MemoryPhi::print(raw_ostream &OS) const {
-  bool First = true;
+  ListSeparator LS(",");
   OS << getID() << " = MemoryPhi(";
   for (const auto &Op : operands()) {
     BasicBlock *BB = getIncomingBlock(Op);
     MemoryAccess *MA = cast<MemoryAccess>(Op);
-    if (!First)
-      OS << ',';
-    else
-      First = false;
 
-    OS << '{';
+    OS << LS << '{';
     if (BB->hasName())
       OS << BB->getName();
     else

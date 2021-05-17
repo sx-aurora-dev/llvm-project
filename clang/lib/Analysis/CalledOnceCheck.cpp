@@ -22,6 +22,7 @@
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/FlowSensitive/DataflowWorklist.h"
+#include "clang/Basic/Builtins.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/BitVector.h"
@@ -47,9 +48,12 @@ static constexpr unsigned EXPECTED_NUMBER_OF_BASIC_BLOCKS = 8;
 template <class T>
 using CFGSizedVector = llvm::SmallVector<T, EXPECTED_NUMBER_OF_BASIC_BLOCKS>;
 constexpr llvm::StringLiteral CONVENTIONAL_NAMES[] = {
-    "completionHandler", "completion", "withCompletionHandler"};
+    "completionHandler", "completion",      "withCompletionHandler",
+    "withCompletion",    "completionBlock", "withCompletionBlock",
+    "replyTo",           "reply",           "withReplyTo"};
 constexpr llvm::StringLiteral CONVENTIONAL_SUFFIXES[] = {
-    "WithCompletionHandler", "WithCompletion"};
+    "WithCompletionHandler", "WithCompletion", "WithCompletionBlock",
+    "WithReplyTo", "WithReply"};
 constexpr llvm::StringLiteral CONVENTIONAL_CONDITIONS[] = {
     "error", "cancel", "shouldCall", "done", "OK", "success"};
 
@@ -328,6 +332,29 @@ public:
 
   const DeclRefExpr *VisitOpaqueValueExpr(const OpaqueValueExpr *OVE) {
     return Visit(OVE->getSourceExpr());
+  }
+
+  const DeclRefExpr *VisitCallExpr(const CallExpr *CE) {
+    if (!ShouldRetrieveFromComparisons)
+      return nullptr;
+
+    // We want to see through some of the boolean builtin functions
+    // that we are likely to see in conditions.
+    switch (CE->getBuiltinCallee()) {
+    case Builtin::BI__builtin_expect:
+    case Builtin::BI__builtin_expect_with_probability: {
+      assert(CE->getNumArgs() >= 2);
+
+      const DeclRefExpr *Candidate = Visit(CE->getArg(0));
+      return Candidate != nullptr ? Candidate : Visit(CE->getArg(1));
+    }
+
+    case Builtin::BI__builtin_unpredictable:
+      return Visit(CE->getArg(0));
+
+    default:
+      return nullptr;
+    }
   }
 
   const DeclRefExpr *VisitExpr(const Expr *E) {
@@ -936,8 +963,9 @@ private:
 
   /// Return true if the only parameter of the function is conventional.
   static bool isOnlyParameterConventional(const FunctionDecl *Function) {
-    return Function->getNumParams() == 1 &&
-           hasConventionalSuffix(Function->getName());
+    IdentifierInfo *II = Function->getIdentifier();
+    return Function->getNumParams() == 1 && II &&
+           hasConventionalSuffix(II->getName());
   }
 
   /// Return true/false if 'swift_async' attribute states that the given
@@ -969,13 +997,15 @@ private:
       return hasConventionalSuffix(MethodSelector.getNameForSlot(0));
     }
 
-    return isConventional(MethodSelector.getNameForSlot(PieceIndex));
+    llvm::StringRef PieceName = MethodSelector.getNameForSlot(PieceIndex);
+    return isConventional(PieceName) || hasConventionalSuffix(PieceName);
   }
 
   bool shouldBeCalledOnce(const ParmVarDecl *Parameter) const {
     return isExplicitlyMarked(Parameter) ||
            (CheckConventionalParameters &&
-            isConventional(Parameter->getName()) &&
+            (isConventional(Parameter->getName()) ||
+             hasConventionalSuffix(Parameter->getName())) &&
             isConventional(Parameter->getType()));
   }
 

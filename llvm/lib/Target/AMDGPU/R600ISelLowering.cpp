@@ -13,11 +13,11 @@
 
 #include "R600ISelLowering.h"
 #include "AMDGPU.h"
-#include "AMDGPUSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "R600Defines.h"
 #include "R600InstrInfo.h"
 #include "R600MachineFunctionInfo.h"
+#include "R600Subtarget.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 
@@ -1239,7 +1239,7 @@ SDValue R600TargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
 
   Align Alignment = StoreNode->getAlign();
   if (Alignment < MemVT.getStoreSize() &&
-      !allowsMisalignedMemoryAccesses(MemVT, AS, Alignment.value(),
+      !allowsMisalignedMemoryAccesses(MemVT, AS, Alignment,
                                       StoreNode->getMemOperand()->getFlags(),
                                       nullptr)) {
     return expandUnalignedStore(StoreNode, DAG);
@@ -1640,7 +1640,7 @@ bool R600TargetLowering::canMergeStoresTo(unsigned AS, EVT MemVT,
 }
 
 bool R600TargetLowering::allowsMisalignedMemoryAccesses(
-    EVT VT, unsigned AddrSpace, unsigned Align, MachineMemOperand::Flags Flags,
+    EVT VT, unsigned AddrSpace, Align Alignment, MachineMemOperand::Flags Flags,
     bool *IsFast) const {
   if (IsFast)
     *IsFast = false;
@@ -1655,7 +1655,7 @@ bool R600TargetLowering::allowsMisalignedMemoryAccesses(
   if (IsFast)
     *IsFast = true;
 
-  return VT.bitsGT(MVT::i32) && Align % 4 == 0;
+  return VT.bitsGT(MVT::i32) && Alignment >= Align(4);
 }
 
 static SDValue CompactSwizzlableVector(

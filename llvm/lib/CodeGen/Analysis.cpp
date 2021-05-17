@@ -43,13 +43,11 @@ unsigned llvm::ComputeLinearIndex(Type *Ty,
 
   // Given a struct type, recursively traverse the elements.
   if (StructType *STy = dyn_cast<StructType>(Ty)) {
-    for (StructType::element_iterator EB = STy->element_begin(),
-                                      EI = EB,
-                                      EE = STy->element_end();
-        EI != EE; ++EI) {
-      if (Indices && *Indices == unsigned(EI - EB))
-        return ComputeLinearIndex(*EI, Indices+1, IndicesEnd, CurIndex);
-      CurIndex = ComputeLinearIndex(*EI, nullptr, nullptr, CurIndex);
+    for (auto I : llvm::enumerate(STy->elements())) {
+      Type *ET = I.value();
+      if (Indices && *Indices == I.index())
+        return ComputeLinearIndex(ET, Indices + 1, IndicesEnd, CurIndex);
+      CurIndex = ComputeLinearIndex(ET, nullptr, nullptr, CurIndex);
     }
     assert(!Indices && "Unexpected out of bound");
     return CurIndex;
@@ -530,11 +528,12 @@ bool llvm::isInTailCallPosition(const CallBase &Call, const TargetMachine &TM) {
     // Pseudo probe intrinsics do not block tail call optimization either.
     if (isa<PseudoProbeInst>(BBI))
       continue;
-    // A lifetime end or assume intrinsic should not stop tail call
-    // optimization.
+    // A lifetime end, assume or noalias.decl intrinsic should not stop tail
+    // call optimization.
     if (const IntrinsicInst *II = dyn_cast<IntrinsicInst>(BBI))
       if (II->getIntrinsicID() == Intrinsic::lifetime_end ||
-          II->getIntrinsicID() == Intrinsic::assume)
+          II->getIntrinsicID() == Intrinsic::assume ||
+          II->getIntrinsicID() == Intrinsic::experimental_noalias_scope_decl)
         continue;
     if (BBI->mayHaveSideEffects() || BBI->mayReadFromMemory() ||
         !isSafeToSpeculativelyExecute(&*BBI))
@@ -732,8 +731,7 @@ static void collectEHScopeMembers(
     if (Visiting->isEHScopeReturnBlock())
       continue;
 
-    for (const MachineBasicBlock *Succ : Visiting->successors())
-      Worklist.push_back(Succ);
+    append_range(Worklist, Visiting->successors());
   }
 }
 

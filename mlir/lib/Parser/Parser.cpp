@@ -808,7 +808,7 @@ Operation *OperationParser::parseGenericOperation() {
   if (getToken().is(Token::l_square)) {
     // Check if the operation is a known terminator.
     const AbstractOperation *abstractOp = result.name.getAbstractOperation();
-    if (abstractOp && !abstractOp->hasProperty(OperationProperty::Terminator))
+    if (abstractOp && !abstractOp->hasTrait<OpTrait::IsTerminator>())
       return emitError("successors in non-terminator"), nullptr;
 
     SmallVector<Block *, 2> successors;
@@ -1448,7 +1448,7 @@ public:
 
     // Try to parse the region.
     assert((!enableNameShadowing ||
-            opDefinition->hasProperty(OperationProperty::IsolatedFromAbove)) &&
+            opDefinition->hasTrait<OpTrait::IsIsolatedFromAbove>()) &&
            "name shadowing is only allowed on isolated regions");
     if (parser.parseRegion(region, regionArguments, enableNameShadowing))
       return failure();
@@ -2088,8 +2088,8 @@ LogicalResult mlir::parseSourceFile(const llvm::SourceMgr &sourceMgr,
                                     LocationAttr *sourceFileLoc) {
   const auto *sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
 
-  Location parserLoc = FileLineColLoc::get(sourceBuf->getBufferIdentifier(),
-                                           /*line=*/0, /*column=*/0, context);
+  Location parserLoc = FileLineColLoc::get(
+      context, sourceBuf->getBufferIdentifier(), /*line=*/0, /*column=*/0);
   if (sourceFileLoc)
     *sourceFileLoc = parserLoc;
 

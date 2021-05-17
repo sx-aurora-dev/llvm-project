@@ -66,7 +66,7 @@ auto IsVariableHelper::operator()(const Substring &x) const -> Result {
 auto IsVariableHelper::operator()(const ProcedureDesignator &x) const
     -> Result {
   const Symbol *symbol{x.GetSymbol()};
-  return symbol && symbol->attrs().test(semantics::Attr::POINTER);
+  return symbol && IsPointer(*symbol);
 }
 
 // Conversions of COMPLEX component expressions to REAL.
@@ -696,6 +696,40 @@ bool IsProcedurePointer(const Expr<SomeType> &expr) {
       expr.u);
 }
 
+template <typename A> inline const ProcedureRef *UnwrapProcedureRef(const A &) {
+  return nullptr;
+}
+
+template <typename T>
+inline const ProcedureRef *UnwrapProcedureRef(const FunctionRef<T> &func) {
+  return &func;
+}
+
+template <typename T>
+inline const ProcedureRef *UnwrapProcedureRef(const Expr<T> &expr) {
+  return std::visit(
+      [](const auto &x) { return UnwrapProcedureRef(x); }, expr.u);
+}
+
+// IsObjectPointer()
+bool IsObjectPointer(const Expr<SomeType> &expr, FoldingContext &context) {
+  if (IsNullPointer(expr)) {
+    return true;
+  } else if (IsProcedurePointer(expr)) {
+    return false;
+  } else if (const auto *procRef{UnwrapProcedureRef(expr)}) {
+    auto proc{
+        characteristics::Procedure::Characterize(procRef->proc(), context)};
+    return proc && proc->functionResult &&
+        proc->functionResult->attrs.test(
+            characteristics::FunctionResult::Attr::Pointer);
+  } else if (const Symbol * symbol{GetLastSymbol(expr)}) {
+    return IsPointer(symbol->GetUltimate());
+  } else {
+    return false;
+  }
+}
+
 // IsNullPointer()
 struct IsNullPointerHelper : public AllTraverse<IsNullPointerHelper, false> {
   using Base = AllTraverse<IsNullPointerHelper, false>;
@@ -896,6 +930,31 @@ std::optional<parser::MessageFixedText> CheckProcCompatibility(bool isCall,
   return msg;
 }
 
+// GetLastPointerSymbol()
+static const Symbol *GetLastPointerSymbol(const Symbol &symbol) {
+  return IsPointer(GetAssociationRoot(symbol)) ? &symbol : nullptr;
+}
+static const Symbol *GetLastPointerSymbol(const SymbolRef &symbol) {
+  return GetLastPointerSymbol(*symbol);
+}
+static const Symbol *GetLastPointerSymbol(const Component &x) {
+  const Symbol &c{x.GetLastSymbol()};
+  return IsPointer(c) ? &c : GetLastPointerSymbol(x.base());
+}
+static const Symbol *GetLastPointerSymbol(const NamedEntity &x) {
+  const auto *c{x.UnwrapComponent()};
+  return c ? GetLastPointerSymbol(*c) : GetLastPointerSymbol(x.GetLastSymbol());
+}
+static const Symbol *GetLastPointerSymbol(const ArrayRef &x) {
+  return GetLastPointerSymbol(x.base());
+}
+static const Symbol *GetLastPointerSymbol(const CoarrayRef &x) {
+  return nullptr;
+}
+const Symbol *GetLastPointerSymbol(const DataRef &x) {
+  return std::visit([](const auto &y) { return GetLastPointerSymbol(y); }, x.u);
+}
+
 } // namespace Fortran::evaluate
 
 namespace Fortran::semantics {
@@ -1001,6 +1060,11 @@ bool IsFunction(const Symbol &symbol) {
       symbol.GetUltimate().details());
 }
 
+bool IsFunction(const Scope &scope) {
+  const Symbol *symbol{scope.GetSymbol()};
+  return symbol && IsFunction(*symbol);
+}
+
 bool IsProcedure(const Symbol &symbol) {
   return std::visit(common::visitors{
                         [](const SubprogramDetails &) { return true; },
@@ -1013,8 +1077,14 @@ bool IsProcedure(const Symbol &symbol) {
       symbol.GetUltimate().details());
 }
 
-const Symbol *FindCommonBlockContaining(const Symbol &object) {
-  const auto *details{object.detailsIf<ObjectEntityDetails>()};
+bool IsProcedure(const Scope &scope) {
+  const Symbol *symbol{scope.GetSymbol()};
+  return symbol && IsProcedure(*symbol);
+}
+
+const Symbol *FindCommonBlockContaining(const Symbol &original) {
+  const Symbol &root{GetAssociationRoot(original)};
+  const auto *details{root.detailsIf<ObjectEntityDetails>()};
   return details ? details->commonBlock() : nullptr;
 }
 

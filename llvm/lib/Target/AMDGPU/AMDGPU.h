@@ -15,7 +15,6 @@
 
 namespace llvm {
 
-class AMDGPUTargetMachine;
 class FunctionPass;
 class GCNTargetMachine;
 class ImmutablePass;
@@ -326,9 +325,6 @@ ImmutablePass *createAMDGPUExternalAAWrapperPass();
 void initializeAMDGPUExternalAAWrapperPass(PassRegistry&);
 
 void initializeAMDGPUArgumentUsageInfoPass(PassRegistry &);
-
-Pass *createAMDGPUFunctionInliningPass();
-void initializeAMDGPUInlinerPass(PassRegistry&);
 
 ModulePass *createAMDGPUOpenCLEnqueuedBlockLoweringPass();
 void initializeAMDGPUOpenCLEnqueuedBlockLoweringPass(PassRegistry &);

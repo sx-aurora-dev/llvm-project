@@ -60,7 +60,7 @@ UseGVNAfterVectorization("use-gvn-after-vectorization",
   cl::init(false), cl::Hidden,
   cl::desc("Run GVN instead of Early CSE after vectorization passes"));
 
-static cl::opt<bool> ExtraVectorizerPasses(
+cl::opt<bool> ExtraVectorizerPasses(
     "extra-vectorizer-passes", cl::init(false), cl::Hidden,
     cl::desc("Run cleanup optimization passes after vectorization."));
 
@@ -84,9 +84,9 @@ static cl::opt<::CFLAAType>
                         clEnumValN(::CFLAAType::Both, "both",
                                    "Enable both variants of CFL-AA")));
 
-static cl::opt<bool> EnableLoopInterchange(
+cl::opt<bool> EnableLoopInterchange(
     "enable-loopinterchange", cl::init(false), cl::Hidden,
-    cl::desc("Enable the new, experimental LoopInterchange Pass"));
+    cl::desc("Enable the experimental LoopInterchange Pass"));
 
 cl::opt<bool> EnableUnrollAndJam("enable-unroll-and-jam", cl::init(false),
                                  cl::Hidden,
@@ -300,7 +300,6 @@ void PassManagerBuilder::addInitialAliasAnalysisPasses(
 void PassManagerBuilder::populateFunctionPassManager(
     legacy::FunctionPassManager &FPM) {
   addExtensionsToPM(EP_EarlyAsPossible, FPM);
-  FPM.add(createEntryExitInstrumenterPass());
 
   // Add LibraryInfo if we have some.
   if (LibraryInfo)
@@ -433,7 +432,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(createLoopSimplifyCFGPass());
   }
   // Rotate Loop - disable header duplication at -Oz
-  MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1));
+  MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1, PrepareForLTO));
   // TODO: Investigate promotion cap for O1.
   MPM.add(createLICMPass(LicmMssaOptCap, LicmMssaNoAccForPromotionCap));
   if (EnableSimpleLoopUnswitch)
@@ -458,7 +457,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   if (EnableLoopInterchange)
     MPM.add(createLoopInterchangePass()); // Interchange loops
 
-  // Unroll small loops
+  // Unroll small loops and perform peeling.
   MPM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,
                                      ForgetAllSCEVInLoopUnroll));
   addExtensionsToPM(EP_LoopOptimizerEnd, MPM);
@@ -472,7 +471,6 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(NewGVN ? createNewGVNPass()
                    : createGVNPass(DisableGVNLoadPRE)); // Remove redundancies
   }
-  MPM.add(createMemCpyOptPass());             // Remove memcpy / form memset
   MPM.add(createSCCPPass());                  // Constant prop with SCCP
 
   if (EnableConstraintElimination)
@@ -493,6 +491,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   }
   MPM.add(createAggressiveDCEPass()); // Delete dead instructions
 
+  MPM.add(createMemCpyOptPass());               // Remove memcpy / form memset
   // TODO: Investigate if this is too expensive at O1.
   if (OptLevel > 1) {
     MPM.add(createDeadStoreEliminationPass());  // Delete dead stores
@@ -777,7 +776,7 @@ void PassManagerBuilder::populateModulePassManager(
   // Re-rotate loops in all our loop nests. These may have fallout out of
   // rotated form due to GVN or other transformations, and the vectorizer relies
   // on the rotated form. Disable header duplication at -Oz.
-  MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1));
+  MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1, PrepareForLTO));
 
   // Distribute loops to allow partial vectorization.  I.e. isolate dependences
   // into separate loop that would otherwise inhibit vectorization.  This is
@@ -1072,7 +1071,7 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
   if (EnableConstraintElimination)
     PM.add(createConstraintEliminationPass());
 
-  // Unroll small loops
+  // Unroll small loops and perform peeling.
   PM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,
                                     ForgetAllSCEVInLoopUnroll));
   PM.add(createLoopDistributePass());

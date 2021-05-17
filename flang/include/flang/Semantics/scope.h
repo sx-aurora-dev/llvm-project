@@ -169,7 +169,7 @@ public:
   mapType &commonBlocks() { return commonBlocks_; }
   const mapType &commonBlocks() const { return commonBlocks_; }
   Symbol &MakeCommonBlock(const SourceName &);
-  Symbol *FindCommonBlock(const SourceName &);
+  Symbol *FindCommonBlock(const SourceName &) const;
 
   /// Make a Symbol but don't add it to the scope.
   template <typename D>
@@ -194,6 +194,7 @@ public:
   DeclTypeSpec &MakeDerivedType(DeclTypeSpec::Category, DerivedTypeSpec &&);
   const DeclTypeSpec &MakeTypeStarType();
   const DeclTypeSpec &MakeClassStarType();
+  const DeclTypeSpec *GetType(const SomeExpr &);
 
   std::size_t size() const { return size_; }
   void set_size(std::size_t size) { size_ = size; }

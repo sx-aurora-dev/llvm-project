@@ -240,6 +240,9 @@ public:
   void operator&=(const FastMathFlags &OtherFlags) {
     Flags &= OtherFlags.Flags;
   }
+  void operator|=(const FastMathFlags &OtherFlags) {
+    Flags |= OtherFlags.Flags;
+  }
 };
 
 /// Utility class for floating point operations which can have
@@ -574,6 +577,11 @@ public:
   bool accumulateConstantOffset(
       const DataLayout &DL, APInt &Offset,
       function_ref<bool(Value &, APInt &)> ExternalAnalysis = nullptr) const;
+
+  static bool accumulateConstantOffset(
+      Type *SourceType, ArrayRef<const Value *> Index, const DataLayout &DL,
+      APInt &Offset,
+      function_ref<bool(Value &, APInt &)> ExternalAnalysis = nullptr);
 };
 
 class PtrToIntOperator

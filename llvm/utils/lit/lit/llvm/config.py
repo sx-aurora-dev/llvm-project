@@ -4,6 +4,7 @@ import platform
 import re
 import subprocess
 import sys
+import errno
 
 import lit.util
 from lit.llvm.subst import FindTool
@@ -345,6 +346,21 @@ class LLVMConfig(object):
         self.config.substitutions.extend(substitutions)
         return True
 
+    def add_err_msg_substitutions(self):
+        host_cxx = getattr(self.config, 'host_cxx', '')
+        # On Windows, python's os.strerror() does not emit the same spelling as the C++ std::error_code.
+        # As a workaround, hardcode the Windows error message.
+        if (sys.platform == 'win32' and 'MSYS' not in host_cxx):
+            self.config.substitutions.append(('%errc_ENOENT', '\'no such file or directory\''))
+            self.config.substitutions.append(('%errc_EISDIR', '\'is a directory\''))
+            self.config.substitutions.append(('%errc_EINVAL', '\'invalid argument\''))
+            self.config.substitutions.append(('%errc_EACCES', '\'permission denied\''))
+        else:
+            self.config.substitutions.append(('%errc_ENOENT', '\'' + os.strerror(errno.ENOENT) + '\''))
+            self.config.substitutions.append(('%errc_EISDIR', '\'' + os.strerror(errno.EISDIR) + '\''))
+            self.config.substitutions.append(('%errc_EINVAL', '\'' + os.strerror(errno.EINVAL) + '\''))
+            self.config.substitutions.append(('%errc_EACCES', '\'' + os.strerror(errno.EACCES) + '\''))
+
     def use_default_substitutions(self):
         tool_patterns = [
             ToolSubst('FileCheck', unresolved='fatal'),
@@ -357,6 +373,8 @@ class LLVMConfig(object):
 
         self.add_tool_substitutions(
             tool_patterns, [self.config.llvm_tools_dir])
+
+        self.add_err_msg_substitutions()
 
     def use_llvm_tool(self, name, search_env=None, required=False, quiet=False):
         """Find the executable program 'name', optionally using the specified

@@ -19,6 +19,8 @@ append_list_if(COMPILER_RT_HAS_FFREESTANDING_FLAG -ffreestanding SCUDO_CFLAGS)
 
 append_list_if(COMPILER_RT_HAS_FVISIBILITY_HIDDEN_FLAG -fvisibility=hidden SCUDO_CFLAGS)
 
+append_list_if(COMPILER_RT_HAS_WNO_PEDANTIC -Wno-pedantic SCUDO_CFLAGS)
+
 # FIXME: find cleaner way to agree with GWPAsan flags
 append_list_if(COMPILER_RT_HAS_FNO_LTO_FLAG -fno-lto SCUDO_CFLAGS)
 
@@ -120,7 +122,7 @@ set(SCUDO_OBJECT_LIBS)
 
 if (COMPILER_RT_HAS_GWP_ASAN)
   list(APPEND SCUDO_OBJECT_LIBS
-       RTGwpAsan RTGwpAsanBacktraceLibc RTGwpAsanSegvHandler RTGwpAsanOptionsParser)
+       RTGwpAsan RTGwpAsanBacktraceLibc RTGwpAsanSegvHandler)
   list(APPEND SCUDO_CFLAGS -DGWP_ASAN_HOOKS)
 endif()
 

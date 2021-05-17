@@ -535,20 +535,16 @@ void GenerateFlangClauseParserClass(const DirectiveLanguage &DirLang,
 
   for (const auto &C : DirLang.getClauses()) {
     Clause Clause{C};
-    // Clause has a non generic class.
-    if (!Clause.getFlangClass().empty())
-      continue;
-    if (!Clause.getFlangClassValue().empty()) {
+    if (!Clause.getFlangClass().empty()) {
       OS << "WRAPPER_CLASS(" << Clause.getFormattedParserClassName() << ", ";
       if (Clause.isValueOptional() && Clause.isValueList()) {
-        OS << "std::optional<std::list<" << Clause.getFlangClassValue()
-           << ">>";
+        OS << "std::optional<std::list<" << Clause.getFlangClass() << ">>";
       } else if (Clause.isValueOptional()) {
-        OS << "std::optional<" << Clause.getFlangClassValue() << ">";
+        OS << "std::optional<" << Clause.getFlangClass() << ">";
       } else if (Clause.isValueList()) {
-        OS << "std::list<" << Clause.getFlangClassValue() << ">";
+        OS << "std::list<" << Clause.getFlangClass() << ">";
       } else {
-        OS << Clause.getFlangClassValue();
+        OS << Clause.getFlangClass();
       }
     } else {
       OS << "EMPTY_CLASS(" << Clause.getFormattedParserClassName();
@@ -566,10 +562,7 @@ void GenerateFlangClauseParserClassList(const DirectiveLanguage &DirLang,
   OS << "\n";
   llvm::interleaveComma(DirLang.getClauses(), OS, [&](Record *C) {
     Clause Clause{C};
-    if (Clause.getFlangClass().empty())
-      OS << Clause.getFormattedParserClassName() << "\n";
-    else
-      OS << Clause.getFlangClass() << "\n";
+    OS << Clause.getFormattedParserClassName() << "\n";
   });
 }
 
@@ -582,10 +575,6 @@ void GenerateFlangClauseDump(const DirectiveLanguage &DirLang,
   OS << "\n";
   for (const auto &C : DirLang.getClauses()) {
     Clause Clause{C};
-    // Clause has a non generic class.
-    if (!Clause.getFlangClass().empty())
-      continue;
-
     OS << "NODE(" << DirLang.getFlangClauseBaseClass() << ", "
        << Clause.getFormattedParserClassName() << ")\n";
   }
@@ -602,10 +591,7 @@ void GenerateFlangClauseUnparse(const DirectiveLanguage &DirLang,
 
   for (const auto &C : DirLang.getClauses()) {
     Clause Clause{C};
-    // Clause has a non generic class.
-    if (!Clause.getFlangClass().empty())
-      continue;
-    if (!Clause.getFlangClassValue().empty()) {
+    if (!Clause.getFlangClass().empty()) {
       if (Clause.isValueOptional() && Clause.getDefaultValue().empty()) {
         OS << "void Unparse(const " << DirLang.getFlangClauseBaseClass()
            << "::" << Clause.getFormattedParserClassName() << " &x) {\n";
@@ -647,6 +633,20 @@ void GenerateFlangClauseUnparse(const DirectiveLanguage &DirLang,
   }
 }
 
+// Generate check in the Enter functions for clauses classes.
+void GenerateFlangClauseCheckPrototypes(const DirectiveLanguage &DirLang,
+                                        raw_ostream &OS) {
+
+  IfDefScope Scope("GEN_FLANG_CLAUSE_CHECK_ENTER", OS);
+
+  OS << "\n";
+  for (const auto &C : DirLang.getClauses()) {
+    Clause Clause{C};
+    OS << "void Enter(const parser::" << DirLang.getFlangClauseBaseClass()
+       << "::" << Clause.getFormattedParserClassName() << " &);\n";
+  }
+}
+
 // Generate the implementation section for the enumeration in the directive
 // language
 void EmitDirectivesFlangImpl(const DirectiveLanguage &DirLang,
@@ -663,6 +663,8 @@ void EmitDirectivesFlangImpl(const DirectiveLanguage &DirLang,
   GenerateFlangClauseDump(DirLang, OS);
 
   GenerateFlangClauseUnparse(DirLang, OS);
+
+  GenerateFlangClauseCheckPrototypes(DirLang, OS);
 }
 
 void GenerateClauseClassMacro(const DirectiveLanguage &DirLang,

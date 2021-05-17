@@ -474,6 +474,21 @@ float SymbolRelevanceSignals::evaluateHeuristics() const {
   if (NeedsFixIts)
     Score *= 0.5f;
 
+  // Use a sigmoid style boosting function similar to `References`, which flats
+  // out nicely for large values. This avoids a sharp gradient for heavily
+  // referenced symbols. Use smaller gradient for ScopeRefsInFile since ideally
+  // MainFileRefs <= ScopeRefsInFile.
+  if (MainFileRefs >= 2) {
+    // E.g.: (2, 1.12), (9, 2.0), (48, 3.0).
+    float S = std::pow(MainFileRefs, -0.11);
+    Score *= 11.0 * (1 - S) / (1 + S) + 0.7;
+  }
+  if (ScopeRefsInFile >= 2) {
+    // E.g.: (2, 1.04), (14, 2.0), (109, 3.0), (400, 3.6).
+    float S = std::pow(ScopeRefsInFile, -0.10);
+    Score *= 10.0 * (1 - S) / (1 + S) + 0.7;
+  }
+
   return Score;
 }
 
@@ -565,12 +580,16 @@ evaluateDecisionForest(const SymbolQualitySignals &Quality,
   // multiplciative boost (like NameMatch). This allows us to weigh the
   // prediciton score and NameMatch appropriately.
   Scores.ExcludingName = pow(Base, Evaluate(E));
-  // NeedsFixIts is not part of the DecisionForest as generating training
-  // data that needs fixits is not-feasible.
+  // Following cases are not part of the generated training dataset:
+  //  - Symbols with `NeedsFixIts`.
+  //  - Forbidden symbols.
+  //  - Keywords: Dataset contains only macros and decls.
   if (Relevance.NeedsFixIts)
     Scores.ExcludingName *= 0.5;
   if (Relevance.Forbidden)
     Scores.ExcludingName *= 0;
+  if (Quality.Category == SymbolQualitySignals::Keyword)
+    Scores.ExcludingName *= 4;
 
   // NameMatch should be a multiplier on total score to support rescoring.
   Scores.Total = Relevance.NameMatch * Scores.ExcludingName;

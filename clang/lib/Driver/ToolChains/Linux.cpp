@@ -102,6 +102,12 @@ std::string Linux::getMultiarchTriple(const Driver &D,
     if (D.getVFS().exists(SysRoot + "/lib/aarch64_be-linux-gnu"))
       return "aarch64_be-linux-gnu";
     break;
+
+  case llvm::Triple::m68k:
+    if (D.getVFS().exists(SysRoot + "/lib/m68k-linux-gnu"))
+      return "m68k-linux-gnu";
+    break;
+
   case llvm::Triple::mips: {
     std::string MT = IsMipsR6 ? "mipsisa32r6-linux-gnu" : "mips-linux-gnu";
     if (D.getVFS().exists(SysRoot + "/lib/" + MT))
@@ -357,6 +363,12 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   addPathIfExists(D, SysRoot + "/usr/lib", Paths);
 }
 
+ToolChain::RuntimeLibType Linux::GetDefaultRuntimeLibType() const {
+  if (getTriple().isAndroid())
+    return ToolChain::RLT_CompilerRT;
+  return Generic_ELF::GetDefaultRuntimeLibType();
+}
+
 ToolChain::CXXStdlibType Linux::GetDefaultCXXStdlibType() const {
   if (getTriple().isAndroid())
     return ToolChain::CST_Libcxx;
@@ -476,6 +488,10 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader = HF ? "ld-linux-armhf.so.3" : "ld-linux.so.3";
     break;
   }
+  case llvm::Triple::m68k:
+    LibDir = "lib";
+    Loader = "ld.so.1";
+    break;
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
   case llvm::Triple::mips64:
@@ -624,6 +640,7 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       "/usr/include/armeb-linux-gnueabi"};
   const StringRef ARMEBHFMultiarchIncludeDirs[] = {
       "/usr/include/armeb-linux-gnueabihf"};
+  const StringRef M68kMultiarchIncludeDirs[] = {"/usr/include/m68k-linux-gnu"};
   const StringRef MIPSMultiarchIncludeDirs[] = {"/usr/include/mips-linux-gnu"};
   const StringRef MIPSELMultiarchIncludeDirs[] = {
       "/usr/include/mipsel-linux-gnu"};
@@ -687,6 +704,9 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       MultiarchIncludeDirs = ARMEBHFMultiarchIncludeDirs;
     else
       MultiarchIncludeDirs = ARMEBMultiarchIncludeDirs;
+    break;
+  case llvm::Triple::m68k:
+    MultiarchIncludeDirs = M68kMultiarchIncludeDirs;
     break;
   case llvm::Triple::mips:
     if (getTriple().getSubArch() == llvm::Triple::MipsSubArch_r6)
@@ -836,6 +856,19 @@ bool Linux::isPIEDefault() const {
           getTriple().isMusl() || getSanitizerArgs().requiresPIE();
 }
 
+bool Linux::IsAArch64OutlineAtomicsDefault(const ArgList &Args) const {
+  // Outline atomics for AArch64 are supported by compiler-rt
+  // and libgcc since 9.3.1
+  assert(getTriple().isAArch64() && "expected AArch64 target!");
+  ToolChain::RuntimeLibType RtLib = GetRuntimeLibType(Args);
+  if (RtLib == ToolChain::RLT_CompilerRT)
+    return true;
+  assert(RtLib == ToolChain::RLT_Libgcc && "unexpected runtime library type!");
+  if (GCCInstallation.getVersion().isOlderThan(9, 3, 1))
+    return false;
+  return true;
+}
+
 bool Linux::isNoExecStackDefault() const {
     return getTriple().isAndroid();
 }
@@ -859,6 +892,7 @@ SanitizerMask Linux::getSupportedSanitizers() const {
                          getTriple().getArch() == llvm::Triple::thumb ||
                          getTriple().getArch() == llvm::Triple::armeb ||
                          getTriple().getArch() == llvm::Triple::thumbeb;
+  const bool IsRISCV64 = getTriple().getArch() == llvm::Triple::riscv64;
   const bool IsSystemZ = getTriple().getArch() == llvm::Triple::systemz;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
@@ -873,7 +907,7 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   if (IsX86_64 || IsMIPS64 || IsAArch64)
     Res |= SanitizerKind::DataFlow;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsArmArch || IsPowerPC64 ||
-      IsSystemZ)
+      IsRISCV64 || IsSystemZ)
     Res |= SanitizerKind::Leak;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsPowerPC64)
     Res |= SanitizerKind::Thread;

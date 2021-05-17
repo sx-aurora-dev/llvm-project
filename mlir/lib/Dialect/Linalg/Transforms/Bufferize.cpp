@@ -12,6 +12,7 @@
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/StandardOps/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
@@ -204,14 +205,6 @@ public:
   }
 };
 
-// Extract int64_t values from the assumed ArrayAttr of IntegerAttr.
-static SmallVector<int64_t, 4> extractFromI64ArrayAttr(Attribute attr) {
-  return llvm::to_vector<4>(
-      llvm::map_range(attr.cast<ArrayAttr>(), [](Attribute a) -> int64_t {
-        return a.cast<IntegerAttr>().getInt();
-      }));
-}
-
 /// Convert `subtensor %t [offsets][sizes][strides] -> %st` to an alloc + copy
 /// pattern.
 /// ```
@@ -241,10 +234,8 @@ public:
     Value alloc =
         rewriter.create<AllocOp>(op.getLoc(), subviewMemRefType, op.sizes());
     Value subView = rewriter.create<SubViewOp>(
-        op.getLoc(), sourceMemref, extractFromI64ArrayAttr(op.static_offsets()),
-        extractFromI64ArrayAttr(op.static_sizes()),
-        extractFromI64ArrayAttr(op.static_strides()), op.offsets(), op.sizes(),
-        op.strides());
+        op.getLoc(), sourceMemref, op.getMixedOffsets(), op.getMixedSizes(),
+        op.getMixedStrides());
     rewriter.create<linalg::CopyOp>(op.getLoc(), subView, alloc);
     rewriter.replaceOp(op, alloc);
     return success();
@@ -283,10 +274,8 @@ public:
 
     // Take a subview to copy the small memref.
     Value subview = rewriter.create<SubViewOp>(
-        op.getLoc(), destMemRef, extractFromI64ArrayAttr(op.static_offsets()),
-        extractFromI64ArrayAttr(op.static_sizes()),
-        extractFromI64ArrayAttr(op.static_strides()), adaptor.offsets(),
-        adaptor.sizes(), adaptor.strides());
+        op.getLoc(), destMemRef, op.getMixedOffsets(), op.getMixedSizes(),
+        op.getMixedStrides());
     // Copy the small memref.
     rewriter.create<linalg::CopyOp>(op.getLoc(), sourceMemRef, subview);
     rewriter.replaceOp(op, destMemRef);
@@ -305,7 +294,8 @@ struct LinalgBufferizePass : public LinalgBufferizeBase<LinalgBufferizePass> {
     BufferizeTypeConverter typeConverter;
 
     // Mark all Standard operations legal.
-    target.addLegalDialect<AffineDialect, StandardOpsDialect>();
+    target.addLegalDialect<AffineDialect, math::MathDialect,
+                           StandardOpsDialect>();
     target.addIllegalOp<InitTensorOp, SubTensorOp, SubTensorInsertOp>();
 
     // Mark all Linalg operations illegal as long as they work on tensors.
