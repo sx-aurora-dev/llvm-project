@@ -51,6 +51,7 @@ static bool stmtNeedsSemicolon(const clang::Stmt *S) {
 }
 
 bool FindTargetCodeVisitor::TraverseDecl(clang::Decl *D) {
+  if (!D) return false;
   if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.push(FD);
   }
