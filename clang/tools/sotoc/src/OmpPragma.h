@@ -55,5 +55,6 @@ public:
 private:
   bool isClausePrintable(clang::OMPClause *Clause);
   void rewriteParam(clang::OMPClause *Clause, std::string *In);
+  void addShared(clang::OMPClause *Clause, std::string *In, llvm::raw_ostream &Out);
   void printClauses(llvm::raw_ostream &Out);
 };

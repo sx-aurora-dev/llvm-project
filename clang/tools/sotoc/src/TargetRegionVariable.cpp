@@ -66,8 +66,15 @@ bool TargetRegionVariable::isArray() const {
   return false;
 }
 
+bool TargetRegionVariable::isPointer() const {
+  if (!Shapes.empty() && Shapes[0].isPointer()) {
+    return true;
+  }
+  return false;
+}
+
 bool TargetRegionVariable::passedByPointer() const {
-  if (isArray()) {
+  if (isArray()||isPointer()) {
     // Arrays are always passed by pointer
     return true;
   }

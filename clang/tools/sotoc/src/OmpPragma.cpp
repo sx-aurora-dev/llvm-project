@@ -346,6 +346,7 @@ void OmpPragma::printClauses(llvm::raw_ostream &Out) {
 
       rewriteParam(C, &param);
       Out << InString.insert(inp,param) << " ";
+//      addShared(C, &param, Out);
       InString.clear();
     }
   }
@@ -366,6 +367,50 @@ if (Clause->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) {
     *In = "__sotoc_clause_param_" + std::to_string(ClauseParamCounter);
     ClauseParamCounter++;
   }
+}/* else if (Clause->getClauseKind() == clang::OpenMPClauseKind::OMPC_shared) {
+  std::string RedString;
+  std::string DefaultString;
+  llvm::raw_string_ostream Red(RedString);
+  llvm::raw_string_ostream Default(DefaultString);
+  clang::OMPClausePrinter RedPrinter(Red, PP);
+  clang::OMPClausePrinter DefaultPrinter(Default, PP);
+  
+  for (auto CD: Clauses) {
+    if (CD->getClauseKind() == clang::OpenMPClauseKind::OMPC_default) {
+      DefaultPrinter.Visit(CD);
+      Default.str();
+      size_t defaultp = DefaultString.find("(")+1;
+      size_t paramlength_default = DefaultString.length()-defaultp-1;
+      std::string param_default = DefaultString.substr(defaultp,paramlength_default);
+      if (!param_default.compare(std::string("none"))) {
+        for (auto CR: Clauses) {
+          if (CR->getClauseKind() == clang::OpenMPClauseKind::OMPC_reduction){
+	    RedPrinter.Visit(CR);
+            Red.str();
+            size_t redp = RedString.find(":")+1;
+            size_t paramlength_red = RedString.length()-redp-1;
+            std::string param_red = RedString.substr(redp,paramlength_red);
+	
+	    In->append("," + param_red);
+	    return;
+          }
+   //     }
+   //   }
+   // }
+  }
+}*/
+}
+
+void OmpPragma::addShared(clang::OMPClause *Clause, std::string *In, llvm::raw_ostream &Out) {
+if (Clause->getClauseKind() == clang::OpenMPClauseKind::OMPC_reduction) {
+  for (auto CS: Clauses) {
+    if (CS->getClauseKind() == clang::OpenMPClauseKind::OMPC_shared){
+      return;
+    }
+  }
+  size_t sharedp = In->find(":")+1;
+  size_t length = In->length()-sharedp-1;
+  Out << "shared(" << In->substr(sharedp,length) << ")";
 }
 }
 

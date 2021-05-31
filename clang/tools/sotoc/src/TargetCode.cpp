@@ -220,6 +220,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
           LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
           Out << ";\n";
         }
+      } else if (Var.isPointer()){
+        Out << Var.baseTypeName() << "* " << Var.name() << " = "
+            << "__sotoc_var_" << Var.name() << ";\n";
       } else {
         // Handle all other types passed by reference
         Out << Var.baseTypeName() << " " << Var.name() << " = "
@@ -262,8 +265,10 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
   Out << "\n";
   // copy values from scalars from scoped vars back into pointers
   for (auto &Var : TCR->capturedVars()) {
-    if (Var.passedByPointer() && !Var.isArray()) {
+    if (Var.passedByPointer() && !Var.isArray() && !Var.isPointer()) {
       Out << "\n  *__sotoc_var_" << Var.name() << " = " << Var.name() << ";";
+    } else if (Var.isPointer()){
+      Out << "\n  __sotoc_var_" << Var.name() << " = " << Var.name() << ";";
     }
   }
 

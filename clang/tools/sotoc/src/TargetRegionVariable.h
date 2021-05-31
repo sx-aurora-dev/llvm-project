@@ -189,6 +189,7 @@ public:
   clang::VarDecl *getDecl() const { return Decl; };
   /// Wether this variable is an array (at the top level) or not
   bool isArray() const;
+  bool isPointer() const;
   /// Returns true if this variable is passed by pointer.
   /// This is the case for shared and first-private variables scalars and for
   /// arrays.
