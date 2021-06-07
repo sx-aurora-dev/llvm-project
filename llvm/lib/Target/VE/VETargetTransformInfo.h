@@ -160,7 +160,7 @@ public:
     // check element sizes for vregs
     if (ElemTy.isIntegerTy()) {
       unsigned ScaBits = ElemTy.getScalarSizeInBits();
-      return ScaBits == 32 || ScaBits == 64;
+      return ScaBits == 1 || ScaBits == 32 || ScaBits == 64;
     }
     if (ElemTy.isPointerTy()) {
       return true;
