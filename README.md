@@ -1,101 +1,110 @@
-# LLVM for NEC SX-Aurora VE (llvm-ve-rv 1.8-dev)
+# The LLVM Compiler Infrastructure
 
-[![Build Status](https://travis-ci.com/sx-aurora-dev/llvm-project.svg?branch=hpce%2Fdevelop)](https://travis-ci.com/sx-aurora-dev/llvm-project)
+This directory and its sub-directories contain source code for LLVM,
+a toolkit for the construction of highly optimized compilers,
+optimizers, and run-time environments.
 
-This is a fork of the LLVM repositoy with support for the NEC
-SX-Aurora TSUBASA Vector Engine (VE).
+The README briefly describes how to get started with building LLVM.
+For more information on how to contribute to the LLVM project, please
+take a look at the
+[Contributing to LLVM](https://llvm.org/docs/Contributing.html) guide.
 
-### Features
+## Getting Started with the LLVM System
 
-- C, C++ support.
-- VE Intrinsics for low-level vector programming.
-- Packed-mode vector code generation by default.
-- Automatic vectorization through LLVM's loop and SLP vectorizers.
-- When combined with RV for SX-Aurora, provides user-guided (and some automatic)
-  outer-loop vectorization through the Region Vectorizer.
-- Two OpenMP offloading modes: VE to VH and VH to VE.
+Taken from https://llvm.org/docs/GettingStarted.html.
 
+### Overview
 
-### Build instructions
+Welcome to the LLVM project!
 
-To build llvm-ve from source refer to
-[llvm-dev](https://github.com/sx-aurora-dev/llvm-dev) and
-[Compile.rst](llvm/docs/VE/Compile.rst).
+The LLVM project has multiple components. The core of the project is
+itself called "LLVM". This contains all of the tools, libraries, and header
+files needed to process intermediate representations and converts it into
+object files.  Tools include an assembler, disassembler, bitcode analyzer, and
+bitcode optimizer.  It also contains basic regression tests.
 
+C-like languages use the [Clang](http://clang.llvm.org/) front end.  This
+component compiles C, C++, Objective-C, and Objective-C++ code into LLVM bitcode
+-- and from there into object files, using LLVM.
 
-### General Usage
+Other components include:
+the [libc++ C++ standard library](https://libcxx.llvm.org),
+the [LLD linker](https://lld.llvm.org), and more.
 
-To compile C/C++ code for the VE run Clang/Clang++ with the following command
-line:
+### Getting the Source Code and Building LLVM
 
-    $ clang -target ve-linux -O3 ...
+The LLVM Getting Started documentation may be out of date.  The [Clang
+Getting Started](http://clang.llvm.org/get_started.html) page might have more
+accurate information.
 
+This is an example work-flow and configuration to get and build the LLVM source:
 
-### OpenMP offloading for/from SX-Aurora
+1. Checkout LLVM (including related sub-projects like Clang):
 
-To compile with OpenMP offloading from VE to VH (VHCall) use:
+     * ``git clone https://github.com/llvm/llvm-project.git``
 
-    $ clang -target ve-linux -fopenmp -fopenmp-targets=x86_64-pc-linux -O3 ...
+     * Or, on windows, ``git clone --config core.autocrlf=false
+    https://github.com/llvm/llvm-project.git``
 
-To compile with OpenMP offloading from VH to VE (VEO) use:
+2. Configure and build LLVM and Clang:
 
-    $ clang -march=native -fopenmp -fopenmp-targets=ve-linux -O3 ...
+     * ``cd llvm-project``
 
+     * ``mkdir build``
 
-### Outer-loop Vectorization
+     * ``cd build``
 
-LLVM for SX-Aurora provides outer-loop vectorization, provided it is build with
-the Region Vectorizer.  The following usage examples require an RV-enabled
-build.
+     * ``cmake -G <generator> [options] ../llvm``
 
-To use user-guided outer-loop vectorization with RV annotate the loops to
-vectorize with `#pragma omp simd` and use:
+        Some common build system generators are:
 
-    $ clang -fopenmp-simd -mllvm -rv -O3 ...
+        * ``Ninja`` --- for generating [Ninja](https://ninja-build.org)
+          build files. Most llvm developers use Ninja.
+        * ``Unix Makefiles`` --- for generating make-compatible parallel makefiles.
+        * ``Visual Studio`` --- for generating Visual Studio projects and
+          solutions.
+        * ``Xcode`` --- for generating Xcode projects.
 
-This release comes with a preview feature for automatic outer-loop vectorization
-with RV.  This will work for some loops that use `int64_t` for their iteration
-variables (loop counters).  To enable automatic outer-loop vectorization with RV
-use:
+        Some Common options:
 
-    $ clang -mllvm -rv -mllvm -rv-autovec -O3 ...
+        * ``-DLLVM_ENABLE_PROJECTS='...'`` --- semicolon-separated list of the LLVM
+          sub-projects you'd like to additionally build. Can include any of: clang,
+          clang-tools-extra, libcxx, libcxxabi, libunwind, lldb, compiler-rt, lld,
+          polly, or debuginfo-tests.
 
+          For example, to build LLVM, Clang, libcxx, and libcxxabi, use
+          ``-DLLVM_ENABLE_PROJECTS="clang;libcxx;libcxxabi"``.
 
-### VE Intrinsics for direct vector programming
+        * ``-DCMAKE_INSTALL_PREFIX=directory`` --- Specify for *directory* the full
+          path name of where you want the LLVM tools and libraries to be installed
+          (default ``/usr/local``).
 
-See [the manual](https://sx-aurora-dev.github.io/velintrin.html).
-There is also [a tutorial](https://sx-aurora-dev.github.io/ve-intrinsics-tutorial/).
+        * ``-DCMAKE_BUILD_TYPE=type`` --- Valid options for *type* are Debug,
+          Release, RelWithDebInfo, and MinSizeRel. Default is Debug.
 
-### Clang Options
+        * ``-DLLVM_ENABLE_ASSERTIONS=On`` --- Compile with assertion checks enabled
+          (default is Yes for Debug builds, No for all other build types).
 
-Refer to the [Clang Command Line Reference](Ghttps://clang.llvm.org/docs/ClangCommandLineReference.html) for general compiler flags
-There are VE-specific flags to control vector code generation:
-Note that packed mode code generation and vectorization is enabled by default.
+      * ``cmake --build . [-- [options] <target>]`` or your build system specified above
+        directly.
 
-- `clang -mno-vepacked` disables packed mode support.
-  LLVM and the vectorizers will not use packed instructions.
-  This option is incompatible with VE Intrinsics.
-- `clang -mno-vevpu` disables all vector code support.
-  Disable vector code generation entirely.
-  Vectorizers (of LLVM or RV) will keep all code scalar - no vector instructions will be generated.
-  Incompatible with VE Intrinsics.
-- `clang -mvesimd` switches to the fixed SIMD legacy code generation path (deprecated).
+        * The default target (i.e. ``ninja`` or ``make``) will build all of LLVM.
 
+        * The ``check-all`` target (i.e. ``ninja check-all``) will run the
+          regression tests to ensure everything is in working order.
 
-### LLVM Advanced Options
+        * CMake will generate targets for each tool and library, and most
+          LLVM sub-projects generate their own ``check-<project>`` target.
 
-Clang and llc accept these flags directly, prefix them with `-mllvm ` to use them with Clang.
+        * Running a serial build will be **slow**.  To improve speed, try running a
+          parallel build.  That's done by default in Ninja; for ``make``, use the option
+          ``-j NNN``, where ``NNN`` is the number of parallel jobs, e.g. the number of
+          CPUs you have.
 
-##### Code Generation
+      * For more information see [CMake](https://llvm.org/docs/CMake.html)
 
-- `-ve-regalloc=0` disable the experimental improvements to the vector register allocator.
-- `-ve-fast-mem=0` use `VGT` (gather op) for masked loads instead of ignoring the mask.
-- `-ve-ignore-masks=0` do not ignore masks on arithmetic even if it's safe.
-- `-ve-optimize-split-avl=0` use the same VL setting for both non-packed operations when a packed operation is split.
-
-
-##### Cost Modelling
-
-- `-ve-unroll-vector=0` discourage vector loop unrolling.
-- `-ve-expensive-vector=1` penalize vector ops to surpress all automatic vectorization.
-  May help with VE Intrinsics to rule out spurious auto-vectorization.
+Consult the
+[Getting Started with LLVM](https://llvm.org/docs/GettingStarted.html#getting-started-with-llvm)
+page for detailed information on configuring and compiling LLVM. You can visit
+[Directory Layout](https://llvm.org/docs/GettingStarted.html#directory-layout)
+to learn about the layout of the source code tree.
