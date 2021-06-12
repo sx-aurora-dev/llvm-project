@@ -694,22 +694,13 @@ void IntrinsicEmitter::EmitAttributes(const CodeGenIntrinsicTable &Ints,
             OS << LS << "Attribute::Returned";
             break;
           case CodeGenIntrinsic::VectorLength:
-            if (addComma)
-              OS << ",";
-            OS << "Attribute::VectorLength";
-            addComma = true;
+            OS << LS << "Attribute::VectorLength";
             break;
           case CodeGenIntrinsic::Mask:
-            if (addComma)
-              OS << ",";
-            OS << "Attribute::Mask";
-            addComma = true;
+            OS << LS << "Attribute::Mask";
             break;
           case CodeGenIntrinsic::Passthru:
-            if (addComma)
-              OS << ",";
-            OS << "Attribute::Passthru";
-            addComma = true;
+            OS << LS << "Attribute::Passthru";
             break;
           case CodeGenIntrinsic::ReadOnly:
             OS << LS << "Attribute::ReadOnly";
