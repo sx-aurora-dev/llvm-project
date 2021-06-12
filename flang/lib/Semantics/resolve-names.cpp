@@ -429,6 +429,7 @@ public:
 
 protected:
   const ArraySpec &arraySpec();
+  void set_arraySpec(const ArraySpec arraySpec) { arraySpec_ = arraySpec; }
   const ArraySpec &coarraySpec();
   void BeginArraySpec();
   void EndArraySpec();
@@ -740,6 +741,7 @@ public:
   bool Pre(const parser::BindStmt &) { return BeginAttrs(); }
   void Post(const parser::BindStmt &) { EndAttrs(); }
   bool Pre(const parser::BindEntity &);
+  bool Pre(const parser::OldParameterStmt &);
   bool Pre(const parser::NamedConstantDef &);
   bool Pre(const parser::NamedConstant &);
   void Post(const parser::EnumDef &);
@@ -906,6 +908,8 @@ private:
     // Enum value must hold inside a C_INT (7.6.2).
     std::optional<int> value{0};
   } enumerationState_;
+  // Set for OldParameterStmt processing
+  bool inOldStyleParameterStmt_{false};
 
   bool HandleAttributeStmt(Attr, const std::list<parser::Name> &);
   Symbol &HandleAttributeStmt(Attr, const parser::Name &);
@@ -1010,9 +1014,9 @@ public:
   bool Pre(const parser::BlockStmt &);
   bool Pre(const parser::EndBlockStmt &);
   void Post(const parser::Selector &);
-  bool Pre(const parser::AssociateStmt &);
+  void Post(const parser::AssociateStmt &);
   void Post(const parser::EndAssociateStmt &);
-  void Post(const parser::Association &);
+  bool Pre(const parser::Association &);
   void Post(const parser::SelectTypeStmt &);
   void Post(const parser::SelectRankStmt &);
   bool Pre(const parser::SelectTypeConstruct &);
@@ -1081,6 +1085,7 @@ private:
     Selector selector;
   };
   std::vector<Association> associationStack_;
+  Association *currentAssociation_{nullptr};
 
   template <typename T> bool CheckDef(const T &t) {
     return CheckDef(std::get<std::optional<parser::Name>>(t));
@@ -1098,9 +1103,10 @@ private:
   void SetAttrsFromAssociation(Symbol &);
   Selector ResolveSelector(const parser::Selector &);
   void ResolveIndexName(const parser::ConcurrentControl &control);
+  void SetCurrentAssociation(std::size_t n);
   Association &GetCurrentAssociation();
   void PushAssociation();
-  void PopAssociation();
+  void PopAssociation(std::size_t count = 1);
 };
 
 // Create scopes for OpenACC constructs
@@ -2235,6 +2241,12 @@ std::optional<SourceName> ScopeHandler::HadForwardRef(
 bool ScopeHandler::CheckPossibleBadForwardRef(const Symbol &symbol) {
   if (!context().HasError(symbol)) {
     if (auto fwdRef{HadForwardRef(symbol)}) {
+      const Symbol *outer{symbol.owner().FindSymbol(symbol.name())};
+      if (outer && symbol.has<UseDetails>() &&
+          &symbol.GetUltimate() == &outer->GetUltimate()) {
+        // e.g. IMPORT of host's USE association
+        return false;
+      }
       Say(*fwdRef,
           "Forward reference to '%s' is not allowed in the same specification part"_err_en_US,
           *fwdRef)
@@ -2329,7 +2341,8 @@ void ModuleVisitor::Post(const parser::UseStmt &x) {
     }
     for (const auto &[name, symbol] : *useModuleScope_) {
       if (symbol->attrs().test(Attr::PUBLIC) &&
-          !symbol->attrs().test(Attr::INTRINSIC) &&
+          (!symbol->attrs().test(Attr::INTRINSIC) ||
+              symbol->has<UseDetails>()) &&
           !symbol->has<MiscDetails>() && useNames.count(name) == 0) {
         SourceName location{x.moduleName.source};
         if (auto *localSymbol{FindInScope(name)}) {
@@ -3248,8 +3261,18 @@ void DeclarationVisitor::Post(const parser::EntityDecl &x) {
 
 void DeclarationVisitor::Post(const parser::PointerDecl &x) {
   const auto &name{std::get<parser::Name>(x.t)};
-  Symbol &symbol{DeclareUnknownEntity(name, Attrs{Attr::POINTER})};
-  symbol.ReplaceName(name.source);
+  if (const auto &deferredShapeSpecs{
+          std::get<std::optional<parser::DeferredShapeSpecList>>(x.t)}) {
+    CHECK(arraySpec().empty());
+    BeginArraySpec();
+    set_arraySpec(AnalyzeDeferredShapeSpecList(context(), *deferredShapeSpecs));
+    Symbol &symbol{DeclareObjectEntity(name, Attrs{Attr::POINTER})};
+    symbol.ReplaceName(name.source);
+    EndArraySpec();
+  } else {
+    Symbol &symbol{DeclareUnknownEntity(name, Attrs{Attr::POINTER})};
+    symbol.ReplaceName(name.source);
+  }
 }
 
 bool DeclarationVisitor::Pre(const parser::BindEntity &x) {
@@ -3265,6 +3288,12 @@ bool DeclarationVisitor::Pre(const parser::BindEntity &x) {
   SetBindNameOn(*symbol);
   return false;
 }
+bool DeclarationVisitor::Pre(const parser::OldParameterStmt &x) {
+  inOldStyleParameterStmt_ = true;
+  Walk(x.v);
+  inOldStyleParameterStmt_ = false;
+  return false;
+}
 bool DeclarationVisitor::Pre(const parser::NamedConstantDef &x) {
   auto &name{std::get<parser::NamedConstant>(x.t).v};
   auto &symbol{HandleAttributeStmt(Attr::PARAMETER, name)};
@@ -3276,11 +3305,44 @@ bool DeclarationVisitor::Pre(const parser::NamedConstantDef &x) {
     return false;
   }
   const auto &expr{std::get<parser::ConstantExpr>(x.t)};
-  ApplyImplicitRules(symbol);
-  Walk(expr);
-  if (auto converted{EvaluateNonPointerInitializer(
-          symbol, expr, expr.thing.value().source)}) {
-    symbol.get<ObjectEntityDetails>().set_init(std::move(*converted));
+  auto &details{symbol.get<ObjectEntityDetails>()};
+  if (inOldStyleParameterStmt_) {
+    // non-standard extension PARAMETER statement (no parentheses)
+    Walk(expr);
+    auto folded{EvaluateExpr(expr)};
+    if (details.type()) {
+      SayWithDecl(name, symbol,
+          "Alternative style PARAMETER '%s' must not already have an explicit type"_err_en_US);
+    } else if (folded) {
+      auto at{expr.thing.value().source};
+      if (evaluate::IsActuallyConstant(*folded)) {
+        if (const auto *type{currScope().GetType(*folded)}) {
+          if (type->IsPolymorphic()) {
+            Say(at, "The expression must not be polymorphic"_err_en_US);
+          } else if (auto shape{ToArraySpec(
+                         GetFoldingContext(), evaluate::GetShape(*folded))}) {
+            // The type of the named constant is assumed from the expression.
+            details.set_type(*type);
+            details.set_init(std::move(*folded));
+            details.set_shape(std::move(*shape));
+          } else {
+            Say(at, "The expression must have constant shape"_err_en_US);
+          }
+        } else {
+          Say(at, "The expression must have a known type"_err_en_US);
+        }
+      } else {
+        Say(at, "The expression must be a constant of known type"_err_en_US);
+      }
+    }
+  } else {
+    // standard-conforming PARAMETER statement (with parentheses)
+    ApplyImplicitRules(symbol);
+    Walk(expr);
+    if (auto converted{EvaluateNonPointerInitializer(
+            symbol, expr, expr.thing.value().source)}) {
+      details.set_init(std::move(*converted));
+    }
   }
   return false;
 }
@@ -3297,10 +3359,11 @@ bool DeclarationVisitor::Pre(const parser::NamedConstant &x) {
 bool DeclarationVisitor::Pre(const parser::Enumerator &enumerator) {
   const parser::Name &name{std::get<parser::NamedConstant>(enumerator.t).v};
   Symbol *symbol{FindSymbol(name)};
-  if (symbol) {
+  if (symbol && !symbol->has<UnknownDetails>()) {
     // Contrary to named constants appearing in a PARAMETER statement,
     // enumerator names should not have their type, dimension or any other
-    // attributes defined before they are declared in the enumerator statement.
+    // attributes defined before they are declared in the enumerator statement,
+    // with the exception of accessibility.
     // This is not explicitly forbidden by the standard, but they are scalars
     // which type is left for the compiler to chose, so do not let users try to
     // tamper with that.
@@ -5153,29 +5216,33 @@ void ConstructVisitor::Post(const parser::Selector &x) {
   GetCurrentAssociation().selector = ResolveSelector(x);
 }
 
-bool ConstructVisitor::Pre(const parser::AssociateStmt &x) {
+void ConstructVisitor::Post(const parser::AssociateStmt &x) {
   CheckDef(x.t);
   PushScope(Scope::Kind::Block, nullptr);
-  PushAssociation();
-  return true;
+  const auto assocCount{std::get<std::list<parser::Association>>(x.t).size()};
+  for (auto nthLastAssoc{assocCount}; nthLastAssoc > 0; --nthLastAssoc) {
+    SetCurrentAssociation(nthLastAssoc);
+    if (auto *symbol{MakeAssocEntity()}) {
+      if (ExtractCoarrayRef(GetCurrentAssociation().selector.expr)) { // C1103
+        Say("Selector must not be a coindexed object"_err_en_US);
+      }
+      SetTypeFromAssociation(*symbol);
+      SetAttrsFromAssociation(*symbol);
+    }
+  }
+  PopAssociation(assocCount);
 }
+
 void ConstructVisitor::Post(const parser::EndAssociateStmt &x) {
-  PopAssociation();
   PopScope();
   CheckRef(x.v);
 }
 
-void ConstructVisitor::Post(const parser::Association &x) {
+bool ConstructVisitor::Pre(const parser::Association &x) {
+  PushAssociation();
   const auto &name{std::get<parser::Name>(x.t)};
   GetCurrentAssociation().name = &name;
-  if (auto *symbol{MakeAssocEntity()}) {
-    if (ExtractCoarrayRef(GetCurrentAssociation().selector.expr)) { // C1103
-      Say("Selector must not be a coindexed object"_err_en_US);
-    }
-    SetTypeFromAssociation(*symbol);
-    SetAttrsFromAssociation(*symbol);
-  }
-  GetCurrentAssociation() = {}; // clean for further parser::Association.
+  return true;
 }
 
 bool ConstructVisitor::Pre(const parser::ChangeTeamStmt &x) {
@@ -5330,14 +5397,14 @@ void ConstructVisitor::CheckRef(const std::optional<parser::Name> &x) {
   }
 }
 
-// Make a symbol representing an associating entity from current association.
+// Make a symbol for the associating entity of the current association.
 Symbol *ConstructVisitor::MakeAssocEntity() {
   Symbol *symbol{nullptr};
   auto &association{GetCurrentAssociation()};
   if (association.name) {
     symbol = &MakeSymbol(*association.name, UnknownDetails{});
     if (symbol->has<AssocEntityDetails>() && symbol->owner() == currScope()) {
-      Say(*association.name, // C1104
+      Say(*association.name, // C1102
           "The associate name '%s' is already used in this associate statement"_err_en_US);
       return nullptr;
     }
@@ -5405,18 +5472,29 @@ ConstructVisitor::Selector ConstructVisitor::ResolveSelector(
       x.u);
 }
 
+// Set the current association to the nth to the last association on the
+// association stack.  The top of the stack is at n = 1.  This allows access
+// to the interior of a list of associations at the top of the stack.
+void ConstructVisitor::SetCurrentAssociation(std::size_t n) {
+  CHECK(n > 0 && n <= associationStack_.size());
+  currentAssociation_ = &associationStack_[associationStack_.size() - n];
+}
+
 ConstructVisitor::Association &ConstructVisitor::GetCurrentAssociation() {
-  CHECK(!associationStack_.empty());
-  return associationStack_.back();
+  CHECK(currentAssociation_);
+  return *currentAssociation_;
 }
 
 void ConstructVisitor::PushAssociation() {
   associationStack_.emplace_back(Association{});
+  currentAssociation_ = &associationStack_.back();
 }
 
-void ConstructVisitor::PopAssociation() {
-  CHECK(!associationStack_.empty());
-  associationStack_.pop_back();
+void ConstructVisitor::PopAssociation(std::size_t count) {
+  CHECK(count > 0 && count <= associationStack_.size());
+  associationStack_.resize(associationStack_.size() - count);
+  currentAssociation_ =
+      associationStack_.empty() ? nullptr : &associationStack_.back();
 }
 
 const DeclTypeSpec &ConstructVisitor::ToDeclTypeSpec(

@@ -35,8 +35,8 @@
 ; CHECK-NEXT:       Analysis containing CSE Info
 ; CHECK-NEXT:       IRTranslator
 ; CHECK-NEXT:       Analysis for ComputingKnownBits
-; CHECK-NEXT:       AArch64PreLegalizerCombiner
 ; CHECK-NEXT:       Analysis containing CSE Info
+; CHECK-NEXT:       AArch64PreLegalizerCombiner
 ; CHECK-NEXT:       Legalizer
 ; CHECK-NEXT:       AArch64PostLegalizerLowering
 ; CHECK-NEXT:       RegBankSelect

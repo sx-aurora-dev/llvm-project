@@ -214,7 +214,10 @@ int64_t ShapedType::getNumElements() const {
   return num;
 }
 
-int64_t ShapedType::getRank() const { return getShape().size(); }
+int64_t ShapedType::getRank() const {
+  assert(hasRank() && "cannot query rank of unranked shaped type");
+  return getShape().size();
+}
 
 bool ShapedType::hasRank() const {
   return !isa<UnrankedMemRefType, UnrankedTensorType>();
@@ -742,12 +745,20 @@ MemRefType mlir::canonicalizeStridedLayout(MemRefType t) {
   if (affineMaps.size() > 1 || affineMaps[0].getNumResults() > 1)
     return t;
 
+  // Corner-case for 0-D affine maps.
+  auto m = affineMaps[0];
+  if (m.getNumDims() == 0 && m.getNumSymbols() == 0) {
+    if (auto cst = m.getResult(0).dyn_cast<AffineConstantExpr>())
+      if (cst.getValue() == 0)
+        return MemRefType::Builder(t).setAffineMaps({});
+    return t;
+  }
+
   // If the canonical strided layout for the sizes of `t` is equal to the
   // simplified layout of `t` we can just return an empty layout. Otherwise,
   // just simplify the existing layout.
   AffineExpr expr =
       makeCanonicalStridedLayoutExpr(t.getShape(), t.getContext());
-  auto m = affineMaps[0];
   auto simplifiedLayoutExpr =
       simplifyAffineExpr(m.getResult(0), m.getNumDims(), m.getNumSymbols());
   if (expr != simplifiedLayoutExpr)

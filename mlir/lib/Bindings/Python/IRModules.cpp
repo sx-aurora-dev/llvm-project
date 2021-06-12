@@ -15,6 +15,7 @@
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
+#include "mlir-c/IntegerSet.h"
 #include "mlir-c/Registration.h"
 #include "llvm/ADT/SmallVector.h"
 #include <pybind11/stl.h>
@@ -129,6 +130,13 @@ equivalent to printing the operation that produced it.
 //------------------------------------------------------------------------------
 // Utilities.
 //------------------------------------------------------------------------------
+
+// Helper for creating an @classmethod.
+template <class Func, typename... Args>
+py::object classmethod(Func f, Args... args) {
+  py::object cf = py::cpp_function(f, args...);
+  return py::reinterpret_borrow<py::object>((PyClassMethod_New(cf.ptr())));
+}
 
 /// Checks whether the given type is an integer or float type.
 static int mlirTypeIsAIntegerOrFloat(MlirType type) {
@@ -884,8 +892,8 @@ PyBlock PyOperation::getBlock() {
 }
 
 py::object PyOperation::create(
-    std::string name, llvm::Optional<std::vector<PyValue *>> operands,
-    llvm::Optional<std::vector<PyType *>> results,
+    std::string name, llvm::Optional<std::vector<PyType *>> results,
+    llvm::Optional<std::vector<PyValue *>> operands,
     llvm::Optional<py::dict> attributes,
     llvm::Optional<std::vector<PyBlock *>> successors, int regions,
     DefaultingPyLocation location, py::object maybeIp) {
@@ -1027,6 +1035,268 @@ py::object PyOperation::createOpView() {
   return py::cast(PyOpView(getRef().getObject()));
 }
 
+//------------------------------------------------------------------------------
+// PyOpView
+//------------------------------------------------------------------------------
+
+py::object
+PyOpView::buildGeneric(py::object cls, py::list resultTypeList,
+                       py::list operandList,
+                       llvm::Optional<py::dict> attributes,
+                       llvm::Optional<std::vector<PyBlock *>> successors,
+                       llvm::Optional<int> regions,
+                       DefaultingPyLocation location, py::object maybeIp) {
+  PyMlirContextRef context = location->getContext();
+  // Class level operation construction metadata.
+  std::string name = py::cast<std::string>(cls.attr("OPERATION_NAME"));
+  // Operand and result segment specs are either none, which does no
+  // variadic unpacking, or a list of ints with segment sizes, where each
+  // element is either a positive number (typically 1 for a scalar) or -1 to
+  // indicate that it is derived from the length of the same-indexed operand
+  // or result (implying that it is a list at that position).
+  py::object operandSegmentSpecObj = cls.attr("_ODS_OPERAND_SEGMENTS");
+  py::object resultSegmentSpecObj = cls.attr("_ODS_RESULT_SEGMENTS");
+
+  std::vector<uint64_t> operandSegmentLengths;
+  std::vector<uint64_t> resultSegmentLengths;
+
+  // Validate/determine region count.
+  auto opRegionSpec = py::cast<std::tuple<int, bool>>(cls.attr("_ODS_REGIONS"));
+  int opMinRegionCount = std::get<0>(opRegionSpec);
+  bool opHasNoVariadicRegions = std::get<1>(opRegionSpec);
+  if (!regions) {
+    regions = opMinRegionCount;
+  }
+  if (*regions < opMinRegionCount) {
+    throw py::value_error(
+        (llvm::Twine("Operation \"") + name + "\" requires a minimum of " +
+         llvm::Twine(opMinRegionCount) +
+         " regions but was built with regions=" + llvm::Twine(*regions))
+            .str());
+  }
+  if (opHasNoVariadicRegions && *regions > opMinRegionCount) {
+    throw py::value_error(
+        (llvm::Twine("Operation \"") + name + "\" requires a maximum of " +
+         llvm::Twine(opMinRegionCount) +
+         " regions but was built with regions=" + llvm::Twine(*regions))
+            .str());
+  }
+
+  // Unpack results.
+  std::vector<PyType *> resultTypes;
+  resultTypes.reserve(resultTypeList.size());
+  if (resultSegmentSpecObj.is_none()) {
+    // Non-variadic result unpacking.
+    for (auto it : llvm::enumerate(resultTypeList)) {
+      try {
+        resultTypes.push_back(py::cast<PyType *>(it.value()));
+        if (!resultTypes.back())
+          throw py::cast_error();
+      } catch (py::cast_error &err) {
+        throw py::value_error((llvm::Twine("Result ") +
+                               llvm::Twine(it.index()) + " of operation \"" +
+                               name + "\" must be a Type (" + err.what() + ")")
+                                  .str());
+      }
+    }
+  } else {
+    // Sized result unpacking.
+    auto resultSegmentSpec = py::cast<std::vector<int>>(resultSegmentSpecObj);
+    if (resultSegmentSpec.size() != resultTypeList.size()) {
+      throw py::value_error((llvm::Twine("Operation \"") + name +
+                             "\" requires " +
+                             llvm::Twine(resultSegmentSpec.size()) +
+                             "result segments but was provided " +
+                             llvm::Twine(resultTypeList.size()))
+                                .str());
+    }
+    resultSegmentLengths.reserve(resultTypeList.size());
+    for (auto it :
+         llvm::enumerate(llvm::zip(resultTypeList, resultSegmentSpec))) {
+      int segmentSpec = std::get<1>(it.value());
+      if (segmentSpec == 1 || segmentSpec == 0) {
+        // Unpack unary element.
+        try {
+          auto resultType = py::cast<PyType *>(std::get<0>(it.value()));
+          if (resultType) {
+            resultTypes.push_back(resultType);
+            resultSegmentLengths.push_back(1);
+          } else if (segmentSpec == 0) {
+            // Allowed to be optional.
+            resultSegmentLengths.push_back(0);
+          } else {
+            throw py::cast_error("was None and result is not optional");
+          }
+        } catch (py::cast_error &err) {
+          throw py::value_error((llvm::Twine("Result ") +
+                                 llvm::Twine(it.index()) + " of operation \"" +
+                                 name + "\" must be a Type (" + err.what() +
+                                 ")")
+                                    .str());
+        }
+      } else if (segmentSpec == -1) {
+        // Unpack sequence by appending.
+        try {
+          if (std::get<0>(it.value()).is_none()) {
+            // Treat it as an empty list.
+            resultSegmentLengths.push_back(0);
+          } else {
+            // Unpack the list.
+            auto segment = py::cast<py::sequence>(std::get<0>(it.value()));
+            for (py::object segmentItem : segment) {
+              resultTypes.push_back(py::cast<PyType *>(segmentItem));
+              if (!resultTypes.back()) {
+                throw py::cast_error("contained a None item");
+              }
+            }
+            resultSegmentLengths.push_back(segment.size());
+          }
+        } catch (std::exception &err) {
+          // NOTE: Sloppy to be using a catch-all here, but there are at least
+          // three different unrelated exceptions that can be thrown in the
+          // above "casts". Just keep the scope above small and catch them all.
+          throw py::value_error((llvm::Twine("Result ") +
+                                 llvm::Twine(it.index()) + " of operation \"" +
+                                 name + "\" must be a Sequence of Types (" +
+                                 err.what() + ")")
+                                    .str());
+        }
+      } else {
+        throw py::value_error("Unexpected segment spec");
+      }
+    }
+  }
+
+  // Unpack operands.
+  std::vector<PyValue *> operands;
+  operands.reserve(operands.size());
+  if (operandSegmentSpecObj.is_none()) {
+    // Non-sized operand unpacking.
+    for (auto it : llvm::enumerate(operandList)) {
+      try {
+        operands.push_back(py::cast<PyValue *>(it.value()));
+        if (!operands.back())
+          throw py::cast_error();
+      } catch (py::cast_error &err) {
+        throw py::value_error((llvm::Twine("Operand ") +
+                               llvm::Twine(it.index()) + " of operation \"" +
+                               name + "\" must be a Value (" + err.what() + ")")
+                                  .str());
+      }
+    }
+  } else {
+    // Sized operand unpacking.
+    auto operandSegmentSpec = py::cast<std::vector<int>>(operandSegmentSpecObj);
+    if (operandSegmentSpec.size() != operandList.size()) {
+      throw py::value_error((llvm::Twine("Operation \"") + name +
+                             "\" requires " +
+                             llvm::Twine(operandSegmentSpec.size()) +
+                             "operand segments but was provided " +
+                             llvm::Twine(operandList.size()))
+                                .str());
+    }
+    operandSegmentLengths.reserve(operandList.size());
+    for (auto it :
+         llvm::enumerate(llvm::zip(operandList, operandSegmentSpec))) {
+      int segmentSpec = std::get<1>(it.value());
+      if (segmentSpec == 1 || segmentSpec == 0) {
+        // Unpack unary element.
+        try {
+          auto operandValue = py::cast<PyValue *>(std::get<0>(it.value()));
+          if (operandValue) {
+            operands.push_back(operandValue);
+            operandSegmentLengths.push_back(1);
+          } else if (segmentSpec == 0) {
+            // Allowed to be optional.
+            operandSegmentLengths.push_back(0);
+          } else {
+            throw py::cast_error("was None and operand is not optional");
+          }
+        } catch (py::cast_error &err) {
+          throw py::value_error((llvm::Twine("Operand ") +
+                                 llvm::Twine(it.index()) + " of operation \"" +
+                                 name + "\" must be a Value (" + err.what() +
+                                 ")")
+                                    .str());
+        }
+      } else if (segmentSpec == -1) {
+        // Unpack sequence by appending.
+        try {
+          if (std::get<0>(it.value()).is_none()) {
+            // Treat it as an empty list.
+            operandSegmentLengths.push_back(0);
+          } else {
+            // Unpack the list.
+            auto segment = py::cast<py::sequence>(std::get<0>(it.value()));
+            for (py::object segmentItem : segment) {
+              operands.push_back(py::cast<PyValue *>(segmentItem));
+              if (!operands.back()) {
+                throw py::cast_error("contained a None item");
+              }
+            }
+            operandSegmentLengths.push_back(segment.size());
+          }
+        } catch (std::exception &err) {
+          // NOTE: Sloppy to be using a catch-all here, but there are at least
+          // three different unrelated exceptions that can be thrown in the
+          // above "casts". Just keep the scope above small and catch them all.
+          throw py::value_error((llvm::Twine("Operand ") +
+                                 llvm::Twine(it.index()) + " of operation \"" +
+                                 name + "\" must be a Sequence of Values (" +
+                                 err.what() + ")")
+                                    .str());
+        }
+      } else {
+        throw py::value_error("Unexpected segment spec");
+      }
+    }
+  }
+
+  // Merge operand/result segment lengths into attributes if needed.
+  if (!operandSegmentLengths.empty() || !resultSegmentLengths.empty()) {
+    // Dup.
+    if (attributes) {
+      attributes = py::dict(*attributes);
+    } else {
+      attributes = py::dict();
+    }
+    if (attributes->contains("result_segment_sizes") ||
+        attributes->contains("operand_segment_sizes")) {
+      throw py::value_error("Manually setting a 'result_segment_sizes' or "
+                            "'operand_segment_sizes' attribute is unsupported. "
+                            "Use Operation.create for such low-level access.");
+    }
+
+    // Add result_segment_sizes attribute.
+    if (!resultSegmentLengths.empty()) {
+      int64_t size = resultSegmentLengths.size();
+      MlirAttribute segmentLengthAttr = mlirDenseElementsAttrUInt64Get(
+          mlirVectorTypeGet(1, &size, mlirIntegerTypeGet(context->get(), 64)),
+          resultSegmentLengths.size(), resultSegmentLengths.data());
+      (*attributes)["result_segment_sizes"] =
+          PyAttribute(context, segmentLengthAttr);
+    }
+
+    // Add operand_segment_sizes attribute.
+    if (!operandSegmentLengths.empty()) {
+      int64_t size = operandSegmentLengths.size();
+      MlirAttribute segmentLengthAttr = mlirDenseElementsAttrUInt64Get(
+          mlirVectorTypeGet(1, &size, mlirIntegerTypeGet(context->get(), 64)),
+          operandSegmentLengths.size(), operandSegmentLengths.data());
+      (*attributes)["operand_segment_sizes"] =
+          PyAttribute(context, segmentLengthAttr);
+    }
+  }
+
+  // Delegate to create.
+  return PyOperation::create(std::move(name),
+                             /*results=*/std::move(resultTypes),
+                             /*operands=*/std::move(operands),
+                             /*attributes=*/std::move(attributes),
+                             /*successors=*/std::move(successors),
+                             /*regions=*/*regions, location, maybeIp);
+}
+
 PyOpView::PyOpView(py::object operationObject)
     // Casting through the PyOperationBase base-class and then back to the
     // Operation lets us accept any PyOperationBase subclass.
@@ -1089,6 +1359,16 @@ void PyInsertionPoint::insert(PyOperationBase &operationBase) {
     // Insert before operation.
     (*refOperation)->checkValid();
     beforeOp = (*refOperation)->get();
+  } else {
+    // Insert at end (before null) is only valid if the block does not
+    // already end in a known terminator (violating this will cause assertion
+    // failures later).
+    if (!mlirOperationIsNull(mlirBlockGetTerminator(block.get()))) {
+      throw py::index_error("Cannot insert operation at the end of a block "
+                            "that already has a terminator. Did you mean to "
+                            "use 'InsertionPoint.at_block_terminator(block)' "
+                            "versus 'InsertionPoint(block)'?");
+    }
   }
   mlirBlockInsertOwnedOperationBefore(block.get(), beforeOp, operation);
   operation.setAttached();
@@ -2564,7 +2844,7 @@ public:
   static void bindDerived(ClassTy &c) {
     c.def_static(
          "get",
-         [](PyType &elementType, std::vector<int64_t> shape,
+         [](std::vector<int64_t> shape, PyType &elementType,
             std::vector<PyAffineMap> layout, unsigned memorySpace,
             DefaultingPyLocation loc) {
            SmallVector<MlirAffineMap> maps;
@@ -2588,7 +2868,7 @@ public:
            }
            return PyMemRefType(elementType.getContext(), t);
          },
-         py::arg("element_type"), py::arg("shape"),
+         py::arg("shape"), py::arg("element_type"),
          py::arg("layout") = py::list(), py::arg("memory_space") = 0,
          py::arg("loc") = py::none(), "Create a memref type")
         .def_property_readonly("layout", &PyMemRefType::getLayout,
@@ -3053,6 +3333,102 @@ PyAffineMap PyAffineMap::createFromCapsule(py::object capsule) {
 }
 
 //------------------------------------------------------------------------------
+// PyIntegerSet and utilities.
+//------------------------------------------------------------------------------
+
+class PyIntegerSetConstraint {
+public:
+  PyIntegerSetConstraint(PyIntegerSet set, intptr_t pos) : set(set), pos(pos) {}
+
+  PyAffineExpr getExpr() {
+    return PyAffineExpr(set.getContext(),
+                        mlirIntegerSetGetConstraint(set, pos));
+  }
+
+  bool isEq() { return mlirIntegerSetIsConstraintEq(set, pos); }
+
+  static void bind(py::module &m) {
+    py::class_<PyIntegerSetConstraint>(m, "IntegerSetConstraint")
+        .def_property_readonly("expr", &PyIntegerSetConstraint::getExpr)
+        .def_property_readonly("is_eq", &PyIntegerSetConstraint::isEq);
+  }
+
+private:
+  PyIntegerSet set;
+  intptr_t pos;
+};
+
+class PyIntegerSetConstraintList
+    : public Sliceable<PyIntegerSetConstraintList, PyIntegerSetConstraint> {
+public:
+  static constexpr const char *pyClassName = "IntegerSetConstraintList";
+
+  PyIntegerSetConstraintList(PyIntegerSet set, intptr_t startIndex = 0,
+                             intptr_t length = -1, intptr_t step = 1)
+      : Sliceable(startIndex,
+                  length == -1 ? mlirIntegerSetGetNumConstraints(set) : length,
+                  step),
+        set(set) {}
+
+  intptr_t getNumElements() { return mlirIntegerSetGetNumConstraints(set); }
+
+  PyIntegerSetConstraint getElement(intptr_t pos) {
+    return PyIntegerSetConstraint(set, pos);
+  }
+
+  PyIntegerSetConstraintList slice(intptr_t startIndex, intptr_t length,
+                                   intptr_t step) {
+    return PyIntegerSetConstraintList(set, startIndex, length, step);
+  }
+
+private:
+  PyIntegerSet set;
+};
+
+bool PyIntegerSet::operator==(const PyIntegerSet &other) {
+  return mlirIntegerSetEqual(integerSet, other.integerSet);
+}
+
+py::object PyIntegerSet::getCapsule() {
+  return py::reinterpret_steal<py::object>(
+      mlirPythonIntegerSetToCapsule(*this));
+}
+
+PyIntegerSet PyIntegerSet::createFromCapsule(py::object capsule) {
+  MlirIntegerSet rawIntegerSet = mlirPythonCapsuleToIntegerSet(capsule.ptr());
+  if (mlirIntegerSetIsNull(rawIntegerSet))
+    throw py::error_already_set();
+  return PyIntegerSet(
+      PyMlirContext::forContext(mlirIntegerSetGetContext(rawIntegerSet)),
+      rawIntegerSet);
+}
+
+/// Attempts to populate `result` with the content of `list` casted to the
+/// appropriate type (Python and C types are provided as template arguments).
+/// Throws errors in case of failure, using "action" to describe what the caller
+/// was attempting to do.
+template <typename PyType, typename CType>
+static void pyListToVector(py::list list, llvm::SmallVectorImpl<CType> &result,
+                           StringRef action) {
+  result.reserve(py::len(list));
+  for (py::handle item : list) {
+    try {
+      result.push_back(item.cast<PyType>());
+    } catch (py::cast_error &err) {
+      std::string msg = (llvm::Twine("Invalid expression when ") + action +
+                         " (" + err.what() + ")")
+                            .str();
+      throw py::cast_error(msg);
+    } catch (py::reference_cast_error &err) {
+      std::string msg = (llvm::Twine("Invalid expression (None?) when ") +
+                         action + " (" + err.what() + ")")
+                            .str();
+      throw py::cast_error(msg);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
 // Populates the pybind11 IR submodule.
 //------------------------------------------------------------------------------
 
@@ -3378,8 +3754,8 @@ void mlir::python::populateIRSubmodule(py::module &m) {
 
   py::class_<PyOperation, PyOperationBase>(m, "Operation")
       .def_static("create", &PyOperation::create, py::arg("name"),
-                  py::arg("operands") = py::none(),
                   py::arg("results") = py::none(),
+                  py::arg("operands") = py::none(),
                   py::arg("attributes") = py::none(),
                   py::arg("successors") = py::none(), py::arg("regions") = 0,
                   py::arg("loc") = py::none(), py::arg("ip") = py::none(),
@@ -3397,17 +3773,28 @@ void mlir::python::populateIRSubmodule(py::module &m) {
           "Context that owns the Operation")
       .def_property_readonly("opview", &PyOperation::createOpView);
 
-  py::class_<PyOpView, PyOperationBase>(m, "OpView")
-      .def(py::init<py::object>())
-      .def_property_readonly("operation", &PyOpView::getOperationObject)
-      .def_property_readonly(
-          "context",
-          [](PyOpView &self) {
-            return self.getOperation().getContext().getObject();
-          },
-          "Context that owns the Operation")
-      .def("__str__",
-           [](PyOpView &self) { return py::str(self.getOperationObject()); });
+  auto opViewClass =
+      py::class_<PyOpView, PyOperationBase>(m, "OpView")
+          .def(py::init<py::object>())
+          .def_property_readonly("operation", &PyOpView::getOperationObject)
+          .def_property_readonly(
+              "context",
+              [](PyOpView &self) {
+                return self.getOperation().getContext().getObject();
+              },
+              "Context that owns the Operation")
+          .def("__str__", [](PyOpView &self) {
+            return py::str(self.getOperationObject());
+          });
+  opViewClass.attr("_ODS_REGIONS") = py::make_tuple(0, true);
+  opViewClass.attr("_ODS_OPERAND_SEGMENTS") = py::none();
+  opViewClass.attr("_ODS_RESULT_SEGMENTS") = py::none();
+  opViewClass.attr("build_generic") = classmethod(
+      &PyOpView::buildGeneric, py::arg("cls"), py::arg("results") = py::none(),
+      py::arg("operands") = py::none(), py::arg("attributes") = py::none(),
+      py::arg("successors") = py::none(), py::arg("regions") = py::none(),
+      py::arg("loc") = py::none(), py::arg("ip") = py::none(),
+      "Builds a specific, generated OpView based on class level attributes.");
 
   //----------------------------------------------------------------------------
   // Mapping of PyRegion.
@@ -3862,24 +4249,8 @@ void mlir::python::populateIRSubmodule(py::module &m) {
           [](intptr_t dimCount, intptr_t symbolCount, py::list exprs,
              DefaultingPyMlirContext context) {
             SmallVector<MlirAffineExpr> affineExprs;
-            affineExprs.reserve(py::len(exprs));
-            for (py::handle expr : exprs) {
-              try {
-                affineExprs.push_back(expr.cast<PyAffineExpr>());
-              } catch (py::cast_error &err) {
-                std::string msg =
-                    std::string("Invalid expression when attempting to create "
-                                "an AffineMap (") +
-                    err.what() + ")";
-                throw py::cast_error(msg);
-              } catch (py::reference_cast_error &err) {
-                std::string msg =
-                    std::string("Invalid expression (None?) when attempting to "
-                                "create an AffineMap (") +
-                    err.what() + ")";
-                throw py::cast_error(msg);
-              }
-            }
+            pyListToVector<PyAffineExpr, MlirAffineExpr>(
+                exprs, affineExprs, "attempting to create an AffineMap");
             MlirAffineMap map =
                 mlirAffineMapGet(context->get(), dimCount, symbolCount,
                                  affineExprs.size(), affineExprs.data());
@@ -3985,4 +4356,125 @@ void mlir::python::populateIRSubmodule(py::module &m) {
         return PyAffineMapExprList(self);
       });
   PyAffineMapExprList::bind(m);
+
+  //----------------------------------------------------------------------------
+  // Mapping of PyIntegerSet.
+  //----------------------------------------------------------------------------
+  py::class_<PyIntegerSet>(m, "IntegerSet")
+      .def_property_readonly(MLIR_PYTHON_CAPI_PTR_ATTR,
+                             &PyIntegerSet::getCapsule)
+      .def(MLIR_PYTHON_CAPI_FACTORY_ATTR, &PyIntegerSet::createFromCapsule)
+      .def("__eq__", [](PyIntegerSet &self,
+                        PyIntegerSet &other) { return self == other; })
+      .def("__eq__", [](PyIntegerSet &self, py::object other) { return false; })
+      .def("__str__",
+           [](PyIntegerSet &self) {
+             PyPrintAccumulator printAccum;
+             mlirIntegerSetPrint(self, printAccum.getCallback(),
+                                 printAccum.getUserData());
+             return printAccum.join();
+           })
+      .def("__repr__",
+           [](PyIntegerSet &self) {
+             PyPrintAccumulator printAccum;
+             printAccum.parts.append("IntegerSet(");
+             mlirIntegerSetPrint(self, printAccum.getCallback(),
+                                 printAccum.getUserData());
+             printAccum.parts.append(")");
+             return printAccum.join();
+           })
+      .def_property_readonly(
+          "context",
+          [](PyIntegerSet &self) { return self.getContext().getObject(); })
+      .def(
+          "dump", [](PyIntegerSet &self) { mlirIntegerSetDump(self); },
+          kDumpDocstring)
+      .def_static(
+          "get",
+          [](intptr_t numDims, intptr_t numSymbols, py::list exprs,
+             std::vector<bool> eqFlags, DefaultingPyMlirContext context) {
+            if (exprs.size() != eqFlags.size())
+              throw py::value_error(
+                  "Expected the number of constraints to match "
+                  "that of equality flags");
+            if (exprs.empty())
+              throw py::value_error("Expected non-empty list of constraints");
+
+            // Copy over to a SmallVector because std::vector has a
+            // specialization for booleans that packs data and does not
+            // expose a `bool *`.
+            SmallVector<bool, 8> flags(eqFlags.begin(), eqFlags.end());
+
+            SmallVector<MlirAffineExpr> affineExprs;
+            pyListToVector<PyAffineExpr>(exprs, affineExprs,
+                                         "attempting to create an IntegerSet");
+            MlirIntegerSet set = mlirIntegerSetGet(
+                context->get(), numDims, numSymbols, exprs.size(),
+                affineExprs.data(), flags.data());
+            return PyIntegerSet(context->getRef(), set);
+          },
+          py::arg("num_dims"), py::arg("num_symbols"), py::arg("exprs"),
+          py::arg("eq_flags"), py::arg("context") = py::none())
+      .def_static(
+          "get_empty",
+          [](intptr_t numDims, intptr_t numSymbols,
+             DefaultingPyMlirContext context) {
+            MlirIntegerSet set =
+                mlirIntegerSetEmptyGet(context->get(), numDims, numSymbols);
+            return PyIntegerSet(context->getRef(), set);
+          },
+          py::arg("num_dims"), py::arg("num_symbols"),
+          py::arg("context") = py::none())
+      .def("get_replaced",
+           [](PyIntegerSet &self, py::list dimExprs, py::list symbolExprs,
+              intptr_t numResultDims, intptr_t numResultSymbols) {
+             if (static_cast<intptr_t>(dimExprs.size()) !=
+                 mlirIntegerSetGetNumDims(self))
+               throw py::value_error(
+                   "Expected the number of dimension replacement expressions "
+                   "to match that of dimensions");
+             if (static_cast<intptr_t>(symbolExprs.size()) !=
+                 mlirIntegerSetGetNumSymbols(self))
+               throw py::value_error(
+                   "Expected the number of symbol replacement expressions "
+                   "to match that of symbols");
+
+             SmallVector<MlirAffineExpr> dimAffineExprs, symbolAffineExprs;
+             pyListToVector<PyAffineExpr>(
+                 dimExprs, dimAffineExprs,
+                 "attempting to create an IntegerSet by replacing dimensions");
+             pyListToVector<PyAffineExpr>(
+                 symbolExprs, symbolAffineExprs,
+                 "attempting to create an IntegerSet by replacing symbols");
+             MlirIntegerSet set = mlirIntegerSetReplaceGet(
+                 self, dimAffineExprs.data(), symbolAffineExprs.data(),
+                 numResultDims, numResultSymbols);
+             return PyIntegerSet(self.getContext(), set);
+           })
+      .def_property_readonly("is_canonical_empty",
+                             [](PyIntegerSet &self) {
+                               return mlirIntegerSetIsCanonicalEmpty(self);
+                             })
+      .def_property_readonly(
+          "n_dims",
+          [](PyIntegerSet &self) { return mlirIntegerSetGetNumDims(self); })
+      .def_property_readonly(
+          "n_symbols",
+          [](PyIntegerSet &self) { return mlirIntegerSetGetNumSymbols(self); })
+      .def_property_readonly(
+          "n_inputs",
+          [](PyIntegerSet &self) { return mlirIntegerSetGetNumInputs(self); })
+      .def_property_readonly("n_equalities",
+                             [](PyIntegerSet &self) {
+                               return mlirIntegerSetGetNumEqualities(self);
+                             })
+      .def_property_readonly("n_inequalities",
+                             [](PyIntegerSet &self) {
+                               return mlirIntegerSetGetNumInequalities(self);
+                             })
+      .def_property_readonly("constraints", [](PyIntegerSet &self) {
+        return PyIntegerSetConstraintList(self);
+      });
+  PyIntegerSetConstraint::bind(m);
+  PyIntegerSetConstraintList::bind(m);
 }

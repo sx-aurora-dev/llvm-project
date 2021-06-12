@@ -221,6 +221,16 @@ static LogicalResult foldMemRefCast(Operation *op) {
 // parse`className` function.
 
 //===----------------------------------------------------------------------===//
+// FillOp
+//===----------------------------------------------------------------------===//
+
+void FillOp::build(OpBuilder &builder, OperationState &result, Value output,
+                   Value value) {
+  build(builder, result, output.getType().dyn_cast<RankedTensorType>(), output,
+        value);
+}
+
+//===----------------------------------------------------------------------===//
 // GenericOps
 //===----------------------------------------------------------------------===//
 void GenericOp::build(
@@ -702,6 +712,10 @@ static LogicalResult verify(InitTensorOp op) {
                                             ShapedType::isDynamic)))
     return failure();
 
+  if (op.static_sizes().size() != static_cast<unsigned>(resultType.getRank()))
+    return op->emitError("expected ")
+           << resultType.getRank() << " sizes values";
+
   Type expectedType =
       InitTensorOp::inferResultType(staticSizes, resultType.getElementType());
   if (resultType != expectedType) {
@@ -886,7 +900,29 @@ static Value getExpandedInitTensor(OpBuilder &builder,
 }
 
 namespace {
-struct FoldWithTensorReshapeOp : public OpRewritePattern<TensorReshapeOp> {
+/// Since `init_tensor` operation creates a tensor needed only for its shape, a
+/// subtensor of this is also needed only for its shape. The result can be
+/// replaced by a new init_tensor operation of the same size as the subtensor
+/// op.
+struct FoldInitTensorWithSubTensorOp : public OpRewritePattern<SubTensorOp> {
+  using OpRewritePattern<SubTensorOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SubTensorOp subtensorOp,
+                                PatternRewriter &rewriter) const override {
+    if (!subtensorOp.source().getDefiningOp<linalg::InitTensorOp>())
+      return failure();
+    rewriter.replaceOpWithNewOp<linalg::InitTensorOp>(
+        subtensorOp, subtensorOp.sizes(),
+        llvm::to_vector<4>(llvm::map_range(
+            subtensorOp.static_sizes(),
+            [](Attribute attr) { return attr.cast<IntegerAttr>().getInt(); })),
+        subtensorOp.getSourceType().getElementType());
+    return success();
+  }
+};
+
+struct FoldInitTensorWithTensorReshapeOp
+    : public OpRewritePattern<TensorReshapeOp> {
   using OpRewritePattern<TensorReshapeOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(TensorReshapeOp reshapeOp,
@@ -911,8 +947,230 @@ struct FoldWithTensorReshapeOp : public OpRewritePattern<TensorReshapeOp> {
 
 void InitTensorOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<FoldWithTensorReshapeOp, ReplaceDimOfInitTensorOp,
-                 ReplaceStaticShapeDims>(context);
+  results
+      .insert<FoldInitTensorWithSubTensorOp, FoldInitTensorWithTensorReshapeOp,
+              ReplaceDimOfInitTensorOp, ReplaceStaticShapeDims>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// PadTensorOp
+//===----------------------------------------------------------------------===//
+
+/// Extract int64_t values from the assumed ArrayAttr of IntegerAttr.
+static SmallVector<int64_t, 4> extractFromI64ArrayAttr(Attribute attr) {
+  return llvm::to_vector<4>(
+      llvm::map_range(attr.cast<ArrayAttr>(), [](Attribute a) -> int64_t {
+        return a.cast<IntegerAttr>().getInt();
+      }));
+}
+
+static LogicalResult verify(PadTensorOp op) {
+  auto sourceType = op.source().getType().cast<RankedTensorType>();
+  auto resultType = op.result().getType().cast<RankedTensorType>();
+  auto expectedType = PadTensorOp::inferResultType(
+      sourceType, extractFromI64ArrayAttr(op.static_low()),
+      extractFromI64ArrayAttr(op.static_high()));
+  for (int i = 0, e = sourceType.getRank(); i < e; ++i) {
+    if (resultType.getDimSize(i) == expectedType.getDimSize(i))
+      continue;
+    if (expectedType.isDynamicDim(i))
+      continue;
+    return op.emitError("specified type ")
+           << resultType << " does not match the inferred type "
+           << expectedType;
+  }
+
+  auto &region = op.region();
+  if (!llvm::hasSingleElement(region))
+    return op.emitOpError("expected region with 1 block");
+  unsigned rank = resultType.getRank();
+  Block &block = region.front();
+  if (block.getNumArguments() != rank)
+    return op.emitError("expected the block to have ") << rank << " arguments";
+
+  // Note: the number and type of yield values are checked in the YieldOp.
+  for (auto en : llvm::enumerate(block.getArgumentTypes())) {
+    if (!en.value().isIndex())
+      return op.emitOpError("expected block argument ")
+             << (en.index() + 1) << " to be an index";
+  }
+
+  return success();
+}
+
+RankedTensorType PadTensorOp::inferResultType(RankedTensorType sourceType,
+                                              ArrayRef<int64_t> staticLow,
+                                              ArrayRef<int64_t> staticHigh) {
+  unsigned rank = sourceType.getRank();
+  assert(staticLow.size() == rank && "unexpected staticLow size mismatch");
+  assert(staticHigh.size() == rank && "unexpected staticHigh size mismatch");
+
+  SmallVector<int64_t, 4> resultShape;
+  for (auto i : llvm::seq<unsigned>(0, rank)) {
+    if (sourceType.isDynamicDim(i) ||
+        staticLow[i] == ShapedType::kDynamicSize ||
+        staticHigh[i] == ShapedType::kDynamicSize) {
+      resultShape.push_back(ShapedType::kDynamicSize);
+    } else {
+      int64_t size = sourceType.getDimSize(i) + staticLow[i] + staticHigh[i];
+      resultShape.push_back(size);
+    }
+  }
+
+  return RankedTensorType::get(resultShape, sourceType.getElementType());
+}
+
+static ParseResult parsePadTensorOp(OpAsmParser &parser,
+                                    OperationState &result) {
+  OpAsmParser::OperandType baseInfo;
+  SmallVector<OpAsmParser::OperandType, 8> operands;
+  SmallVector<Type, 8> types;
+  if (parser.parseOperand(baseInfo))
+    return failure();
+
+  IndexType indexType = parser.getBuilder().getIndexType();
+  SmallVector<OpAsmParser::OperandType, 4> lowPadding, highPadding;
+  if (parser.parseKeyword("low") ||
+      parseListOfOperandsOrIntegers(parser, result,
+                                    PadTensorOp::getStaticLowAttrName(),
+                                    ShapedType::kDynamicSize, lowPadding))
+    return failure();
+  if (parser.parseKeyword("high") ||
+      parseListOfOperandsOrIntegers(parser, result,
+                                    PadTensorOp::getStaticHighAttrName(),
+                                    ShapedType::kDynamicSize, highPadding))
+    return failure();
+
+  SmallVector<OpAsmParser::OperandType, 8> regionOperands;
+  std::unique_ptr<Region> region = std::make_unique<Region>();
+  SmallVector<Type, 8> operandTypes, regionTypes;
+  if (parser.parseRegion(*region, regionOperands, regionTypes))
+    return failure();
+  result.addRegion(std::move(region));
+
+  Type srcType, dstType;
+  if (parser.parseColonType(srcType) || parser.parseKeywordType("to", dstType))
+    return failure();
+
+  if (parser.addTypeToList(dstType, result.types))
+    return failure();
+
+  SmallVector<int, 4> segmentSizesFinal = {1}; // source tensor
+  segmentSizesFinal.append({static_cast<int>(lowPadding.size()),
+                            static_cast<int>(highPadding.size())});
+  result.addAttribute(
+      OpTrait::AttrSizedOperandSegments<void>::getOperandSegmentSizeAttr(),
+      parser.getBuilder().getI32VectorAttr(segmentSizesFinal));
+  return failure(
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.resolveOperand(baseInfo, srcType, result.operands) ||
+      parser.resolveOperands(lowPadding, indexType, result.operands) ||
+      parser.resolveOperands(highPadding, indexType, result.operands));
+}
+
+static void print(OpAsmPrinter &p, PadTensorOp op) {
+  p << op->getName().getStringRef() << ' ';
+  p << op.source();
+  p << " low";
+  printListOfOperandsOrIntegers(p, op.low(), op.static_low(),
+                                ShapedType::isDynamic);
+  p << " high";
+  printListOfOperandsOrIntegers(p, op.high(), op.static_high(),
+                                ShapedType::isDynamic);
+  p.printRegion(op.region());
+  p << " : " << op.source().getType() << " to " << op.getType();
+}
+
+/// Helper function to dispatch an OpFoldResult into either the `dynamicVec` if
+/// it is a Value or into `staticVec` if it is an IntegerAttr.
+/// In the case of a Value, a copy of the `sentinel` value is also pushed to
+/// `staticVec`. This is useful to extract mixed static and dynamic entries that
+/// come from an AttrSizedOperandSegments trait.
+static void dispatchIndexOpFoldResult(OpFoldResult ofr,
+                                      SmallVectorImpl<Value> &dynamicVec,
+                                      SmallVectorImpl<int64_t> &staticVec,
+                                      int64_t sentinel) {
+  if (auto v = ofr.dyn_cast<Value>()) {
+    dynamicVec.push_back(v);
+    staticVec.push_back(sentinel);
+    return;
+  }
+  APInt apInt = ofr.dyn_cast<Attribute>().cast<IntegerAttr>().getValue();
+  staticVec.push_back(apInt.getSExtValue());
+}
+
+void PadTensorOp::build(OpBuilder &b, OperationState &result, Value source,
+                        ArrayRef<int64_t> staticLow,
+                        ArrayRef<int64_t> staticHigh, ValueRange low,
+                        ValueRange high, ArrayRef<NamedAttribute> attrs) {
+  auto sourceType = source.getType().cast<RankedTensorType>();
+  auto resultType = inferResultType(sourceType, staticLow, staticHigh);
+  build(b, result, resultType, source, low, high, b.getI64ArrayAttr(staticLow),
+        b.getI64ArrayAttr(staticHigh));
+  result.addAttributes(attrs);
+}
+
+void PadTensorOp::build(OpBuilder &b, OperationState &result, Value source,
+                        ValueRange low, ValueRange high,
+                        ArrayRef<NamedAttribute> attrs) {
+  auto sourceType = source.getType().cast<RankedTensorType>();
+  unsigned rank = sourceType.getRank();
+  SmallVector<int64_t, 4> staticVector(ShapedType::kDynamicSize, rank);
+  build(b, result, source, staticVector, staticVector, low, high, attrs);
+}
+
+void PadTensorOp::build(OpBuilder &b, OperationState &result, Type resultType,
+                        Value source, ArrayRef<OpFoldResult> low,
+                        ArrayRef<OpFoldResult> high,
+                        ArrayRef<NamedAttribute> attrs) {
+  assert(resultType.isa<RankedTensorType>());
+  auto sourceType = source.getType().cast<RankedTensorType>();
+  unsigned rank = sourceType.getRank();
+  SmallVector<Value, 4> dynamicLow, dynamicHigh;
+  SmallVector<int64_t, 4> staticLow, staticHigh;
+  for (unsigned i = 0; i < rank; ++i) {
+    // staticLow and staticHigh have full information of the padding config.
+    // This will grow staticLow and staticHigh with 1 value. If the config is
+    // dynamic (ie not a constant), dynamicLow and dynamicHigh will grow with 1
+    // value as well.
+    dispatchIndexOpFoldResult(low[i], dynamicLow, staticLow,
+                              ShapedType::kDynamicSize);
+    dispatchIndexOpFoldResult(high[i], dynamicHigh, staticHigh,
+                              ShapedType::kDynamicSize);
+  }
+  if (!resultType) {
+    resultType =
+        PadTensorOp::inferResultType(sourceType, staticLow, staticHigh);
+  }
+  build(b, result, resultType, source, dynamicLow, dynamicHigh,
+        b.getI64ArrayAttr(staticLow), b.getI64ArrayAttr(staticHigh));
+}
+
+PadTensorOp PadTensorOp::createPadHighOp(Type type, Value source, Value pad,
+                                         Location loc, OpBuilder &builder) {
+  SmallVector<OpFoldResult, 4> low, high;
+  auto rankedTensorType = type.cast<RankedTensorType>();
+  assert(rankedTensorType.hasStaticShape());
+  int rank = rankedTensorType.getRank();
+  for (int i = 0; i < rank; ++i) {
+    auto dimOp = builder.createOrFold<DimOp>(loc, source, i);
+    auto resultDimSize = builder.createOrFold<ConstantIndexOp>(
+        loc, rankedTensorType.getDimSize(i));
+    auto highValue = builder.createOrFold<SubIOp>(loc, resultDimSize, dimOp);
+    high.push_back(highValue);
+    low.push_back(builder.createOrFold<ConstantIndexOp>(loc, 0));
+  }
+  auto padTensorOp =
+      builder.create<linalg::PadTensorOp>(loc, type, source, low, high);
+  SmallVector<Type, 4> blockArgTypes;
+  blockArgTypes.assign(rank, builder.getIndexType());
+  auto &region = padTensorOp.region();
+  // `builder.createBlock` changes the insertion point within the block. Create
+  // a guard to reset the insertion point of the builder after it is destroyed.
+  OpBuilder::InsertionGuard guard(builder);
+  builder.createBlock(&region, region.end(), blockArgTypes);
+  builder.create<linalg::YieldOp>(loc, pad);
+  return padTensorOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1557,6 +1815,13 @@ static LogicalResult verify(linalg::YieldOp op) {
   if (auto linalgOp = dyn_cast<LinalgOp>(parentOp))
     return verifyYield(op, cast<LinalgOp>(parentOp));
 
+  if (auto padTensorOp = dyn_cast<linalg::PadTensorOp>(parentOp)) {
+    return success(
+        op.getNumOperands() == 1 &&
+        op.getOperand(0).getType() ==
+            padTensorOp.getType().cast<ShapedType>().getElementType());
+  }
+
   return op.emitOpError("expected parent op with LinalgOp interface");
 }
 
@@ -1574,6 +1839,10 @@ static LogicalResult verify(FillOp op) {
   auto fillType = op.value().getType();
   if (viewType.getElementType() != fillType)
     return op.emitOpError("expects fill type to match view elemental type");
+  if (!op.getNumResults() && !viewType.isa<MemRefType>()) {
+    return op.emitOpError(
+        "expected fill op with no result value to use memref type");
+  }
   return success();
 }
 

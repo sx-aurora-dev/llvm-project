@@ -123,8 +123,7 @@ namespace {
     void addRegWithSubRegs(RegVector &RV, Register Reg) {
       RV.push_back(Reg);
       if (Reg.isPhysical())
-        for (const MCPhysReg &SubReg : TRI->subregs(Reg.asMCReg()))
-          RV.push_back(SubReg);
+        append_range(RV, TRI->subregs(Reg.asMCReg()));
     }
 
     struct BBInfo {
@@ -942,6 +941,41 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
 
   // Verify properties of various specific instruction types
   switch (MI->getOpcode()) {
+  case TargetOpcode::G_ASSERT_ZEXT: {
+    if (!MI->getOperand(2).isImm()) {
+      report("G_ASSERT_ZEXT expects an immediate operand #2", MI);
+      break;
+    }
+
+    Register Dst = MI->getOperand(0).getReg();
+    Register Src = MI->getOperand(1).getReg();
+    LLT DstTy = MRI->getType(Dst);
+    LLT SrcTy = MRI->getType(Src);
+    verifyVectorElementMatch(DstTy, SrcTy, MI);
+    int64_t Imm = MI->getOperand(2).getImm();
+    if (Imm <= 0) {
+      report("G_ASSERT_ZEXT size must be >= 1", MI);
+      break;
+    }
+
+    if (Imm >= SrcTy.getScalarSizeInBits()) {
+      report("G_ASSERT_ZEXT size must be less than source bit width", MI);
+      break;
+    }
+
+    if (MRI->getRegBankOrNull(Src) != MRI->getRegBankOrNull(Dst)) {
+      report("G_ASSERT_ZEXT source and destination register banks must match",
+             MI);
+      break;
+    }
+
+    if (MRI->getRegClassOrNull(Src) != MRI->getRegClassOrNull(Dst))
+      report("G_ASSERT_ZEXT source and destination register classes must match",
+             MI);
+
+    break;
+  }
+
   case TargetOpcode::G_CONSTANT:
   case TargetOpcode::G_FCONSTANT: {
     LLT DstTy = MRI->getType(MI->getOperand(0).getReg());
@@ -1005,16 +1039,15 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
   }
   case TargetOpcode::G_PHI: {
     LLT DstTy = MRI->getType(MI->getOperand(0).getReg());
-    if (!DstTy.isValid() ||
-        !std::all_of(MI->operands_begin() + 1, MI->operands_end(),
-                     [this, &DstTy](const MachineOperand &MO) {
-                       if (!MO.isReg())
-                         return true;
-                       LLT Ty = MRI->getType(MO.getReg());
-                       if (!Ty.isValid() || (Ty != DstTy))
-                         return false;
-                       return true;
-                     }))
+    if (!DstTy.isValid() || !all_of(drop_begin(MI->operands()),
+                                    [this, &DstTy](const MachineOperand &MO) {
+                                      if (!MO.isReg())
+                                        return true;
+                                      LLT Ty = MRI->getType(MO.getReg());
+                                      if (!Ty.isValid() || (Ty != DstTy))
+                                        return false;
+                                      return true;
+                                    }))
       report("Generic Instruction G_PHI has operands with incompatible/missing "
              "types",
              MI);
@@ -1596,7 +1629,8 @@ void MachineVerifier::visitMachineInstrBefore(const MachineInstr *MI) {
     }
   }
 
-  if (isPreISelGenericOpcode(MCID.getOpcode())) {
+  unsigned Opc = MCID.getOpcode();
+  if (isPreISelGenericOpcode(Opc) || isPreISelGenericOptimizationHint(Opc)) {
     verifyPreISelGenericInstruction(MI);
     return;
   }

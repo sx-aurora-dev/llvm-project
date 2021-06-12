@@ -164,7 +164,7 @@ CSProfileGenerator::getFunctionProfileForContext(StringRef ContextStr) {
   if (Ret.second) {
     SampleContext FContext(Ret.first->first(), RawContext);
     FunctionSamples &FProfile = Ret.first->second;
-    FProfile.setName(FContext.getName());
+    FProfile.setName(FContext.getNameWithoutContext());
     FProfile.setContext(FContext);
   }
   return Ret.first->second;
@@ -239,11 +239,9 @@ void CSProfileGenerator::populateFunctionBoundarySamples(
 
     // Record called target sample and its count
     const FrameLocation &LeafLoc = Binary->getInlineLeafFrameLoc(SourceOffset);
-
     FunctionProfile.addCalledTargetSamples(LeafLoc.second.LineOffset,
                                            LeafLoc.second.Discriminator,
                                            CalleeName, Count);
-    FunctionProfile.addTotalSamples(Count);
 
     // Record head sample for called target(callee)
     // TODO: Cleanup ' @ '
@@ -311,8 +309,10 @@ void CSProfileGenerator::populateInferredFunctionSamples() {
         CallerLeafFrameLoc.second.LineOffset,
         CallerLeafFrameLoc.second.Discriminator, CalleeProfile.getName(),
         EstimatedCallCount);
-    updateBodySamplesforFunctionProfile(CallerProfile, CallerLeafFrameLoc,
-                                        EstimatedCallCount);
+    CallerProfile.addBodySamples(CallerLeafFrameLoc.second.LineOffset,
+                                 CallerLeafFrameLoc.second.Discriminator,
+                                 EstimatedCallCount);
+    CallerProfile.addTotalSamples(EstimatedCallCount);
   }
 }
 

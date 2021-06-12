@@ -237,8 +237,13 @@ bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
     return false;
   }
   if (matchADDRrr(Addr, LHS, RHS)) {
-    // Move a frameiindex to LHS.
-    if (dyn_cast<FrameIndexSDNode>(RHS))
+    // Move a frameiindex to LHS:
+    // If the input is a pair of a frame-index and a register, move a
+    // frame-index to LHS.  This generates MI with following operands.
+    //    %dest, #FI, %reg, offset
+    // In the eliminateFrameIndex, above MI is converted to the following.
+    //    %dest, %fp, %reg, fi_offset + offset
+    if (isa<FrameIndexSDNode>(RHS))
       std::swap(LHS, RHS);
 
     if (matchADDRri(RHS, Index, Offset)) {
@@ -278,9 +283,8 @@ bool VEDAGToDAGISel::selectADDRzri(SDValue Addr, SDValue &Base, SDValue &Index,
 
 bool VEDAGToDAGISel::selectADDRzii(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
-  if (dyn_cast<FrameIndexSDNode>(Addr)) {
+  if (isa<FrameIndexSDNode>(Addr))
     return false;
-  }
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
@@ -310,7 +314,7 @@ bool VEDAGToDAGISel::selectADDRri(SDValue Addr, SDValue &Base,
 
 bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
-  if (dyn_cast<FrameIndexSDNode>(Addr))
+  if (isa<FrameIndexSDNode>(Addr))
     return false;
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||

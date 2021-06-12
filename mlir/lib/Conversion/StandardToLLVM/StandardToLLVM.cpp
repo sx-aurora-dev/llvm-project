@@ -212,7 +212,6 @@ Type LLVMTypeConverter::convertFunctionType(FunctionType type) {
   return LLVM::LLVMPointerType::get(converted);
 }
 
-
 // Function types are converted to LLVM Function types by recursively converting
 // argument and result types.  If MLIR Function has zero results, the LLVM
 // Function has one VoidType result.  If MLIR Function has more than one result,
@@ -525,10 +524,11 @@ MemRefDescriptor::fromStaticShape(OpBuilder &builder, Location loc,
   auto result = getStridesAndOffset(type, strides, offset);
   (void)result;
   assert(succeeded(result) && "unexpected failure in stride computation");
-  assert(offset != MemRefType::getDynamicStrideOrOffset() &&
+  assert(!MemRefType::isDynamicStrideOrOffset(offset) &&
          "expected static offset");
-  assert(!llvm::is_contained(strides, MemRefType::getDynamicStrideOrOffset()) &&
-         "expected static strides");
+  assert(!llvm::any_of(strides, [](int64_t stride) {
+    return MemRefType::isDynamicStrideOrOffset(stride);
+  }) && "expected static strides");
 
   auto convertedType = typeConverter.convertType(type);
   assert(convertedType && "unexpected failure in memref type conversion");
@@ -1044,14 +1044,14 @@ Value ConvertToLLVMPattern::getStridedElementPtr(
 
   Value index;
   if (offset != 0) // Skip if offset is zero.
-    index = offset == MemRefType::getDynamicStrideOrOffset()
+    index = MemRefType::isDynamicStrideOrOffset(offset)
                 ? memRefDescriptor.offset(rewriter, loc)
                 : createIndexConstant(rewriter, loc, offset);
 
   for (int i = 0, e = indices.size(); i < e; ++i) {
     Value increment = indices[i];
     if (strides[i] != 1) { // Skip if stride is 1.
-      Value stride = strides[i] == MemRefType::getDynamicStrideOrOffset()
+      Value stride = MemRefType::isDynamicStrideOrOffset(strides[i])
                          ? memRefDescriptor.stride(rewriter, loc, i)
                          : createIndexConstant(rewriter, loc, strides[i]);
       increment = rewriter.create<LLVM::MulOp>(loc, increment, stride);
@@ -1727,142 +1727,6 @@ struct AssertOpLowering : public ConvertOpToLLVMPattern<AssertOp> {
     rewriter.replaceOpWithNewOp<LLVM::CondBrOp>(
         op, transformed.arg(), continuationBlock, failureBlock);
 
-    return success();
-  }
-};
-
-// Lowerings for operations on complex numbers.
-
-struct CreateComplexOpLowering
-    : public ConvertOpToLLVMPattern<CreateComplexOp> {
-  using ConvertOpToLLVMPattern<CreateComplexOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(CreateComplexOp complexOp, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    CreateComplexOp::Adaptor transformed(operands);
-
-    // Pack real and imaginary part in a complex number struct.
-    auto loc = complexOp.getLoc();
-    auto structType = typeConverter->convertType(complexOp.getType());
-    auto complexStruct = ComplexStructBuilder::undef(rewriter, loc, structType);
-    complexStruct.setReal(rewriter, loc, transformed.real());
-    complexStruct.setImaginary(rewriter, loc, transformed.imaginary());
-
-    rewriter.replaceOp(complexOp, {complexStruct});
-    return success();
-  }
-};
-
-struct ReOpLowering : public ConvertOpToLLVMPattern<ReOp> {
-  using ConvertOpToLLVMPattern<ReOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(ReOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    ReOp::Adaptor transformed(operands);
-
-    // Extract real part from the complex number struct.
-    ComplexStructBuilder complexStruct(transformed.complex());
-    Value real = complexStruct.real(rewriter, op.getLoc());
-    rewriter.replaceOp(op, real);
-
-    return success();
-  }
-};
-
-struct ImOpLowering : public ConvertOpToLLVMPattern<ImOp> {
-  using ConvertOpToLLVMPattern<ImOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(ImOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImOp::Adaptor transformed(operands);
-
-    // Extract imaginary part from the complex number struct.
-    ComplexStructBuilder complexStruct(transformed.complex());
-    Value imaginary = complexStruct.imaginary(rewriter, op.getLoc());
-    rewriter.replaceOp(op, imaginary);
-
-    return success();
-  }
-};
-
-struct BinaryComplexOperands {
-  std::complex<Value> lhs, rhs;
-};
-
-template <typename OpTy>
-BinaryComplexOperands
-unpackBinaryComplexOperands(OpTy op, ArrayRef<Value> operands,
-                            ConversionPatternRewriter &rewriter) {
-  auto loc = op.getLoc();
-  typename OpTy::Adaptor transformed(operands);
-
-  // Extract real and imaginary values from operands.
-  BinaryComplexOperands unpacked;
-  ComplexStructBuilder lhs(transformed.lhs());
-  unpacked.lhs.real(lhs.real(rewriter, loc));
-  unpacked.lhs.imag(lhs.imaginary(rewriter, loc));
-  ComplexStructBuilder rhs(transformed.rhs());
-  unpacked.rhs.real(rhs.real(rewriter, loc));
-  unpacked.rhs.imag(rhs.imaginary(rewriter, loc));
-
-  return unpacked;
-}
-
-struct AddCFOpLowering : public ConvertOpToLLVMPattern<AddCFOp> {
-  using ConvertOpToLLVMPattern<AddCFOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(AddCFOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    BinaryComplexOperands arg =
-        unpackBinaryComplexOperands<AddCFOp>(op, operands, rewriter);
-
-    // Initialize complex number struct for result.
-    auto structType = typeConverter->convertType(op.getType());
-    auto result = ComplexStructBuilder::undef(rewriter, loc, structType);
-
-    // Emit IR to add complex numbers.
-    auto fmf = LLVM::FMFAttr::get({}, op.getContext());
-    Value real =
-        rewriter.create<LLVM::FAddOp>(loc, arg.lhs.real(), arg.rhs.real(), fmf);
-    Value imag =
-        rewriter.create<LLVM::FAddOp>(loc, arg.lhs.imag(), arg.rhs.imag(), fmf);
-    result.setReal(rewriter, loc, real);
-    result.setImaginary(rewriter, loc, imag);
-
-    rewriter.replaceOp(op, {result});
-    return success();
-  }
-};
-
-struct SubCFOpLowering : public ConvertOpToLLVMPattern<SubCFOp> {
-  using ConvertOpToLLVMPattern<SubCFOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(SubCFOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-    BinaryComplexOperands arg =
-        unpackBinaryComplexOperands<SubCFOp>(op, operands, rewriter);
-
-    // Initialize complex number struct for result.
-    auto structType = typeConverter->convertType(op.getType());
-    auto result = ComplexStructBuilder::undef(rewriter, loc, structType);
-
-    // Emit IR to substract complex numbers.
-    auto fmf = LLVM::FMFAttr::get({}, op.getContext());
-    Value real =
-        rewriter.create<LLVM::FSubOp>(loc, arg.lhs.real(), arg.rhs.real(), fmf);
-    Value imag =
-        rewriter.create<LLVM::FSubOp>(loc, arg.lhs.imag(), arg.rhs.imag(), fmf);
-    result.setReal(rewriter, loc, real);
-    result.setImaginary(rewriter, loc, imag);
-
-    rewriter.replaceOp(op, {result});
     return success();
   }
 };
@@ -3444,7 +3308,7 @@ struct SubViewOpLowering : public ConvertOpToLLVMPattern<SubViewOp> {
         extracted);
     targetMemRef.setAllocatedPtr(rewriter, loc, bitcastPtr);
 
-    // Copy the buffer pointer from the old descriptor to the new one.
+    // Copy the aligned pointer from the old descriptor to the new one.
     extracted = sourceMemRef.alignedPtr(rewriter, loc);
     bitcastPtr = rewriter.create<LLVM::BitcastOp>(
         loc,
@@ -3472,8 +3336,14 @@ struct SubViewOpLowering : public ConvertOpToLLVMPattern<SubViewOp> {
       targetMemRef.setConstantOffset(rewriter, loc, offset);
     } else {
       Value baseOffset = sourceMemRef.offset(rewriter, loc);
-      for (unsigned i = 0; i < inferredShapeRank; ++i) {
+      // `inferredShapeRank` may be larger than the number of offset operands
+      // because of trailing semantics. In this case, the offset is guaranteed
+      // to be interpreted as 0 and we can just skip the extra dimensions.
+      for (unsigned i = 0, e = std::min(inferredShapeRank,
+                                        subViewOp.getMixedOffsets().size());
+           i < e; ++i) {
         Value offset =
+            // TODO: need OpFoldResult ODS adaptor to clean this up.
             subViewOp.isDynamicOffset(i)
                 ? operands[subViewOp.getIndexOfDynamicOffset(i)]
                 : rewriter.create<LLVM::ConstantOp>(
@@ -3486,31 +3356,47 @@ struct SubViewOpLowering : public ConvertOpToLLVMPattern<SubViewOp> {
     }
 
     // Update sizes and strides.
+    SmallVector<OpFoldResult> mixedSizes = subViewOp.getMixedSizes();
+    SmallVector<OpFoldResult> mixedStrides = subViewOp.getMixedStrides();
+    assert(mixedSizes.size() == mixedStrides.size() &&
+           "expected sizes and strides of equal length");
     for (int i = inferredShapeRank - 1, j = resultShapeRank - 1;
          i >= 0 && j >= 0; --i) {
       if (!mask[i])
         continue;
 
-      Value size =
-          subViewOp.isDynamicSize(i)
-              ? operands[subViewOp.getIndexOfDynamicSize(i)]
-              : rewriter.create<LLVM::ConstantOp>(
-                    loc, llvmIndexType,
-                    rewriter.getI64IntegerAttr(subViewOp.getStaticSize(i)));
-      targetMemRef.setSize(rewriter, loc, j, size);
-      Value stride;
-      if (!ShapedType::isDynamicStrideOrOffset(strides[i])) {
+      // `i` may overflow subViewOp.getMixedSizes because of trailing semantics.
+      // In this case, the size is guaranteed to be interpreted as Dim and the
+      // stride as 1.
+      Value size, stride;
+      if (static_cast<unsigned>(i) >= mixedSizes.size()) {
+        size = rewriter.create<LLVM::DialectCastOp>(
+            loc, llvmIndexType,
+            rewriter.create<DimOp>(loc, subViewOp.source(), i));
         stride = rewriter.create<LLVM::ConstantOp>(
-            loc, llvmIndexType, rewriter.getI64IntegerAttr(strides[i]));
+            loc, llvmIndexType, rewriter.getI64IntegerAttr(1));
       } else {
-        stride =
-            subViewOp.isDynamicStride(i)
-                ? operands[subViewOp.getIndexOfDynamicStride(i)]
+        // TODO: need OpFoldResult ODS adaptor to clean this up.
+        size =
+            subViewOp.isDynamicSize(i)
+                ? operands[subViewOp.getIndexOfDynamicSize(i)]
                 : rewriter.create<LLVM::ConstantOp>(
                       loc, llvmIndexType,
-                      rewriter.getI64IntegerAttr(subViewOp.getStaticStride(i)));
-        stride = rewriter.create<LLVM::MulOp>(loc, stride, strideValues[i]);
+                      rewriter.getI64IntegerAttr(subViewOp.getStaticSize(i)));
+        if (!ShapedType::isDynamicStrideOrOffset(strides[i])) {
+          stride = rewriter.create<LLVM::ConstantOp>(
+              loc, llvmIndexType, rewriter.getI64IntegerAttr(strides[i]));
+        } else {
+          stride = subViewOp.isDynamicStride(i)
+                       ? operands[subViewOp.getIndexOfDynamicStride(i)]
+                       : rewriter.create<LLVM::ConstantOp>(
+                             loc, llvmIndexType,
+                             rewriter.getI64IntegerAttr(
+                                 subViewOp.getStaticStride(i)));
+          stride = rewriter.create<LLVM::MulOp>(loc, stride, strideValues[i]);
+        }
       }
+      targetMemRef.setSize(rewriter, loc, j, size);
       targetMemRef.setStride(rewriter, loc, j, stride);
       j--;
     }
@@ -3601,7 +3487,7 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<ViewOp> {
                   ArrayRef<int64_t> strides, Value nextSize,
                   Value runningStride, unsigned idx) const {
     assert(idx < strides.size());
-    if (strides[idx] != MemRefType::getDynamicStrideOrOffset())
+    if (!MemRefType::isDynamicStrideOrOffset(strides[idx]))
       return createIndexConstant(rewriter, loc, strides[idx]);
     if (nextSize)
       return runningStride
@@ -3910,7 +3796,6 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
   // clang-format off
   patterns.insert<
       AbsFOpLowering,
-      AddCFOpLowering,
       AddFOpLowering,
       AddIOpLowering,
       AllocaOpLowering,
@@ -3927,7 +3812,6 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       CopySignOpLowering,
       CosOpLowering,
       ConstantOpLowering,
-      CreateComplexOpLowering,
       DialectCastOpLowering,
       DivFOpLowering,
       ExpOpLowering,
@@ -3941,7 +3825,6 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       FPToSILowering,
       FPToUILowering,
       FPTruncLowering,
-      ImOpLowering,
       IndexCastOpLowering,
       MulFOpLowering,
       MulIOpLowering,
@@ -3949,7 +3832,6 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       OrOpLowering,
       PowFOpLowering,
       PrefetchOpLowering,
-      ReOpLowering,
       RemFOpLowering,
       ReturnOpLowering,
       RsqrtOpLowering,
@@ -3964,7 +3846,6 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       SplatOpLowering,
       SplatNdOpLowering,
       SqrtOpLowering,
-      SubCFOpLowering,
       SubFOpLowering,
       SubIOpLowering,
       TruncateIOpLowering,

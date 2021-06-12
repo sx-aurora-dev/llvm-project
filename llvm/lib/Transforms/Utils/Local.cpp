@@ -420,6 +420,14 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     return true;
   }
 
+  if (auto *CB = dyn_cast<CallBase>(I)) {
+    // Treat calls that may not return as alive.
+    // TODO: Remove the intrinsic escape hatch once all intrinsics set
+    // willreturn properly.
+    if (!CB->willReturn() && !isa<IntrinsicInst>(I))
+      return false;
+  }
+
   if (!I->mayHaveSideEffects())
     return true;
 
@@ -2114,15 +2122,16 @@ void llvm::changeToCall(InvokeInst *II, DomTreeUpdater *DTU) {
 }
 
 BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
-                                                   BasicBlock *UnwindEdge) {
+                                                   BasicBlock *UnwindEdge,
+                                                   DomTreeUpdater *DTU) {
   BasicBlock *BB = CI->getParent();
 
   // Convert this function call into an invoke instruction.  First, split the
   // basic block.
-  BasicBlock *Split =
-      BB->splitBasicBlock(CI->getIterator(), CI->getName() + ".noexc");
+  BasicBlock *Split = SplitBlock(BB, CI, DTU, /*LI=*/nullptr, /*MSSAU*/ nullptr,
+                                 CI->getName() + ".noexc");
 
-  // Delete the unconditional branch inserted by splitBasicBlock
+  // Delete the unconditional branch inserted by SplitBlock
   BB->getInstList().pop_back();
 
   // Create the new invoke instruction.
@@ -2141,6 +2150,9 @@ BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
   II->setDebugLoc(CI->getDebugLoc());
   II->setCallingConv(CI->getCallingConv());
   II->setAttributes(CI->getAttributes());
+
+  if (DTU)
+    DTU->applyUpdates({{DominatorTree::Insert, BB, UnwindEdge}});
 
   // Make sure that anything using the call now uses the invoke!  This also
   // updates the CallGraph if present, because it uses a WeakTrackingVH.

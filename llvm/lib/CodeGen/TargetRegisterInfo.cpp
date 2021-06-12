@@ -510,19 +510,13 @@ TargetRegisterInfo::getRegSizeInBits(Register Reg,
   return getRegSizeInBits(*RC);
 }
 
-Register TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
-                                              const MachineRegisterInfo *MRI,
-                                              bool *AllDefHaveOneUser) const {
-  if (AllDefHaveOneUser)
-    *AllDefHaveOneUser = true;
-
+Register
+TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
+                                     const MachineRegisterInfo *MRI) const {
   while (true) {
     const MachineInstr *MI = MRI->getVRegDef(SrcReg);
-    if (!MI->isCopyLike()) {
-      if (AllDefHaveOneUser && !MRI->hasOneNonDBGUse(SrcReg))
-        *AllDefHaveOneUser = false;
+    if (!MI->isCopyLike())
       return SrcReg;
-    }
 
     Register CopySrcReg;
     if (MI->isCopy())
@@ -532,11 +526,33 @@ Register TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
       CopySrcReg = MI->getOperand(2).getReg();
     }
 
-    if (!CopySrcReg.isVirtual()) {
-      if (AllDefHaveOneUser)
-        *AllDefHaveOneUser = false;
+    if (!CopySrcReg.isVirtual())
       return CopySrcReg;
+
+    SrcReg = CopySrcReg;
+  }
+}
+
+Register TargetRegisterInfo::lookThruSingleUseCopyChain(
+    Register SrcReg, const MachineRegisterInfo *MRI) const {
+  while (true) {
+    const MachineInstr *MI = MRI->getVRegDef(SrcReg);
+    // Found the real definition, return it if it has a single use.
+    if (!MI->isCopyLike())
+      return MRI->hasOneNonDBGUse(SrcReg) ? SrcReg : Register();
+
+    Register CopySrcReg;
+    if (MI->isCopy())
+      CopySrcReg = MI->getOperand(1).getReg();
+    else {
+      assert(MI->isSubregToReg() && "Bad opcode for lookThruCopyLike");
+      CopySrcReg = MI->getOperand(2).getReg();
     }
+
+    // Continue only if the next definition in the chain is for a virtual
+    // register that has a single use.
+    if (!CopySrcReg.isVirtual() || !MRI->hasOneNonDBGUse(CopySrcReg))
+      return Register();
 
     SrcReg = CopySrcReg;
   }

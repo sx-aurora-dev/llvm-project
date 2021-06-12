@@ -648,7 +648,7 @@ void ASTWorker::update(ParseInputs Inputs, WantDiagnostics WantDiags,
     log("ASTWorker building file {0} version {1} with command {2}\n[{3}]\n{4}",
         FileName, Inputs.Version, Inputs.CompileCommand.Heuristic,
         Inputs.CompileCommand.Directory,
-        llvm::join(Inputs.CompileCommand.CommandLine, " "));
+        printArgv(Inputs.CompileCommand.CommandLine));
 
     StoreDiags CompilerInvocationDiagConsumer;
     std::vector<std::string> CC1Args;
@@ -656,7 +656,7 @@ void ASTWorker::update(ParseInputs Inputs, WantDiagnostics WantDiags,
         Inputs, CompilerInvocationDiagConsumer, &CC1Args);
     // Log cc1 args even (especially!) if creating invocation failed.
     if (!CC1Args.empty())
-      vlog("Driver produced command: cc1 {0}", llvm::join(CC1Args, " "));
+      vlog("Driver produced command: cc1 {0}", printArgv(CC1Args));
     std::vector<Diag> CompilerInvocationDiags =
         CompilerInvocationDiagConsumer.take();
     if (!Invocation) {
@@ -1265,7 +1265,7 @@ TUScheduler::TUScheduler(const GlobalCompilationDatabase &CDB,
     : CDB(CDB), Opts(Opts),
       Callbacks(Callbacks ? move(Callbacks)
                           : std::make_unique<ParsingCallbacks>()),
-      Barrier(Opts.AsyncThreadsCount),
+      Barrier(Opts.AsyncThreadsCount), QuickRunBarrier(Opts.AsyncThreadsCount),
       IdleASTs(
           std::make_unique<ASTCache>(Opts.RetentionPolicy.MaxRetainedASTs)) {
   // Avoid null checks everywhere.
@@ -1339,14 +1339,27 @@ llvm::StringMap<std::string> TUScheduler::getAllFileContents() const {
 
 void TUScheduler::run(llvm::StringRef Name, llvm::StringRef Path,
                       llvm::unique_function<void()> Action) {
+  runWithSemaphore(Name, Path, std::move(Action), Barrier);
+}
+
+void TUScheduler::runQuick(llvm::StringRef Name, llvm::StringRef Path,
+                           llvm::unique_function<void()> Action) {
+  // Use QuickRunBarrier to serialize quick tasks: we are ignoring
+  // the parallelism level set by the user, don't abuse it
+  runWithSemaphore(Name, Path, std::move(Action), QuickRunBarrier);
+}
+
+void TUScheduler::runWithSemaphore(llvm::StringRef Name, llvm::StringRef Path,
+                                   llvm::unique_function<void()> Action,
+                                   Semaphore &Sem) {
   if (!PreambleTasks) {
     WithContext WithProvidedContext(Opts.ContextProvider(Path));
     return Action();
   }
-  PreambleTasks->runAsync(Name, [this, Ctx = Context::current().clone(),
+  PreambleTasks->runAsync(Name, [this, &Sem, Ctx = Context::current().clone(),
                                  Path(Path.str()),
                                  Action = std::move(Action)]() mutable {
-    std::lock_guard<Semaphore> BarrierLock(Barrier);
+    std::lock_guard<Semaphore> BarrierLock(Sem);
     WithContext WC(std::move(Ctx));
     WithContext WithProvidedContext(Opts.ContextProvider(Path));
     Action();

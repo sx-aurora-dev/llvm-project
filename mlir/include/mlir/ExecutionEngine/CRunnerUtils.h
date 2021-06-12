@@ -26,7 +26,7 @@
 #define MLIR_CRUNNERUTILS_EXPORT __declspec(dllimport)
 #endif // mlir_c_runner_utils_EXPORTS
 #endif // MLIR_CRUNNERUTILS_EXPORT
-#else
+#else  // _WIN32
 #define MLIR_CRUNNERUTILS_EXPORT
 #define MLIR_CRUNNERUTILS_DEFINE_FUNCTIONS
 #endif // _WIN32
@@ -208,6 +208,12 @@ extern "C" MLIR_CRUNNERUTILS_EXPORT void printOpen();
 extern "C" MLIR_CRUNNERUTILS_EXPORT void printClose();
 extern "C" MLIR_CRUNNERUTILS_EXPORT void printComma();
 extern "C" MLIR_CRUNNERUTILS_EXPORT void printNewline();
+
+//===----------------------------------------------------------------------===//
+// Small runtime support library for timing execution and printing GFLOPS
+//===----------------------------------------------------------------------===//
+extern "C" MLIR_CRUNNERUTILS_EXPORT void print_flops(double flops);
+extern "C" MLIR_CRUNNERUTILS_EXPORT double rtclock();
 
 //===----------------------------------------------------------------------===//
 // Small runtime support library for sparse tensors.
