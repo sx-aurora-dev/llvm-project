@@ -522,6 +522,11 @@ def gen_reproducer: Flag<["-"], "gen-reproducer">, InternalDebugOpt,
 def gen_cdb_fragment_path: Separate<["-"], "gen-cdb-fragment-path">, InternalDebugOpt,
   HelpText<"Emit a compilation database fragment to the specified directory">;
 
+def round_trip_args : Flag<["-"], "round-trip-args">, Flags<[CC1Option, NoDriverOption]>,
+  HelpText<"Enable command line arguments round-trip.">;
+def no_round_trip_args : Flag<["-"], "no-round-trip-args">, Flags<[CC1Option, NoDriverOption]>,
+  HelpText<"Disable command line arguments round-trip.">;
+
 def _migrate : Flag<["--"], "migrate">, Flags<[NoXarchOption]>,
   HelpText<"Run the migrator">;
 def ccc_objcmt_migrate : Separate<["-"], "ccc-objcmt-migrate">,
@@ -946,6 +951,11 @@ def dependency_dot : Separate<["-"], "dependency-dot">, Flags<[CC1Option]>,
 def module_dependency_dir : Separate<["-"], "module-dependency-dir">,
   Flags<[CC1Option]>, HelpText<"Directory to dump module dependencies to">,
   MarshallingInfoString<DependencyOutputOpts<"ModuleDependencyOutputDir">>;
+def module_dir : Separate<["-"], "module-dir">, Flags<[FlangOption,FC1Option]>, MetaVarName<"<dir>">,
+  HelpText<"Put MODULE files in <dir>">,
+  DocBrief<[{This option specifies where to put .mod files for compiled modules.
+It is also added to the list of directories to be searched by an USE statement.
+The default is the current directory.}]>;
 def dsym_dir : JoinedOrSeparate<["-"], "dsym-dir">,
   Flags<[NoXarchOption, RenderAsInput]>,
   HelpText<"Directory to output dSYM's (if any) to">, MetaVarName<"<dir>">;
@@ -1157,7 +1167,7 @@ def fprofile_update_EQ : Joined<["-"], "fprofile-update=">,
 defm pseudo_probe_for_profiling : BoolFOption<"pseudo-probe-for-profiling",
   CodeGenOpts<"PseudoProbeForProfiling">, DefaultFalse,
   PosFlag<SetTrue, [], "Emit">, NegFlag<SetFalse, [], "Do not emit">,
-  BothFlags<[NoXarchOption, CC1Option], " pseudo probes for sample profiler">>;
+  BothFlags<[NoXarchOption, CC1Option], " pseudo probes for sample profiling">>;
 def forder_file_instrumentation : Flag<["-"], "forder-file-instrumentation">,
     Group<f_Group>, Flags<[CC1Option, CoreOption]>,
     HelpText<"Generate instrumented code to collect order file into default.profraw file (overridden by '=' form of option or LLVM_PROFILE_FILE env var)">;
@@ -2147,24 +2157,18 @@ def fopenmp_EQ : Joined<["-"], "fopenmp=">, Group<f_Group>;
 def fopenmp_use_tls : Flag<["-"], "fopenmp-use-tls">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>;
 def fnoopenmp_use_tls : Flag<["-"], "fnoopenmp-use-tls">, Group<f_Group>,
-  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>,
-  MarshallingInfoNegativeFlag<LangOpts<"OpenMPUseTLS">, !strconcat("(bool)", fopenmp.KeyPath)>,
-  ShouldParseIf<fopenmp.KeyPath>;
+  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fopenmp_targets_EQ : CommaJoined<["-"], "fopenmp-targets=">, Flags<[NoXarchOption, CC1Option]>,
   HelpText<"Specify comma-separated list of triples OpenMP offloading targets to be supported">;
 def fopenmp_relocatable_target : Flag<["-"], "fopenmp-relocatable-target">,
   Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fnoopenmp_relocatable_target : Flag<["-"], "fnoopenmp-relocatable-target">,
   Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-defm openmp_simd : BoolFOption<"openmp-simd",
-  LangOpts<"OpenMPSimd">, DefaultFalse,
-  PosFlag<SetTrue, [], "Emit OpenMP code only for SIMD-based constructs.">,
-  NegFlag<SetFalse>, BothFlags<[CC1Option, NoArgumentUnused]>>,
-  ShouldParseIf<!strconcat("!", fopenmp.KeyPath)>;
+def fopenmp_simd : Flag<["-"], "fopenmp-simd">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+  HelpText<"Emit OpenMP code only for SIMD-based constructs.">;
 def fopenmp_enable_irbuilder : Flag<["-"], "fopenmp-enable-irbuilder">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>,
-  HelpText<"Use the experimental OpenMP-IR-Builder codegen path.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPIRBuilder">>,
-  ShouldParseIf<fopenmp.KeyPath>;
+  HelpText<"Use the experimental OpenMP-IR-Builder codegen path.">;
+def fno_openmp_simd : Flag<["-"], "fno-openmp-simd">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>;
 def fopenmp_cuda_mode : Flag<["-"], "fopenmp-cuda-mode">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fno_openmp_cuda_mode : Flag<["-"], "fno-openmp-cuda-mode">, Group<f_Group>,
@@ -3777,6 +3781,8 @@ def mv67 : Flag<["-"], "mv67">, Group<m_hexagon_Features_Group>,
   Alias<mcpu_EQ>, AliasArgs<["hexagonv67"]>;
 def mv67t : Flag<["-"], "mv67t">, Group<m_hexagon_Features_Group>,
   Alias<mcpu_EQ>, AliasArgs<["hexagonv67t"]>;
+def mv68 : Flag<["-"], "mv68">, Group<m_hexagon_Features_Group>,
+  Alias<mcpu_EQ>, AliasArgs<["hexagonv68"]>;
 def mhexagon_hvx : Flag<["-"], "mhvx">, Group<m_hexagon_Features_HVX_Group>,
   HelpText<"Enable Hexagon Vector eXtensions">;
 def mhexagon_hvx_EQ : Joined<["-"], "mhvx=">,
@@ -4143,7 +4149,7 @@ defm devirtualize_speculatively : BooleanFFlag<"devirtualize-speculatively">,
 
 // Generic gfortran options.
 def A_DASH : Joined<["-"], "A-">, Group<gfortran_Group>;
-def J : JoinedOrSeparate<["-"], "J">, Flags<[RenderJoined]>, Group<gfortran_Group>;
+def J : JoinedOrSeparate<["-"], "J">, Flags<[RenderJoined,FlangOption,FC1Option]>, Group<gfortran_Group>, Alias<module_dir>;
 def cpp : Flag<["-"], "cpp">, Group<gfortran_Group>;
 def nocpp : Flag<["-"], "nocpp">, Group<gfortran_Group>;
 def static_libgfortran : Flag<["-"], "static-libgfortran">, Group<gfortran_Group>;
@@ -4153,7 +4159,6 @@ def fblas_matmul_limit_EQ : Joined<["-"], "fblas-matmul-limit=">, Group<gfortran
 def fcheck_EQ : Joined<["-"], "fcheck=">, Group<gfortran_Group>;
 def fcoarray_EQ : Joined<["-"], "fcoarray=">, Group<gfortran_Group>;
 def fconvert_EQ : Joined<["-"], "fconvert=">, Group<gfortran_Group>;
-def ffixed_line_length_VALUE : Joined<["-"], "ffixed-line-length-">, Group<gfortran_Group>;
 def ffpe_trap_EQ : Joined<["-"], "ffpe-trap=">, Group<gfortran_Group>;
 def ffree_line_length_VALUE : Joined<["-"], "ffree-line-length-">, Group<gfortran_Group>;
 def finit_character_EQ : Joined<["-"], "finit-character=">, Group<gfortran_Group>;
@@ -4187,8 +4192,6 @@ defm dump_fortran_original : BooleanFFlag<"dump-fortran-original">, Group<gfortr
 defm dump_parse_tree : BooleanFFlag<"dump-parse-tree">, Group<gfortran_Group>;
 defm external_blas : BooleanFFlag<"external-blas">, Group<gfortran_Group>;
 defm f2c : BooleanFFlag<"f2c">, Group<gfortran_Group>;
-defm fixed_form : BooleanFFlag<"fixed-form">, Group<gfortran_Group>;
-defm free_form : BooleanFFlag<"free-form">, Group<gfortran_Group>;
 defm frontend_optimize : BooleanFFlag<"frontend-optimize">, Group<gfortran_Group>;
 defm implicit_none : BooleanFFlag<"implicit-none">, Group<gfortran_Group>;
 defm init_local_zero : BooleanFFlag<"init-local-zero">, Group<gfortran_Group>;
@@ -4230,6 +4233,20 @@ def sycl_std_EQ : Joined<["-"], "sycl-std=">, Group<sycl_Group>, Flags<[CC1Optio
 //===----------------------------------------------------------------------===//
 def test_io : Flag<["-"], "test-io">, Flags<[HelpHidden, FlangOption, FC1Option, FlangOnlyOption]>, Group<Action_Group>,
   HelpText<"Run the InputOuputTest action. Use for development and testing only.">;
+
+let Flags = [FC1Option, FlangOption, FlangOnlyOption] in {
+
+def ffixed_form : Flag<["-"], "ffixed-form">, Group<f_Group>,
+  HelpText<"Process source files in fixed form">;
+def ffree_form : Flag<["-"], "ffree-form">, Group<f_Group>,
+  HelpText<"Process source files in free form">;
+def ffixed_line_length_EQ : Joined<["-"], "ffixed-line-length=">, Group<f_Group>,
+  HelpText<"Use <value> as character line width in fixed mode">,
+  DocBrief<[{Set column after which characters are ignored in typical fixed-form lines in the source
+file}]>;
+def ffixed_line_length_VALUE : Joined<["-"], "ffixed-line-length-">, Group<f_Group>, Alias<ffixed_line_length_EQ>;
+
+}
 
 //===----------------------------------------------------------------------===//
 // CC1 Options
@@ -4780,8 +4797,8 @@ def diagnostic_serialized_file : Separate<["-"], "serialize-diagnostic-file">,
   HelpText<"File for serializing diagnostics in a binary format">;
 
 def fdiagnostics_format : Separate<["-"], "fdiagnostics-format">,
-  HelpText<"Change diagnostic formatting to match IDE and command line tools">, Values<"clang,msvc,msvc-fallback,vi">,
-  NormalizedValuesScope<"DiagnosticOptions">, NormalizedValues<["Clang", "MSVC", "MSVC", "Vi"]>,
+  HelpText<"Change diagnostic formatting to match IDE and command line tools">, Values<"clang,msvc,vi">,
+  NormalizedValuesScope<"DiagnosticOptions">, NormalizedValues<["Clang", "MSVC", "Vi"]>,
   MarshallingInfoString<DiagnosticOpts<"Format">, "Clang">, AutoNormalizeEnum;
 def fdiagnostics_show_category : Separate<["-"], "fdiagnostics-show-category">,
   HelpText<"Print diagnostic category">, Values<"none,id,name">,
@@ -5396,12 +5413,9 @@ def fno_cuda_host_device_constexpr : Flag<["-"], "fno-cuda-host-device-constexpr
 //===----------------------------------------------------------------------===//
 
 def fopenmp_is_device : Flag<["-"], "fopenmp-is-device">,
-  HelpText<"Generate code only for an OpenMP target device.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPIsDevice">>,
-  ShouldParseIf<fopenmp.KeyPath>;
+  HelpText<"Generate code only for an OpenMP target device.">;
 def fopenmp_host_ir_file_path : Separate<["-"], "fopenmp-host-ir-file-path">,
-  HelpText<"Path to the IR file produced by the frontend for the host.">,
-  MarshallingInfoString<LangOpts<"OMPHostIRFile">>;
+  HelpText<"Path to the IR file produced by the frontend for the host.">;
 
 //===----------------------------------------------------------------------===//
 // SYCL Options
@@ -5738,8 +5752,6 @@ def _SLASH_FA : CLFlag<"FA">,
 def _SLASH_Fa : CLJoined<"Fa">,
   HelpText<"Set assembly output file name (with /FA)">,
   MetaVarName<"<file or dir/>">;
-def _SLASH_fallback : CLCompileFlag<"fallback">,
-  HelpText<"Fall back to cl.exe if clang-cl fails to compile">;
 def _SLASH_FI : CLJoinedOrSeparate<"FI">,
   HelpText<"Include file before parsing">, Alias<include_>;
 def _SLASH_Fe : CLJoined<"Fe">,

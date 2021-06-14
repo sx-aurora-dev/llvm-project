@@ -4396,7 +4396,15 @@ void SelectionDAGBuilder::visitMaskedScatter(const CallInst &I) {
     Scale =
         DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
-  SDValue Ops[] = {getMemoryRoot(), Src0, Mask, Base, Index, Scale};
+
+  EVT IdxVT = Index.getValueType();
+  EVT EltTy = IdxVT.getVectorElementType();
+  if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
+    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
+  }
+
+  SDValue Ops[] = { getMemoryRoot(), Src0, Mask, Base, Index, Scale };
   SDValue Scatter = DAG.getMaskedScatter(DAG.getVTList(MVT::Other), VT, sdl,
                                          Ops, MMO, IndexType, false);
   DAG.setRoot(Scatter);
@@ -4506,7 +4514,15 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
     IndexType = ISD::SIGNED_UNSCALED;
     Scale = DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
-  SDValue Ops[] = {Root, Src0, Mask, Base, Index, Scale};
+
+  EVT IdxVT = Index.getValueType();
+  EVT EltTy = IdxVT.getVectorElementType();
+  if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
+    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
+  }
+
+  SDValue Ops[] = { Root, Src0, Mask, Base, Index, Scale };
   SDValue Gather = DAG.getMaskedGather(DAG.getVTList(VT, MVT::Other), VT, sdl,
                                        Ops, MMO, IndexType, ISD::NON_EXTLOAD);
 
@@ -6462,6 +6478,12 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              getValue(I.getArgOperand(0)), SatW));
     return;
   }
+  case Intrinsic::set_rounding:
+    Res = DAG.getNode(ISD::SET_ROUNDING, sdl, MVT::Other,
+                      {getRoot(), getValue(I.getArgOperand(0))});
+    setValue(&I, Res);
+    DAG.setRoot(Res.getValue(0));
+    return;
   case Intrinsic::pcmarker: {
     SDValue Tmp = getValue(I.getArgOperand(0));
     DAG.setRoot(DAG.getNode(ISD::PCMARKER, sdl, MVT::Other, getRoot(), Tmp));

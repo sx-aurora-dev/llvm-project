@@ -974,7 +974,7 @@ public:
     return nullptr;
   }
 
-  const SDNodeFlags getFlags() const { return Flags; }
+  SDNodeFlags getFlags() const { return Flags; }
   void setFlags(SDNodeFlags NewFlags) { Flags = NewFlags; }
 
   /// Clear any flags in this node that aren't also set in Flags.
