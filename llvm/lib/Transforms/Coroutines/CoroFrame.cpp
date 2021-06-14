@@ -596,9 +596,21 @@ void FrameTypeBuilder::addFieldForAllocas(const Function &F,
     // NonOverlappedAllocaSet.
     for (auto &AllocaSet : NonOverlapedAllocas) {
       assert(!AllocaSet.empty() && "Processing Alloca Set is not empty.\n");
-      bool CouldMerge = none_of(AllocaSet, [&](auto Iter) {
+      bool NoInference = none_of(AllocaSet, [&](auto Iter) {
         return IsAllocaInferenre(Alloca, Iter);
       });
+      // If the alignment of A is multiple of the alignment of B, the address
+      // of A should satisfy the requirement for aligning for B.
+      //
+      // There may be other more fine-grained strategies to handle the alignment
+      // infomation during the merging process. But it seems hard to handle
+      // these strategies and benefit little.
+      bool Alignable = [&]() -> bool {
+        auto *LargestAlloca = *AllocaSet.begin();
+        return LargestAlloca->getAlign().value() % Alloca->getAlign().value() ==
+               0;
+      }();
+      bool CouldMerge = NoInference && Alignable;
       if (!CouldMerge)
         continue;
       AllocaIndex[Alloca] = AllocaIndex[*AllocaSet.begin()];
@@ -901,8 +913,7 @@ struct AllocaUseVisitor : PtrUseVisitor<AllocaUseVisitor> {
       // StoreAliases contains aliases of the memory location stored into.
       SmallVector<Instruction *, 4> StoreAliases = {AI};
       while (!StoreAliases.empty()) {
-        Instruction *I = StoreAliases.back();
-        StoreAliases.pop_back();
+        Instruction *I = StoreAliases.pop_back_val();
         for (User *U : I->users()) {
           // If we are loading from the memory location, we are creating an
           // alias of the original pointer.
@@ -1093,6 +1104,7 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
   auto *FramePtr =
       cast<Instruction>(Builder.CreateBitCast(CB, FramePtrTy, "FramePtr"));
   DominatorTree DT(*CB->getFunction());
+  SmallDenseMap<llvm::Value *, llvm::AllocaInst *, 4> DbgPtrAllocaCache;
 
   // Create a GEP with the given index into the coroutine frame for the original
   // value Orig. Appends an extra 0 index for array-allocas, preserving the
@@ -1120,7 +1132,11 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
     if (isa<AllocaInst>(Orig)) {
       // If the type of GEP is not equal to the type of AllocaInst, it implies
       // that the AllocaInst may be reused in the Frame slot of other
-      // AllocaInst. So we cast the GEP to the type of AllocaInst.
+      // AllocaInst. So We cast GEP to the AllocaInst here to re-use
+      // the Frame storage.
+      //
+      // Note: If we change the strategy dealing with alignment, we need to refine
+      // this casting.
       if (GEP->getResultElementType() != Orig->getType())
         return Builder.CreateBitCast(GEP, Orig->getType(),
                                      Orig->getName() + Twine(".cast"));
@@ -1194,6 +1210,21 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
         CurrentReload = Builder.CreateLoad(
             FrameTy->getElementType(FrameData.getFieldIndex(E.first)), GEP,
             E.first->getName() + Twine(".reload"));
+
+        TinyPtrVector<DbgDeclareInst *> DIs = FindDbgDeclareUses(Def);
+        for (DbgDeclareInst *DDI : DIs) {
+          bool AllowUnresolved = false;
+          // This dbg.declare is preserved for all coro-split function
+          // fragments. It will be unreachable in the main function, and
+          // processed by coro::salvageDebugInfo() by CoroCloner.
+          DIBuilder(*CurrentBlock->getParent()->getParent(), AllowUnresolved)
+              .insertDeclare(CurrentReload, DDI->getVariable(),
+                             DDI->getExpression(), DDI->getDebugLoc(),
+                             &*Builder.GetInsertPoint());
+          // This dbg.declare is for the main function entry point.  It
+          // will be deleted in all coro-split functions.
+          coro::salvageDebugInfo(DbgPtrAllocaCache, DDI);
+        }
       }
 
       // If we have a single edge PHINode, remove it and replace it with a
@@ -1261,50 +1292,18 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
 
     SmallPtrSet<BasicBlock *, 4> SeenDbgBBs;
     TinyPtrVector<DbgDeclareInst *> DIs = FindDbgDeclareUses(Alloca);
-    DIBuilder DIB(*Alloca->getModule(), /*AllowUnresolved*/ false);
-    Instruction *FirstDbgDecl = nullptr;
-
-    if (!DIs.empty()) {
-      FirstDbgDecl = DIB.insertDeclare(G, DIs.front()->getVariable(),
-                                       DIs.front()->getExpression(),
-                                       DIs.front()->getDebugLoc(), DIs.front());
-      SeenDbgBBs.insert(DIs.front()->getParent());
-    }
+    if (!DIs.empty())
+      DIBuilder(*Alloca->getModule(),
+                /*AllowUnresolved*/ false)
+          .insertDeclare(G, DIs.front()->getVariable(),
+                         DIs.front()->getExpression(),
+                         DIs.front()->getDebugLoc(), DIs.front());
     for (auto *DI : FindDbgDeclareUses(Alloca))
       DI->eraseFromParent();
     replaceDbgUsesWithUndef(Alloca);
 
-    for (Instruction *I : UsersToUpdate) {
+    for (Instruction *I : UsersToUpdate)
       I->replaceUsesOfWith(Alloca, G);
-
-      // After cloning, transformations might not guarantee that all uses
-      // of this alloca are dominated by the already existing dbg.declare's,
-      // compromising the debug quality. Instead of writing another
-      // transformation to patch each clone, go ahead and early populate
-      // basic blocks that use such allocas with more debug info.
-      if (SeenDbgBBs.count(I->getParent()))
-        continue;
-
-      // If there isn't a prior dbg.declare for this alloca, it probably
-      // means the state hasn't changed prior to one of the relevant suspend
-      // point for this frame access.
-      if (!FirstDbgDecl)
-        continue;
-
-      // These instructions are all dominated by the alloca, insert the
-      // dbg.value in the beginning of the BB to enhance debugging
-      // experience and allow values to be inspected as early as possible.
-      // Prefer dbg.value over dbg.declare since it better sets expectations
-      // that control flow can be later changed by other passes.
-      auto *DI = cast<DbgDeclareInst>(FirstDbgDecl);
-      BasicBlock *CurrentBlock = I->getParent();
-      auto *DerefExpr =
-          DIExpression::append(DI->getExpression(), dwarf::DW_OP_deref);
-      DIB.insertDbgValueIntrinsic(G, DI->getVariable(), DerefExpr,
-                                  DI->getDebugLoc(),
-                                  &*CurrentBlock->getFirstInsertionPt());
-      SeenDbgBBs.insert(CurrentBlock);
-    }
   }
   Builder.SetInsertPoint(FramePtr->getNextNode());
   for (const auto &A : FrameData.Allocas) {
@@ -1479,8 +1478,7 @@ static void rewritePHIsForCleanupPad(BasicBlock *CleanupPadBB,
                                                 pred_size(CleanupPadBB));
 
   int SwitchIndex = 0;
-  SmallVector<BasicBlock *, 8> Preds(pred_begin(CleanupPadBB),
-                                     pred_end(CleanupPadBB));
+  SmallVector<BasicBlock *, 8> Preds(predecessors(CleanupPadBB));
   for (BasicBlock *Pred : Preds) {
     // Create a new cleanuppad and move the PHI values to there.
     auto *CaseBB = BasicBlock::Create(CleanupPadBB->getContext(),
@@ -1535,7 +1533,6 @@ static void rewritePHIs(BasicBlock &BB) {
     for (BasicBlock *Pred : Preds) {
       if (CatchSwitchInst *CS =
               dyn_cast<CatchSwitchInst>(Pred->getTerminator())) {
-        (void)CS;
         // CleanupPad with a CatchSwitch predecessor: therefore this is an
         // unwind destination that needs to be handle specially.
         assert(CS->getUnwindDest() == &BB);
@@ -1990,8 +1987,7 @@ static void sinkSpillUsesAfterCoroBegin(Function &F,
   }
   // Recursively collect users before coro.begin.
   while (!Worklist.empty()) {
-    auto *Def = Worklist.back();
-    Worklist.pop_back();
+    auto *Def = Worklist.pop_back_val();
     for (User *U : Def->users()) {
       auto Inst = cast<Instruction>(U);
       if (Dom.dominates(CoroBegin, Inst))
@@ -2158,6 +2154,73 @@ static void collectFrameAllocas(Function &F, coro::Shape &Shape,
     Allocas.emplace_back(AI, Visitor.getAliasesCopy(),
                          Visitor.getMayWriteBeforeCoroBegin());
   }
+}
+
+void coro::salvageDebugInfo(
+    SmallDenseMap<llvm::Value *, llvm::AllocaInst *, 4> &DbgPtrAllocaCache,
+    DbgDeclareInst *DDI) {
+  Function *F = DDI->getFunction();
+  IRBuilder<> Builder(F->getContext());
+  auto InsertPt = F->getEntryBlock().getFirstInsertionPt();
+  while (isa<IntrinsicInst>(InsertPt))
+    ++InsertPt;
+  Builder.SetInsertPoint(&F->getEntryBlock(), InsertPt);
+  DIExpression *Expr = DDI->getExpression();
+  // Follow the pointer arithmetic all the way to the incoming
+  // function argument and convert into a DIExpression.
+  bool OutermostLoad = true;
+  Value *Storage = DDI->getAddress();
+  while (Storage) {
+    if (auto *LdInst = dyn_cast<LoadInst>(Storage)) {
+      Storage = LdInst->getOperand(0);
+      // FIXME: This is a heuristic that works around the fact that
+      // LLVM IR debug intrinsics cannot yet distinguish between
+      // memory and value locations: Because a dbg.declare(alloca) is
+      // implicitly a memory location no DW_OP_deref operation for the
+      // last direct load from an alloca is necessary.  This condition
+      // effectively drops the *last* DW_OP_deref in the expression.
+      if (!OutermostLoad)
+        Expr = DIExpression::prepend(Expr, DIExpression::DerefBefore);
+      OutermostLoad = false;
+    } else if (auto *StInst = dyn_cast<StoreInst>(Storage)) {
+      Storage = StInst->getOperand(0);
+    } else if (auto *GEPInst = dyn_cast<GetElementPtrInst>(Storage)) {
+      Expr = llvm::salvageDebugInfoImpl(*GEPInst, Expr,
+                                        /*WithStackValue=*/false);
+      Storage = GEPInst->getOperand(0);
+    } else if (auto *BCInst = dyn_cast<llvm::BitCastInst>(Storage))
+      Storage = BCInst->getOperand(0);
+    else
+      break;
+  }
+  // Store a pointer to the coroutine frame object in an alloca so it
+  // is available throughout the function when producing unoptimized
+  // code. Extending the lifetime this way is correct because the
+  // variable has been declared by a dbg.declare intrinsic.
+  if (auto Arg = dyn_cast_or_null<llvm::Argument>(Storage)) {
+    auto &Cached = DbgPtrAllocaCache[Storage];
+    if (!Cached) {
+      Cached = Builder.CreateAlloca(Storage->getType(), 0, nullptr,
+                                    Arg->getName() + ".debug");
+      Builder.CreateStore(Storage, Cached);
+    }
+    Storage = Cached;
+    // FIXME: LLVM lacks nuanced semantics to differentiate between
+    // memory and direct locations at the IR level. The backend will
+    // turn a dbg.declare(alloca, ..., DIExpression()) into a memory
+    // location. Thus, if there are deref and offset operations in the
+    // expression, we need to add a DW_OP_deref at the *start* of the
+    // expression to first load the contents of the alloca before
+    // adjusting it with the expression.
+    if (Expr && Expr->isComplex())
+      Expr = DIExpression::prepend(Expr, DIExpression::DerefBefore);
+  }
+  auto &VMContext = DDI->getFunction()->getContext();
+  DDI->setOperand(
+      0, MetadataAsValue::get(VMContext, ValueAsMetadata::get(Storage)));
+  DDI->setOperand(2, MetadataAsValue::get(VMContext, Expr));
+  if (auto *InsertPt = dyn_cast_or_null<Instruction>(Storage))
+    DDI->moveAfter(InsertPt);
 }
 
 void coro::buildCoroutineFrame(Function &F, Shape &Shape) {

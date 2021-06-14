@@ -70,6 +70,7 @@
 #include "llvm/Support/ScopedPrinter.h"
 #include <algorithm>
 #include <iterator>
+#include <limits>
 
 // We log detailed candidate here if you run with -debug-only=codecomplete.
 #define DEBUG_TYPE "CodeComplete"
@@ -1122,7 +1123,9 @@ bool semaCodeComplete(std::unique_ptr<CodeCompleteConsumer> Consumer,
   // skip all includes in this case; these completions are really simple.
   PreambleBounds PreambleRegion =
       ComputePreambleBounds(*CI->getLangOpts(), *ContentsBuffer, 0);
-  bool CompletingInPreamble = PreambleRegion.Size > Input.Offset;
+  bool CompletingInPreamble = Input.Offset < PreambleRegion.Size ||
+                              (!PreambleRegion.PreambleEndsAtStartOfLine &&
+                               Input.Offset == PreambleRegion.Size);
   if (Input.Patch)
     Input.Patch->apply(*CI);
   // NOTE: we must call BeginSourceFile after prepareCompilerInstance. Otherwise
@@ -1655,9 +1658,10 @@ private:
           evaluateSymbolAndRelevance(Scores.Quality, Scores.Relevance);
       // NameMatch is in fact a multiplier on total score, so rescoring is
       // sound.
-      Scores.ExcludingName = Relevance.NameMatch
-                                 ? Scores.Total / Relevance.NameMatch
-                                 : Scores.Quality;
+      Scores.ExcludingName =
+          Relevance.NameMatch > std::numeric_limits<float>::epsilon()
+              ? Scores.Total / Relevance.NameMatch
+              : Scores.Quality;
       return Scores;
 
     case RM::DecisionForest:

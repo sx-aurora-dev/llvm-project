@@ -188,12 +188,56 @@ entry:
   ret void
 }
 
+define void @vld4_v4i32_align1(<16 x i32> *%src, <4 x i32> *%dst) {
+; CHECK-LABEL: vld4_v4i32_align1:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .vsave {d8, d9, d10, d11}
+; CHECK-NEXT:    vpush {d8, d9, d10, d11}
+; CHECK-NEXT:    vldrb.u8 q0, [r0]
+; CHECK-NEXT:    vldrb.u8 q3, [r0, #32]
+; CHECK-NEXT:    vldrb.u8 q1, [r0, #48]
+; CHECK-NEXT:    vldrb.u8 q2, [r0, #16]
+; CHECK-NEXT:    vmov.f32 s18, s15
+; CHECK-NEXT:    vmov.f64 d10, d1
+; CHECK-NEXT:    vmov.f32 s19, s7
+; CHECK-NEXT:    vmov.f32 s21, s10
+; CHECK-NEXT:    vmov.f32 s16, s3
+; CHECK-NEXT:    vmov.f32 s15, s6
+; CHECK-NEXT:    vmov.f32 s22, s14
+; CHECK-NEXT:    vmov.f32 s17, s11
+; CHECK-NEXT:    vmov.f32 s23, s6
+; CHECK-NEXT:    vadd.i32 q4, q5, q4
+; CHECK-NEXT:    vmov.f32 s22, s13
+; CHECK-NEXT:    vmov.f32 s23, s5
+; CHECK-NEXT:    vmov.f32 s20, s1
+; CHECK-NEXT:    vmov.f32 s2, s12
+; CHECK-NEXT:    vmov.f32 s3, s4
+; CHECK-NEXT:    vmov.f32 s21, s9
+; CHECK-NEXT:    vmov.f32 s1, s8
+; CHECK-NEXT:    vadd.i32 q0, q0, q5
+; CHECK-NEXT:    vadd.i32 q0, q0, q4
+; CHECK-NEXT:    vstrw.32 q0, [r1]
+; CHECK-NEXT:    vpop {d8, d9, d10, d11}
+; CHECK-NEXT:    bx lr
+entry:
+  %l1 = load <16 x i32>, <16 x i32>* %src, align 1
+  %s1 = shufflevector <16 x i32> %l1, <16 x i32> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
+  %s2 = shufflevector <16 x i32> %l1, <16 x i32> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
+  %s3 = shufflevector <16 x i32> %l1, <16 x i32> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
+  %s4 = shufflevector <16 x i32> %l1, <16 x i32> undef, <4 x i32> <i32 3, i32 7, i32 11, i32 15>
+  %a1 = add <4 x i32> %s1, %s2
+  %a2 = add <4 x i32> %s3, %s4
+  %a3 = add <4 x i32> %a1, %a2
+  store <4 x i32> %a3, <4 x i32> *%dst
+  ret void
+}
+
 ; i16
 
 define void @vld4_v2i16(<8 x i16> *%src, <2 x i16> *%dst) {
 ; CHECK-LABEL: vld4_v2i16:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldrw.u32 q0, [r0]
+; CHECK-NEXT:    vldrh.u16 q0, [r0]
 ; CHECK-NEXT:    vmov.u16 r0, q0[7]
 ; CHECK-NEXT:    vmov.u16 r2, q0[6]
 ; CHECK-NEXT:    add r0, r2
@@ -212,7 +256,7 @@ define void @vld4_v2i16(<8 x i16> *%src, <2 x i16> *%dst) {
 ; CHECK-NEXT:    strh r0, [r1]
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <8 x i16>, <8 x i16>* %src, align 4
+  %l1 = load <8 x i16>, <8 x i16>* %src, align 2
   %s1 = shufflevector <8 x i16> %l1, <8 x i16> undef, <2 x i32> <i32 0, i32 4>
   %s2 = shufflevector <8 x i16> %l1, <8 x i16> undef, <2 x i32> <i32 1, i32 5>
   %s3 = shufflevector <8 x i16> %l1, <8 x i16> undef, <2 x i32> <i32 2, i32 6>
@@ -229,8 +273,8 @@ define void @vld4_v4i16(<16 x i16> *%src, <4 x i16> *%dst) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    .vsave {d8, d9}
 ; CHECK-NEXT:    vpush {d8, d9}
-; CHECK-NEXT:    vldrw.u32 q0, [r0, #16]
-; CHECK-NEXT:    vldrw.u32 q1, [r0]
+; CHECK-NEXT:    vldrh.u16 q0, [r0, #16]
+; CHECK-NEXT:    vldrh.u16 q1, [r0]
 ; CHECK-NEXT:    vmov.u16 r2, q0[3]
 ; CHECK-NEXT:    vmov.u16 r0, q1[3]
 ; CHECK-NEXT:    vmov q2[2], q2[0], r0, r2
@@ -262,7 +306,7 @@ define void @vld4_v4i16(<16 x i16> *%src, <4 x i16> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <16 x i16>, <16 x i16>* %src, align 4
+  %l1 = load <16 x i16>, <16 x i16>* %src, align 2
   %s1 = shufflevector <16 x i16> %l1, <16 x i16> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
   %s2 = shufflevector <16 x i16> %l1, <16 x i16> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
   %s3 = shufflevector <16 x i16> %l1, <16 x i16> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
@@ -291,7 +335,7 @@ define void @vld4_v8i16(<32 x i16> *%src, <8 x i16> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <32 x i16>, <32 x i16>* %src, align 4
+  %l1 = load <32 x i16>, <32 x i16>* %src, align 2
   %s1 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28>
   %s2 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29>
   %s3 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30>
@@ -329,7 +373,7 @@ define void @vld4_v16i16(<64 x i16> *%src, <16 x i16> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9, d10, d11, d12, d13}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <64 x i16>, <64 x i16>* %src, align 4
+  %l1 = load <64 x i16>, <64 x i16>* %src, align 2
   %s1 = shufflevector <64 x i16> %l1, <64 x i16> undef, <16 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28, i32 32, i32 36, i32 40, i32 44, i32 48, i32 52, i32 56, i32 60>
   %s2 = shufflevector <64 x i16> %l1, <64 x i16> undef, <16 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29, i32 33, i32 37, i32 41, i32 45, i32 49, i32 53, i32 57, i32 61>
   %s3 = shufflevector <64 x i16> %l1, <64 x i16> undef, <16 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30, i32 34, i32 38, i32 42, i32 46, i32 50, i32 54, i32 58, i32 62>
@@ -338,6 +382,106 @@ entry:
   %a2 = add <16 x i16> %s3, %s4
   %a3 = add <16 x i16> %a1, %a2
   store <16 x i16> %a3, <16 x i16> *%dst
+  ret void
+}
+
+define void @vld4_v8i16_align1(<32 x i16> *%src, <8 x i16> *%dst) {
+; CHECK-LABEL: vld4_v8i16_align1:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .vsave {d8, d9, d10, d11, d12, d13}
+; CHECK-NEXT:    vpush {d8, d9, d10, d11, d12, d13}
+; CHECK-NEXT:    vldrb.u8 q1, [r0]
+; CHECK-NEXT:    vldrb.u8 q0, [r0, #16]
+; CHECK-NEXT:    vldrb.u8 q2, [r0, #32]
+; CHECK-NEXT:    vldrb.u8 q3, [r0, #48]
+; CHECK-NEXT:    vmov.u16 r2, q1[3]
+; CHECK-NEXT:    vmov.16 q4[0], r2
+; CHECK-NEXT:    vmov.u16 r2, q1[7]
+; CHECK-NEXT:    vmov.16 q4[1], r2
+; CHECK-NEXT:    vmov.u16 r2, q0[3]
+; CHECK-NEXT:    vmov.16 q4[2], r2
+; CHECK-NEXT:    vmov.u16 r2, q2[3]
+; CHECK-NEXT:    vmov.16 q5[4], r2
+; CHECK-NEXT:    vmov.u16 r2, q2[7]
+; CHECK-NEXT:    vmov.16 q5[5], r2
+; CHECK-NEXT:    vmov.u16 r0, q3[3]
+; CHECK-NEXT:    vmov.16 q5[6], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[7]
+; CHECK-NEXT:    vmov.16 q5[7], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[7]
+; CHECK-NEXT:    vmov.16 q4[3], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[2]
+; CHECK-NEXT:    vmov.f32 s18, s22
+; CHECK-NEXT:    vmov.f32 s19, s23
+; CHECK-NEXT:    vmov.16 q5[0], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[6]
+; CHECK-NEXT:    vmov.16 q5[1], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[2]
+; CHECK-NEXT:    vmov.16 q5[2], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[2]
+; CHECK-NEXT:    vmov.16 q6[4], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[6]
+; CHECK-NEXT:    vmov.16 q6[5], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[2]
+; CHECK-NEXT:    vmov.16 q6[6], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[6]
+; CHECK-NEXT:    vmov.16 q6[7], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[6]
+; CHECK-NEXT:    vmov.16 q5[3], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[1]
+; CHECK-NEXT:    vmov.f32 s22, s26
+; CHECK-NEXT:    vmov.f32 s23, s27
+; CHECK-NEXT:    vadd.i16 q4, q5, q4
+; CHECK-NEXT:    vmov.16 q5[0], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[5]
+; CHECK-NEXT:    vmov.16 q5[1], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[1]
+; CHECK-NEXT:    vmov.16 q5[2], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[1]
+; CHECK-NEXT:    vmov.16 q6[4], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[5]
+; CHECK-NEXT:    vmov.16 q6[5], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[1]
+; CHECK-NEXT:    vmov.16 q6[6], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[5]
+; CHECK-NEXT:    vmov.16 q6[7], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[5]
+; CHECK-NEXT:    vmov.16 q5[3], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[0]
+; CHECK-NEXT:    vmov.f32 s22, s26
+; CHECK-NEXT:    vmov.f32 s23, s27
+; CHECK-NEXT:    vmov.16 q6[0], r0
+; CHECK-NEXT:    vmov.u16 r0, q1[4]
+; CHECK-NEXT:    vmov.16 q6[1], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[0]
+; CHECK-NEXT:    vmov.16 q6[2], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[0]
+; CHECK-NEXT:    vmov.16 q1[4], r0
+; CHECK-NEXT:    vmov.u16 r0, q2[4]
+; CHECK-NEXT:    vmov.16 q1[5], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[0]
+; CHECK-NEXT:    vmov.16 q1[6], r0
+; CHECK-NEXT:    vmov.u16 r0, q3[4]
+; CHECK-NEXT:    vmov.16 q1[7], r0
+; CHECK-NEXT:    vmov.u16 r0, q0[4]
+; CHECK-NEXT:    vmov.16 q6[3], r0
+; CHECK-NEXT:    vmov.f32 s26, s6
+; CHECK-NEXT:    vmov.f32 s27, s7
+; CHECK-NEXT:    vadd.i16 q0, q6, q5
+; CHECK-NEXT:    vadd.i16 q0, q0, q4
+; CHECK-NEXT:    vstrw.32 q0, [r1]
+; CHECK-NEXT:    vpop {d8, d9, d10, d11, d12, d13}
+; CHECK-NEXT:    bx lr
+entry:
+  %l1 = load <32 x i16>, <32 x i16>* %src, align 1
+  %s1 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28>
+  %s2 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29>
+  %s3 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30>
+  %s4 = shufflevector <32 x i16> %l1, <32 x i16> undef, <8 x i32> <i32 3, i32 7, i32 11, i32 15, i32 19, i32 23, i32 27, i32 31>
+  %a1 = add <8 x i16> %s1, %s2
+  %a2 = add <8 x i16> %s3, %s4
+  %a3 = add <8 x i16> %a1, %a2
+  store <8 x i16> %a3, <8 x i16> *%dst
   ret void
 }
 
@@ -365,7 +509,7 @@ define void @vld4_v2i8(<8 x i8> *%src, <2 x i8> *%dst) {
 ; CHECK-NEXT:    strb r0, [r1]
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <8 x i8>, <8 x i8>* %src, align 4
+  %l1 = load <8 x i8>, <8 x i8>* %src, align 1
   %s1 = shufflevector <8 x i8> %l1, <8 x i8> undef, <2 x i32> <i32 0, i32 4>
   %s2 = shufflevector <8 x i8> %l1, <8 x i8> undef, <2 x i32> <i32 1, i32 5>
   %s3 = shufflevector <8 x i8> %l1, <8 x i8> undef, <2 x i32> <i32 2, i32 6>
@@ -380,7 +524,7 @@ entry:
 define void @vld4_v4i8(<16 x i8> *%src, <4 x i8> *%dst) {
 ; CHECK-LABEL: vld4_v4i8:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldrw.u32 q0, [r0]
+; CHECK-NEXT:    vldrb.u8 q0, [r0]
 ; CHECK-NEXT:    vmov.u8 r0, q0[10]
 ; CHECK-NEXT:    vmov.u8 r2, q0[2]
 ; CHECK-NEXT:    vmov q1[2], q1[0], r2, r0
@@ -395,7 +539,7 @@ define void @vld4_v4i8(<16 x i8> *%src, <4 x i8> *%dst) {
 ; CHECK-NEXT:    vstrb.32 q0, [r1]
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <16 x i8>, <16 x i8>* %src, align 4
+  %l1 = load <16 x i8>, <16 x i8>* %src, align 1
   %s1 = shufflevector <16 x i8> %l1, <16 x i8> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
   %s2 = shufflevector <16 x i8> %l1, <16 x i8> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
   %s3 = shufflevector <16 x i8> %l1, <16 x i8> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
@@ -412,8 +556,8 @@ define void @vld4_v8i8(<32 x i8> *%src, <8 x i8> *%dst) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    .vsave {d8, d9}
 ; CHECK-NEXT:    vpush {d8, d9}
-; CHECK-NEXT:    vldrw.u32 q1, [r0]
-; CHECK-NEXT:    vldrw.u32 q0, [r0, #16]
+; CHECK-NEXT:    vldrb.u8 q1, [r0]
+; CHECK-NEXT:    vldrb.u8 q0, [r0, #16]
 ; CHECK-NEXT:    vmov.u8 r2, q1[3]
 ; CHECK-NEXT:    vmov.u8 r0, q0[3]
 ; CHECK-NEXT:    vmov.16 q2[0], r2
@@ -485,7 +629,7 @@ define void @vld4_v8i8(<32 x i8> *%src, <8 x i8> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <32 x i8>, <32 x i8>* %src, align 4
+  %l1 = load <32 x i8>, <32 x i8>* %src, align 1
   %s1 = shufflevector <32 x i8> %l1, <32 x i8> undef, <8 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28>
   %s2 = shufflevector <32 x i8> %l1, <32 x i8> undef, <8 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29>
   %s3 = shufflevector <32 x i8> %l1, <32 x i8> undef, <8 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30>
@@ -514,7 +658,7 @@ define void @vld4_v16i8(<64 x i8> *%src, <16 x i8> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <64 x i8>, <64 x i8>* %src, align 4
+  %l1 = load <64 x i8>, <64 x i8>* %src, align 1
   %s1 = shufflevector <64 x i8> %l1, <64 x i8> undef, <16 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28, i32 32, i32 36, i32 40, i32 44, i32 48, i32 52, i32 56, i32 60>
   %s2 = shufflevector <64 x i8> %l1, <64 x i8> undef, <16 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29, i32 33, i32 37, i32 41, i32 45, i32 49, i32 53, i32 57, i32 61>
   %s3 = shufflevector <64 x i8> %l1, <64 x i8> undef, <16 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30, i32 34, i32 38, i32 42, i32 46, i32 50, i32 54, i32 58, i32 62>
@@ -585,7 +729,7 @@ define void @vld4_v2i64(<8 x i64> *%src, <2 x i64> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9, d10, d11}
 ; CHECK-NEXT:    pop {r4, r5, r6, pc}
 entry:
-  %l1 = load <8 x i64>, <8 x i64>* %src, align 4
+  %l1 = load <8 x i64>, <8 x i64>* %src, align 8
   %s1 = shufflevector <8 x i64> %l1, <8 x i64> undef, <2 x i32> <i32 0, i32 4>
   %s2 = shufflevector <8 x i64> %l1, <8 x i64> undef, <2 x i32> <i32 1, i32 5>
   %s3 = shufflevector <8 x i64> %l1, <8 x i64> undef, <2 x i32> <i32 2, i32 6>
@@ -713,7 +857,7 @@ define void @vld4_v4i64(<16 x i64> *%src, <4 x i64> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9, d10, d11, d12, d13, d14, d15}
 ; CHECK-NEXT:    pop.w {r4, r5, r6, r7, r8, r9, r10, pc}
 entry:
-  %l1 = load <16 x i64>, <16 x i64>* %src, align 4
+  %l1 = load <16 x i64>, <16 x i64>* %src, align 8
   %s1 = shufflevector <16 x i64> %l1, <16 x i64> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
   %s2 = shufflevector <16 x i64> %l1, <16 x i64> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
   %s3 = shufflevector <16 x i64> %l1, <16 x i64> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
@@ -904,12 +1048,56 @@ entry:
   ret void
 }
 
+define void @vld4_v4f32_align1(<16 x float> *%src, <4 x float> *%dst) {
+; CHECK-LABEL: vld4_v4f32_align1:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .vsave {d8, d9, d10, d11}
+; CHECK-NEXT:    vpush {d8, d9, d10, d11}
+; CHECK-NEXT:    vldrb.u8 q0, [r0]
+; CHECK-NEXT:    vldrb.u8 q3, [r0, #32]
+; CHECK-NEXT:    vldrb.u8 q1, [r0, #48]
+; CHECK-NEXT:    vldrb.u8 q2, [r0, #16]
+; CHECK-NEXT:    vmov.f32 s18, s15
+; CHECK-NEXT:    vmov.f64 d10, d1
+; CHECK-NEXT:    vmov.f32 s19, s7
+; CHECK-NEXT:    vmov.f32 s21, s10
+; CHECK-NEXT:    vmov.f32 s16, s3
+; CHECK-NEXT:    vmov.f32 s15, s6
+; CHECK-NEXT:    vmov.f32 s22, s14
+; CHECK-NEXT:    vmov.f32 s17, s11
+; CHECK-NEXT:    vmov.f32 s23, s6
+; CHECK-NEXT:    vadd.f32 q4, q5, q4
+; CHECK-NEXT:    vmov.f32 s22, s13
+; CHECK-NEXT:    vmov.f32 s23, s5
+; CHECK-NEXT:    vmov.f32 s20, s1
+; CHECK-NEXT:    vmov.f32 s2, s12
+; CHECK-NEXT:    vmov.f32 s3, s4
+; CHECK-NEXT:    vmov.f32 s21, s9
+; CHECK-NEXT:    vmov.f32 s1, s8
+; CHECK-NEXT:    vadd.f32 q0, q0, q5
+; CHECK-NEXT:    vadd.f32 q0, q0, q4
+; CHECK-NEXT:    vstrw.32 q0, [r1]
+; CHECK-NEXT:    vpop {d8, d9, d10, d11}
+; CHECK-NEXT:    bx lr
+entry:
+  %l1 = load <16 x float>, <16 x float>* %src, align 1
+  %s1 = shufflevector <16 x float> %l1, <16 x float> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
+  %s2 = shufflevector <16 x float> %l1, <16 x float> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
+  %s3 = shufflevector <16 x float> %l1, <16 x float> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
+  %s4 = shufflevector <16 x float> %l1, <16 x float> undef, <4 x i32> <i32 3, i32 7, i32 11, i32 15>
+  %a1 = fadd <4 x float> %s1, %s2
+  %a2 = fadd <4 x float> %s3, %s4
+  %a3 = fadd <4 x float> %a1, %a2
+  store <4 x float> %a3, <4 x float> *%dst
+  ret void
+}
+
 ; f16
 
 define void @vld4_v2f16(<8 x half> *%src, <2 x half> *%dst) {
 ; CHECK-LABEL: vld4_v2f16:
 ; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vldrw.u32 q0, [r0]
+; CHECK-NEXT:    vldrh.u16 q0, [r0]
 ; CHECK-NEXT:    vmovx.f16 s4, s3
 ; CHECK-NEXT:    vmov r0, s4
 ; CHECK-NEXT:    vmovx.f16 s4, s1
@@ -937,7 +1125,7 @@ define void @vld4_v2f16(<8 x half> *%src, <2 x half> *%dst) {
 ; CHECK-NEXT:    str r0, [r1]
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <8 x half>, <8 x half>* %src, align 4
+  %l1 = load <8 x half>, <8 x half>* %src, align 2
   %s1 = shufflevector <8 x half> %l1, <8 x half> undef, <2 x i32> <i32 0, i32 4>
   %s2 = shufflevector <8 x half> %l1, <8 x half> undef, <2 x i32> <i32 1, i32 5>
   %s3 = shufflevector <8 x half> %l1, <8 x half> undef, <2 x i32> <i32 2, i32 6>
@@ -954,8 +1142,8 @@ define void @vld4_v4f16(<16 x half> *%src, <4 x half> *%dst) {
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    .vsave {d8}
 ; CHECK-NEXT:    vpush {d8}
-; CHECK-NEXT:    vldrw.u32 q1, [r0]
-; CHECK-NEXT:    vldrw.u32 q0, [r0, #16]
+; CHECK-NEXT:    vldrh.u16 q1, [r0]
+; CHECK-NEXT:    vldrh.u16 q0, [r0, #16]
 ; CHECK-NEXT:    vmov r2, s5
 ; CHECK-NEXT:    vmovx.f16 s12, s5
 ; CHECK-NEXT:    vmov r3, s7
@@ -1005,7 +1193,7 @@ define void @vld4_v4f16(<16 x half> *%src, <4 x half> *%dst) {
 ; CHECK-NEXT:    vpop {d8}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <16 x half>, <16 x half>* %src, align 4
+  %l1 = load <16 x half>, <16 x half>* %src, align 2
   %s1 = shufflevector <16 x half> %l1, <16 x half> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
   %s2 = shufflevector <16 x half> %l1, <16 x half> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
   %s3 = shufflevector <16 x half> %l1, <16 x half> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>
@@ -1034,7 +1222,7 @@ define void @vld4_v8f16(<32 x half> *%src, <8 x half> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <32 x half>, <32 x half>* %src, align 4
+  %l1 = load <32 x half>, <32 x half>* %src, align 2
   %s1 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28>
   %s2 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29>
   %s3 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30>
@@ -1082,7 +1270,7 @@ define void @vld4_v16f16(<64 x half> *%src, <16 x half> *%dst) {
 ; CHECK-NEXT:    pop {r4, r5}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <64 x half>, <64 x half>* %src, align 4
+  %l1 = load <64 x half>, <64 x half>* %src, align 2
   %s1 = shufflevector <64 x half> %l1, <64 x half> undef, <16 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28, i32 32, i32 36, i32 40, i32 44, i32 48, i32 52, i32 56, i32 60>
   %s2 = shufflevector <64 x half> %l1, <64 x half> undef, <16 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29, i32 33, i32 37, i32 41, i32 45, i32 49, i32 53, i32 57, i32 61>
   %s3 = shufflevector <64 x half> %l1, <64 x half> undef, <16 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30, i32 34, i32 38, i32 42, i32 46, i32 50, i32 54, i32 58, i32 62>
@@ -1091,6 +1279,134 @@ entry:
   %a2 = fadd <16 x half> %s3, %s4
   %a3 = fadd <16 x half> %a1, %a2
   store <16 x half> %a3, <16 x half> *%dst
+  ret void
+}
+
+define void @vld4_v8f16_align1(<32 x half> *%src, <8 x half> *%dst) {
+; CHECK-LABEL: vld4_v8f16_align1:
+; CHECK:       @ %bb.0: @ %entry
+; CHECK-NEXT:    .vsave {d8, d9, d10, d11, d12, d13, d14, d15}
+; CHECK-NEXT:    vpush {d8, d9, d10, d11, d12, d13, d14, d15}
+; CHECK-NEXT:    .pad #64
+; CHECK-NEXT:    sub sp, #64
+; CHECK-NEXT:    vldrb.u8 q6, [r0]
+; CHECK-NEXT:    vldrb.u8 q2, [r0, #16]
+; CHECK-NEXT:    vldrb.u8 q4, [r0, #32]
+; CHECK-NEXT:    vldrb.u8 q5, [r0, #48]
+; CHECK-NEXT:    vmov r2, s24
+; CHECK-NEXT:    vstrw.32 q2, [sp] @ 16-byte Spill
+; CHECK-NEXT:    vmov.16 q0[0], r2
+; CHECK-NEXT:    vmov r3, s26
+; CHECK-NEXT:    vmov.16 q0[1], r3
+; CHECK-NEXT:    vmov r2, s8
+; CHECK-NEXT:    vmov.16 q0[2], r2
+; CHECK-NEXT:    vstrw.32 q0, [sp, #48] @ 16-byte Spill
+; CHECK-NEXT:    vmovx.f16 s0, s19
+; CHECK-NEXT:    vmov r2, s0
+; CHECK-NEXT:    vmovx.f16 s0, s17
+; CHECK-NEXT:    vmov r3, s0
+; CHECK-NEXT:    vmovx.f16 s0, s21
+; CHECK-NEXT:    vmov.16 q1[4], r3
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmov.16 q1[5], r2
+; CHECK-NEXT:    vmovx.f16 s0, s23
+; CHECK-NEXT:    vmov.16 q1[6], r0
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmovx.f16 s0, s25
+; CHECK-NEXT:    vmov.16 q1[7], r0
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmovx.f16 s0, s27
+; CHECK-NEXT:    vmov r2, s0
+; CHECK-NEXT:    vmov.16 q3[0], r0
+; CHECK-NEXT:    vmovx.f16 s0, s9
+; CHECK-NEXT:    vmov.16 q3[1], r2
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmovx.f16 s0, s11
+; CHECK-NEXT:    vmov.16 q3[2], r0
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmov.16 q3[3], r0
+; CHECK-NEXT:    vmov r0, s17
+; CHECK-NEXT:    vmov.16 q0[4], r0
+; CHECK-NEXT:    vmov r2, s19
+; CHECK-NEXT:    vmov.16 q0[5], r2
+; CHECK-NEXT:    vmov r0, s21
+; CHECK-NEXT:    vmov.16 q0[6], r0
+; CHECK-NEXT:    vmov r0, s23
+; CHECK-NEXT:    vmov.16 q0[7], r0
+; CHECK-NEXT:    vmov r0, s25
+; CHECK-NEXT:    vmov.16 q7[0], r0
+; CHECK-NEXT:    vmov r2, s27
+; CHECK-NEXT:    vmov.16 q7[1], r2
+; CHECK-NEXT:    vmov r0, s9
+; CHECK-NEXT:    vstrw.32 q0, [sp, #16] @ 16-byte Spill
+; CHECK-NEXT:    vmov.16 q7[2], r0
+; CHECK-NEXT:    vmov r0, s11
+; CHECK-NEXT:    vmovx.f16 s0, s16
+; CHECK-NEXT:    vmov.16 q7[3], r0
+; CHECK-NEXT:    vmov r0, s0
+; CHECK-NEXT:    vmovx.f16 s0, s18
+; CHECK-NEXT:    vstrw.32 q1, [sp, #32] @ 16-byte Spill
+; CHECK-NEXT:    vmov r2, s0
+; CHECK-NEXT:    vmov.16 q1[4], r0
+; CHECK-NEXT:    vmovx.f16 s8, s20
+; CHECK-NEXT:    vmov.16 q1[5], r2
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmovx.f16 s8, s22
+; CHECK-NEXT:    vmov.16 q1[6], r0
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmovx.f16 s8, s24
+; CHECK-NEXT:    vldrw.u32 q0, [sp] @ 16-byte Reload
+; CHECK-NEXT:    vmov.16 q1[7], r0
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmovx.f16 s8, s26
+; CHECK-NEXT:    vmov.16 q6[0], r0
+; CHECK-NEXT:    vmov r2, s8
+; CHECK-NEXT:    vmovx.f16 s8, s0
+; CHECK-NEXT:    vmov.16 q6[1], r2
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vmovx.f16 s8, s2
+; CHECK-NEXT:    vmov.16 q6[2], r0
+; CHECK-NEXT:    vmov r0, s8
+; CHECK-NEXT:    vldrw.u32 q2, [sp, #48] @ 16-byte Reload
+; CHECK-NEXT:    vmov.16 q6[3], r0
+; CHECK-NEXT:    vmov r0, s16
+; CHECK-NEXT:    vmov r2, s18
+; CHECK-NEXT:    vmov.16 q4[4], r0
+; CHECK-NEXT:    vmov.16 q4[5], r2
+; CHECK-NEXT:    vmov r0, s20
+; CHECK-NEXT:    vmov.16 q4[6], r0
+; CHECK-NEXT:    vmov r0, s22
+; CHECK-NEXT:    vmov.16 q4[7], r0
+; CHECK-NEXT:    vmov r0, s2
+; CHECK-NEXT:    vldrw.u32 q0, [sp, #16] @ 16-byte Reload
+; CHECK-NEXT:    vldrw.u32 q5, [sp, #32] @ 16-byte Reload
+; CHECK-NEXT:    vmov.16 q2[3], r0
+; CHECK-NEXT:    vmov.f32 s26, s6
+; CHECK-NEXT:    vmov.f32 s30, s2
+; CHECK-NEXT:    vmov.f32 s31, s3
+; CHECK-NEXT:    vmov q0, q2
+; CHECK-NEXT:    vmov.f32 s14, s22
+; CHECK-NEXT:    vmov.f32 s2, s18
+; CHECK-NEXT:    vmov.f32 s15, s23
+; CHECK-NEXT:    vmov.f32 s27, s7
+; CHECK-NEXT:    vadd.f16 q3, q7, q3
+; CHECK-NEXT:    vmov.f32 s3, s19
+; CHECK-NEXT:    vadd.f16 q0, q0, q6
+; CHECK-NEXT:    vadd.f16 q0, q0, q3
+; CHECK-NEXT:    vstrw.32 q0, [r1]
+; CHECK-NEXT:    add sp, #64
+; CHECK-NEXT:    vpop {d8, d9, d10, d11, d12, d13, d14, d15}
+; CHECK-NEXT:    bx lr
+entry:
+  %l1 = load <32 x half>, <32 x half>* %src, align 1
+  %s1 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 0, i32 4, i32 8, i32 12, i32 16, i32 20, i32 24, i32 28>
+  %s2 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 1, i32 5, i32 9, i32 13, i32 17, i32 21, i32 25, i32 29>
+  %s3 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 2, i32 6, i32 10, i32 14, i32 18, i32 22, i32 26, i32 30>
+  %s4 = shufflevector <32 x half> %l1, <32 x half> undef, <8 x i32> <i32 3, i32 7, i32 11, i32 15, i32 19, i32 23, i32 27, i32 31>
+  %a1 = fadd <8 x half> %s1, %s2
+  %a2 = fadd <8 x half> %s3, %s4
+  %a3 = fadd <8 x half> %a1, %a2
+  store <8 x half> %a3, <8 x half> *%dst
   ret void
 }
 
@@ -1112,7 +1428,7 @@ define void @vld4_v2f64(<8 x double> *%src, <2 x double> *%dst) {
 ; CHECK-NEXT:    vstrw.32 q0, [r1]
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <8 x double>, <8 x double>* %src, align 4
+  %l1 = load <8 x double>, <8 x double>* %src, align 8
   %s1 = shufflevector <8 x double> %l1, <8 x double> undef, <2 x i32> <i32 0, i32 4>
   %s2 = shufflevector <8 x double> %l1, <8 x double> undef, <2 x i32> <i32 1, i32 5>
   %s3 = shufflevector <8 x double> %l1, <8 x double> undef, <2 x i32> <i32 2, i32 6>
@@ -1154,7 +1470,7 @@ define void @vld4_v4f64(<16 x double> *%src, <4 x double> *%dst) {
 ; CHECK-NEXT:    vpop {d8, d9}
 ; CHECK-NEXT:    bx lr
 entry:
-  %l1 = load <16 x double>, <16 x double>* %src, align 4
+  %l1 = load <16 x double>, <16 x double>* %src, align 8
   %s1 = shufflevector <16 x double> %l1, <16 x double> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
   %s2 = shufflevector <16 x double> %l1, <16 x double> undef, <4 x i32> <i32 1, i32 5, i32 9, i32 13>
   %s3 = shufflevector <16 x double> %l1, <16 x double> undef, <4 x i32> <i32 2, i32 6, i32 10, i32 14>

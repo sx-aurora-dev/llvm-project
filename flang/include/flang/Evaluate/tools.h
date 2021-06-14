@@ -235,11 +235,14 @@ std::optional<DataRef> ExtractSubstringBase(const Substring &);
 
 // Predicate: is an expression is an array element reference?
 template <typename T>
-bool IsArrayElement(const Expr<T> &expr, bool intoSubstring = false) {
+bool IsArrayElement(const Expr<T> &expr, bool intoSubstring = true,
+    bool skipComponents = false) {
   if (auto dataRef{ExtractDataRef(expr, intoSubstring)}) {
     const DataRef *ref{&*dataRef};
-    while (const Component * component{std::get_if<Component>(&ref->u)}) {
-      ref = &component->base();
+    if (skipComponents) {
+      while (const Component * component{std::get_if<Component>(&ref->u)}) {
+        ref = &component->base();
+      }
     }
     if (const auto *coarrayRef{std::get_if<CoarrayRef>(&ref->u)}) {
       return !coarrayRef->subscript().empty();
@@ -327,6 +330,22 @@ template <typename A> const Symbol *UnwrapWholeSymbolDataRef(const A &x) {
   return nullptr;
 }
 
+// If an expression is a whole symbol or a whole component desginator,
+// extract and return that symbol, else null.
+template <typename A>
+const Symbol *UnwrapWholeSymbolOrComponentDataRef(const A &x) {
+  if (auto dataRef{ExtractDataRef(x)}) {
+    if (const SymbolRef * p{std::get_if<SymbolRef>(&dataRef->u)}) {
+      return &p->get();
+    } else if (const Component * c{std::get_if<Component>(&dataRef->u)}) {
+      if (c->base().Rank() == 0) {
+        return &c->GetLastSymbol();
+      }
+    }
+  }
+  return nullptr;
+}
+
 // GetFirstSymbol(A%B%C[I]%D) -> A
 template <typename A> const Symbol *GetFirstSymbol(const A &x) {
   if (auto dataRef{ExtractDataRef(x, true)}) {
@@ -335,6 +354,9 @@ template <typename A> const Symbol *GetFirstSymbol(const A &x) {
     return nullptr;
   }
 }
+
+// GetLastPointerSymbol(A%PTR1%B%PTR2%C) -> PTR2
+const Symbol *GetLastPointerSymbol(const evaluate::DataRef &);
 
 // Creation of conversion expressions can be done to either a known
 // specific intrinsic type with ConvertToType<T>(x) or by converting
@@ -786,6 +808,7 @@ bool IsProcedure(const Expr<SomeType> &);
 bool IsFunction(const Expr<SomeType> &);
 bool IsProcedurePointer(const Expr<SomeType> &);
 bool IsNullPointer(const Expr<SomeType> &);
+bool IsObjectPointer(const Expr<SomeType> &, FoldingContext &);
 
 // Extracts the chain of symbols from a designator, which has perhaps been
 // wrapped in an Expr<>, removing all of the (co)subscripts.  The
@@ -888,8 +911,8 @@ public:
     }
     return expanded;
   }
-  template <typename T> Constant<T> Expand(Parentheses<T> &&x) {
-    return Expand(std::move(x)); // Constant<> can be parenthesized
+  template <typename T> Expr<T> Expand(Parentheses<T> &&x) {
+    return Expand(std::move(x.left())); // Constant<> can be parenthesized
   }
   template <typename T> Expr<T> Expand(Expr<T> &&x) {
     return std::visit([&](auto &&x) { return Expr<T>{Expand(std::move(x))}; },
@@ -910,12 +933,13 @@ class Scope;
 // These functions are used in Evaluate so they are defined here rather than in
 // Semantics to avoid a link-time dependency on Semantics.
 // All of these apply GetUltimate() or ResolveAssociations() to their arguments.
-
 bool IsVariableName(const Symbol &);
 bool IsPureProcedure(const Symbol &);
 bool IsPureProcedure(const Scope &);
 bool IsFunction(const Symbol &);
+bool IsFunction(const Scope &);
 bool IsProcedure(const Symbol &);
+bool IsProcedure(const Scope &);
 bool IsProcedurePointer(const Symbol &);
 bool IsSaved(const Symbol &); // saved implicitly or explicitly
 bool IsDummy(const Symbol &);

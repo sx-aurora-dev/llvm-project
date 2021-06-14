@@ -145,6 +145,7 @@ def EXIT_WWM : SPseudoInstSI <(outs SReg_1:$sdst), (ins SReg_1:$src0)> {
 
 // Invert the exec mask and overwrite the inactive lanes of dst with inactive,
 // restoring it after we're done.
+let Defs = [SCC] in {
 def V_SET_INACTIVE_B32 : VPseudoInstSI <(outs VGPR_32:$vdst),
   (ins VGPR_32: $src, VSrc_b32:$inactive),
   [(set i32:$vdst, (int_amdgcn_set_inactive i32:$src, i32:$inactive))]> {
@@ -156,6 +157,7 @@ def V_SET_INACTIVE_B64 : VPseudoInstSI <(outs VReg_64:$vdst),
   [(set i64:$vdst, (int_amdgcn_set_inactive i64:$src, i64:$inactive))]> {
   let Constraints = "$src = $vdst";
 }
+} // End Defs = [SCC]
 
 let usesCustomInserter = 1, Defs = [VCC, EXEC] in {
 def V_ADD_U64_PSEUDO : VPseudoInstSI <
@@ -399,32 +401,13 @@ def SI_INIT_EXEC : SPseudoInstSI <
   (outs), (ins i64imm:$src),
   [(int_amdgcn_init_exec (i64 timm:$src))]> {
   let Defs = [EXEC];
-  let usesCustomInserter = 1;
   let isAsCheapAsAMove = 1;
-  let WaveSizePredicate = isWave64;
 }
 
-// FIXME: Intrinsic should be mangled for wave size.
-def SI_INIT_EXEC_LO : SPseudoInstSI <
-  (outs), (ins i32imm:$src), []> {
-  let Defs = [EXEC_LO];
-  let usesCustomInserter = 1;
-  let isAsCheapAsAMove = 1;
-  let WaveSizePredicate = isWave32;
-}
-
-// FIXME: Wave32 version
 def SI_INIT_EXEC_FROM_INPUT : SPseudoInstSI <
   (outs), (ins SSrc_b32:$input, i32imm:$shift),
   [(int_amdgcn_init_exec_from_input i32:$input, (i32 timm:$shift))]> {
   let Defs = [EXEC];
-  let usesCustomInserter = 1;
-}
-
-def : GCNPat <
-  (int_amdgcn_init_exec timm:$src),
-  (SI_INIT_EXEC_LO (as_i32timm timm:$src))> {
-  let WaveSizePredicate = isWave32;
 }
 
 // Return for returning shaders to a shader variant epilog.
@@ -786,12 +769,9 @@ def : Pat <
 
 let OtherPredicates = [UnsafeFPMath] in {
 
-//def : RcpPat<V_RCP_F64_e32, f64>;
-//defm : RsqPat<V_RSQ_F64_e32, f64>;
 //defm : RsqPat<V_RSQ_F32_e32, f32>;
 
 def : RsqPat<V_RSQ_F32_e32, f32>;
-def : RsqPat<V_RSQ_F64_e32, f64>;
 
 // Convert (x - floor(x)) to fract(x)
 def : GCNPat <

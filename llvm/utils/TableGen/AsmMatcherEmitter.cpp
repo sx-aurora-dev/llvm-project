@@ -1112,9 +1112,7 @@ static std::string getEnumNameForToken(StringRef Str) {
     case '-': Res += "_MINUS_"; break;
     case '#': Res += "_HASH_"; break;
     default:
-      if ((*it >= 'A' && *it <= 'Z') ||
-          (*it >= 'a' && *it <= 'z') ||
-          (*it >= '0' && *it <= '9'))
+      if (isAlnum(*it))
         Res += *it;
       else
         Res += "_" + utostr((unsigned) *it) + "_";
@@ -2885,14 +2883,10 @@ static void emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
 
     OS << OMI.OperandMask;
     OS << " /* ";
-    bool printComma = false;
+    ListSeparator LS;
     for (int i = 0, e = 31; i !=e; ++i)
-      if (OMI.OperandMask & (1 << i)) {
-        if (printComma)
-          OS << ", ";
-        OS << i;
-        printComma = true;
-      }
+      if (OMI.OperandMask & (1 << i))
+        OS << LS << i;
     OS << " */, ";
 
     OS << OMI.CI->Name;

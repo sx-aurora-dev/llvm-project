@@ -29,7 +29,6 @@
 ; CHECK-NEXT:      Shadow Stack GC Lowering
 ; CHECK-NEXT:      Lower constant intrinsics
 ; CHECK-NEXT:      Remove unreachable blocks from the CFG
-; CHECK-NEXT:      Dominator Tree Construction
 ; CHECK-NEXT:      Natural Loop Information
 ; CHECK-NEXT:      Post-Dominator Tree Construction
 ; CHECK-NEXT:      Branch Probability Analysis
@@ -40,7 +39,6 @@
 ; CHECK-NEXT:      Expand vector predication intrinsics
 ; CHECK-NEXT:      Scalarize Masked Memory Intrinsics
 ; CHECK-NEXT:      Expand reduction intrinsics
-; CHECK-NEXT:      Dominator Tree Construction
 ; CHECK-NEXT:      Natural Loop Information
 ; CHECK-NEXT:      Scalar Evolution Analysis
 ; CHECK-NEXT:      Basic Alias Analysis (stateless AA impl)
@@ -56,7 +54,6 @@
 ; CHECK-NEXT:      Dominator Tree Construction
 ; CHECK-NEXT:      Exception handling preparation
 ; CHECK-NEXT:      Merge internal globals
-; CHECK-NEXT:      Dominator Tree Construction
 ; CHECK-NEXT:      Natural Loop Information
 ; CHECK-NEXT:      Scalar Evolution Analysis
 ; CHECK-NEXT:      Lazy Branch Probability Analysis
@@ -69,7 +66,6 @@
 ; CHECK-NEXT:      Safe Stack instrumentation pass
 ; CHECK-NEXT:      Insert stack protectors
 ; CHECK-NEXT:      Module Verifier
-; CHECK-NEXT:      Dominator Tree Construction
 ; CHECK-NEXT:      Basic Alias Analysis (stateless AA impl)
 ; CHECK-NEXT:      Function Alias Analysis Results
 ; CHECK-NEXT:      Natural Loop Information

@@ -12,6 +12,7 @@ set(LIBCXX_SOURCES
   condition_variable.cpp
   condition_variable_destructor.cpp
   exception.cpp
+  format.cpp
   functional.cpp
   future.cpp
   hash.cpp
@@ -91,6 +92,7 @@ if (LIBCXX_ENABLE_FILESYSTEM)
     filesystem/filesystem_common.h
     filesystem/operations.cpp
     filesystem/directory_iterator.cpp
+    filesystem/posix_compat.h
     )
   # Filesystem uses __int128_t, which requires a definition of __muloi4 when
   # compiled with UBSAN. This definition is not provided by libgcc_s, but is
@@ -213,9 +215,12 @@ if (LIBCXX_ENABLE_SHARED)
   endif()
 
   # Maybe re-export symbols from libc++abi
+  # In particular, we don't re-export the symbols if libc++abi is merged statically
+  # into libc++ because in that case there's no dylib to re-export from.
   if (APPLE AND (LIBCXX_CXX_ABI_LIBNAME STREQUAL "libcxxabi" OR
                  LIBCXX_CXX_ABI_LIBNAME STREQUAL "default")
-            AND NOT DEFINED LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS)
+            AND NOT DEFINED LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS
+            AND NOT LIBCXX_STATICALLY_LINK_ABI_IN_SHARED_LIBRARY)
     set(LIBCXX_OSX_REEXPORT_LIBCXXABI_SYMBOLS ON)
   endif()
 
