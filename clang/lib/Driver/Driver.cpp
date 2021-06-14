@@ -77,6 +77,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Host.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
@@ -1460,7 +1461,9 @@ void Driver::generateCompilationDiagnostics(
   llvm::SmallString<128> Script(CrashInfo.Filename);
   llvm::sys::path::replace_extension(Script, "sh");
   std::error_code EC;
-  llvm::raw_fd_ostream ScriptOS(Script, EC, llvm::sys::fs::CD_CreateNew);
+  llvm::raw_fd_ostream ScriptOS(Script, EC, llvm::sys::fs::CD_CreateNew,
+                                llvm::sys::fs::FA_Write,
+                                llvm::sys::fs::OF_Text);
   if (EC) {
     Diag(clang::diag::note_drv_command_failed_diag_msg)
         << "Error generating run script: " << Script << " " << EC.message();
@@ -2469,6 +2472,14 @@ class OffloadingActionBuilder final {
     /// Default GPU architecture if there's no one specified.
     CudaArch DefaultCudaArch = CudaArch::UNKNOWN;
 
+    /// Method to generate compilation unit ID specified by option
+    /// '-fuse-cuid='.
+    enum UseCUIDKind { CUID_Hash, CUID_Random, CUID_None, CUID_Invalid };
+    UseCUIDKind UseCUID = CUID_Hash;
+
+    /// Compilation unit ID specified by option '-cuid='.
+    StringRef FixedCUID;
+
   public:
     CudaActionBuilderBase(Compilation &C, DerivedArgList &Args,
                           const Driver::InputList &Inputs,
@@ -2505,9 +2516,32 @@ class OffloadingActionBuilder final {
         // Replicate inputs for each GPU architecture.
         auto Ty = IA->getType() == types::TY_HIP ? types::TY_HIP_DEVICE
                                                  : types::TY_CUDA_DEVICE;
+        std::string CUID = FixedCUID.str();
+        if (CUID.empty()) {
+          if (UseCUID == CUID_Random)
+            CUID = llvm::utohexstr(llvm::sys::Process::GetRandomNumber(),
+                                   /*LowerCase=*/true);
+          else if (UseCUID == CUID_Hash) {
+            llvm::MD5 Hasher;
+            llvm::MD5::MD5Result Hash;
+            SmallString<256> RealPath;
+            llvm::sys::fs::real_path(IA->getInputArg().getValue(), RealPath,
+                                     /*expand_tilde=*/true);
+            Hasher.update(RealPath);
+            for (auto *A : Args) {
+              if (A->getOption().matches(options::OPT_INPUT))
+                continue;
+              Hasher.update(A->getAsString(Args));
+            }
+            Hasher.final(Hash);
+            CUID = llvm::utohexstr(Hash.low(), /*LowerCase=*/true);
+          }
+        }
+        IA->setId(CUID);
+
         for (unsigned I = 0, E = GpuArchList.size(); I != E; ++I) {
           CudaDeviceActions.push_back(
-              C.MakeAction<InputAction>(IA->getInputArg(), Ty));
+              C.MakeAction<InputAction>(IA->getInputArg(), Ty, IA->getId()));
         }
 
         return ABRT_Success;
@@ -2629,6 +2663,21 @@ class OffloadingActionBuilder final {
                               options::OPT_cuda_device_only);
       EmitLLVM = Args.getLastArg(options::OPT_emit_llvm);
       EmitAsm = Args.getLastArg(options::OPT_S);
+      FixedCUID = Args.getLastArgValue(options::OPT_cuid_EQ);
+      if (Arg *A = Args.getLastArg(options::OPT_fuse_cuid_EQ)) {
+        StringRef UseCUIDStr = A->getValue();
+        UseCUID = llvm::StringSwitch<UseCUIDKind>(UseCUIDStr)
+                      .Case("hash", CUID_Hash)
+                      .Case("random", CUID_Random)
+                      .Case("none", CUID_None)
+                      .Default(CUID_Invalid);
+        if (UseCUID == CUID_Invalid) {
+          C.getDriver().Diag(diag::err_drv_invalid_value)
+              << A->getAsString(Args) << UseCUIDStr;
+          C.setContainsError();
+          return true;
+        }
+      }
 
       // Collect all cuda_gpu_arch parameters, removing duplicates.
       std::set<StringRef> GpuArchs;

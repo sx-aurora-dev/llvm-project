@@ -26,6 +26,8 @@
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -2986,10 +2988,32 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   }
   case Builtin::BI__builtin_isnan: {
     CodeGenFunction::CGFPOptionsRAII FPOptsRAII(*this, E);
-    // FIXME: for strictfp/IEEE-754 we need to not trap on SNaN here.
     Value *V = EmitScalarExpr(E->getArg(0));
-    V = Builder.CreateFCmpUNO(V, V, "cmp");
-    return RValue::get(Builder.CreateZExt(V, ConvertType(E->getType())));
+    llvm::Type *Ty = V->getType();
+    const llvm::fltSemantics &Semantics = Ty->getFltSemantics();
+    if (!Builder.getIsFPConstrained() ||
+        Builder.getDefaultConstrainedExcept() == fp::ebIgnore ||
+        !Ty->isIEEE()) {
+      V = Builder.CreateFCmpUNO(V, V, "cmp");
+      return RValue::get(Builder.CreateZExt(V, ConvertType(E->getType())));
+    }
+
+    // NaN has all exp bits set and a non zero significand. Therefore:
+    // isnan(V) == ((exp mask - (abs(V) & exp mask)) < 0)
+    unsigned bitsize = Ty->getScalarSizeInBits();
+    llvm::IntegerType *IntTy = Builder.getIntNTy(bitsize);
+    Value *IntV = Builder.CreateBitCast(V, IntTy);
+    APInt AndMask = APInt::getSignedMaxValue(bitsize);
+    Value *AbsV =
+        Builder.CreateAnd(IntV, llvm::ConstantInt::get(IntTy, AndMask));
+    APInt ExpMask = APFloat::getInf(Semantics).bitcastToAPInt();
+    Value *Sub =
+        Builder.CreateSub(llvm::ConstantInt::get(IntTy, ExpMask), AbsV);
+    // V = sign bit (Sub) <=> V = (Sub < 0)
+    V = Builder.CreateLShr(Sub, llvm::ConstantInt::get(IntTy, bitsize - 1));
+    if (bitsize > 32)
+      V = Builder.CreateTrunc(V, ConvertType(E->getType()));
+    return RValue::get(V);
   }
 
   case Builtin::BI__builtin_matrix_transpose: {
@@ -5809,6 +5833,15 @@ static const ARMVectorIntrinsicInfo AArch64SIMDIntrinsicMap[] = {
   NEONMAP0(vshr_n_v),
   NEONMAP0(vshrn_n_v),
   NEONMAP0(vshrq_n_v),
+  NEONMAP1(vsm3partw1q_v, aarch64_crypto_sm3partw1, 0),
+  NEONMAP1(vsm3partw2q_v, aarch64_crypto_sm3partw2, 0),
+  NEONMAP1(vsm3ss1q_v, aarch64_crypto_sm3ss1, 0),
+  NEONMAP1(vsm3tt1aq_v, aarch64_crypto_sm3tt1a, 0),
+  NEONMAP1(vsm3tt1bq_v, aarch64_crypto_sm3tt1b, 0),
+  NEONMAP1(vsm3tt2aq_v, aarch64_crypto_sm3tt2a, 0),
+  NEONMAP1(vsm3tt2bq_v, aarch64_crypto_sm3tt2b, 0),
+  NEONMAP1(vsm4ekeyq_v, aarch64_crypto_sm4ekey, 0),
+  NEONMAP1(vsm4eq_v, aarch64_crypto_sm4e, 0),
   NEONMAP1(vst1_x2_v, aarch64_neon_st1x2, 0),
   NEONMAP1(vst1_x3_v, aarch64_neon_st1x3, 0),
   NEONMAP1(vst1_x4_v, aarch64_neon_st1x4, 0),
@@ -6686,6 +6719,22 @@ Value *CodeGenFunction::EmitCommonNeonBuiltinExpr(
     llvm::Type *Tys[] = {Int8PtrTy, Ty};
     Ops.push_back(getAlignmentValue32(PtrOp0));
     return EmitNeonCall(CGM.getIntrinsic(Int, Tys), Ops, "");
+  }
+  case NEON::BI__builtin_neon_vsm3partw1q_v:
+  case NEON::BI__builtin_neon_vsm3partw2q_v:
+  case NEON::BI__builtin_neon_vsm3ss1q_v:
+  case NEON::BI__builtin_neon_vsm4ekeyq_v:
+  case NEON::BI__builtin_neon_vsm4eq_v: {
+    Function *F = CGM.getIntrinsic(Int);
+    return EmitNeonCall(F, Ops, "");
+  }
+  case NEON::BI__builtin_neon_vsm3tt1aq_v:
+  case NEON::BI__builtin_neon_vsm3tt1bq_v:
+  case NEON::BI__builtin_neon_vsm3tt2aq_v:
+  case NEON::BI__builtin_neon_vsm3tt2bq_v: {
+    Function *F = CGM.getIntrinsic(Int);
+    Ops[3] = Builder.CreateZExt(Ops[3], Int64Ty);
+    return EmitNeonCall(F, Ops, "");
   }
   case NEON::BI__builtin_neon_vst1_x2_v:
   case NEON::BI__builtin_neon_vst1q_x2_v:
@@ -13803,12 +13852,14 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
   case X86::BI__builtin_ia32_reduce_fadd_ps512: {
     Function *F =
         CGM.getIntrinsic(Intrinsic::vector_reduce_fadd, Ops[1]->getType());
+    Builder.getFastMathFlags().setAllowReassoc(true);
     return Builder.CreateCall(F, {Ops[0], Ops[1]});
   }
   case X86::BI__builtin_ia32_reduce_fmul_pd512:
   case X86::BI__builtin_ia32_reduce_fmul_ps512: {
     Function *F =
         CGM.getIntrinsic(Intrinsic::vector_reduce_fmul, Ops[1]->getType());
+    Builder.getFastMathFlags().setAllowReassoc(true);
     return Builder.CreateCall(F, {Ops[0], Ops[1]});
   }
   case X86::BI__builtin_ia32_reduce_mul_d512:

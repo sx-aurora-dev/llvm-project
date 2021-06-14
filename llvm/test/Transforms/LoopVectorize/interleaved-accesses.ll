@@ -214,11 +214,7 @@ define i32 @test_struct_load4(%struct.ST4* nocapture readonly %S) {
 ; CHECK-NEXT:    [[TMP6:%.*]] = icmp eq i64 [[INDEX_NEXT]], 1024
 ; CHECK-NEXT:    br i1 [[TMP6]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP6:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    [[RDX_SHUF:%.*]] = shufflevector <4 x i32> [[TMP5]], <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX:%.*]] = add <4 x i32> [[TMP5]], [[RDX_SHUF]]
-; CHECK-NEXT:    [[RDX_SHUF4:%.*]] = shufflevector <4 x i32> [[BIN_RDX]], <4 x i32> poison, <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX5:%.*]] = add <4 x i32> [[BIN_RDX]], [[RDX_SHUF4]]
-; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <4 x i32> [[BIN_RDX5]], i32 0
+; CHECK-NEXT:    [[TMP7:%.*]] = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> [[TMP5]])
 ; CHECK-NEXT:    br i1 true, label [[FOR_END:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -447,7 +443,7 @@ define void @even_load_static_tc(i32* noalias nocapture readonly %A, i32* noalia
 ; CHECK-NEXT:    [[TMP6:%.*]] = icmp eq i64 [[INDEX_NEXT]], 508
 ; CHECK-NEXT:    br i1 [[TMP6]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP12:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    br i1 false, label [[FOR_COND_CLEANUP:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ 1016, [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -463,7 +459,7 @@ define void @even_load_static_tc(i32* noalias nocapture readonly %A, i32* noalia
 ; CHECK-NEXT:    store i32 [[MUL]], i32* [[ARRAYIDX2]], align 4
 ; CHECK-NEXT:    [[INDVARS_IV_NEXT]] = add nuw nsw i64 [[INDVARS_IV]], 2
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp ult i64 [[INDVARS_IV]], 1022
-; CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY]], label [[FOR_COND_CLEANUP:%.*]], [[LOOP13:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY]], label [[FOR_COND_CLEANUP]], [[LOOP13:!llvm.loop !.*]]
 ;
 entry:
   br label %for.body
@@ -528,7 +524,7 @@ define void @even_load_dynamic_tc(i32* noalias nocapture readonly %A, i32* noali
 ; CHECK-NEXT:    [[TMP12:%.*]] = icmp eq i64 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP12]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP14:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    br i1 false, label [[FOR_COND_CLEANUP:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ [[IND_END]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -544,7 +540,7 @@ define void @even_load_dynamic_tc(i32* noalias nocapture readonly %A, i32* noali
 ; CHECK-NEXT:    store i32 [[MUL]], i32* [[ARRAYIDX2]], align 4
 ; CHECK-NEXT:    [[INDVARS_IV_NEXT]] = add nuw nsw i64 [[INDVARS_IV]], 2
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp ult i64 [[INDVARS_IV_NEXT]], [[N]]
-; CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY]], label [[FOR_COND_CLEANUP:%.*]], [[LOOP15:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[CMP]], label [[FOR_BODY]], label [[FOR_COND_CLEANUP]], [[LOOP15:!llvm.loop !.*]]
 ;
 entry:
   br label %for.body
@@ -865,16 +861,8 @@ define void @int_float_struct(%struct.IntFloat* nocapture readonly %A) #0 {
 ; CHECK-NEXT:    [[TMP5:%.*]] = icmp eq i64 [[INDEX_NEXT]], 1024
 ; CHECK-NEXT:    br i1 [[TMP5]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP22:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    [[RDX_SHUF5:%.*]] = shufflevector <4 x i32> [[TMP3]], <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX6:%.*]] = add <4 x i32> [[TMP3]], [[RDX_SHUF5]]
-; CHECK-NEXT:    [[RDX_SHUF7:%.*]] = shufflevector <4 x i32> [[BIN_RDX6]], <4 x i32> poison, <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX8:%.*]] = add <4 x i32> [[BIN_RDX6]], [[RDX_SHUF7]]
-; CHECK-NEXT:    [[TMP6:%.*]] = extractelement <4 x i32> [[BIN_RDX8]], i32 0
-; CHECK-NEXT:    [[RDX_SHUF:%.*]] = shufflevector <4 x float> [[TMP4]], <4 x float> poison, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX:%.*]] = fadd fast <4 x float> [[TMP4]], [[RDX_SHUF]]
-; CHECK-NEXT:    [[RDX_SHUF3:%.*]] = shufflevector <4 x float> [[BIN_RDX]], <4 x float> poison, <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX4:%.*]] = fadd fast <4 x float> [[BIN_RDX]], [[RDX_SHUF3]]
-; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <4 x float> [[BIN_RDX4]], i32 0
+; CHECK-NEXT:    [[TMP6:%.*]] = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> [[TMP3]])
+; CHECK-NEXT:    [[TMP7:%.*]] = call fast float @llvm.vector.reduce.fadd.v4f32(float -0.000000e+00, <4 x float> [[TMP4]])
 ; CHECK-NEXT:    br i1 true, label [[FOR_COND_CLEANUP:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -973,7 +961,7 @@ define void @PR27626_0(%pair.i32 *%p, i32 %z, i64 %n) {
 ; CHECK-NEXT:    [[TMP19:%.*]] = icmp eq i64 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP19]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP24:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    br i1 false, label [[FOR_END:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ [[N_VEC]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -985,7 +973,7 @@ define void @PR27626_0(%pair.i32 *%p, i32 %z, i64 %n) {
 ; CHECK-NEXT:    store i32 [[Z]], i32* [[P_I_Y]], align 4
 ; CHECK-NEXT:    [[I_NEXT]] = add nuw nsw i64 [[I]], 1
 ; CHECK-NEXT:    [[COND:%.*]] = icmp slt i64 [[I_NEXT]], [[N]]
-; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END:%.*]], [[LOOP25:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END]], [[LOOP25:!llvm.loop !.*]]
 ; CHECK:       for.end:
 ; CHECK-NEXT:    ret void
 ;
@@ -1061,12 +1049,8 @@ define i32 @PR27626_1(%pair.i32 *%p, i64 %n) {
 ; CHECK-NEXT:    [[TMP18:%.*]] = icmp eq i64 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP18]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP26:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    [[RDX_SHUF:%.*]] = shufflevector <4 x i32> [[TMP17]], <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX:%.*]] = add <4 x i32> [[TMP17]], [[RDX_SHUF]]
-; CHECK-NEXT:    [[RDX_SHUF3:%.*]] = shufflevector <4 x i32> [[BIN_RDX]], <4 x i32> poison, <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX4:%.*]] = add <4 x i32> [[BIN_RDX]], [[RDX_SHUF3]]
-; CHECK-NEXT:    [[TMP19:%.*]] = extractelement <4 x i32> [[BIN_RDX4]], i32 0
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    [[TMP19:%.*]] = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> [[TMP17]])
+; CHECK-NEXT:    br i1 false, label [[FOR_END:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ [[N_VEC]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    [[BC_MERGE_RDX:%.*]] = phi i32 [ [[TMP19]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY]] ]
@@ -1081,9 +1065,10 @@ define i32 @PR27626_1(%pair.i32 *%p, i64 %n) {
 ; CHECK-NEXT:    [[TMP21]] = add nsw i32 [[TMP20]], [[S]]
 ; CHECK-NEXT:    [[I_NEXT]] = add nuw nsw i64 [[I]], 1
 ; CHECK-NEXT:    [[COND:%.*]] = icmp slt i64 [[I_NEXT]], [[N]]
-; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END:%.*]], [[LOOP27:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END]], [[LOOP27:!llvm.loop !.*]]
 ; CHECK:       for.end:
-; CHECK-NEXT:    ret i32 [[TMP21]]
+; CHECK-NEXT:    [[TMP22:%.*]] = phi i32 [ [[TMP21]], [[FOR_BODY]] ], [ [[TMP19]], [[MIDDLE_BLOCK]] ]
+; CHECK-NEXT:    ret i32 [[TMP22]]
 ;
 entry:
   br label %for.body
@@ -1162,7 +1147,7 @@ define void @PR27626_2(%pair.i32 *%p, i64 %n, i32 %z) {
 ; CHECK-NEXT:    [[TMP20:%.*]] = icmp eq i64 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP20]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP28:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    br i1 false, label [[FOR_END:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ [[N_VEC]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
@@ -1176,7 +1161,7 @@ define void @PR27626_2(%pair.i32 *%p, i64 %n, i32 %z) {
 ; CHECK-NEXT:    store i32 [[TMP21]], i32* [[P_I_Y]], align 4
 ; CHECK-NEXT:    [[I_NEXT]] = add nuw nsw i64 [[I]], 1
 ; CHECK-NEXT:    [[COND:%.*]] = icmp slt i64 [[I_NEXT]], [[N]]
-; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END:%.*]], [[LOOP29:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END]], [[LOOP29:!llvm.loop !.*]]
 ; CHECK:       for.end:
 ; CHECK-NEXT:    ret void
 ;
@@ -1258,12 +1243,8 @@ define i32 @PR27626_3(%pair.i32 *%p, i64 %n, i32 %z) {
 ; CHECK-NEXT:    [[TMP21:%.*]] = icmp eq i64 [[INDEX_NEXT]], [[N_VEC]]
 ; CHECK-NEXT:    br i1 [[TMP21]], label [[MIDDLE_BLOCK:%.*]], label [[VECTOR_BODY]], [[LOOP30:!llvm.loop !.*]]
 ; CHECK:       middle.block:
-; CHECK-NEXT:    [[RDX_SHUF:%.*]] = shufflevector <4 x i32> [[TMP20]], <4 x i32> poison, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX:%.*]] = add <4 x i32> [[TMP20]], [[RDX_SHUF]]
-; CHECK-NEXT:    [[RDX_SHUF3:%.*]] = shufflevector <4 x i32> [[BIN_RDX]], <4 x i32> poison, <4 x i32> <i32 1, i32 undef, i32 undef, i32 undef>
-; CHECK-NEXT:    [[BIN_RDX4:%.*]] = add <4 x i32> [[BIN_RDX]], [[RDX_SHUF3]]
-; CHECK-NEXT:    [[TMP22:%.*]] = extractelement <4 x i32> [[BIN_RDX4]], i32 0
-; CHECK-NEXT:    br label [[SCALAR_PH]]
+; CHECK-NEXT:    [[TMP22:%.*]] = call i32 @llvm.vector.reduce.add.v4i32(<4 x i32> [[TMP20]])
+; CHECK-NEXT:    br i1 false, label [[FOR_END:%.*]], label [[SCALAR_PH]]
 ; CHECK:       scalar.ph:
 ; CHECK-NEXT:    [[BC_RESUME_VAL:%.*]] = phi i64 [ [[N_VEC]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY:%.*]] ]
 ; CHECK-NEXT:    [[BC_MERGE_RDX:%.*]] = phi i32 [ [[TMP22]], [[MIDDLE_BLOCK]] ], [ 0, [[ENTRY]] ]
@@ -1281,9 +1262,10 @@ define i32 @PR27626_3(%pair.i32 *%p, i64 %n, i32 %z) {
 ; CHECK-NEXT:    [[TMP25]] = add nsw i32 [[TMP24]], [[S]]
 ; CHECK-NEXT:    [[I_NEXT]] = add nuw nsw i64 [[I]], 1
 ; CHECK-NEXT:    [[COND:%.*]] = icmp slt i64 [[I_NEXT]], [[N]]
-; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END:%.*]], [[LOOP31:!llvm.loop !.*]]
+; CHECK-NEXT:    br i1 [[COND]], label [[FOR_BODY]], label [[FOR_END]], [[LOOP31:!llvm.loop !.*]]
 ; CHECK:       for.end:
-; CHECK-NEXT:    ret i32 [[TMP25]]
+; CHECK-NEXT:    [[TMP26:%.*]] = phi i32 [ [[TMP25]], [[FOR_BODY]] ], [ [[TMP22]], [[MIDDLE_BLOCK]] ]
+; CHECK-NEXT:    ret i32 [[TMP26]]
 ;
 entry:
   br label %for.body

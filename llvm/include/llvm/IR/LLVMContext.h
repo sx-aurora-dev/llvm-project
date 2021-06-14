@@ -87,14 +87,15 @@ public:
   /// operand bundle tags without comparing strings. Keep this in sync with
   /// LLVMContext::LLVMContext().
   enum : unsigned {
-    OB_deopt = 0,         // "deopt"
-    OB_funclet = 1,       // "funclet"
-    OB_gc_transition = 2, // "gc-transition"
-    OB_cfguardtarget = 3, // "cfguardtarget"
-    OB_preallocated = 4,  // "preallocated"
-    OB_gc_live = 5,       // "gc-live"
-    OB_cfp_round = 6,     // "cfp-round"
-    OB_cfp_except = 7,    // "cfp-except"
+    OB_deopt = 0,                  // "deopt"
+    OB_funclet = 1,                // "funclet"
+    OB_gc_transition = 2,          // "gc-transition"
+    OB_cfguardtarget = 3,          // "cfguardtarget"
+    OB_preallocated = 4,           // "preallocated"
+    OB_gc_live = 5,                // "gc-live"
+    OB_clang_arc_attachedcall = 6, // "clang.arc.attachedcall"
+    OB_cfp_round = 7,              // "cfp-round"
+    OB_cfp_except = 8,             // "cfp-except"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.

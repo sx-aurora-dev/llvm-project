@@ -9,8 +9,7 @@
 #include "lld/Common/Driver.h"
 #include "Config.h"
 #include "InputChunks.h"
-#include "InputGlobal.h"
-#include "InputTable.h"
+#include "InputElement.h"
 #include "MarkLive.h"
 #include "SymbolTable.h"
 #include "Writer.h"
@@ -596,8 +595,7 @@ static GlobalSymbol *createGlobalVariable(StringRef name, bool isMutable) {
 
 static GlobalSymbol *createOptionalGlobal(StringRef name, bool isMutable) {
   InputGlobal *g = createGlobal(name, isMutable);
-  return symtab->addOptionalGlobalSymbols(name, WASM_SYMBOL_VISIBILITY_HIDDEN,
-                                          g);
+  return symtab->addOptionalGlobalSymbol(name, g);
 }
 
 // Create ABI-defined synthetic symbols
@@ -1016,11 +1014,6 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     Symbol *sym = symtab->find(arg->getValue());
     if (sym && sym->isDefined())
       sym->forceExport = true;
-    else if (config->unresolvedSymbols == UnresolvedPolicy::ReportError)
-      error(Twine("symbol exported via --export not found: ") +
-            arg->getValue());
-    else if (config->unresolvedSymbols == UnresolvedPolicy::Warn)
-      warn(Twine("symbol exported via --export not found: ") + arg->getValue());
   }
 
   if (!config->relocatable && !config->isPic) {

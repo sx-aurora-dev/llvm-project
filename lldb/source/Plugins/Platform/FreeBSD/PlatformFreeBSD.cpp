@@ -255,6 +255,8 @@ bool PlatformFreeBSD::CanDebugProcess() {
     switch (host_triple.getArch()) {
       case llvm::Triple::aarch64:
       case llvm::Triple::arm:
+      case llvm::Triple::mips64:
+      case llvm::Triple::ppc:
       case llvm::Triple::x86:
       case llvm::Triple::x86_64:
         use_legacy_plugin = !!getenv("FREEBSD_LEGACY_PLUGIN");

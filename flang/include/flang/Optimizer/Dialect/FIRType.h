@@ -5,6 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// Coding style: https://mlir.llvm.org/getting_started/DeveloperGuide/
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef OPTIMIZER_DIALECT_FIRTYPE_H
 #define OPTIMIZER_DIALECT_FIRTYPE_H
@@ -12,6 +16,9 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallVector.h"
+
+#define GET_TYPEDEF_CLASSES
+#include "flang/Optimizer/Dialect/FIROpsTypes.h.inc"
 
 namespace llvm {
 class raw_ostream;
@@ -32,10 +39,9 @@ namespace fir {
 
 class FIROpsDialect;
 
-using KindTy = int;
+using KindTy = unsigned;
 
 namespace detail {
-struct BoxTypeStorage;
 struct BoxCharTypeStorage;
 struct BoxProcTypeStorage;
 struct CharacterTypeStorage;
@@ -50,7 +56,9 @@ struct RealTypeStorage;
 struct RecordTypeStorage;
 struct ReferenceTypeStorage;
 struct SequenceTypeStorage;
+struct SliceTypeStorage;
 struct TypeDescTypeStorage;
+struct VectorTypeStorage;
 } // namespace detail
 
 // These isa_ routines follow the precedent of llvm::isa_or_null<>
@@ -67,7 +75,9 @@ bool isa_fir_or_std_type(mlir::Type t);
 /// Is `t` a FIR dialect type that implies a memory (de)reference?
 bool isa_ref_type(mlir::Type t);
 
-/// Is `t` a type that is always trivially pass-by-reference?
+/// Is `t` a type that is always trivially pass-by-reference? Specifically, this
+/// is testing if `t` is a ReferenceType or any box type. Compare this to
+/// conformsWithPassByRef(), which includes pointers and allocatables.
 bool isa_passbyref_type(mlir::Type t);
 
 /// Is `t` a boxed type?
@@ -90,15 +100,34 @@ mlir::Type dyn_cast_ptrEleTy(mlir::Type t);
 // Intrinsic types
 
 /// Model of the Fortran CHARACTER intrinsic type, including the KIND type
-/// parameter. The model does not include a LEN type parameter. A CharacterType
-/// is thus the type of a single character value.
+/// parameter. The model optionally includes a LEN type parameter. A
+/// CharacterType is thus the type of both a single character value and a
+/// character with a LEN parameter.
 class CharacterType
     : public mlir::Type::TypeBase<CharacterType, mlir::Type,
                                   detail::CharacterTypeStorage> {
 public:
   using Base::Base;
-  static CharacterType get(mlir::MLIRContext *ctxt, KindTy kind);
+  using LenType = std::int64_t;
+
+  static CharacterType get(mlir::MLIRContext *ctxt, KindTy kind, LenType len);
+  /// Return unknown length CHARACTER type.
+  static CharacterType getUnknownLen(mlir::MLIRContext *ctxt, KindTy kind) {
+    return get(ctxt, kind, unknownLen());
+  }
+  /// Return length 1 CHARACTER type.
+  static CharacterType getSingleton(mlir::MLIRContext *ctxt, KindTy kind) {
+    return get(ctxt, kind, singleton());
+  }
   KindTy getFKind() const;
+
+  /// CHARACTER is a singleton and has a LEN of 1.
+  static constexpr LenType singleton() { return 1; }
+  /// CHARACTER has an unknown LEN property.
+  static constexpr LenType unknownLen() { return -1; }
+
+  /// Access to a CHARACTER's LEN property. Defaults to 1.
+  LenType getLen() const;
 };
 
 /// Model of a Fortran COMPLEX intrinsic type, including the KIND type
@@ -148,23 +177,6 @@ public:
 
 // FIR support types
 
-/// The type of a Fortran descriptor. Descriptors are tuples of information that
-/// describe an entity being passed from a calling context. This information
-/// might include (but is not limited to) whether the entity is an array, its
-/// size, or what type it has.
-class BoxType
-    : public mlir::Type::TypeBase<BoxType, mlir::Type, detail::BoxTypeStorage> {
-public:
-  using Base::Base;
-  static BoxType get(mlir::Type eleTy, mlir::AffineMapAttr map = {});
-  mlir::Type getEleTy() const;
-  mlir::AffineMapAttr getLayoutMap() const;
-
-  static mlir::LogicalResult
-  verifyConstructionInvariants(mlir::Location, mlir::Type eleTy,
-                               mlir::AffineMapAttr map);
-};
-
 /// The type of a pair that describes a CHARACTER variable. Specifically, a
 /// CHARACTER consists of a reference to a buffer (the string value) and a LEN
 /// type parameter (the runtime length of the buffer).
@@ -188,6 +200,17 @@ public:
 
   static mlir::LogicalResult verifyConstructionInvariants(mlir::Location,
                                                           mlir::Type eleTy);
+};
+
+/// Type of a vector that represents an array slice operation on an array.
+/// Fortran slices are triples of lower bound, upper bound, and stride. The rank
+/// of a SliceType must be at least 1.
+class SliceType : public mlir::Type::TypeBase<SliceType, mlir::Type,
+                                              detail::SliceTypeStorage> {
+public:
+  using Base::Base;
+  static SliceType get(mlir::MLIRContext *ctx, unsigned rank);
+  unsigned getRank() const;
 };
 
 /// The type of a field name. Implementations may defer the layout of a Fortran
@@ -357,14 +380,6 @@ public:
                                                           llvm::StringRef name);
 };
 
-mlir::Type parseFirType(FIROpsDialect *, mlir::DialectAsmParser &parser);
-
-void printFirType(FIROpsDialect *, mlir::Type ty, mlir::DialectAsmPrinter &p);
-
-/// Guarantee `type` is a scalar integral type (standard Integer, standard
-/// Index, or FIR Int). Aborts execution if condition is false.
-void verifyIntegralType(mlir::Type type);
-
 /// Is `t` a FIR Real or MLIR Float type?
 inline bool isa_real(mlir::Type t) {
   return t.isa<fir::RealType>() || t.isa<mlir::FloatType>();
@@ -376,10 +391,48 @@ inline bool isa_integer(mlir::Type t) {
          t.isa<fir::IntegerType>();
 }
 
+/// Replacement for the builtin vector type.
+/// The FIR vector type is always rank one. It's size is always a constant.
+/// A vector's element type must be real or integer.
+class VectorType : public mlir::Type::TypeBase<fir::VectorType, mlir::Type,
+                                               detail::VectorTypeStorage> {
+public:
+  using Base::Base;
+
+  static fir::VectorType get(uint64_t len, mlir::Type eleTy);
+  mlir::Type getEleTy() const;
+  uint64_t getLen() const;
+
+  static mlir::LogicalResult
+  verifyConstructionInvariants(mlir::Location, uint64_t len, mlir::Type eleTy);
+  static bool isValidElementType(mlir::Type t) {
+    return isa_real(t) || isa_integer(t);
+  }
+};
+
+mlir::Type parseFirType(FIROpsDialect *, mlir::DialectAsmParser &parser);
+
+void printFirType(FIROpsDialect *, mlir::Type ty, mlir::DialectAsmPrinter &p);
+
+/// Guarantee `type` is a scalar integral type (standard Integer, standard
+/// Index, or FIR Int). Aborts execution if condition is false.
+void verifyIntegralType(mlir::Type type);
+
 /// Is `t` a FIR or MLIR Complex type?
 inline bool isa_complex(mlir::Type t) {
   return t.isa<fir::ComplexType>() || t.isa<mlir::ComplexType>();
 }
+
+inline bool isa_char_string(mlir::Type t) {
+  if (auto ct = t.dyn_cast_or_null<fir::CharacterType>())
+    return ct.getLen() != fir::CharacterType::singleton();
+  return false;
+}
+
+/// Is `t` a box type for which it is not possible to deduce the box size.
+/// It is not possible to deduce the size of a box that describes an entity
+/// of unknown rank or type.
+bool isa_unknown_size_box(mlir::Type t);
 
 } // namespace fir
 

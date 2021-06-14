@@ -105,6 +105,7 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     case WebAssembly::TRY_S:
       ControlFlowStack.push_back(std::make_pair(ControlFlowCounter, false));
       EHPadStack.push_back(ControlFlowCounter++);
+      EHInstStack.push_back(TRY);
       return;
 
     case WebAssembly::END_LOOP:
@@ -128,11 +129,12 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, uint64_t Address,
 
     case WebAssembly::END_TRY:
     case WebAssembly::END_TRY_S:
-      if (ControlFlowStack.empty()) {
+      if (ControlFlowStack.empty() || EHInstStack.empty()) {
         printAnnotation(OS, "End marker mismatch!");
       } else {
         printAnnotation(
             OS, "label" + utostr(ControlFlowStack.pop_back_val().first) + ':');
+        EHInstStack.pop_back();
       }
       return;
 
@@ -140,10 +142,25 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, uint64_t Address,
     case WebAssembly::CATCH_S:
     case WebAssembly::CATCH_ALL:
     case WebAssembly::CATCH_ALL_S:
-      if (EHPadStack.empty()) {
+      // There can be multiple catch instructions for one try instruction, so
+      // we print a label only for the first 'catch' label.
+      if (EHInstStack.empty()) {
         printAnnotation(OS, "try-catch mismatch!");
-      } else {
-        printAnnotation(OS, "catch" + utostr(EHPadStack.pop_back_val()) + ':');
+      } else if (EHInstStack.back() == CATCH_ALL) {
+        printAnnotation(OS, "catch/catch_all cannot occur after catch_all");
+      } else if (EHInstStack.back() == TRY) {
+        if (EHPadStack.empty()) {
+          printAnnotation(OS, "try-catch mismatch!");
+        } else {
+          printAnnotation(OS,
+                          "catch" + utostr(EHPadStack.pop_back_val()) + ':');
+        }
+        EHInstStack.pop_back();
+        if (Opc == WebAssembly::CATCH || Opc == WebAssembly::CATCH_S) {
+          EHInstStack.push_back(CATCH);
+        } else {
+          EHInstStack.push_back(CATCH_ALL);
+        }
       }
       return;
 
@@ -155,6 +172,36 @@ void WebAssemblyInstPrinter::printInst(const MCInst *MI, uint64_t Address,
         printAnnotation(OS, "to caller");
       } else {
         printAnnotation(OS, "down to catch" + utostr(EHPadStack.back()));
+      }
+      return;
+
+    case WebAssembly::DELEGATE:
+    case WebAssembly::DELEGATE_S:
+      if (ControlFlowStack.empty() || EHPadStack.empty() ||
+          EHInstStack.empty()) {
+        printAnnotation(OS, "try-delegate mismatch!");
+      } else {
+        // 'delegate' is
+        // 1. A marker for the end of block label
+        // 2. A destination for throwing instructions
+        // 3. An instruction that itself rethrows to another 'catch'
+        assert(ControlFlowStack.back().first == EHPadStack.back());
+        std::string Label = "label/catch" +
+                            utostr(ControlFlowStack.pop_back_val().first) +
+                            ": ";
+        EHPadStack.pop_back();
+        EHInstStack.pop_back();
+        uint64_t Depth = MI->getOperand(0).getImm();
+        if (Depth >= ControlFlowStack.size()) {
+          Label += "to caller";
+        } else {
+          const auto &Pair = ControlFlowStack.rbegin()[Depth];
+          if (Pair.second)
+            printAnnotation(OS, "delegate cannot target a loop");
+          else
+            Label += "down to catch" + utostr(Pair.first);
+        }
+        printAnnotation(OS, Label);
       }
       return;
     }
