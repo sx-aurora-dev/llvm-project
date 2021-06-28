@@ -240,6 +240,9 @@ public:
   void operator&=(const FastMathFlags &OtherFlags) {
     Flags &= OtherFlags.Flags;
   }
+  void operator|=(const FastMathFlags &OtherFlags) {
+    Flags |= OtherFlags.Flags;
+  }
 };
 
 /// Utility class for floating point operations which can have

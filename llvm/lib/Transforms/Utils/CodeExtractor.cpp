@@ -1164,9 +1164,8 @@ CallInst *CodeExtractor::emitCallAndSwitchStatement(Function *newFunction,
   AllocaInst *Struct = nullptr;
   if (AggregateArgs && (inputs.size() + outputs.size() > 0)) {
     std::vector<Type *> ArgTypes;
-    for (ValueSet::iterator v = StructValues.begin(),
-           ve = StructValues.end(); v != ve; ++v)
-      ArgTypes.push_back((*v)->getType());
+    for (Value *V : StructValues)
+      ArgTypes.push_back(V->getType());
 
     // Allocate a struct at the beginning of this function
     StructArgTy = StructType::get(newFunction->getContext(), ArgTypes);
@@ -1615,15 +1614,14 @@ CodeExtractor::extractCodeRegion(const CodeExtractorAnalysisCache &CEAC) {
   DenseMap<BasicBlock *, BlockFrequency> ExitWeights;
   SmallPtrSet<BasicBlock *, 1> ExitBlocks;
   for (BasicBlock *Block : Blocks) {
-    for (succ_iterator SI = succ_begin(Block), SE = succ_end(Block); SI != SE;
-         ++SI) {
-      if (!Blocks.count(*SI)) {
+    for (BasicBlock *Succ : successors(Block)) {
+      if (!Blocks.count(Succ)) {
         // Update the branch weight for this successor.
         if (BFI) {
-          BlockFrequency &BF = ExitWeights[*SI];
-          BF += BFI->getBlockFreq(Block) * BPI->getEdgeProbability(Block, *SI);
+          BlockFrequency &BF = ExitWeights[Succ];
+          BF += BFI->getBlockFreq(Block) * BPI->getEdgeProbability(Block, Succ);
         }
-        ExitBlocks.insert(*SI);
+        ExitBlocks.insert(Succ);
       }
     }
   }

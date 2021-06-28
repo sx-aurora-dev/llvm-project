@@ -281,6 +281,12 @@ opt<bool> IncludeIneligibleResults{
 };
 
 RetiredFlag<bool> EnableIndex("index");
+RetiredFlag<bool> SuggestMissingIncludes("suggest-missing-includes");
+RetiredFlag<bool> RecoveryAST("recovery-ast");
+RetiredFlag<bool> RecoveryASTType("recovery-ast-type");
+RetiredFlag<bool> AsyncPreamble("async-preamble");
+RetiredFlag<bool> CollectMainFileRefs("collect-main-file-refs");
+RetiredFlag<bool> CrossFileRename("cross-file-rename");
 
 opt<int> LimitResults{
     "limit-results",
@@ -290,8 +296,6 @@ opt<int> LimitResults{
     init(100),
 };
 
-RetiredFlag<bool> SuggestMissingIncludes("suggest-missing-includes");
-
 list<std::string> TweakList{
     "tweaks",
     cat(Features),
@@ -299,16 +303,6 @@ list<std::string> TweakList{
     Hidden,
     CommaSeparated,
 };
-
-opt<bool> CrossFileRename{
-    "cross-file-rename",
-    cat(Features),
-    desc("Enable cross-file rename feature."),
-    init(true),
-};
-
-RetiredFlag<bool> RecoveryAST("recovery-ast");
-RetiredFlag<bool> RecoveryASTType("recovery-ast-type");
 
 opt<bool> FoldingRanges{
     "folding-ranges",
@@ -450,16 +444,6 @@ opt<bool> PrettyPrint{
     init(false),
 };
 
-// FIXME: retire this flag in llvm 13 release cycle.
-opt<bool> AsyncPreamble{
-    "async-preamble",
-    cat(Misc),
-    desc("Reuse even stale preambles, and rebuild them in the background. This "
-         "improves latency at the cost of accuracy."),
-    init(ClangdServer::Options().AsyncPreambleBuilds),
-    Hidden,
-};
-
 opt<bool> EnableConfig{
     "enable-config",
     cat(Misc),
@@ -472,15 +456,6 @@ opt<bool> EnableConfig{
         "\tOthers: $XDG_CONFIG_HOME, usually ~/.config\n"
         "Configuration is documented at https://clangd.llvm.org/config.html"),
     init(true),
-};
-
-// FIXME: retire this flag in llvm 13 release cycle.
-opt<bool> CollectMainFileRefs{
-    "collect-main-file-refs",
-    cat(Misc),
-    desc("Store references to main-file-only symbols in the index"),
-    init(ClangdServer::Options().CollectMainFileRefs),
-    Hidden,
 };
 
 #if defined(__GLIBC__) && CLANGD_MALLOC_TRIM
@@ -760,7 +735,6 @@ clangd accepts flags on the commandline, and in the CLANGD_FLAGS environment var
   if (!ResourceDir.empty())
     Opts.ResourceDir = ResourceDir;
   Opts.BuildDynamicSymbolIndex = true;
-  Opts.CollectMainFileRefs = CollectMainFileRefs;
   std::vector<std::unique_ptr<SymbolIndex>> IdxStack;
   std::unique_ptr<SymbolIndex> StaticIdx;
   std::future<void> AsyncIndexLoad; // Block exit while loading the index.
@@ -860,7 +834,6 @@ clangd accepts flags on the commandline, and in the CLANGD_FLAGS environment var
     ClangTidyOptProvider = combine(std::move(Providers));
     Opts.ClangTidyProvider = ClangTidyOptProvider;
   }
-  Opts.AsyncPreambleBuilds = AsyncPreamble;
   Opts.QueryDriverGlobs = std::move(QueryDriverGlobs);
   Opts.TweakFilter = [&](const Tweak &T) {
     if (T.hidden() && !HiddenFeatures)
@@ -871,9 +844,6 @@ clangd accepts flags on the commandline, and in the CLANGD_FLAGS environment var
   };
   if (ForceOffsetEncoding != OffsetEncoding::UnsupportedEncoding)
     Opts.Encoding = ForceOffsetEncoding;
-
-  // Shall we allow to customize the file limit?
-  Opts.Rename.AllowCrossFile = CrossFileRename;
 
   if (CheckFile.getNumOccurrences()) {
     llvm::SmallString<256> Path;

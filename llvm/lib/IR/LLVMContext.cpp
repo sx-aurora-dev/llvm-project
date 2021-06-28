@@ -78,6 +78,12 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "gc-transition operand bundle id drifted!");
   (void)GCLiveEntry;
 
+  auto *ClangAttachedCall =
+      pImpl->getOrInsertBundleTag("clang.arc.attachedcall");
+  assert(ClangAttachedCall->second == LLVMContext::OB_clang_arc_attachedcall &&
+         "clang.arc.attachedcall operand bundle id drifted!");
+  (void)ClangAttachedCall;
+
   auto *CFPRoundEntry = pImpl->getOrInsertBundleTag("cfp-round");
   assert(CFPRoundEntry->second == LLVMContext::OB_cfp_round &&
          "cfp-round operand bundle id drifted!");

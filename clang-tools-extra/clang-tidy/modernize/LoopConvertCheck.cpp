@@ -188,11 +188,6 @@ StatementMatcher makeIteratorLoopMatcher(bool IsReverse) {
   StatementMatcher IteratorComparisonMatcher = expr(
       ignoringParenImpCasts(declRefExpr(to(varDecl().bind(ConditionVarName)))));
 
-  auto OverloadedNEQMatcher = ignoringImplicit(
-      cxxOperatorCallExpr(hasOverloadedOperatorName("!="), argumentCountIs(2),
-                          hasArgument(0, IteratorComparisonMatcher),
-                          hasArgument(1, IteratorBoundMatcher)));
-
   // This matcher tests that a declaration is a CXXRecordDecl that has an
   // overloaded operator*(). If the operator*() returns by value instead of by
   // reference then the return type is tagged with DerefByValueResultName.
@@ -216,14 +211,9 @@ StatementMatcher makeIteratorLoopMatcher(bool IsReverse) {
                                         containsDeclaration(0, InitDeclMatcher),
                                         containsDeclaration(1, EndDeclMatcher)),
                                declStmt(hasSingleDecl(InitDeclMatcher)))),
-             hasCondition(
-                 anyOf(binaryOperator(hasOperatorName("!="),
-                                      hasLHS(IteratorComparisonMatcher),
-                                      hasRHS(IteratorBoundMatcher)),
-                       binaryOperator(hasOperatorName("!="),
-                                      hasLHS(IteratorBoundMatcher),
-                                      hasRHS(IteratorComparisonMatcher)),
-                       OverloadedNEQMatcher)),
+             hasCondition(ignoringImplicit(binaryOperation(
+                 hasOperatorName("!="), hasOperands(IteratorComparisonMatcher,
+                                                    IteratorBoundMatcher)))),
              hasIncrement(anyOf(
                  unaryOperator(hasOperatorName("++"),
                                hasUnaryOperand(declRefExpr(
@@ -722,10 +712,11 @@ StringRef LoopConvertCheck::getContainerString(ASTContext *Context,
   if (isa<CXXThisExpr>(ContainerExpr)) {
     ContainerString = "this";
   } else {
-    // For CXXOperatorCallExpr (e.g. vector_ptr->size()), its first argument is
-    // the class object (vector_ptr) we are targeting.
+    // For CXXOperatorCallExpr such as vector_ptr->size() we want the class
+    // object vector_ptr, but for vector[2] we need the whole expression.
     if (const auto* E = dyn_cast<CXXOperatorCallExpr>(ContainerExpr))
-      ContainerExpr = E->getArg(0);
+      if (E->getOperator() != OO_Subscript)
+        ContainerExpr = E->getArg(0);
     ContainerString =
         getStringFromRange(Context->getSourceManager(), Context->getLangOpts(),
                            ContainerExpr->getSourceRange());

@@ -10,6 +10,7 @@
 
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
@@ -102,6 +103,27 @@ static SmallVector<int64_t, 4> getI64SubArray(ArrayAttr arrayAttr,
   return res;
 }
 
+static Value createCastToIndexLike(ConversionPatternRewriter &rewriter,
+                                   Location loc, Type targetType, Value value) {
+  if (targetType == value.getType())
+    return value;
+
+  bool targetIsIndex = targetType.isIndex();
+  bool valueIsIndex = value.getType().isIndex();
+  if (targetIsIndex ^ valueIsIndex)
+    return rewriter.create<IndexCastOp>(loc, targetType, value);
+
+  auto targetIntegerType = targetType.dyn_cast<IntegerType>();
+  auto valueIntegerType = value.getType().dyn_cast<IntegerType>();
+  assert(targetIntegerType && valueIntegerType &&
+         "unexpected cast between types other than integers and index");
+  assert(targetIntegerType.getSignedness() == valueIntegerType.getSignedness());
+
+  if (targetIntegerType.getWidth() > valueIntegerType.getWidth())
+    return rewriter.create<SignExtendIOp>(loc, targetIntegerType, value);
+  return rewriter.create<TruncateIOp>(loc, targetIntegerType, value);
+}
+
 // Helper that returns a vector comparison that constructs a mask:
 //     mask = [0,1,..,n-1] + [o,o,..,o] < [b,b,..,b]
 //
@@ -131,12 +153,12 @@ static Value buildVectorComparison(ConversionPatternRewriter &rewriter,
   }
   // Add in an offset if requested.
   if (off) {
-    Value o = rewriter.create<IndexCastOp>(loc, idxType, *off);
+    Value o = createCastToIndexLike(rewriter, loc, idxType, *off);
     Value ov = rewriter.create<SplatOp>(loc, indices.getType(), o);
     indices = rewriter.create<AddIOp>(loc, ov, indices);
   }
   // Construct the vector comparison.
-  Value bound = rewriter.create<IndexCastOp>(loc, idxType, b);
+  Value bound = createCastToIndexLike(rewriter, loc, idxType, b);
   Value bounds = rewriter.create<SplatOp>(loc, indices.getType(), bound);
   return rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, indices, bounds);
 }
@@ -216,10 +238,8 @@ replaceTransferOpWithMasked(ConversionPatternRewriter &rewriter,
                             LLVMTypeConverter &typeConverter, Location loc,
                             TransferReadOp xferOp, ArrayRef<Value> operands,
                             Value dataPtr, Value mask) {
-  auto toLLVMTy = [&](Type t) { return typeConverter.convertType(t); };
   VectorType fillType = xferOp.getVectorType();
   Value fill = rewriter.create<SplatOp>(loc, fillType, xferOp.padding());
-  fill = rewriter.create<LLVM::DialectCastOp>(loc, toLLVMTy(fillType), fill);
 
   Type vecTy = typeConverter.convertType(xferOp.getVectorType());
   if (!vecTy)
@@ -279,6 +299,26 @@ static TransferWriteOpAdaptor getTransferOpAdapter(TransferWriteOp xferOp,
 }
 
 namespace {
+
+/// Conversion pattern for a vector.bitcast.
+class VectorBitCastOpConversion
+    : public ConvertOpToLLVMPattern<vector::BitCastOp> {
+public:
+  using ConvertOpToLLVMPattern<vector::BitCastOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(vector::BitCastOp bitCastOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Only 1-D vectors can be lowered to LLVM.
+    VectorType resultTy = bitCastOp.getType();
+    if (resultTy.getRank() != 1)
+      return failure();
+    Type newResultTy = typeConverter->convertType(resultTy);
+    rewriter.replaceOpWithNewOp<LLVM::BitcastOp>(bitCastOp, newResultTy,
+                                                 operands[0]);
+    return success();
+  }
+};
 
 /// Conversion pattern for a vector.matrix_multiply.
 /// This is lowered directly to the proper llvm.intr.matrix.multiply.
@@ -723,7 +763,7 @@ public:
     if (positionAttrs.size() > 1) {
       auto oneDVectorType = reducedVectorTypeBack(vectorType);
       auto nMinusOnePositionAttrs =
-          ArrayAttr::get(positionAttrs.drop_back(), context);
+          ArrayAttr::get(context, positionAttrs.drop_back());
       extracted = rewriter.create<LLVM::ExtractValueOp>(
           loc, typeConverter->convertType(oneDVectorType), extracted,
           nMinusOnePositionAttrs);
@@ -832,7 +872,7 @@ public:
     if (positionAttrs.size() > 1) {
       oneDVectorType = reducedVectorTypeBack(destVectorType);
       auto nMinusOnePositionAttrs =
-          ArrayAttr::get(positionAttrs.drop_back(), context);
+          ArrayAttr::get(context, positionAttrs.drop_back());
       extracted = rewriter.create<LLVM::ExtractValueOp>(
           loc, typeConverter->convertType(oneDVectorType), extracted,
           nMinusOnePositionAttrs);
@@ -848,7 +888,7 @@ public:
     // Potential insertion of resulting 1-D vector into array.
     if (positionAttrs.size() > 1) {
       auto nMinusOnePositionAttrs =
-          ArrayAttr::get(positionAttrs.drop_back(), context);
+          ArrayAttr::get(context, positionAttrs.drop_back());
       inserted = rewriter.create<LLVM::InsertValueOp>(loc, llvmResultType,
                                                       adaptor.dest(), inserted,
                                                       nMinusOnePositionAttrs);
@@ -1272,11 +1312,14 @@ public:
     Type eltType = vectorType ? vectorType.getElementType() : printType;
     Operation *printer;
     if (eltType.isF32()) {
-      printer = getPrintFloat(printOp);
+      printer =
+          LLVM::lookupOrCreatePrintF32Fn(printOp->getParentOfType<ModuleOp>());
     } else if (eltType.isF64()) {
-      printer = getPrintDouble(printOp);
+      printer =
+          LLVM::lookupOrCreatePrintF64Fn(printOp->getParentOfType<ModuleOp>());
     } else if (eltType.isIndex()) {
-      printer = getPrintU64(printOp);
+      printer =
+          LLVM::lookupOrCreatePrintU64Fn(printOp->getParentOfType<ModuleOp>());
     } else if (auto intTy = eltType.dyn_cast<IntegerType>()) {
       // Integers need a zero or sign extension on the operand
       // (depending on the source type) as well as a signed or
@@ -1286,7 +1329,8 @@ public:
         if (width <= 64) {
           if (width < 64)
             conversion = PrintConversion::ZeroExt64;
-          printer = getPrintU64(printOp);
+          printer = LLVM::lookupOrCreatePrintU64Fn(
+              printOp->getParentOfType<ModuleOp>());
         } else {
           return failure();
         }
@@ -1299,7 +1343,8 @@ public:
             conversion = PrintConversion::ZeroExt64;
           else if (width < 64)
             conversion = PrintConversion::SignExt64;
-          printer = getPrintI64(printOp);
+          printer = LLVM::lookupOrCreatePrintI64Fn(
+              printOp->getParentOfType<ModuleOp>());
         } else {
           return failure();
         }
@@ -1312,7 +1357,9 @@ public:
     int64_t rank = vectorType ? vectorType.getRank() : 0;
     emitRanks(rewriter, printOp, adaptor.source(), vectorType, printer, rank,
               conversion);
-    emitCall(rewriter, printOp->getLoc(), getPrintNewline(printOp));
+    emitCall(rewriter, printOp->getLoc(),
+             LLVM::lookupOrCreatePrintNewlineFn(
+                 printOp->getParentOfType<ModuleOp>()));
     rewriter.eraseOp(printOp);
     return success();
   }
@@ -1347,8 +1394,10 @@ private:
       return;
     }
 
-    emitCall(rewriter, loc, getPrintOpen(op));
-    Operation *printComma = getPrintComma(op);
+    emitCall(rewriter, loc,
+             LLVM::lookupOrCreatePrintOpenFn(op->getParentOfType<ModuleOp>()));
+    Operation *printComma =
+        LLVM::lookupOrCreatePrintCommaFn(op->getParentOfType<ModuleOp>());
     int64_t dim = vectorType.getDimSize(0);
     for (int64_t d = 0; d < dim; ++d) {
       auto reducedType =
@@ -1362,7 +1411,8 @@ private:
       if (d != dim - 1)
         emitCall(rewriter, loc, printComma);
     }
-    emitCall(rewriter, loc, getPrintClose(op));
+    emitCall(rewriter, loc,
+             LLVM::lookupOrCreatePrintCloseFn(op->getParentOfType<ModuleOp>()));
   }
 
   // Helper to emit a call.
@@ -1370,46 +1420,6 @@ private:
                        Operation *ref, ValueRange params = ValueRange()) {
     rewriter.create<LLVM::CallOp>(loc, TypeRange(),
                                   rewriter.getSymbolRefAttr(ref), params);
-  }
-
-  // Helper for printer method declaration (first hit) and lookup.
-  static Operation *getPrint(Operation *op, StringRef name,
-                             ArrayRef<Type> params) {
-    auto module = op->getParentOfType<ModuleOp>();
-    auto func = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
-    if (func)
-      return func;
-    OpBuilder moduleBuilder(module.getBodyRegion());
-    return moduleBuilder.create<LLVM::LLVMFuncOp>(
-        op->getLoc(), name,
-        LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(op->getContext()),
-                                    params));
-  }
-
-  // Helpers for method names.
-  Operation *getPrintI64(Operation *op) const {
-    return getPrint(op, "printI64", IntegerType::get(op->getContext(), 64));
-  }
-  Operation *getPrintU64(Operation *op) const {
-    return getPrint(op, "printU64", IntegerType::get(op->getContext(), 64));
-  }
-  Operation *getPrintFloat(Operation *op) const {
-    return getPrint(op, "printF32", Float32Type::get(op->getContext()));
-  }
-  Operation *getPrintDouble(Operation *op) const {
-    return getPrint(op, "printF64", Float64Type::get(op->getContext()));
-  }
-  Operation *getPrintOpen(Operation *op) const {
-    return getPrint(op, "printOpen", {});
-  }
-  Operation *getPrintClose(Operation *op) const {
-    return getPrint(op, "printClose", {});
-  }
-  Operation *getPrintComma(Operation *op) const {
-    return getPrint(op, "printComma", {});
-  }
-  Operation *getPrintNewline(Operation *op) const {
-    return getPrint(op, "printNewline", {});
   }
 };
 
@@ -1492,7 +1502,8 @@ void mlir::populateVectorToLLVMConversionPatterns(
                   VectorTransferConversion<TransferWriteOp>>(
       converter, enableIndexOptimizations);
   patterns
-      .insert<VectorShuffleOpConversion,
+      .insert<VectorBitCastOpConversion,
+              VectorShuffleOpConversion,
               VectorExtractElementOpConversion,
               VectorExtractOpConversion,
               VectorFMAOp1DConversion,

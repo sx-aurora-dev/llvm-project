@@ -1073,12 +1073,6 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
   if (auto *Params = N.getRawTemplateParams())
     visitTemplateParams(N, *Params);
 
-  if (N.getTag() == dwarf::DW_TAG_class_type ||
-      N.getTag() == dwarf::DW_TAG_union_type) {
-    AssertDI(N.getFile() && !N.getFile()->getFilename().empty(),
-             "class/union requires a filename", &N, N.getFile());
-  }
-
   if (auto *D = N.getRawDiscriminator()) {
     AssertDI(isa<DIDerivedType>(D) && N.getTag() == dwarf::DW_TAG_variant_part,
              "discriminator can only appear on variant part");
@@ -3268,8 +3262,8 @@ void Verifier::visitCallBase(CallBase &Call) {
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
        FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
-       FoundCFPExceptBundle = false, FoundCFPRoundBundle = false;
-  ;
+       FoundAttachedCallBundle = false, FoundCFPExceptBundle = false,
+       FoundCFPRoundBundle = false;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
     uint32_t Tag = BU.getTagID();
@@ -3310,6 +3304,10 @@ void Verifier::visitCallBase(CallBase &Call) {
       Assert(!FoundGCLiveBundle, "Multiple gc-live operand bundles",
              Call);
       FoundGCLiveBundle = true;
+    } else if (Tag == LLVMContext::OB_clang_arc_attachedcall) {
+      Assert(!FoundAttachedCallBundle,
+             "Multiple \"clang.arc.attachedcall\" operand bundles", Call);
+      FoundAttachedCallBundle = true;
     } else if (Tag == LLVMContext::OB_cfp_round) {
       Assert(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
              Call);
@@ -3320,6 +3318,12 @@ void Verifier::visitCallBase(CallBase &Call) {
       FoundCFPExceptBundle = true;
     }
   }
+
+  if (FoundAttachedCallBundle)
+    Assert(FTy->getReturnType()->isPointerTy(),
+           "a call with operand bundle \"clang.arc.attachedcall\" must call a "
+           "function returning a pointer",
+           Call);
 
   // Verify that each inlinable callsite of a debug-info-bearing function in a
   // debug-info-bearing function has a debug location attached to it. Failure to

@@ -1321,10 +1321,11 @@ bool SelectionDAGBuilder::handleDebugValue(const Value *V, DILocalVariable *Var,
         if (auto Fragment = Expr->getFragmentInfo())
           BitsToDescribe = Fragment->SizeInBits;
         for (auto RegAndSize : RFV.getRegsAndSizes()) {
-          unsigned RegisterSize = RegAndSize.second;
           // Bail out if all bits are described already.
           if (Offset >= BitsToDescribe)
             break;
+          // TODO: handle scalable vectors.
+          unsigned RegisterSize = RegAndSize.second;
           unsigned FragmentSize = (Offset + RegisterSize > BitsToDescribe)
                                       ? BitsToDescribe - Offset
                                       : RegisterSize;
@@ -2772,11 +2773,11 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
 
   // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
   // have to do anything here to lower funclet bundles.
-  assert(!I.hasOperandBundlesOtherThan({LLVMContext::OB_deopt,
-                                        LLVMContext::OB_gc_transition,
-                                        LLVMContext::OB_gc_live,
-                                        LLVMContext::OB_funclet,
-                                        LLVMContext::OB_cfguardtarget}) &&
+  assert(!I.hasOperandBundlesOtherThan(
+             {LLVMContext::OB_deopt, LLVMContext::OB_gc_transition,
+              LLVMContext::OB_gc_live, LLVMContext::OB_funclet,
+              LLVMContext::OB_cfguardtarget,
+              LLVMContext::OB_clang_arc_attachedcall}) &&
          "Cannot lower invokes with arbitrary operand bundles yet!");
 
   const Value *Callee(I.getCalledOperand());
@@ -4396,7 +4397,15 @@ void SelectionDAGBuilder::visitMaskedScatter(const CallInst &I) {
     Scale =
         DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
-  SDValue Ops[] = {getMemoryRoot(), Src0, Mask, Base, Index, Scale};
+
+  EVT IdxVT = Index.getValueType();
+  EVT EltTy = IdxVT.getVectorElementType();
+  if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
+    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
+  }
+
+  SDValue Ops[] = { getMemoryRoot(), Src0, Mask, Base, Index, Scale };
   SDValue Scatter = DAG.getMaskedScatter(DAG.getVTList(MVT::Other), VT, sdl,
                                          Ops, MMO, IndexType, false);
   DAG.setRoot(Scatter);
@@ -4506,7 +4515,15 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
     IndexType = ISD::SIGNED_UNSCALED;
     Scale = DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
-  SDValue Ops[] = {Root, Src0, Mask, Base, Index, Scale};
+
+  EVT IdxVT = Index.getValueType();
+  EVT EltTy = IdxVT.getVectorElementType();
+  if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
+    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
+  }
+
+  SDValue Ops[] = { Root, Src0, Mask, Base, Index, Scale };
   SDValue Gather = DAG.getMaskedGather(DAG.getVTList(VT, MVT::Other), VT, sdl,
                                        Ops, MMO, IndexType, ISD::NON_EXTLOAD);
 
@@ -6462,6 +6479,12 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              getValue(I.getArgOperand(0)), SatW));
     return;
   }
+  case Intrinsic::set_rounding:
+    Res = DAG.getNode(ISD::SET_ROUNDING, sdl, MVT::Other,
+                      {getRoot(), getValue(I.getArgOperand(0))});
+    setValue(&I, Res);
+    DAG.setRoot(Res.getValue(0));
+    return;
   case Intrinsic::pcmarker: {
     SDValue Tmp = getValue(I.getArgOperand(0));
     DAG.setRoot(DAG.getNode(ISD::PCMARKER, sdl, MVT::Other, getRoot(), Tmp));
@@ -6891,10 +6914,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     SmallVector<const Value *, 4> Allocas;
     getUnderlyingObjects(ObjectPtr, Allocas);
 
-    for (SmallVectorImpl<const Value *>::iterator Object = Allocas.begin(),
-                                                  E = Allocas.end();
-         Object != E; ++Object) {
-      const AllocaInst *LifetimeObject = dyn_cast_or_null<AllocaInst>(*Object);
+    for (const Value *Alloca : Allocas) {
+      const AllocaInst *LifetimeObject = dyn_cast_or_null<AllocaInst>(Alloca);
 
       // Could not find an Alloca.
       if (!LifetimeObject)
@@ -7355,7 +7376,10 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
   case ISD::STRICT_FSETCC:
   case ISD::STRICT_FSETCCS: {
     auto *FPCmp = dyn_cast<ConstrainedFPCmpIntrinsic>(&FPI);
-    Opers.push_back(DAG.getCondCode(getFCmpCondCode(FPCmp->getPredicate())));
+    ISD::CondCode Condition = getFCmpCondCode(FPCmp->getPredicate());
+    if (TM.Options.NoNaNsFPMath)
+      Condition = getFCmpCodeWithoutNaN(Condition);
+    Opers.push_back(DAG.getCondCode(Condition));
     break;
   }
   }
@@ -8262,7 +8286,8 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
   // CFGuardTarget bundles are lowered in LowerCallTo.
   assert(!I.hasOperandBundlesOtherThan(
              {LLVMContext::OB_deopt, LLVMContext::OB_funclet,
-              LLVMContext::OB_cfguardtarget, LLVMContext::OB_preallocated}) &&
+              LLVMContext::OB_cfguardtarget, LLVMContext::OB_preallocated,
+              LLVMContext::OB_clang_arc_attachedcall}) &&
          "Cannot lower calls with arbitrary operand bundles!");
 
   SDValue Callee = getValue(I.getCalledOperand());
@@ -10064,8 +10089,9 @@ static void findArgumentCopyElisionCandidates(
       // We will look through cast uses, so ignore them completely.
       if (I.isCast())
         continue;
-      // Ignore debug info intrinsics, they don't escape or store to allocas.
-      if (isa<DbgInfoIntrinsic>(I))
+      // Ignore debug info and pseudo op intrinsics, they don't escape or store
+      // to allocas.
+      if (I.isDebugOrPseudoInst())
         continue;
       // This is an unknown instruction. Assume it escapes or writes to all
       // static alloca operands.

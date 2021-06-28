@@ -49,7 +49,7 @@ static linalg::GenericOp createGenericOpFromNamedOp(linalg::LinalgOp namedOp,
       indexingMaps, iterators,
       [&regionBuilder](OpBuilder &bodyBuilder, Location loc, ValueRange) {
         edsc::ScopedContext scope(bodyBuilder, loc);
-        regionBuilder(*bodyBuilder.getBlock());
+        regionBuilder(*bodyBuilder.getBlock(), /*captures=*/{});
       });
 }
 
@@ -146,7 +146,7 @@ void LinalgGeneralizationPass::runOnFunction() {
   OwningRewritePatternList patterns;
   linalg::populateLinalgConvGeneralizationPatterns(&getContext(), patterns);
   linalg::populateLinalgNamedOpsGeneralizationPatterns(&getContext(), patterns);
-  applyPatternsAndFoldGreedily(func.getBody(), std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(func.getBody(), std::move(patterns));
 }
 
 linalg::GenericOp GeneralizeConvOp::createGenericOp(linalg::ConvOp convOp,

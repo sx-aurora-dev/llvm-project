@@ -247,7 +247,7 @@ def no_branch_islands : Flag<["-"], "no_branch_islands">,
      Flags<[HelpHidden]>,
      Group<grp_opts>;
 
-def grp_version : OptionGroup<"version">, HelpText<"VERSION CONTROL">;
+def grp_version : OptionGroup<"version">, HelpText<"VERSION TARGETING">;
 
 def platform_version : MultiArg<["-"], "platform_version", 3>,
      MetaVarName<"<platform> <min_version> <sdk_version>">,
@@ -454,7 +454,6 @@ def flat_namespace : Flag<["-"], "flat_namespace">,
 def u : Separate<["-"], "u">,
      MetaVarName<"<symbol>">,
      HelpText<"Require that <symbol> be defined for the link to succeed">,
-     Flags<[HelpHidden]>,
      Group<grp_resolve>;
 def U : Separate<["-"], "U">,
      MetaVarName<"<symbol>">,
