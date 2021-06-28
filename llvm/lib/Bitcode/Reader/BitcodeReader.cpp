@@ -2894,6 +2894,20 @@ Error BitcodeReader::parseConstants() {
       V = BlockAddress::get(Fn, BB);
       break;
     }
+    case bitc::CST_CODE_DSO_LOCAL_EQUIVALENT: {
+      if (Record.size() < 2)
+        return error("Invalid record");
+      Type *GVTy = getTypeByID(Record[0]);
+      if (!GVTy)
+        return error("Invalid record");
+      GlobalValue *GV = dyn_cast_or_null<GlobalValue>(
+          ValueList.getConstantFwdRef(Record[1], GVTy));
+      if (!GV)
+        return error("Invalid record");
+
+      V = DSOLocalEquivalent::get(GV);
+      break;
+    }
     }
 
     assert(V->getType() == flattenPointerTypes(CurFullTy) &&
@@ -6851,7 +6865,7 @@ static Expected<bool> getEnableSplitLTOUnitFlag(BitstreamCursor &Stream,
     case bitc::FS_FLAGS: { // [flags]
       uint64_t Flags = Record[0];
       // Scan flags.
-      assert(Flags <= 0x3f && "Unexpected bits in flag");
+      assert(Flags <= 0x7f && "Unexpected bits in flag");
 
       return Flags & 0x8;
     }

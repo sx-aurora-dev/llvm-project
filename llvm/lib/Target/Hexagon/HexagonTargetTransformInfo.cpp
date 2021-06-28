@@ -80,8 +80,10 @@ void HexagonTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
   }
 }
 
-bool HexagonTTIImpl::shouldFavorPostInc() const {
-  return true;
+TTI::AddressingModeKind
+HexagonTTIImpl::getPreferredAddressingMode(const Loop *L,
+                                           ScalarEvolution *SE) const {
+  return TTI::AMK_PostIndexed;
 }
 
 /// --- Vector TTI begin ---
@@ -116,9 +118,10 @@ unsigned HexagonTTIImpl::getScalarizationOverhead(VectorType *Ty,
   return BaseT::getScalarizationOverhead(Ty, DemandedElts, Insert, Extract);
 }
 
-unsigned HexagonTTIImpl::getOperandsScalarizationOverhead(
-      ArrayRef<const Value*> Args, unsigned VF) {
-  return BaseT::getOperandsScalarizationOverhead(Args, VF);
+unsigned
+HexagonTTIImpl::getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
+                                                 ArrayRef<Type *> Tys) {
+  return BaseT::getOperandsScalarizationOverhead(Args, Tys);
 }
 
 unsigned HexagonTTIImpl::getCallInstrCost(Function *F, Type *RetTy,

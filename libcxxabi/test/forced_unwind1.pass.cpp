@@ -11,13 +11,25 @@
 
 // UNSUPPORTED: no-exceptions, c++03
 
+// These tests fail on previously released dylibs, investigation needed.
+// XFAIL: with_system_cxx_lib=macosx10.15
+// XFAIL: with_system_cxx_lib=macosx10.14
+// XFAIL: with_system_cxx_lib=macosx10.13
+// XFAIL: with_system_cxx_lib=macosx10.12
+// XFAIL: with_system_cxx_lib=macosx10.11
+// XFAIL: with_system_cxx_lib=macosx10.10
+// XFAIL: with_system_cxx_lib=macosx10.9
+
 #include <stdlib.h>
 #include <string.h>
 #include <unwind.h>
 #include <tuple>
+#include <__cxxabi_config.h>
 
 #if defined(_LIBCXXABI_ARM_EHABI)
-int main() {}
+int main(int, char**) {
+  return 0;
+}
 #else
 static int bits = 0;
 
@@ -74,7 +86,7 @@ static void test() {
   }
 }
 
-int main() {
+int main(int, char**) {
   test();
   return bits != 15;
 }
