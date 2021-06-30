@@ -336,7 +336,7 @@ private:
 
 struct ScopedSaveAliaseesAndUsed {
   Module &M;
-  SmallPtrSet<GlobalValue *, 16> Used, CompilerUsed;
+  SmallVector<GlobalValue *, 4> Used, CompilerUsed;
   std::vector<std::pair<GlobalIndirectSymbol *, Function *>> FunctionAliases;
 
   ScopedSaveAliaseesAndUsed(Module &M) : M(M) {
@@ -367,9 +367,8 @@ struct ScopedSaveAliaseesAndUsed {
   }
 
   ~ScopedSaveAliaseesAndUsed() {
-    appendToUsed(M, std::vector<GlobalValue *>(Used.begin(), Used.end()));
-    appendToCompilerUsed(M, std::vector<GlobalValue *>(CompilerUsed.begin(),
-                                                       CompilerUsed.end()));
+    appendToUsed(M, Used);
+    appendToCompilerUsed(M, CompilerUsed);
 
     for (auto P : FunctionAliases)
       P.first->setIndirectSymbol(
@@ -1791,13 +1790,10 @@ bool LowerTypeTestsModule::lower() {
          UI != UE;) {
       auto *CI = cast<CallInst>((*UI++).getUser());
       // Find and erase llvm.assume intrinsics for this llvm.type.test call.
-      for (auto CIU = CI->use_begin(), CIUE = CI->use_end(); CIU != CIUE;) {
-        if (auto *AssumeCI = dyn_cast<CallInst>((*CIU++).getUser())) {
-          Function *F = AssumeCI->getCalledFunction();
-          if (F && F->getIntrinsicID() == Intrinsic::assume)
-            AssumeCI->eraseFromParent();
-        }
-      }
+      for (auto CIU = CI->use_begin(), CIUE = CI->use_end(); CIU != CIUE;)
+        if (auto *II = dyn_cast<IntrinsicInst>((*CIU++).getUser()))
+          if (II->getIntrinsicID() == Intrinsic::assume)
+            II->eraseFromParent();
       CI->eraseFromParent();
     }
 
@@ -2065,12 +2061,10 @@ bool LowerTypeTestsModule::lower() {
       // unnecessarily. These will be removed by a subsequent LTT invocation
       // with the DropTypeTests flag set.
       bool OnlyAssumeUses = !CI->use_empty();
-      for (auto CIU = CI->use_begin(), CIUE = CI->use_end(); CIU != CIUE;) {
-        if (auto *AssumeCI = dyn_cast<CallInst>((*CIU++).getUser())) {
-          Function *F = AssumeCI->getCalledFunction();
-          if (F && F->getIntrinsicID() == Intrinsic::assume)
+      for (const Use &CIU : CI->uses()) {
+        if (auto *II = dyn_cast<IntrinsicInst>(CIU.getUser()))
+          if (II->getIntrinsicID() == Intrinsic::assume)
             continue;
-        }
         OnlyAssumeUses = false;
         break;
       }

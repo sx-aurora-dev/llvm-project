@@ -214,6 +214,9 @@ CODEGENOPT(SanitizeAddressGlobalsDeadStripping, 1, 0) ///< Enable linker dead st
 CODEGENOPT(SanitizeAddressUseOdrIndicator, 1, 0) ///< Enable ODR indicator globals
 CODEGENOPT(SanitizeMemoryTrackOrigins, 2, 0) ///< Enable tracking origins in
                                              ///< MemorySanitizer
+ENUM_CODEGENOPT(SanitizeAddressDtorKind, llvm::AsanDtorKind, 2,
+                llvm::AsanDtorKind::Global)  ///< Set how ASan global
+                                             ///< destructors are emitted.
 CODEGENOPT(SanitizeMemoryUseAfterDtor, 1, 0) ///< Enable use-after-delete detection
                                              ///< in MemorySanitizer
 CODEGENOPT(SanitizeCfiCrossDso, 1, 0) ///< Enable cross-dso support in CFI.
@@ -265,6 +268,9 @@ CODEGENOPT(UnwindTables      , 1, 0) ///< Emit unwind tables.
 CODEGENOPT(VectorizeLoop     , 1, 0) ///< Run loop vectorizer.
 CODEGENOPT(VectorizeSLP      , 1, 0) ///< Run SLP vectorizer.
 CODEGENOPT(ProfileSampleAccurate, 1, 0) ///< Sample profile is accurate.
+
+/// Treat loops as finite: language, always, never.
+ENUM_CODEGENOPT(FiniteLoops, FiniteLoopsKind, 2, FiniteLoopsKind::Language)
 
   /// Attempt to use register sized accesses to bit-fields in structures, when
   /// possible.

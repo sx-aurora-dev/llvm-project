@@ -223,6 +223,9 @@ public:
 
   bool supportsEfficientVectorElementLoadStore() { return false; }
 
+  // Following implementation conflicts with dd2dbf7.
+  // Also following code seems incorrect.  Therefore, removing them.
+#if 0
   unsigned getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
                                     bool Insert, bool Extract) const {
     auto VecTy = dyn_cast<FixedVectorType>(Ty);
@@ -235,6 +238,7 @@ public:
                                             unsigned VF) const {
     return Args.size() * VF;
   }
+#endif
 
   unsigned getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                            unsigned AddressSpace,

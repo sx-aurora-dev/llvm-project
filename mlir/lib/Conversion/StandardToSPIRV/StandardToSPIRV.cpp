@@ -264,9 +264,8 @@ public:
       std::string varName =
           std::string("__workgroup_mem__") +
           std::to_string(std::distance(varOps.begin(), varOps.end()));
-      varOp = rewriter.create<spirv::GlobalVariableOp>(
-          loc, TypeAttr::get(spirvType), varName,
-          /*initializer = */ nullptr);
+      varOp = rewriter.create<spirv::GlobalVariableOp>(loc, spirvType, varName,
+                                                       /*initializer=*/nullptr);
     }
 
     // Get pointer to global variable at the current scope.
@@ -512,6 +511,35 @@ public:
   }
 };
 
+/// Converts std.trunci to spv.Select if the type of result is i1 or vector of
+/// i1.
+class TruncI1Pattern final : public OpConversionPattern<TruncateIOp> {
+public:
+  using OpConversionPattern<TruncateIOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TruncateIOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType =
+        this->getTypeConverter()->convertType(op.getResult().getType());
+    if (!isBoolScalarOrVector(dstType))
+      return failure();
+
+    Location loc = op.getLoc();
+    auto srcType = operands.front().getType();
+    // Check if (x & 1) == 1.
+    Value mask = spirv::ConstantOp::getOne(srcType, loc, rewriter);
+    Value maskedSrc =
+        rewriter.create<spirv::BitwiseAndOp>(loc, srcType, operands[0], mask);
+    Value isOne = rewriter.create<spirv::IEqualOp>(loc, maskedSrc, mask);
+
+    Value zero = spirv::ConstantOp::getZero(dstType, loc, rewriter);
+    Value one = spirv::ConstantOp::getOne(dstType, loc, rewriter);
+    rewriter.replaceOpWithNewOp<spirv::SelectOp>(op, dstType, isOne, one, zero);
+    return success();
+  }
+};
+
 /// Converts std.uitofp to spv.Select if the type of source is i1 or vector of
 /// i1.
 class UIToFPI1Pattern final : public OpConversionPattern<UIToFPOp> {
@@ -547,10 +575,10 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     assert(operands.size() == 1);
     auto srcType = operands.front().getType();
-    if (isBoolScalarOrVector(srcType))
-      return failure();
     auto dstType =
         this->getTypeConverter()->convertType(operation.getResult().getType());
+    if (isBoolScalarOrVector(srcType) || isBoolScalarOrVector(dstType))
+      return failure();
     if (dstType == srcType) {
       // Due to type conversion, we are seeing the same source and target type.
       // Then we can just erase this operation by forwarding its operand.
@@ -1178,7 +1206,7 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
       ReturnOpPattern, SelectOpPattern,
 
       // Type cast patterns
-      UIToFPI1Pattern, ZeroExtendI1Pattern,
+      UIToFPI1Pattern, ZeroExtendI1Pattern, TruncI1Pattern,
       TypeCastingOpPattern<IndexCastOp, spirv::SConvertOp>,
       TypeCastingOpPattern<SIToFPOp, spirv::ConvertSToFOp>,
       TypeCastingOpPattern<UIToFPOp, spirv::ConvertUToFOp>,

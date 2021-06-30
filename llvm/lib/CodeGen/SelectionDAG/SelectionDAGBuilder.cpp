@@ -1460,9 +1460,8 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
 
     if (isa<ConstantStruct>(C) || isa<ConstantArray>(C)) {
       SmallVector<SDValue, 4> Constants;
-      for (User::const_op_iterator OI = C->op_begin(), OE = C->op_end();
-           OI != OE; ++OI) {
-        SDNode *Val = getValue(*OI).getNode();
+      for (const Use &U : C->operands()) {
+        SDNode *Val = getValue(U).getNode();
         // If the operand is an empty aggregate, there are no values.
         if (!Val)
           continue;
@@ -1595,6 +1594,8 @@ void SelectionDAGBuilder::visitCatchRet(const CatchReturnInst &I) {
   // Update machine-CFG edge.
   MachineBasicBlock *TargetMBB = FuncInfo.MBBMap[I.getSuccessor()];
   FuncInfo.MBB->addSuccessor(TargetMBB);
+  TargetMBB->setIsEHCatchretTarget(true);
+  DAG.getMachineFunction().setHasEHCatchret(true);
 
   auto Pers = classifyEHPersonality(FuncInfo.Fn->getPersonalityFn());
   bool IsSEH = isAsynchronousEHPersonality(Pers);
@@ -7256,6 +7257,14 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     SDValue Vec = getValue(I.getOperand(0));
     SDValue SubVec = getValue(I.getOperand(1));
     SDValue Index = getValue(I.getOperand(2));
+
+    // The intrinsic's index type is i64, but the SDNode requires an index type
+    // suitable for the target. Convert the index as required.
+    MVT VectorIdxTy = TLI.getVectorIdxTy(DAG.getDataLayout());
+    if (Index.getValueType() != VectorIdxTy)
+      Index = DAG.getVectorIdxConstant(
+          cast<ConstantSDNode>(Index)->getZExtValue(), DL);
+
     EVT ResultVT = TLI.getValueType(DAG.getDataLayout(), I.getType());
     setValue(&I, DAG.getNode(ISD::INSERT_SUBVECTOR, DL, ResultVT, Vec, SubVec,
                              Index));
@@ -7268,9 +7277,19 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     SDValue Index = getValue(I.getOperand(1));
     EVT ResultVT = TLI.getValueType(DAG.getDataLayout(), I.getType());
 
+    // The intrinsic's index type is i64, but the SDNode requires an index type
+    // suitable for the target. Convert the index as required.
+    MVT VectorIdxTy = TLI.getVectorIdxTy(DAG.getDataLayout());
+    if (Index.getValueType() != VectorIdxTy)
+      Index = DAG.getVectorIdxConstant(
+          cast<ConstantSDNode>(Index)->getZExtValue(), DL);
+
     setValue(&I, DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, ResultVT, Vec, Index));
     return;
   }
+  case Intrinsic::experimental_vector_reverse:
+    visitVectorReverse(I);
+    return;
   }
 }
 
@@ -11236,6 +11255,29 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
 
     lowerWorkItem(W, SI.getCondition(), SwitchMBB, DefaultMBB);
   }
+}
+
+void SelectionDAGBuilder::visitVectorReverse(const CallInst &I) {
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
+
+  SDLoc DL = getCurSDLoc();
+  SDValue V = getValue(I.getOperand(0));
+  assert(VT == V.getValueType() && "Malformed vector.reverse!");
+
+  if (VT.isScalableVector()) {
+    setValue(&I, DAG.getNode(ISD::VECTOR_REVERSE, DL, VT, V));
+    return;
+  }
+
+  // Use VECTOR_SHUFFLE for the fixed-length vector
+  // to maintain existing behavior.
+  SmallVector<int, 8> Mask;
+  unsigned NumElts = VT.getVectorMinNumElements();
+  for (unsigned i = 0; i != NumElts; ++i)
+    Mask.push_back(NumElts - 1 - i);
+
+  setValue(&I, DAG.getVectorShuffle(VT, DL, V, DAG.getUNDEF(VT), Mask));
 }
 
 void SelectionDAGBuilder::visitFreeze(const FreezeInst &I) {

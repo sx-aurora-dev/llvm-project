@@ -15,6 +15,7 @@
 
 #include "DebugTranslation.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/LegalizeForExport.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -37,6 +38,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -102,9 +104,9 @@ static llvm::Type *getInnermostElementType(llvm::Type *type) {
 /// This currently supports integer, floating point, splat and dense element
 /// attributes and combinations thereof.  In case of error, report it to `loc`
 /// and return nullptr.
-llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
-                                                   Attribute attr,
-                                                   Location loc) {
+llvm::Constant *mlir::LLVM::detail::getLLVMConstant(
+    llvm::Type *llvmType, Attribute attr, Location loc,
+    const ModuleTranslation &moduleTranslation) {
   if (!attr)
     return llvm::UndefValue::get(llvmType);
   if (llvmType->isStructTy()) {
@@ -120,8 +122,8 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
   if (auto floatAttr = attr.dyn_cast<FloatAttr>())
     return llvm::ConstantFP::get(llvmType, floatAttr.getValue());
   if (auto funcAttr = attr.dyn_cast<FlatSymbolRefAttr>())
-    return llvm::ConstantExpr::getBitCast(lookupFunction(funcAttr.getValue()),
-                                          llvmType);
+    return llvm::ConstantExpr::getBitCast(
+        moduleTranslation.lookupFunction(funcAttr.getValue()), llvmType);
   if (auto splatAttr = attr.dyn_cast<SplatElementsAttr>()) {
     llvm::Type *elementType;
     uint64_t numElements;
@@ -140,7 +142,8 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
         isa<llvm::ArrayType, llvm::VectorType>(elementType);
     llvm::Constant *child = getLLVMConstant(
         elementType,
-        elementTypeSequential ? splatAttr : splatAttr.getSplatValue(), loc);
+        elementTypeSequential ? splatAttr : splatAttr.getSplatValue(), loc,
+        moduleTranslation);
     if (!child)
       return nullptr;
     if (llvmType->isVectorTy())
@@ -164,7 +167,8 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
     constants.reserve(elementsAttr.getNumElements());
     llvm::Type *innermostType = getInnermostElementType(llvmType);
     for (auto n : elementsAttr.getValues<Attribute>()) {
-      constants.push_back(getLLVMConstant(innermostType, n, loc));
+      constants.push_back(
+          getLLVMConstant(innermostType, n, loc, moduleTranslation));
       if (!constants.back())
         return nullptr;
     }
@@ -177,8 +181,9 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
 
   if (auto stringAttr = attr.dyn_cast<StringAttr>()) {
     return llvm::ConstantDataArray::get(
-        llvmModule->getContext(), ArrayRef<char>{stringAttr.getValue().data(),
-                                                 stringAttr.getValue().size()});
+        moduleTranslation.getLLVMContext(),
+        ArrayRef<char>{stringAttr.getValue().data(),
+                       stringAttr.getValue().size()});
   }
   emitError(loc, "unsupported constant value");
   return nullptr;
@@ -189,7 +194,6 @@ ModuleTranslation::ModuleTranslation(Operation *module,
     : mlirModule(module), llvmModule(std::move(llvmModule)),
       debugTranslation(
           std::make_unique<DebugTranslation>(module, *this->llvmModule)),
-      ompDialect(module->getContext()->getLoadedDialect("omp")),
       typeTranslator(this->llvmModule->getContext()),
       iface(module->getContext()) {
   assert(satisfiesLLVMModule(mlirModule) &&
@@ -288,17 +292,24 @@ mlir::LLVM::detail::getTopologicallySortedBlocks(Region &region) {
   return blocks;
 }
 
-/// Given a single MLIR operation, create the corresponding LLVM IR operation
-/// using the `builder`.  LLVM IR Builder does not have a generic interface so
-/// this has to be a long chain of `if`s calling different functions with a
-/// different number of arguments.
-LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
-                                                  llvm::IRBuilder<> &builder) {
-  if (succeeded(iface.convertOperation(&opInst, builder, *this)))
-    return success();
+llvm::Value *mlir::LLVM::detail::createIntrinsicCall(
+    llvm::IRBuilderBase &builder, llvm::Intrinsic::ID intrinsic,
+    ArrayRef<llvm::Value *> args, ArrayRef<llvm::Type *> tys) {
+  llvm::Module *module = builder.GetInsertBlock()->getModule();
+  llvm::Function *fn = llvm::Intrinsic::getDeclaration(module, intrinsic, tys);
+  return builder.CreateCall(fn, args);
+}
 
-  return opInst.emitError("unsupported or non-LLVM operation: ")
-         << opInst.getName();
+/// Given a single MLIR operation, create the corresponding LLVM IR operation
+/// using the `builder`.
+LogicalResult
+ModuleTranslation::convertOperation(Operation &opInst,
+                                    llvm::IRBuilderBase &builder) {
+  if (failed(iface.convertOperation(&opInst, builder, *this)))
+    return opInst.emitError("unsupported or non-LLVM operation: ")
+           << opInst.getName();
+
+  return convertDialectAttributes(&opInst);
 }
 
 /// Convert block to LLVM IR.  Unless `ignoreArguments` is set, emit PHI nodes
@@ -309,7 +320,7 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
 /// instructions at the end of the block and leaves `builder` in a state
 /// suitable for further insertion into the end of the block.
 LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments,
-                                              llvm::IRBuilder<> &builder) {
+                                              llvm::IRBuilderBase &builder) {
   builder.SetInsertPoint(lookupBlock(&bb));
   auto *subprogram = builder.GetInsertBlock()->getParent()->getSubprogram();
 
@@ -347,6 +358,12 @@ LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments,
   return success();
 }
 
+/// A helper method to get the single Block in an operation honoring LLVM's
+/// module requirements.
+static Block &getModuleBody(Operation *module) {
+  return module->getRegion(0).front();
+}
+
 /// Create named global variables that correspond to llvm.mlir.global
 /// definitions.
 LogicalResult ModuleTranslation::convertGlobals() {
@@ -360,8 +377,8 @@ LogicalResult ModuleTranslation::convertGlobals() {
         cst = llvm::ConstantDataArray::getString(
             llvmModule->getContext(), strAttr.getValue(), /*AddNull=*/false);
         type = cst->getType();
-      } else if (!(cst = getLLVMConstant(type, op.getValueOrNull(),
-                                         op.getLoc()))) {
+      } else if (!(cst = getLLVMConstant(type, op.getValueOrNull(), op.getLoc(),
+                                         *this))) {
         return failure();
       }
     } else if (Block *initializer = op.getInitializerBlock()) {
@@ -537,7 +554,7 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
   if (func.personality().hasValue()) {
     llvm::Type *ty = llvm::Type::getInt8PtrTy(llvmFunc->getContext());
     if (llvm::Constant *pfunc =
-            getLLVMConstant(ty, func.personalityAttr(), func.getLoc()))
+            getLLVMConstant(ty, func.personalityAttr(), func.getLoc(), *this))
       llvmFunc->setPersonalityFn(pfunc);
   }
 
@@ -558,13 +575,23 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
       return failure();
   }
 
-  // Finally, after all blocks have been traversed and values mapped, connect
-  // the PHI nodes to the results of preceding blocks.
+  // After all blocks have been traversed and values mapped, connect the PHI
+  // nodes to the results of preceding blocks.
   detail::connectPHINodes(func.getBody(), *this);
+
+  // Finally, convert dialect attributes attached to the function.
+  return convertDialectAttributes(func);
+}
+
+LogicalResult ModuleTranslation::convertDialectAttributes(Operation *op) {
+  for (NamedAttribute attribute : op->getDialectAttrs())
+    if (failed(iface.amendOperation(op, attribute, *this)))
+      return failure();
   return success();
 }
 
-LogicalResult ModuleTranslation::checkSupportedModuleOps(Operation *m) {
+/// Check whether the module contains only supported ops directly in its body.
+static LogicalResult checkSupportedModuleOps(Operation *m) {
   for (Operation &o : getModuleBody(m).getOperations())
     if (!isa<LLVM::LLVMFuncOp, LLVM::GlobalOp>(&o) &&
         !o.hasTrait<OpTrait::IsTerminator>())
@@ -625,8 +652,14 @@ ModuleTranslation::translateLoc(Location loc, llvm::DILocalScope *scope) {
   return debugTranslation->translateLoc(loc, scope);
 }
 
-std::unique_ptr<llvm::Module> ModuleTranslation::prepareLLVMModule(
-    Operation *m, llvm::LLVMContext &llvmContext, StringRef name) {
+llvm::NamedMDNode *
+ModuleTranslation::getOrInsertNamedModuleMetadata(StringRef name) {
+  return llvmModule->getOrInsertNamedMetadata(name);
+}
+
+static std::unique_ptr<llvm::Module>
+prepareLLVMModule(Operation *m, llvm::LLVMContext &llvmContext,
+                  StringRef name) {
   m->getContext()->getOrLoadDialect<LLVM::LLVMDialect>();
   auto llvmModule = std::make_unique<llvm::Module>(name, llvmContext);
   if (auto dataLayoutAttr =
@@ -645,4 +678,29 @@ std::unique_ptr<llvm::Module> ModuleTranslation::prepareLLVMModule(
                                   builder.getInt8PtrTy());
 
   return llvmModule;
+}
+
+std::unique_ptr<llvm::Module>
+mlir::translateModuleToLLVMIR(Operation *module, llvm::LLVMContext &llvmContext,
+                              StringRef name) {
+  if (!satisfiesLLVMModule(module))
+    return nullptr;
+  if (failed(checkSupportedModuleOps(module)))
+    return nullptr;
+  std::unique_ptr<llvm::Module> llvmModule =
+      prepareLLVMModule(module, llvmContext, name);
+
+  LLVM::ensureDistinctSuccessors(module);
+
+  ModuleTranslation translator(module, std::move(llvmModule));
+  if (failed(translator.convertFunctionSignatures()))
+    return nullptr;
+  if (failed(translator.convertGlobals()))
+    return nullptr;
+  if (failed(translator.convertFunctions()))
+    return nullptr;
+  if (llvm::verifyModule(*translator.llvmModule, &llvm::errs()))
+    return nullptr;
+
+  return std::move(translator.llvmModule);
 }

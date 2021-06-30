@@ -49,7 +49,7 @@ def Shape_AddOp : Shape_Op<"add", [Commutative, NoSideEffect]> {
   let verifier = [{ return verifySizeOrIndexOp(*this); }];
 }
 
-def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative]> {
+def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative, NoSideEffect]> {
   let summary = "Returns the broadcasted output shape of two or more inputs";
   let description = [{
     Returns the broadcasted shape for input shapes or extent tensors. The rest
@@ -89,10 +89,7 @@ def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative]> {
   ];
 
   let hasFolder = 1;
-  let verifier = [{
-    return success(succeeded(::verifyShapeOrExtentTensorOp(*this)) &&
-                   getNumOperands() >= 2);
-  }];
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def Shape_ConstShapeOp : Shape_Op<"const_shape", [ConstantLike, NoSideEffect]> {
@@ -141,6 +138,36 @@ def Shape_ConstSizeOp : Shape_Op<"const_size", [
   let hasFolder = 1;
 }
 
+def Shape_DivOp : Shape_Op<"div", [NoSideEffect]> {
+  let summary = "Division of sizes and indices";
+  let description = [{
+    Divides two sizes or indices. If either operand is an error it will be
+    propagated to the result. The operands can be of type `size` or `index`.
+    If at least one of the operands can hold an error, i.e. if it is of type
+    `size`, the result must be of type `size`. If error propagation is not
+    possible because both operands are of type `index` then the result may be
+    of type  `size` or `index`. If both operands and result are of type `index`,
+    their runtime values could be negative. The result is rounded toward
+    negative infinity, i.e. floor(lhs / rhs), such that
+
+        div(lhs, rhs) * rhs + mod(lhs, rhs) = lhs
+
+    always holds. If any of the values is of type `size`, the behavior for
+    negative value is undefined.
+  }];
+
+  let arguments = (ins Shape_SizeOrIndexType:$lhs,
+                       Shape_SizeOrIndexType:$rhs);
+  let results = (outs Shape_SizeOrIndexType:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)
+  }];
+
+  let verifier = [{ return ::verifySizeOrIndexOp(*this); }];
+  let hasFolder = 1;
+}
+
 def Shape_ShapeEqOp : Shape_Op<"shape_eq", [Commutative, NoSideEffect]> {
   let summary = "Returns whether the input shapes or extent tensors are equal";
   let description = [{
@@ -171,10 +198,10 @@ def Shape_FromExtentsOp : Shape_Op<"from_extents", [NoSideEffect]> {
     %s1 = shape.from_extents
     ```
   }];
-  let arguments = (ins Variadic<Index>:$extents);
+  let arguments = (ins Variadic<Shape_SizeOrIndexType>:$extents);
   let results = (outs Shape_ShapeType:$shape);
 
-  let assemblyFormat = "$extents attr-dict";
+  let assemblyFormat = "$extents attr-dict `:` type($extents)";
 
   let hasFolder = 1;
 }
@@ -193,11 +220,12 @@ def Shape_FromExtentTensorOp : Shape_Op<"from_extent_tensor", [NoSideEffect]> {
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def Shape_IsBroadcastableOp : Shape_Op<"is_broadcastable", [Commutative]> {
-  let summary = "Determines if 2 shapes can be successfully broadcasted";
+def Shape_IsBroadcastableOp : Shape_Op<"is_broadcastable",
+                                       [Commutative, InferTypeOpInterface]> {
+  let summary = "Determines if 2+ shapes can be successfully broadcasted";
   let description = [{
-    Given two input shapes or extent tensors, return a predicate specifying if
-    they are broadcastable. This broadcastable follows the same logic as what
+    Given multiple input shapes or extent tensors, return a predicate specifying
+    if they are broadcastable. This broadcastable follows the same logic as what
     shape.broadcast documents.
 
     Concretely, shape.is_broadcastable returning true implies that
@@ -212,11 +240,28 @@ def Shape_IsBroadcastableOp : Shape_Op<"is_broadcastable", [Commutative]> {
     ```
   }];
 
-  let arguments = (ins Shape_ShapeOrExtentTensorType:$lhs,
-                       Shape_ShapeOrExtentTensorType:$rhs);
+  let arguments = (ins Variadic<Shape_ShapeOrExtentTensorType>:$shapes);
   let results = (outs I1:$result);
 
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+  let builders = [
+  OpBuilderDAG<(ins "::mlir::Value":$lhs, "::mlir::Value":$rhs),
+    [{ build($_builder, $_state, ::llvm::makeArrayRef({lhs, rhs})); }]>,
+  ];
+  let extraClassDeclaration = [{
+    // TODO: This should really be automatic. Figure out how to not need this defined.
+    static ::mlir::LogicalResult inferReturnTypes(::mlir::MLIRContext *context,
+    ::llvm::Optional<::mlir::Location> location, ::mlir::ValueRange operands,
+    ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type>&inferredReturnTypes) {
+      inferredReturnTypes.push_back(::mlir::IntegerType::get(context,
+                                                             /*width=*/1));
+      return success();
+    };
+  }];
+
+  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
+  let verifier = [{ return ::verify(*this); }];
+
 }
 
 def Shape_RankOp : Shape_Op<"rank", [NoSideEffect]> {
@@ -695,11 +740,12 @@ def Shape_AssumingYieldOp : Shape_Op<"assuming_yield",
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
 
-def Shape_CstrBroadcastableOp : Shape_Op<"cstr_broadcastable", [Commutative]> {
-  let summary = "Determines if 2 shapes can be successfully broadcasted";
+def Shape_CstrBroadcastableOp : Shape_Op<"cstr_broadcastable",
+                                         [Commutative, InferTypeOpInterface]> {
+  let summary = "Determines if 2+ shapes can be successfully broadcasted";
   let description = [{
-    Given two input shapes or extent tensors, return a witness specifying if
-    they are broadcastable. This broadcastable follows the same logic as what
+    Given input shapes or extent tensors, return a witness specifying if they
+    are broadcastable. This broadcastable follows the same logic as what
     shape.broadcast documents.
 
     "cstr" operations represent runtime assertions.
@@ -711,14 +757,30 @@ def Shape_CstrBroadcastableOp : Shape_Op<"cstr_broadcastable", [Commutative]> {
     ```
   }];
 
-  let arguments = (ins Shape_ShapeOrExtentTensorType:$lhs,
-                       Shape_ShapeOrExtentTensorType:$rhs);
+  let arguments = (ins Variadic<Shape_ShapeOrExtentTensorType>:$shapes);
   let results = (outs Shape_WitnessType:$result);
 
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
+
+  let builders = [
+  OpBuilderDAG<(ins "::mlir::Value":$lhs, "::mlir::Value":$rhs),
+    [{ build($_builder, $_state, ::llvm::makeArrayRef({lhs, rhs})); }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    // TODO: This should really be automatic. Figure out how to not need this defined.
+    static ::mlir::LogicalResult inferReturnTypes(::mlir::MLIRContext *context,
+    ::llvm::Optional<::mlir::Location> location, ::mlir::ValueRange operands,
+    ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type>&inferredReturnTypes) {
+      inferredReturnTypes.push_back(::mlir::shape::WitnessType::get(context));
+      return success();
+    };
+  }];
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def Shape_CstrEqOp : Shape_Op<"cstr_eq", [Commutative]> {

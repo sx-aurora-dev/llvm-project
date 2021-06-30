@@ -67,7 +67,8 @@ public:
                              TTI::PeelingPreferences &PP);
 
   /// Bias LSR towards creating post-increment opportunities.
-  bool shouldFavorPostInc() const;
+  TTI::AddressingModeKind
+    getPreferredAddressingMode(const Loop *L, ScalarEvolution *SE) const;
 
   // L1 cache prefetch.
   unsigned getPrefetchDistance() const override;
@@ -106,7 +107,7 @@ public:
   unsigned getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
                                     bool Insert, bool Extract);
   unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                            unsigned VF);
+                                            ArrayRef<Type *> Tys);
   unsigned getCallInstrCost(Function *F, Type *RetTy, ArrayRef<Type*> Tys,
                             TTI::TargetCostKind CostKind);
   unsigned getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,

@@ -54,20 +54,20 @@ static SmallVector<std::pair<int64_t, Value *>, 4> decompose(Value *V) {
   }
   auto *GEP = dyn_cast<GetElementPtrInst>(V);
   if (GEP && GEP->getNumOperands() == 2 && GEP->isInBounds()) {
-    Value *Op0;
+    Value *Op0, *Op1;
     ConstantInt *CI;
 
     // If the index is zero-extended, it is guaranteed to be positive.
     if (match(GEP->getOperand(GEP->getNumOperands() - 1),
               m_ZExt(m_Value(Op0)))) {
-      if (match(Op0, m_NUWShl(m_Value(Op0), m_ConstantInt(CI))))
+      if (match(Op0, m_NUWShl(m_Value(Op1), m_ConstantInt(CI))))
         return {{0, nullptr},
                 {1, GEP->getPointerOperand()},
-                {std::pow(int64_t(2), CI->getSExtValue()), Op0}};
-      if (match(Op0, m_NSWAdd(m_Value(Op0), m_ConstantInt(CI))))
+                {std::pow(int64_t(2), CI->getSExtValue()), Op1}};
+      if (match(Op0, m_NSWAdd(m_Value(Op1), m_ConstantInt(CI))))
         return {{CI->getSExtValue(), nullptr},
                 {1, GEP->getPointerOperand()},
-                {1, Op0}};
+                {1, Op1}};
       return {{0, nullptr}, {1, GEP->getPointerOperand()}, {1, Op0}};
     }
 
@@ -158,6 +158,10 @@ getConstraint(CmpInst::Predicate Pred, Value *Op0, Value *Op1,
     return A;
   }
 
+  if (Pred == CmpInst::ICMP_NE && match(Op1, m_Zero())) {
+    return getConstraint(CmpInst::ICMP_UGT, Op0, Op1, Value2Index, NewIndices);
+  }
+
   // Only ULE and ULT predicates are supported at the moment.
   if (Pred != CmpInst::ICMP_ULE && Pred != CmpInst::ICMP_ULT)
     return {};
@@ -177,8 +181,8 @@ getConstraint(CmpInst::Predicate Pred, Value *Op0, Value *Op1,
   Offset1 *= -1;
 
   // Create iterator ranges that skip the constant-factor.
-  auto VariablesA = make_range(std::next(ADec.begin()), ADec.end());
-  auto VariablesB = make_range(std::next(BDec.begin()), BDec.end());
+  auto VariablesA = llvm::drop_begin(ADec);
+  auto VariablesB = llvm::drop_begin(BDec);
 
   // Make sure all variables have entries in Value2Index or NewIndices.
   for (const auto &KV :
