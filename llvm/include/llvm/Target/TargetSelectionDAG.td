@@ -289,6 +289,9 @@ def SDTLoadVP : SDTypeProfile<1, 3, [       // vp load
 def SDTVecShuffle : SDTypeProfile<1, 2, [
   SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>
 ]>;
+def SDTVecSlice : SDTypeProfile<1, 3, [     // vector splice
+  SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>, SDTCisInt<3>
+]>;
 def SDTVShiftVP : SDTypeProfile<1, 4, [
   SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>
 ]>;
@@ -770,9 +773,11 @@ def st         : SDNode<"ISD::STORE"      , SDTStore,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 def ist        : SDNode<"ISD::STORE"      , SDTIStore,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+
 def vp_vshift : SDNode<"ISD::VP_VSHIFT", SDTVShiftVP, []>;
 def vector_shuffle : SDNode<"ISD::VECTOR_SHUFFLE", SDTVecShuffle, []>;
 def vector_reverse : SDNode<"ISD::VECTOR_REVERSE", SDTVecReverse>;
+def vector_splice : SDNode<"ISD::VECTOR_SPLICE", SDTVecSlice, []>;
 def build_vector : SDNode<"ISD::BUILD_VECTOR", SDTypeProfile<1, -1, []>, []>;
 def splat_vector : SDNode<"ISD::SPLAT_VECTOR", SDTypeProfile<1, 1, []>, []>;
 def scalar_to_vector : SDNode<"ISD::SCALAR_TO_VECTOR", SDTypeProfile<1, 1, []>,

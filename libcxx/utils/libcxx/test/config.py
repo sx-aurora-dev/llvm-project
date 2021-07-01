@@ -175,7 +175,7 @@ class Configuration(object):
         # Gather various compiler parameters.
         cxx = self.get_lit_conf('cxx_under_test')
         self.cxx_is_clang_cl = cxx is not None and \
-                               os.path.basename(cxx) == 'clang-cl.exe'
+                               os.path.basename(cxx).startswith('clang-cl')
         # If no specific cxx_under_test was given, attempt to infer it as
         # clang++.
         if cxx is None or self.cxx_is_clang_cl:
@@ -524,7 +524,7 @@ class Configuration(object):
                 if llvm_symbolizer is not None:
                     self.exec_env['ASAN_SYMBOLIZER_PATH'] = llvm_symbolizer
                 # FIXME: Turn ODR violation back on after PR28391 is resolved
-                # https://bugs.llvm.org/show_bug.cgi?id=28391
+                # https://llvm.org/PR28391
                 self.exec_env['ASAN_OPTIONS'] = 'detect_odr_violation=0'
                 self.config.available_features.add('asan')
                 self.config.available_features.add('sanitizer-new-delete')

@@ -63,8 +63,8 @@ static uint32_t cpuSubtype() {
 
   if (config->outputType == MachO::MH_EXECUTE && !config->staticLink &&
       target->cpuSubtype == MachO::CPU_SUBTYPE_X86_64_ALL &&
-      config->platform.kind == MachO::PlatformKind::macOS &&
-      config->platform.minimum >= VersionTuple(10, 5))
+      config->target.Platform == MachO::PlatformKind::macOS &&
+      config->platformInfo.minimum >= VersionTuple(10, 5))
     subtype |= MachO::CPU_SUBTYPE_LIB64;
 
   return subtype;
@@ -284,7 +284,7 @@ static void encodeBinding(const Symbol *sym, const OutputSection *osec,
 // Non-weak bindings need to have their dylib ordinal encoded as well.
 static int16_t ordinalForDylibSymbol(const DylibSymbol &dysym) {
   return config->namespaceKind == NamespaceKind::flat || dysym.isDynamicLookup()
-             ? MachO::BIND_SPECIAL_DYLIB_FLAT_LOOKUP
+             ? (int16_t)MachO::BIND_SPECIAL_DYLIB_FLAT_LOOKUP
              : dysym.getFile()->ordinal;
 }
 
@@ -612,6 +612,34 @@ void ExportSection::finalizeContents() {
 
 void ExportSection::writeTo(uint8_t *buf) const { trieBuilder.writeTo(buf); }
 
+FunctionStartsSection::FunctionStartsSection()
+    : LinkEditSection(segment_names::linkEdit, section_names::functionStarts_) {
+}
+
+void FunctionStartsSection::finalizeContents() {
+  raw_svector_ostream os{contents};
+  uint64_t addr = in.header->addr;
+  for (const Symbol *sym : symtab->getSymbols()) {
+    if (const auto *defined = dyn_cast<Defined>(sym)) {
+      if (!defined->isec || !isCodeSection(defined->isec))
+        continue;
+      // TODO: Add support for thumbs, in that case
+      // the lowest bit of nextAddr needs to be set to 1.
+      uint64_t nextAddr = defined->getVA();
+      uint64_t delta = nextAddr - addr;
+      if (delta == 0)
+        continue;
+      encodeULEB128(delta, os);
+      addr = nextAddr;
+    }
+  }
+  os << '\0';
+}
+
+void FunctionStartsSection::writeTo(uint8_t *buf) const {
+  memcpy(buf, contents.data(), contents.size());
+}
+
 SymtabSection::SymtabSection(StringTableSection &stringTableSection)
     : LinkEditSection(segment_names::linkEdit, section_names::symbolTable),
       stringTableSection(stringTableSection) {}
@@ -733,6 +761,8 @@ void SymtabSection::finalizeContents() {
   for (InputFile *file : inputFiles) {
     if (auto *objFile = dyn_cast<ObjFile>(file)) {
       for (Symbol *sym : objFile->symbols) {
+        if (sym == nullptr)
+          continue;
         // TODO: when we implement -dead_strip, we should filter out symbols
         // that belong to dead sections.
         if (auto *defined = dyn_cast<Defined>(sym)) {

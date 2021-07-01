@@ -90,6 +90,10 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "SunOS")
     support/solaris/wcsnrtombs.inc
     support/solaris/xlocale.cpp
     )
+elseif(ZOS)
+  list(APPEND LIBCXX_SOURCES
+    support/ibm/xlocale_zos.cpp
+    )
 endif()
 
 if (LIBCXX_ENABLE_FILESYSTEM)
@@ -379,9 +383,7 @@ endif()
 # NOTE: This install command must go after the cxx install command otherwise
 # it will not be executed after the library symlinks are installed.
 if (LIBCXX_ENABLE_SHARED AND LIBCXX_ENABLE_ABI_LINKER_SCRIPT)
-  # Replace the libc++ filename with $<TARGET_LINKER_FILE:cxx>
-  # after we required CMake 3.0.
-  install(FILES "${LIBCXX_LIBRARY_DIR}/libc++${CMAKE_SHARED_LIBRARY_SUFFIX}"
+  install(FILES "$<TARGET_LINKER_FILE:cxx_shared>"
     DESTINATION ${LIBCXX_INSTALL_PREFIX}${LIBCXX_INSTALL_LIBRARY_DIR}
     COMPONENT libcxx)
 endif()

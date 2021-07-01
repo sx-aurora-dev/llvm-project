@@ -123,7 +123,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_bind_front",
     "values": { "c++20": 201907 },
     "headers": ["functional"],
-    "unimplemented": True,
   }, {
     "name": "__cpp_lib_bit_cast",
     "values": { "c++20": 201806 },
@@ -594,6 +593,10 @@ feature_test_macros = [ add_version_header(x) for x in [
     "values": { "c++17": 201611 },
     "headers": ["utility"],
     "unimplemented": True,
+  }, {
+    "name": "__cpp_lib_to_underlying",
+    "values": { "c++2b": 202102 },
+    "headers": ["utility"],
   }, {
     "name": "__cpp_lib_transformation_trait_aliases",
     "values": { "c++14": 201304 },

@@ -29,7 +29,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/Target/LLVMIR.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/NVVM/NVVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -65,7 +65,9 @@ OwnedBlob compilePtxToCubin(const std::string ptx, Location loc,
                             StringRef name) {
   char jitErrorBuffer[4096] = {0};
 
-  RETURN_ON_CUDA_ERROR(cuInit(0));
+  // Initialize CUDA once in a thread-safe manner.
+  static CUresult cuInitResult = [] { return cuInit(/*flags=*/0); }();
+  RETURN_ON_CUDA_ERROR(cuInitResult);
 
   // Linking requires a device context.
   CUdevice device;
@@ -181,9 +183,8 @@ int main(int argc, char **argv) {
   registry.insert<mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
                   mlir::async::AsyncDialect, mlir::gpu::GPUDialect,
                   mlir::StandardOpsDialect>();
-  registry.addDialectInterface<NVVM::NVVMDialect,
-                               NVVMDialectLLVMIRTranslationInterface>();
   mlir::registerLLVMDialectTranslation(registry);
+  mlir::registerNVVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);
 }

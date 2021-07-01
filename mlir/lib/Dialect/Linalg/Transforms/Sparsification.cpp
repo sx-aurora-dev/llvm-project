@@ -357,6 +357,14 @@ static void findSparseAnnotations(Merger &merger, linalg::GenericOp op) {
   }
 }
 
+/// Returns true if tensor was set up with sparse storage scheme.
+static bool linkedSparse(linalg::GenericOp op, unsigned tensor) {
+  if (tensor < op.getNumInputs())
+    return isa_and_nonnull<linalg::SparseTensorFromPointerOp>(
+        op.getInput(tensor).getDefiningOp());
+  return false;
+}
+
 /// A DFS helper to compute a topological sort. Note that recursion is
 /// bounded by the number of implicit loops, which is always small.
 /// Returns false when a cycle is detected.
@@ -394,7 +402,7 @@ static bool computeIterationGraph(Merger &merger, linalg::GenericOp op,
     auto map = op.getIndexingMap(t);
     assert(map.getNumDims() == n);
     // Skip dense tensor constraints when sparse only is requested.
-    if (sparseOnly && !merger.isSparseTensor(t))
+    if (sparseOnly && !merger.isSparseTensor(t) && !linkedSparse(op, t))
       continue;
     // At the moment, we take the index variables in the tensor access
     // expression in the order in which they appear (conceptually a
@@ -513,14 +521,6 @@ static Type genIntType(PatternRewriter &rewriter, linalg::SparseIntType tp) {
   llvm_unreachable("unexpected SparseIntType");
 }
 
-/// Returns true if tensor was set up with sparse storage scheme.
-static bool linkedSparse(linalg::GenericOp op, unsigned tensor) {
-  if (tensor < op.getNumInputs())
-    return isa_and_nonnull<linalg::SparseTensorFromPointerOp>(
-        op.getInput(tensor).getDefiningOp());
-  return false;
-}
-
 /// Generates buffer for the output tensor.
 static Value genOutputBuffer(CodeGen &codegen, PatternRewriter &rewriter,
                              linalg::GenericOp op, MemRefType denseTp,
@@ -635,8 +635,8 @@ static Value genVectorMask(CodeGen &codegen, PatternRewriter &rewriter,
       matchPattern(hi, m_Constant(&hiInt)) &&
       matchPattern(step, m_Constant(&stepInt))) {
     if (((hiInt.getInt() - loInt.getInt()) % stepInt.getInt()) == 0)
-      return rewriter.create<vector::ConstantMaskOp>(
-          loc, mtp, rewriter.getI64ArrayAttr(codegen.curVecLength));
+      return rewriter.create<vector::BroadcastOp>(
+          loc, mtp, rewriter.create<ConstantIntOp>(loc, 1, 1));
   }
   // Otherwise, generate a vector mask that avoids overrunning the upperbound
   // during vector execution. Here we rely on subsequent loop optimizations to
@@ -723,9 +723,13 @@ static Value genTensorLoad(Merger &merger, CodeGen &codegen,
 static void genTensorStore(Merger &merger, CodeGen &codegen,
                            PatternRewriter &rewriter, linalg::GenericOp op,
                            unsigned tensor, Value rhs) {
+  Location loc = op.getLoc();
   // Test if this is a scalarized reduction.
   unsigned lhs = op.getNumShapedOperands() - 1;
   if (lhs == tensor && codegen.redVal) {
+    if (codegen.curVecLength > 1)
+      rhs = rewriter.create<SelectOp>(loc, codegen.curVecMask, rhs,
+                                      codegen.redVal);
     codegen.redVal = rhs;
     return;
   }
@@ -736,7 +740,6 @@ static void genTensorStore(Merger &merger, CodeGen &codegen,
     unsigned idx = map.getDimPosition(i);
     args.push_back(codegen.loops[idx]); // universal dense index
   }
-  Location loc = op.getLoc();
   Value ptr = codegen.buffers[tensor];
   if (codegen.curVecLength > 1)
     genVectorStore(codegen, rewriter, rhs, ptr, args);
@@ -773,6 +776,39 @@ static Value genAddress(CodeGen &codegen, PatternRewriter &rewriter,
     mul = genVectorInvariantValue(codegen, rewriter, inv);
   }
   return rewriter.create<AddIOp>(loc, mul, i);
+}
+
+/// Generates start of a reduction.
+static Value genReductionStart(Merger &merger, CodeGen &codegen,
+                               PatternRewriter &rewriter,
+                               linalg::GenericOp op) {
+  if (codegen.redVal)
+    return codegen.redVal; // chained with previous for-loop
+  if (codegen.curVecLength > 1) {
+    // TODO: assumes + reductions for now
+    VectorType vtp = vectorType(codegen, codegen.buffers[codegen.redExp]);
+    return rewriter.create<ConstantOp>(op.getLoc(), vtp,
+                                       rewriter.getZeroAttr(vtp));
+  }
+  return genTensorLoad(merger, codegen, rewriter, op, codegen.redExp);
+}
+
+/// Generates end of a reduction.
+static void genReductionEnd(Merger &merger, CodeGen &codegen,
+                            PatternRewriter &rewriter, linalg::GenericOp op) {
+  Value red = codegen.redVal;
+  if (!red)
+    return;
+  codegen.redVal = merger.exp(codegen.redExp).val = Value(); // end chain
+  unsigned lhs = op.getNumShapedOperands() - 1;
+  if (red.getType().isa<VectorType>()) {
+    // TODO: assumes + reductions for now
+    codegen.curVecLength = 1;
+    Value ld = genTensorLoad(merger, codegen, rewriter, op, codegen.redExp);
+    red = rewriter.create<vector::ReductionOp>(
+        op.getLoc(), ld.getType(), rewriter.getStringAttr("add"), red, ld);
+  }
+  genTensorStore(merger, codegen, rewriter, op, lhs, red);
 }
 
 /// Recursively generates tensor expression.
@@ -952,16 +988,7 @@ static Operation *genFor(Merger &merger, CodeGen &codegen,
   bool scalarRed = isInner && codegen.redExp != -1u;
   SmallVector<Value, 4> operands;
   if (scalarRed) {
-    Value load;
-    if (codegen.redVal) {
-      load = codegen.redVal; // chained with previous for-loop
-    } else if (isVector) {
-      // TODO: assumes + reductions for now
-      VectorType vtp = vectorType(codegen, codegen.buffers[codegen.redExp]);
-      load = rewriter.create<ConstantOp>(loc, vtp, rewriter.getZeroAttr(vtp));
-    } else {
-      load = genTensorLoad(merger, codegen, rewriter, op, codegen.redExp);
-    }
+    Value load = genReductionStart(merger, codegen, rewriter, op);
     operands.push_back(load);
   }
   scf::ForOp forOp = rewriter.create<scf::ForOp>(loc, lo, hi, step, operands);
@@ -1004,7 +1031,7 @@ static Operation *genWhile(Merger &merger, CodeGen &codegen,
   if (needsUniv) {
     types.push_back(indexType);
     assert(codegen.loops[idx].getType().isa<IndexType>() &&
-           "type_mismatch for universal index");
+           "type mismatch for universal index");
     operands.push_back(codegen.loops[idx]);
   }
   Location loc = op.getLoc();
@@ -1049,6 +1076,7 @@ static Operation *genLoop(Merger &merger, CodeGen &codegen,
     return genFor(merger, codegen, rewriter, op, isOuter, isInner, idx,
                   indices);
   }
+  genReductionEnd(merger, codegen, rewriter, op); // cannot chain
   return genWhile(merger, codegen, rewriter, op, idx, needsUniv, indices);
 }
 
@@ -1251,18 +1279,7 @@ static void genStmt(Merger &merger, CodeGen &codegen, PatternRewriter &rewriter,
   }
 
   // Wrap-up loop sequence.
-  Value red = codegen.redVal;
-  if (red) {
-    codegen.redVal = merger.exp(codegen.redExp).val = Value(); // end chain
-    unsigned lhs = op.getNumShapedOperands() - 1;
-    if (codegen.curVecLength > 1) {
-      codegen.curVecLength = 1;
-      Value ld = genTensorLoad(merger, codegen, rewriter, op, codegen.redExp);
-      red = rewriter.create<vector::ReductionOp>(
-          loc, ld.getType(), rewriter.getStringAttr("add"), red, ld);
-    }
-    genTensorStore(merger, codegen, rewriter, op, lhs, red);
-  }
+  genReductionEnd(merger, codegen, rewriter, op);
   genInvariants(merger, codegen, rewriter, op, exp, ldx, /*hoist=*/false);
   codegen.loops[idx] = Value();
   codegen.curVecLength = 1;
