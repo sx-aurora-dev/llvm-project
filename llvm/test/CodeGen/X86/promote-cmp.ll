@@ -28,7 +28,6 @@ define <4 x i64> @PR45808(<4 x i64> %0, <4 x i64> %1) {
 ; SSE2-NEXT:    shufps {{.*#+}} xmm5 = xmm5[1,3],xmm8[1,3]
 ; SSE2-NEXT:    orps %xmm4, %xmm5
 ; SSE2-NEXT:    pshufd {{.*#+}} xmm4 = xmm5[2,1,3,3]
-; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm5
 ; SSE2-NEXT:    psllq $63, %xmm4
 ; SSE2-NEXT:    psrad $31, %xmm4
 ; SSE2-NEXT:    pshufd {{.*#+}} xmm4 = xmm4[1,1,3,3]
@@ -36,6 +35,7 @@ define <4 x i64> @PR45808(<4 x i64> %0, <4 x i64> %1) {
 ; SSE2-NEXT:    pandn %xmm3, %xmm4
 ; SSE2-NEXT:    por %xmm4, %xmm1
 ; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm5[0,1,1,3]
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm3
 ; SSE2-NEXT:    psllq $63, %xmm3
 ; SSE2-NEXT:    psrad $31, %xmm3
 ; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm3[1,1,3,3]
@@ -47,16 +47,17 @@ define <4 x i64> @PR45808(<4 x i64> %0, <4 x i64> %1) {
 ; SSE4-LABEL: PR45808:
 ; SSE4:       # %bb.0:
 ; SSE4-NEXT:    movdqa %xmm0, %xmm4
-; SSE4-NEXT:    movdqa %xmm0, %xmm5
-; SSE4-NEXT:    pcmpgtq %xmm2, %xmm5
 ; SSE4-NEXT:    movdqa %xmm1, %xmm0
 ; SSE4-NEXT:    pcmpgtq %xmm3, %xmm0
+; SSE4-NEXT:    movdqa %xmm4, %xmm5
+; SSE4-NEXT:    pcmpgtq %xmm2, %xmm5
+; SSE4-NEXT:    pshufd {{.*#+}} xmm5 = xmm5[0,2,2,3]
 ; SSE4-NEXT:    pcmpeqd %xmm6, %xmm6
-; SSE4-NEXT:    pxor %xmm6, %xmm5
+; SSE4-NEXT:    pxor %xmm5, %xmm6
 ; SSE4-NEXT:    psllq $63, %xmm0
 ; SSE4-NEXT:    blendvpd %xmm0, %xmm1, %xmm3
-; SSE4-NEXT:    psllq $63, %xmm5
-; SSE4-NEXT:    movdqa %xmm5, %xmm0
+; SSE4-NEXT:    pmovzxdq {{.*#+}} xmm0 = xmm6[0],zero,xmm6[1],zero
+; SSE4-NEXT:    psllq $63, %xmm0
 ; SSE4-NEXT:    blendvpd %xmm0, %xmm4, %xmm2
 ; SSE4-NEXT:    movapd %xmm2, %xmm0
 ; SSE4-NEXT:    movapd %xmm3, %xmm1

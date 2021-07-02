@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
+#include "llvm/CodeGen/MachineSizeOpts.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/StackProtector.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -827,6 +828,20 @@ bool llvm::isBuildVectorAllOnes(const MachineInstr &MI,
   return isBuildVectorConstantSplat(MI, MRI, -1);
 }
 
+Optional<RegOrConstant> llvm::getVectorSplat(const MachineInstr &MI,
+                                             const MachineRegisterInfo &MRI) {
+  unsigned Opc = MI.getOpcode();
+  if (!isBuildVectorOp(Opc))
+    return None;
+  if (auto Splat = getBuildVectorConstantSplat(MI, MRI))
+    return RegOrConstant(*Splat);
+  auto Reg = MI.getOperand(1).getReg();
+  if (any_of(make_range(MI.operands_begin() + 2, MI.operands_end()),
+             [&Reg](const MachineOperand &Op) { return Op.getReg() != Reg; }))
+    return None;
+  return RegOrConstant(Reg);
+}
+
 bool llvm::isConstTrueVal(const TargetLowering &TLI, int64_t Val, bool IsVector,
                           bool IsFP) {
   switch (TLI.getBooleanContents(IsVector, IsFP)) {
@@ -850,4 +865,11 @@ int64_t llvm::getICmpTrueVal(const TargetLowering &TLI, bool IsVector,
     return -1;
   }
   llvm_unreachable("Invalid boolean contents");
+}
+
+bool llvm::shouldOptForSize(const MachineBasicBlock &MBB,
+                            ProfileSummaryInfo *PSI, BlockFrequencyInfo *BFI) {
+  const auto &F = MBB.getParent()->getFunction();
+  return F.hasOptSize() || F.hasMinSize() ||
+         llvm::shouldOptimizeForSize(MBB.getBasicBlock(), PSI, BFI);
 }

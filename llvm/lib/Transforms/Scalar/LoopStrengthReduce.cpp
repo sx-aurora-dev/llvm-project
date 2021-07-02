@@ -77,6 +77,7 @@
 #include "llvm/Analysis/ScalarEvolutionNormalization.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
@@ -5561,6 +5562,50 @@ void LSRInstance::ImplementSolution(
 
   Changed |= RecursivelyDeleteTriviallyDeadInstructionsPermissive(DeadInsts,
                                                                   &TLI, MSSAU);
+
+  // In our cost analysis above, we assume that each addrec consumes exactly
+  // one register, and arrange to have increments inserted just before the
+  // latch to maximimize the chance this is true.  However, if we reused
+  // existing IVs, we now need to move the increments to match our
+  // expectations.  Otherwise, our cost modeling results in us having a
+  // chosen a non-optimal result for the actual schedule.  (And yes, this
+  // scheduling decision does impact later codegen.)
+  for (PHINode &PN : L->getHeader()->phis()) {
+    BinaryOperator *BO = nullptr;
+    Value *Start = nullptr, *Step = nullptr;
+    if (!matchSimpleRecurrence(&PN, BO, Start, Step))
+      continue;
+
+    switch (BO->getOpcode()) {
+    case Instruction::Sub:
+      if (BO->getOperand(0) != &PN)
+        // sub is non-commutative - match handling elsewhere in LSR
+        continue;
+      break;
+    case Instruction::Add:
+      break;
+    default:
+      continue;
+    };
+
+    if (!isa<Constant>(Step))
+      // If not a constant step, might increase register pressure
+      // (We assume constants have been canonicalized to RHS)
+      continue;
+
+    if (BO->getParent() == IVIncInsertPos->getParent())
+      // Only bother moving across blocks.  Isel can handle block local case.
+      continue;
+
+    // Can we legally schedule inc at the desired point?
+    if (!llvm::all_of(BO->uses(),
+                      [&](Use &U) {return DT.dominates(IVIncInsertPos, U);}))
+      continue;
+    BO->moveBefore(IVIncInsertPos);
+    Changed = true;
+  }
+
+
 }
 
 LSRInstance::LSRInstance(Loop *L, IVUsers &IU, ScalarEvolution &SE,
@@ -5791,7 +5836,7 @@ static void DbgGatherEqualValues(Loop *L, ScalarEvolution &SE,
       auto DVI = dyn_cast<DbgValueInst>(&I);
       if (!DVI)
         continue;
-      auto V = DVI->getVariableLocation();
+      auto V = DVI->getVariableLocationOp(0);
       if (!V || !SE.isSCEVable(V->getType()))
         continue;
       auto DbgValueSCEV = SE.getSCEV(V);
@@ -5817,7 +5862,7 @@ static void DbgApplyEqualValues(EqualValuesMap &DbgValueToEqualSet) {
   for (auto A : DbgValueToEqualSet) {
     auto DVI = A.first;
     // Only update those that are now undef.
-    if (!isa_and_nonnull<UndefValue>(DVI->getVariableLocation()))
+    if (!isa_and_nonnull<UndefValue>(DVI->getVariableLocationOp(0)))
       continue;
     for (auto EV : A.second) {
       auto V = std::get<WeakVH>(EV);
@@ -5825,14 +5870,13 @@ static void DbgApplyEqualValues(EqualValuesMap &DbgValueToEqualSet) {
         continue;
       auto DbgDIExpr = std::get<DIExpression *>(EV);
       auto Offset = std::get<int64_t>(EV);
-      auto &Ctx = DVI->getContext();
-      DVI->setOperand(0, MetadataAsValue::get(Ctx, ValueAsMetadata::get(V)));
+      DVI->replaceVariableLocationOp(DVI->getVariableLocationOp(0), V);
       if (Offset) {
         SmallVector<uint64_t, 8> Ops;
         DIExpression::appendOffset(Ops, Offset);
         DbgDIExpr = DIExpression::prependOpcodes(DbgDIExpr, Ops, true);
       }
-      DVI->setOperand(2, MetadataAsValue::get(Ctx, DbgDIExpr));
+      DVI->setExpression(DbgDIExpr);
       break;
     }
   }

@@ -2593,8 +2593,70 @@ static LogicalResult verify(TransferWriteOp op) {
                               [&op](Twine t) { return op.emitOpError(t); });
 }
 
-LogicalResult TransferWriteOp::fold(ArrayRef<Attribute>,
-                                    SmallVectorImpl<OpFoldResult> &) {
+/// Fold:
+/// ```
+///    %t1 = ...
+///    %v = vector.transfer_read %t0[%c0...], {masked = [false...]} :
+///      tensor<static_sizesxf32>, vector<static_sizesxf32>
+///    %t2 = vector.transfer_write %v, %t1[%c0...] {masked = [false...]} :
+///      vector<static_sizesxf32>, tensor<static_sizesxf32>
+/// ```
+///
+/// into:
+///
+/// ```
+///    %t0
+/// ```
+///
+/// The producer of t1 may or may not be DCE'd depending on whether it is a
+/// block argument or has side effects.
+static LogicalResult foldReadInitWrite(TransferWriteOp write,
+                                       ArrayRef<Attribute>,
+                                       SmallVectorImpl<OpFoldResult> &results) {
+  auto rankedTensorType = write.source().getType().dyn_cast<RankedTensorType>();
+  // If not operating on tensors, bail.
+  if (!rankedTensorType)
+    return failure();
+  // If no read, bail.
+  auto read = write.vector().getDefiningOp<vector::TransferReadOp>();
+  if (!read)
+    return failure();
+  // For now, only accept minor identity. Future: composition is minor identity.
+  if (!read.permutation_map().isMinorIdentity() ||
+      !write.permutation_map().isMinorIdentity())
+    return failure();
+  // Bail on mismatching ranks.
+  if (read.getTransferRank() != write.getTransferRank())
+    return failure();
+  // Bail on masked.
+  if (read.hasMaskedDim() || write.hasMaskedDim())
+    return failure();
+  // Tensor types must be the same.
+  if (read.source().getType() != rankedTensorType)
+    return failure();
+  // Vector types must be the same.
+  if (read.getVectorType() != write.getVectorType())
+    return failure();
+  // Vector and Tensor shapes must match.
+  if (read.getVectorType().getShape() != rankedTensorType.getShape())
+    return failure();
+  // If any index is nonzero.
+  auto isNotConstantZero = [](Value v) {
+    auto cstOp = v.getDefiningOp<ConstantIndexOp>();
+    return !cstOp || cstOp.getValue() != 0;
+  };
+  if (llvm::any_of(read.indices(), isNotConstantZero) ||
+      llvm::any_of(write.indices(), isNotConstantZero))
+    return failure();
+  // Success.
+  results.push_back(read.source());
+  return success();
+}
+
+LogicalResult TransferWriteOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (succeeded(foldReadInitWrite(*this, operands, results)))
+    return success();
   if (succeeded(foldTransferMaskAttribute(*this)))
     return success();
   return foldMemRefCast(*this);
@@ -2702,8 +2764,8 @@ public:
                                 PatternRewriter &rewriter) const override {
     switch (get1DMaskFormat(load.mask())) {
     case MaskFormat::AllTrue:
-      rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
-          load, load.getType(), load.base(), load.indices(), false);
+      rewriter.replaceOpWithNewOp<vector::LoadOp>(load, load.getType(),
+                                                  load.base(), load.indices());
       return success();
     case MaskFormat::AllFalse:
       rewriter.replaceOp(load, load.pass_thru());
@@ -2747,8 +2809,8 @@ public:
                                 PatternRewriter &rewriter) const override {
     switch (get1DMaskFormat(store.mask())) {
     case MaskFormat::AllTrue:
-      rewriter.replaceOpWithNewOp<vector::TransferWriteOp>(
-          store, store.valueToStore(), store.base(), store.indices(), false);
+      rewriter.replaceOpWithNewOp<vector::StoreOp>(
+          store, store.valueToStore(), store.base(), store.indices());
       return success();
     case MaskFormat::AllFalse:
       rewriter.eraseOp(store);
@@ -2889,8 +2951,8 @@ public:
                                 PatternRewriter &rewriter) const override {
     switch (get1DMaskFormat(expand.mask())) {
     case MaskFormat::AllTrue:
-      rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
-          expand, expand.getType(), expand.base(), expand.indices(), false);
+      rewriter.replaceOpWithNewOp<vector::LoadOp>(
+          expand, expand.getType(), expand.base(), expand.indices());
       return success();
     case MaskFormat::AllFalse:
       rewriter.replaceOp(expand, expand.pass_thru());
@@ -2934,9 +2996,9 @@ public:
                                 PatternRewriter &rewriter) const override {
     switch (get1DMaskFormat(compress.mask())) {
     case MaskFormat::AllTrue:
-      rewriter.replaceOpWithNewOp<vector::TransferWriteOp>(
+      rewriter.replaceOpWithNewOp<vector::StoreOp>(
           compress, compress.valueToStore(), compress.base(),
-          compress.indices(), false);
+          compress.indices());
       return success();
     case MaskFormat::AllFalse:
       rewriter.eraseOp(compress);
@@ -3174,7 +3236,7 @@ void TypeCastOp::build(OpBuilder &builder, OperationState &result,
       VectorType::get(extractShape(memRefType),
                       getElementTypeOrSelf(getElementTypeOrSelf(memRefType)));
   result.addTypes(
-      MemRefType::get({}, vectorType, {}, memRefType.getMemorySpace()));
+      MemRefType::get({}, vectorType, {}, memRefType.getMemorySpaceAsInt()));
 }
 
 static LogicalResult verify(TypeCastOp op) {
@@ -3183,8 +3245,8 @@ static LogicalResult verify(TypeCastOp op) {
     return op.emitOpError("expects operand to be a memref with no layout");
   if (!op.getResultMemRefType().getAffineMaps().empty())
     return op.emitOpError("expects result to be a memref with no layout");
-  if (op.getResultMemRefType().getMemorySpace() !=
-      op.getMemRefType().getMemorySpace())
+  if (op.getResultMemRefType().getMemorySpaceAsInt() !=
+      op.getMemRefType().getMemorySpaceAsInt())
     return op.emitOpError("expects result in same memory space");
 
   auto sourceType = op.getMemRefType();

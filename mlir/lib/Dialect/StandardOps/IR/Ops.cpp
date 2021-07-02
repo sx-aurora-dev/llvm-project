@@ -2096,7 +2096,7 @@ bool MemRefCastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
         if (!checkCompatible(aStride.value(), bStrides[aStride.index()]))
           return false;
     }
-    if (aT.getMemorySpace() != bT.getMemorySpace())
+    if (aT.getMemorySpaceAsInt() != bT.getMemorySpaceAsInt())
       return false;
 
     // They must have the same rank, and any specified dimensions must match.
@@ -2123,8 +2123,10 @@ bool MemRefCastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     if (aEltType != bEltType)
       return false;
 
-    auto aMemSpace = (aT) ? aT.getMemorySpace() : uaT.getMemorySpace();
-    auto bMemSpace = (bT) ? bT.getMemorySpace() : ubT.getMemorySpace();
+    auto aMemSpace =
+        (aT) ? aT.getMemorySpaceAsInt() : uaT.getMemorySpaceAsInt();
+    auto bMemSpace =
+        (bT) ? bT.getMemorySpaceAsInt() : ubT.getMemorySpaceAsInt();
     if (aMemSpace != bMemSpace)
       return false;
 
@@ -2201,7 +2203,7 @@ static LogicalResult verify(MemRefReinterpretCastOp op) {
   // The source and result memrefs should be in the same memory space.
   auto srcType = op.source().getType().cast<BaseMemRefType>();
   auto resultType = op.getType().cast<MemRefType>();
-  if (srcType.getMemorySpace() != resultType.getMemorySpace())
+  if (srcType.getMemorySpaceAsInt() != resultType.getMemorySpaceAsInt())
     return op.emitError("different memory spaces specified for source type ")
            << srcType << " and result memref type " << resultType;
   if (srcType.getElementType() != resultType.getElementType())
@@ -2875,7 +2877,7 @@ Type SubViewOp::inferResultType(MemRefType sourceMemRefType,
       staticSizes, sourceMemRefType.getElementType(),
       makeStridedLinearLayoutMap(targetStrides, targetOffset,
                                  sourceMemRefType.getContext()),
-      sourceMemRefType.getMemorySpace());
+      sourceMemRefType.getMemorySpaceAsInt());
 }
 
 Type SubViewOp::inferResultType(MemRefType sourceMemRefType,
@@ -2932,7 +2934,7 @@ Type SubViewOp::inferRankReducedResultType(
       map = getProjectedMap(maps.front(), dimsToProject);
     inferredType =
         MemRefType::get(projectedShape, inferredType.getElementType(), map,
-                        inferredType.getMemorySpace());
+                        inferredType.getMemorySpaceAsInt());
   }
   return inferredType;
 }
@@ -3154,7 +3156,7 @@ isRankReducedType(Type originalType, Type candidateReducedType,
   // Strided layout logic is relevant for MemRefType only.
   MemRefType original = originalType.cast<MemRefType>();
   MemRefType candidateReduced = candidateReducedType.cast<MemRefType>();
-  if (original.getMemorySpace() != candidateReduced.getMemorySpace())
+  if (original.getMemorySpaceAsInt() != candidateReduced.getMemorySpaceAsInt())
     return SubViewVerificationResult::MemSpaceMismatch;
 
   llvm::SmallDenseSet<unsigned> unusedDims = optionalUnusedDimsMask.getValue();
@@ -3228,7 +3230,7 @@ static LogicalResult verify(SubViewOp op) {
   MemRefType subViewType = op.getType();
 
   // The base memref and the view memref should be in the same memory space.
-  if (baseType.getMemorySpace() != subViewType.getMemorySpace())
+  if (baseType.getMemorySpaceAsInt() != subViewType.getMemorySpaceAsInt())
     return op.emitError("different memory spaces specified for base memref "
                         "type ")
            << baseType << " and subview memref type " << subViewType;
@@ -3303,7 +3305,11 @@ static void replaceWithNewOp(PatternRewriter &rewriter, SubViewOp op,
 
 static void replaceWithNewOp(PatternRewriter &rewriter, SubTensorOp op,
                              SubTensorOp newOp) {
-  rewriter.replaceOpWithNewOp<tensor::CastOp>(op, op.getType(), newOp);
+  Value replacement = newOp.getResult();
+  if (replacement.getType() != op.getType())
+    replacement =
+        rewriter.create<tensor::CastOp>(op.getLoc(), op.getType(), replacement);
+  rewriter.replaceOp(op, replacement);
 }
 
 /// Pattern to rewrite a subview op with constant arguments.
@@ -3490,9 +3496,13 @@ void SubViewOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult SubViewOp::fold(ArrayRef<Attribute> operands) {
-  if (getResult().getType().cast<ShapedType>().getRank() == 0 &&
-      source().getType().cast<ShapedType>().getRank() == 0)
+  auto resultShapedType = getResult().getType().cast<ShapedType>();
+  auto sourceShapedType = source().getType().cast<ShapedType>();
+
+  if (resultShapedType.hasStaticShape() &&
+      resultShapedType == sourceShapedType) {
     return getViewSource();
+  }
 
   return {};
 }
@@ -3787,10 +3797,9 @@ void mlir::SubTensorInsertOp::build(OpBuilder &b, OperationState &result,
 }
 
 OpFoldResult SubTensorInsertOp::fold(ArrayRef<Attribute>) {
-  if (getSourceType() == getType() &&
+  if (getSourceType().hasStaticShape() && getType().hasStaticShape() &&
+      getSourceType() == getType() &&
       succeeded(foldIdentityOffsetSizeAndStrideOpInterface(*this, getType())))
-    return this->source();
-  if (succeeded(tensor::foldTensorCast(*this)))
     return this->source();
   return OpFoldResult();
 }
@@ -3845,9 +3854,9 @@ struct SubTensorInsertOpCastFolder final
     : public OpRewritePattern<SubTensorInsertOp> {
   using OpRewritePattern<SubTensorInsertOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(SubTensorInsertOp subTensorOp,
+  LogicalResult matchAndRewrite(SubTensorInsertOp subTensorInsertOp,
                                 PatternRewriter &rewriter) const override {
-    if (llvm::any_of(subTensorOp.getOperands(), [](Value operand) {
+    if (llvm::any_of(subTensorInsertOp.getOperands(), [](Value operand) {
           return matchPattern(operand, m_ConstantIndex());
         }))
       return failure();
@@ -3858,21 +3867,25 @@ struct SubTensorInsertOpCastFolder final
         return llvm::None;
       return castOp.source();
     };
-    Optional<Value> sourceCastSource = getSourceOfCastOp(subTensorOp.source());
-    Optional<Value> destCastSource = getSourceOfCastOp(subTensorOp.dest());
-    if (!sourceCastSource && !destCastSource &&
-        subTensorOp.dest().getType() == subTensorOp.getResult().getType())
+    Optional<Value> sourceCastSource =
+        getSourceOfCastOp(subTensorInsertOp.source());
+    Optional<Value> destCastSource =
+        getSourceOfCastOp(subTensorInsertOp.dest());
+    if (!sourceCastSource && !destCastSource)
       return failure();
 
-    auto newOp = rewriter.create<SubTensorInsertOp>(
-        subTensorOp.getLoc(),
-        (sourceCastSource ? *sourceCastSource : subTensorOp.source()),
-        (destCastSource ? *destCastSource : subTensorOp.dest()),
-        subTensorOp.getMixedOffsets(), subTensorOp.getMixedSizes(),
-        subTensorOp.getMixedStrides());
+    Value replacement = rewriter.create<SubTensorInsertOp>(
+        subTensorInsertOp.getLoc(),
+        (sourceCastSource ? *sourceCastSource : subTensorInsertOp.source()),
+        (destCastSource ? *destCastSource : subTensorInsertOp.dest()),
+        subTensorInsertOp.getMixedOffsets(), subTensorInsertOp.getMixedSizes(),
+        subTensorInsertOp.getMixedStrides());
 
-    rewriter.replaceOpWithNewOp<tensor::CastOp>(subTensorOp,
-                                                subTensorOp.getType(), newOp);
+    if (replacement.getType() != subTensorInsertOp.getType()) {
+      replacement = rewriter.create<tensor::CastOp>(
+          subTensorInsertOp.getLoc(), subTensorInsertOp.getType(), replacement);
+    }
+    rewriter.replaceOp(subTensorInsertOp, replacement);
     return success();
   }
 };
@@ -3890,7 +3903,11 @@ void SubTensorInsertOp::getCanonicalizationPatterns(
 
 OpFoldResult TensorLoadOp::fold(ArrayRef<Attribute>) {
   if (auto tensorToMemref = memref().getDefiningOp<TensorToMemrefOp>())
-    return tensorToMemref.tensor();
+    // Approximate alias analysis by conservatively folding only when no there
+    // is no interleaved operation.
+    if (tensorToMemref->getBlock() == this->getOperation()->getBlock() &&
+        tensorToMemref->getNextNode() == this->getOperation())
+      return tensorToMemref.tensor();
   return {};
 }
 
@@ -4179,7 +4196,7 @@ static LogicalResult verify(ViewOp op) {
     return op.emitError("unsupported map for result memref type ") << viewType;
 
   // The base memref and the view memref should be in the same memory space.
-  if (baseType.getMemorySpace() != viewType.getMemorySpace())
+  if (baseType.getMemorySpaceAsInt() != viewType.getMemorySpaceAsInt())
     return op.emitError("different memory spaces specified for base memref "
                         "type ")
            << baseType << " and view memref type " << viewType;

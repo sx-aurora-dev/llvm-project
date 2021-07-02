@@ -22,6 +22,7 @@
 #include "Targets/Hexagon.h"
 #include "Targets/Lanai.h"
 #include "Targets/Le64.h"
+#include "Targets/M68k.h"
 #include "Targets/MSP430.h"
 #include "Targets/Mips.h"
 #include "Targets/NVPTX.h"
@@ -301,6 +302,16 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
       return new OpenBSDTargetInfo<MipsTargetInfo>(Triple, Opts);
     default:
       return new MipsTargetInfo(Triple, Opts);
+    }
+
+  case llvm::Triple::m68k:
+    switch (os) {
+    case llvm::Triple::Linux:
+      return new LinuxTargetInfo<M68kTargetInfo>(Triple, Opts);
+    case llvm::Triple::NetBSD:
+      return new NetBSDTargetInfo<M68kTargetInfo>(Triple, Opts);
+    default:
+      return new M68kTargetInfo(Triple, Opts);
     }
 
   case llvm::Triple::le32:
@@ -722,7 +733,7 @@ void TargetInfo::getOpenCLFeatureDefines(const LangOptions &Opts,
                                          MacroBuilder &Builder) const {
   // FIXME: OpenCL options which affect language semantics/syntax
   // should be moved into LangOptions, thus macro definitions of
-  // such options is better to be done in clang::InitializePreprocessor
+  // such options is better to be done in clang::InitializePreprocessor.
   auto defineOpenCLExtMacro = [&](llvm::StringRef Name, unsigned AvailVer,
                                   unsigned CoreVersions,
                                   unsigned OptionalVersions) {
@@ -730,12 +741,12 @@ void TargetInfo::getOpenCLFeatureDefines(const LangOptions &Opts,
     // OpenCL version
     auto It = getTargetOpts().OpenCLFeaturesMap.find(Name);
     if ((It != getTargetOpts().OpenCLFeaturesMap.end()) && It->getValue() &&
-        OpenCLOptions::OpenCLOptionInfo(AvailVer, CoreVersions,
+        OpenCLOptions::OpenCLOptionInfo(false, AvailVer, CoreVersions,
                                         OptionalVersions)
             .isAvailableIn(Opts))
       Builder.defineMacro(Name);
   };
-#define OPENCL_GENERIC_EXTENSION(Ext, Avail, Core, Opt)                        \
+#define OPENCL_GENERIC_EXTENSION(Ext, WithPragma, Avail, Core, Opt)            \
   defineOpenCLExtMacro(#Ext, Avail, Core, Opt);
 #include "clang/Basic/OpenCLExtensions.def"
 

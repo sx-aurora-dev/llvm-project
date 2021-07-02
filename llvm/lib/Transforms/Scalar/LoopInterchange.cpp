@@ -186,12 +186,8 @@ static bool populateDependencyMatrix(CharMatrix &DepMatrix, unsigned Level,
 // matrix by exchanging the two columns.
 static void interChangeDependencies(CharMatrix &DepMatrix, unsigned FromIndx,
                                     unsigned ToIndx) {
-  unsigned numRows = DepMatrix.size();
-  for (unsigned i = 0; i < numRows; ++i) {
-    char TmpVal = DepMatrix[i][ToIndx];
-    DepMatrix[i][ToIndx] = DepMatrix[i][FromIndx];
-    DepMatrix[i][FromIndx] = TmpVal;
-  }
+  for (unsigned I = 0, E = DepMatrix.size(); I < E; ++I)
+    std::swap(DepMatrix[I][ToIndx], DepMatrix[I][FromIndx]);
 }
 
 // Checks if outermost non '=','S'or'I' dependence in the dependence matrix is
@@ -588,26 +584,14 @@ bool LoopInterchangeLegality::containsUnsafeInstructions(BasicBlock *BB) {
 }
 
 bool LoopInterchangeLegality::tightlyNested(Loop *OuterLoop, Loop *InnerLoop) {
+  LLVM_DEBUG(dbgs() << "Checking if loops are tightly nested\n");
+
+  if (!LoopNest::checkLoopsStructure(*OuterLoop, *InnerLoop, *SE))
+    return false;
   BasicBlock *OuterLoopHeader = OuterLoop->getHeader();
   BasicBlock *InnerLoopPreHeader = InnerLoop->getLoopPreheader();
   BasicBlock *OuterLoopLatch = OuterLoop->getLoopLatch();
 
-  LLVM_DEBUG(dbgs() << "Checking if loops are tightly nested\n");
-
-  // A perfectly nested loop will not have any branch in between the outer and
-  // inner block i.e. outer header will branch to either inner preheader and
-  // outerloop latch.
-  BranchInst *OuterLoopHeaderBI =
-      dyn_cast<BranchInst>(OuterLoopHeader->getTerminator());
-  if (!OuterLoopHeaderBI)
-    return false;
-
-  for (BasicBlock *Succ : successors(OuterLoopHeaderBI))
-    if (Succ != InnerLoopPreHeader && Succ != InnerLoop->getHeader() &&
-        Succ != OuterLoopLatch)
-      return false;
-
-  LLVM_DEBUG(dbgs() << "Checking instructions in Loop header and Loop latch\n");
   // We do not have any basic block in between now make sure the outer header
   // and outer loop latch doesn't contain any unsafe instructions.
   if (containsUnsafeInstructions(OuterLoopHeader) ||

@@ -79,6 +79,12 @@ using namespace lld::macho;
 std::string lld::toString(const InputFile *f) {
   if (!f)
     return "<internal>";
+
+  // Multiple dylibs can be defined in one .tbd file.
+  if (auto dylibFile = dyn_cast<DylibFile>(f))
+    if (f->getName().endswith(".tbd"))
+      return (f->getName() + "(" + dylibFile->dylibName + ")").str();
+
   if (f->archiveName.empty())
     return std::string(f->getName());
   return (path::filename(f->archiveName) + "(" + path::filename(f->getName()) +
@@ -91,8 +97,7 @@ std::unique_ptr<TarWriter> macho::tar;
 int InputFile::idCount = 0;
 
 // Open a given file path and return it as a memory-mapped file.
-// Perform no sanity checks--just open, map & return.
-Optional<MemoryBufferRef> macho::readRawFile(StringRef path) {
+Optional<MemoryBufferRef> macho::readFile(StringRef path) {
   // Open a file.
   auto mbOrErr = MemoryBuffer::getFile(path);
   if (auto ec = mbOrErr.getError()) {
@@ -103,32 +108,12 @@ Optional<MemoryBufferRef> macho::readRawFile(StringRef path) {
   std::unique_ptr<MemoryBuffer> &mb = *mbOrErr;
   MemoryBufferRef mbref = mb->getMemBufferRef();
   make<std::unique_ptr<MemoryBuffer>>(std::move(mb)); // take mb ownership
-  return mbref;
-}
-
-// Open a given file path and return it as a memory-mapped file.
-// Assume the file has one of a variety of linkable formats and
-// perform some basic sanity checks, notably minimum length.
-Optional<MemoryBufferRef> macho::readLinkableFile(StringRef path) {
-  Optional<MemoryBufferRef> maybeMbref = readRawFile(path);
-  if (!maybeMbref) {
-    return None;
-  }
-  MemoryBufferRef mbref = *maybeMbref;
-
-  // LD64 hard-codes 20 as minimum header size, which is presumably
-  // the smallest header among the the various linkable input formats
-  // LLD are less demanding. We insist on having only enough data for
-  // a magic number.
-  if (mbref.getBufferSize() < sizeof(uint32_t)) {
-    error("file is too small to contain a magic number: " + path);
-    return None;
-  }
 
   // If this is a regular non-fat file, return it.
   const char *buf = mbref.getBufferStart();
   auto *hdr = reinterpret_cast<const MachO::fat_header *>(buf);
-  if (read32be(&hdr->magic) != MachO::FAT_MAGIC) {
+  if (mbref.getBufferSize() < sizeof(uint32_t) ||
+      read32be(&hdr->magic) != MachO::FAT_MAGIC) {
     if (tar)
       tar->append(relativeToRoot(path), mbref.getBuffer());
     return mbref;
@@ -162,20 +147,6 @@ Optional<MemoryBufferRef> macho::readLinkableFile(StringRef path) {
 
   error("unable to find matching architecture in " + path);
   return None;
-}
-
-const load_command *macho::findCommand(const mach_header_64 *hdr,
-                                       uint32_t type) {
-  const uint8_t *p =
-      reinterpret_cast<const uint8_t *>(hdr) + sizeof(mach_header_64);
-
-  for (uint32_t i = 0, n = hdr->ncmds; i < n; ++i) {
-    auto *cmd = reinterpret_cast<const load_command *>(p);
-    if (cmd->cmd == type)
-      return cmd;
-    p += cmd->cmdsize;
-  }
-  return nullptr;
 }
 
 void ObjFile::parseSections(ArrayRef<section_64> sections) {
@@ -367,6 +338,32 @@ static macho::Symbol *createDefined(const structs::nlist_64 &sym,
                        /*isExternal=*/false, /*isPrivateExtern=*/false);
 }
 
+// Checks if the version specified in `cmd` is compatible with target
+// version. IOW, check if cmd's version >= config's version.
+static bool hasCompatVersion(const InputFile *input,
+                             const build_version_command *cmd) {
+
+  if (config->target.Platform != static_cast<PlatformKind>(cmd->platform)) {
+    error(toString(input) + " has platform " +
+          getPlatformName(static_cast<PlatformKind>(cmd->platform)) +
+          Twine(", which is different from target platform ") +
+          getPlatformName(config->target.Platform));
+    return false;
+  }
+
+  unsigned major = cmd->minos >> 16;
+  unsigned minor = (cmd->minos >> 8) & 0xffu;
+  unsigned subMinor = cmd->minos & 0xffu;
+  VersionTuple version(major, minor, subMinor);
+  if (version >= config->platformInfo.minimum)
+    return true;
+
+  error(toString(input) + " has version " + version.getAsString() +
+        ", which is incompatible with target version of " +
+        config->platformInfo.minimum.getAsString());
+  return false;
+}
+
 // Absolute symbols are defined symbols that do not have an associated
 // InputSection. They cannot be weak.
 static macho::Symbol *createAbsolute(const structs::nlist_64 &sym,
@@ -422,7 +419,11 @@ void ObjFile::parseSymbols(ArrayRef<structs::nlist_64> nList,
 
     const section_64 &sec = sectionHeaders[sym.n_sect - 1];
     SubsectionMap &subsecMap = subsections[sym.n_sect - 1];
-    assert(!subsecMap.empty());
+
+    // parseSections() may have chosen not to parse this section.
+    if (subsecMap.empty())
+      continue;
+
     uint64_t offset = sym.n_value - sec.addr;
 
     // If the input file does not use subsections-via-symbols, all symbols can
@@ -501,11 +502,17 @@ ObjFile::ObjFile(MemoryBufferRef mb, uint32_t modTime, StringRef archiveName)
 
   MachO::Architecture arch =
       MachO::getArchitectureFromCpuType(hdr->cputype, hdr->cpusubtype);
-  if (arch != config->arch) {
+  if (arch != config->target.Arch) {
     error(toString(this) + " has architecture " + getArchitectureName(arch) +
           " which is incompatible with target architecture " +
-          getArchitectureName(config->arch));
+          getArchitectureName(config->target.Arch));
     return;
+  }
+
+  if (const auto *cmd =
+          findCommand<build_version_command>(hdr, LC_BUILD_VERSION)) {
+    if (!hasCompatVersion(this, cmd))
+      return;
   }
 
   if (const load_command *cmd = findCommand(hdr, LC_LINKER_OPTION)) {
@@ -558,14 +565,15 @@ void ObjFile::parseDebugInfo() {
   // TODO: Since object files can contain a lot of DWARF info, we should verify
   // that we are parsing just the info we need
   const DWARFContext::compile_unit_range &units = ctx->compile_units();
+  // FIXME: There can be more than one compile unit per object file. See
+  // PR48637.
   auto it = units.begin();
   compileUnit = it->get();
-  assert(std::next(it) == units.end());
 }
 
 // The path can point to either a dylib or a .tbd file.
 static Optional<DylibFile *> loadDylib(StringRef path, DylibFile *umbrella) {
-  Optional<MemoryBufferRef> mbref = readLinkableFile(path);
+  Optional<MemoryBufferRef> mbref = readFile(path);
   if (!mbref) {
     error("could not read dylib file at " + path);
     return {};
@@ -575,19 +583,16 @@ static Optional<DylibFile *> loadDylib(StringRef path, DylibFile *umbrella) {
 
 // TBD files are parsed into a series of TAPI documents (InterfaceFiles), with
 // the first document storing child pointers to the rest of them. When we are
-// processing a given TBD file, we store that top-level document here. When
-// processing re-exports, we search its children for potentially matching
-// documents in the same TBD file. Note that the children themselves don't
-// point to further documents, i.e. this is a two-level tree.
+// processing a given TBD file, we store that top-level document in
+// currentTopLevelTapi. When processing re-exports, we search its children for
+// potentially matching documents in the same TBD file. Note that the children
+// themselves don't point to further documents, i.e. this is a two-level tree.
 //
-// ld64 allows a TAPI re-export to reference documents nested within other TBD
-// files, but that seems like a strange design, so this is an intentional
-// deviation.
-const InterfaceFile *currentTopLevelTapi = nullptr;
-
 // Re-exports can either refer to on-disk files, or to documents within .tbd
 // files.
-static Optional<DylibFile *> findDylib(StringRef path, DylibFile *umbrella) {
+static Optional<DylibFile *>
+findDylib(StringRef path, DylibFile *umbrella,
+          const InterfaceFile *currentTopLevelTapi) {
   if (path::is_absolute(path, path::Style::posix))
     for (StringRef root : config->systemLibraryRoots)
       if (Optional<std::string> dylibPath =
@@ -599,9 +604,9 @@ static Optional<DylibFile *> findDylib(StringRef path, DylibFile *umbrella) {
   if (currentTopLevelTapi) {
     for (InterfaceFile &child :
          make_pointee_range(currentTopLevelTapi->documents())) {
+      assert(child.documents().empty());
       if (path == child.getInstallName())
         return make<DylibFile>(child, umbrella);
-      assert(child.documents().empty());
     }
   }
 
@@ -631,8 +636,10 @@ static bool isImplicitlyLinked(StringRef path) {
   return false;
 }
 
-void loadReexport(StringRef path, DylibFile *umbrella) {
-  Optional<DylibFile *> reexport = findDylib(path, umbrella);
+void loadReexport(StringRef path, DylibFile *umbrella,
+                  const InterfaceFile *currentTopLevelTapi) {
+  Optional<DylibFile *> reexport =
+      findDylib(path, umbrella, currentTopLevelTapi);
   if (!reexport)
     error("unable to locate re-export with install name " + path);
   else if (isImplicitlyLinked(path))
@@ -663,6 +670,12 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
     return;
   }
 
+  if (const build_version_command *cmd =
+          findCommand<build_version_command>(hdr, LC_BUILD_VERSION)) {
+    if (!hasCompatVersion(this, cmd))
+      return;
+  }
+
   // Initialize symbols.
   DylibFile *exportingFile = isImplicitlyLinked(dylibName) ? this : umbrella;
   if (const load_command *cmd = findCommand(hdr, LC_DYLD_INFO_ONLY)) {
@@ -690,7 +703,7 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
       const auto *c = reinterpret_cast<const dylib_command *>(cmd);
       StringRef reexportPath =
           reinterpret_cast<const char *>(c) + read32le(&c->dylib.name);
-      loadReexport(reexportPath, umbrella);
+      loadReexport(reexportPath, exportingFile, nullptr);
     }
 
     // FIXME: What about LC_LOAD_UPWARD_DYLIB, LC_LAZY_LOAD_DYLIB,
@@ -701,7 +714,7 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
       const auto *c = reinterpret_cast<const dylib_command *>(cmd);
       StringRef dylibPath =
           reinterpret_cast<const char *>(c) + read32le(&c->dylib.name);
-      Optional<DylibFile *> dylib = findDylib(dylibPath, umbrella);
+      Optional<DylibFile *> dylib = findDylib(dylibPath, umbrella, nullptr);
       if (!dylib)
         error(Twine("unable to locate library '") + dylibPath +
               "' loaded from '" + toString(this) + "' for -flat_namespace");
@@ -718,15 +731,16 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
   if (umbrella == nullptr)
     umbrella = this;
 
-  if (!interface.getArchitectures().has(config->arch)) {
-    error(toString(this) + " is incompatible with " +
-          getArchitectureName(config->arch));
-    return;
-  }
-
   dylibName = saver.save(interface.getInstallName());
   compatibilityVersion = interface.getCompatibilityVersion().rawValue();
   currentVersion = interface.getCurrentVersion().rawValue();
+
+  if (!is_contained(interface.targets(), config->target)) {
+    error(toString(this) + " is incompatible with " +
+          std::string(config->target));
+    return;
+  }
+
   DylibFile *exportingFile = isImplicitlyLinked(dylibName) ? this : umbrella;
   auto addSymbol = [&](const Twine &name) -> void {
     symbols.push_back(symtab->addDylib(saver.save(name), exportingFile,
@@ -736,7 +750,7 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
   // TODO(compnerd) filter out symbols based on the target platform
   // TODO: handle weak defs, thread locals
   for (const auto symbol : interface.symbols()) {
-    if (!symbol->getArchitectures().has(config->arch))
+    if (!symbol->getArchitectures().has(config->target.Arch))
       continue;
 
     switch (symbol->getKind()) {
@@ -758,17 +772,14 @@ DylibFile::DylibFile(const InterfaceFile &interface, DylibFile *umbrella,
     }
   }
 
-  bool isTopLevelTapi = false;
-  if (currentTopLevelTapi == nullptr) {
-    currentTopLevelTapi = &interface;
-    isTopLevelTapi = true;
+  const InterfaceFile *topLevel =
+      interface.getParent() == nullptr ? &interface : interface.getParent();
+
+  for (InterfaceFileRef intfRef : interface.reexportedLibraries()) {
+    auto targets = intfRef.targets();
+    if (is_contained(targets, config->target))
+      loadReexport(intfRef.getInstallName(), exportingFile, topLevel);
   }
-
-  for (InterfaceFileRef intfRef : interface.reexportedLibraries())
-    loadReexport(intfRef.getInstallName(), umbrella);
-
-  if (isTopLevelTapi)
-    currentTopLevelTapi = nullptr;
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<object::Archive> &&f)

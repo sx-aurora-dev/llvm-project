@@ -125,23 +125,6 @@ static Optional<std::string> findFramework(StringRef name) {
   return {};
 }
 
-static TargetInfo *createTargetInfo(opt::InputArgList &args) {
-  // TODO: should unspecified arch be an error rather than defaulting?
-  // Jez: ld64 seems to make unspecified arch an error when LTO is
-  // being used. I'm not sure why though. Feels like we should be able
-  // to infer the arch from our input files regardless
-  StringRef archName = args.getLastArgValue(OPT_arch, "x86_64");
-  config->arch = MachO::getArchitectureFromName(archName);
-  switch (MachO::getCPUTypeFromArchitecture(config->arch).first) {
-  case MachO::CPU_TYPE_X86_64:
-    return createX86_64TargetInfo();
-  case MachO::CPU_TYPE_ARM64:
-    return createARM64TargetInfo();
-  default:
-    fatal("missing or unsupported -arch " + archName);
-  }
-}
-
 static bool warnIfNotDirectory(StringRef option, StringRef path) {
   if (!fs::exists(path)) {
     warn("directory not found for option -" + option + path);
@@ -263,7 +246,7 @@ static std::vector<ArchiveMember> getArchiveMembers(MemoryBufferRef mb) {
 
 static InputFile *addFile(StringRef path, bool forceLoadArchive,
                           bool isBundleLoader = false) {
-  Optional<MemoryBufferRef> buffer = readLinkableFile(path);
+  Optional<MemoryBufferRef> buffer = readFile(path);
   if (!buffer)
     return nullptr;
   MemoryBufferRef mbref = *buffer;
@@ -279,7 +262,7 @@ static InputFile *addFile(StringRef path, bool forceLoadArchive,
       error(path + ": archive has no index; run ranlib to add one");
 
     if (config->allLoad || forceLoadArchive) {
-      if (Optional<MemoryBufferRef> buffer = readLinkableFile(path)) {
+      if (Optional<MemoryBufferRef> buffer = readFile(path)) {
         for (const ArchiveMember &member : getArchiveMembers(*buffer)) {
           if (Optional<InputFile *> file = loadArchiveMember(
                   member.mbref, member.modTime, path, /*objCOnly=*/false)) {
@@ -300,7 +283,7 @@ static InputFile *addFile(StringRef path, bool forceLoadArchive,
       // we already found that it contains an ObjC symbol. We should also
       // consider creating a LazyObjFile class in order to avoid double-loading
       // these files here and below (as part of the ArchiveFile).
-      if (Optional<MemoryBufferRef> buffer = readLinkableFile(path)) {
+      if (Optional<MemoryBufferRef> buffer = readFile(path)) {
         for (const ArchiveMember &member : getArchiveMembers(*buffer)) {
           if (Optional<InputFile *> file = loadArchiveMember(
                   member.mbref, member.modTime, path, /*objCOnly=*/true)) {
@@ -403,7 +386,7 @@ void macho::parseLCLinkerOption(InputFile* f, unsigned argc, StringRef data) {
 }
 
 static void addFileList(StringRef path) {
-  Optional<MemoryBufferRef> buffer = readRawFile(path);
+  Optional<MemoryBufferRef> buffer = readFile(path);
   if (!buffer)
     return;
   MemoryBufferRef mbref = *buffer;
@@ -426,7 +409,7 @@ static void addFileList(StringRef path) {
 //
 // The file can also have line comments that start with '#'.
 static void parseOrderFile(StringRef path) {
-  Optional<MemoryBufferRef> buffer = readRawFile(path);
+  Optional<MemoryBufferRef> buffer = readFile(path);
   if (!buffer) {
     error("Could not read order file at " + path);
     return;
@@ -560,13 +543,20 @@ static std::string lowerDash(StringRef s) {
                      map_iterator(s.end(), toLowerDash));
 }
 
-static void handlePlatformVersion(const opt::Arg *arg) {
+// Has the side-effect of setting Config::platformInfo.
+static PlatformKind parsePlatformVersion(const opt::ArgList &args) {
+  const opt::Arg *arg = args.getLastArg(OPT_platform_version);
+  if (!arg) {
+    error("must specify -platform_version");
+    return PlatformKind::unknown;
+  }
+
   StringRef platformStr = arg->getValue(0);
   StringRef minVersionStr = arg->getValue(1);
   StringRef sdkVersionStr = arg->getValue(2);
 
   // TODO(compnerd) see if we can generate this case list via XMACROS
-  config->platform.kind =
+  PlatformKind platform =
       StringSwitch<PlatformKind>(lowerDash(platformStr))
           .Cases("macos", "1", PlatformKind::macOS)
           .Cases("ios", "2", PlatformKind::iOS)
@@ -579,23 +569,45 @@ static void handlePlatformVersion(const opt::Arg *arg) {
           .Cases("watchos-simulator", "9", PlatformKind::watchOSSimulator)
           .Cases("driverkit", "10", PlatformKind::driverKit)
           .Default(PlatformKind::unknown);
-  if (config->platform.kind == PlatformKind::unknown)
+  if (platform == PlatformKind::unknown)
     error(Twine("malformed platform: ") + platformStr);
   // TODO: check validity of version strings, which varies by platform
   // NOTE: ld64 accepts version strings with 5 components
   // llvm::VersionTuple accepts no more than 4 components
   // Has Apple ever published version strings with 5 components?
-  if (config->platform.minimum.tryParse(minVersionStr))
+  if (config->platformInfo.minimum.tryParse(minVersionStr))
     error(Twine("malformed minimum version: ") + minVersionStr);
-  if (config->platform.sdk.tryParse(sdkVersionStr))
+  if (config->platformInfo.sdk.tryParse(sdkVersionStr))
     error(Twine("malformed sdk version: ") + sdkVersionStr);
+  return platform;
 }
 
-static void handleUndefined(const opt::Arg *arg) {
-  StringRef treatmentStr = arg->getValue(0);
+// Has the side-effect of setting Config::target.
+static TargetInfo *createTargetInfo(opt::InputArgList &args) {
+  StringRef archName = args.getLastArgValue(OPT_arch);
+  if (archName.empty())
+    fatal("must specify -arch");
+  PlatformKind platform = parsePlatformVersion(args);
+
+  config->target =
+      MachO::Target(MachO::getArchitectureFromName(archName), platform);
+
+  switch (MachO::getCPUTypeFromArchitecture(config->target.Arch).first) {
+  case MachO::CPU_TYPE_X86_64:
+    return createX86_64TargetInfo();
+  case MachO::CPU_TYPE_ARM64:
+    return createARM64TargetInfo();
+  default:
+    fatal("missing or unsupported -arch " + archName);
+  }
+}
+
+static UndefinedSymbolTreatment
+getUndefinedSymbolTreatment(const opt::ArgList &args) {
+  StringRef treatmentStr = args.getLastArgValue(OPT_undefined);
   auto treatment =
       StringSwitch<UndefinedSymbolTreatment>(treatmentStr)
-          .Case("error", UndefinedSymbolTreatment::error)
+          .Cases("error", "", UndefinedSymbolTreatment::error)
           .Case("warning", UndefinedSymbolTreatment::warning)
           .Case("suppress", UndefinedSymbolTreatment::suppress)
           .Case("dynamic_lookup", UndefinedSymbolTreatment::dynamic_lookup)
@@ -613,7 +625,7 @@ static void handleUndefined(const opt::Arg *arg) {
       error("'-undefined suppress' only valid with '-flat_namespace'");
     treatment = UndefinedSymbolTreatment::error;
   }
-  config->undefinedSymbolTreatment = treatment;
+  return treatment;
 }
 
 static void warnIfDeprecatedOption(const opt::Option &opt) {
@@ -659,16 +671,16 @@ static const char *getReproduceOption(opt::InputArgList &args) {
 static bool isPie(opt::InputArgList &args) {
   if (config->outputType != MH_EXECUTE || args.hasArg(OPT_no_pie))
     return false;
-  if (config->arch == AK_arm64 || config->arch == AK_arm64e)
+  if (config->target.Arch == AK_arm64 || config->target.Arch == AK_arm64e)
     return true;
 
   // TODO: add logic here as we support more archs. E.g. i386 should default
   // to PIE from 10.7
-  assert(config->arch == AK_x86_64 || config->arch == AK_x86_64h);
+  assert(config->target.Arch == AK_x86_64 || config->target.Arch == AK_x86_64h);
 
-  PlatformKind kind = config->platform.kind;
+  PlatformKind kind = config->target.Platform;
   if (kind == PlatformKind::macOS &&
-      config->platform.minimum >= VersionTuple(10, 6))
+      config->platformInfo.minimum >= VersionTuple(10, 6))
     return true;
 
   if (kind == PlatformKind::iOSSimulator || kind == PlatformKind::driverKit)
@@ -792,11 +804,12 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     config->staticLink = (arg->getOption().getID() == OPT_static);
 
   if (const opt::Arg *arg =
-          args.getLastArg(OPT_flat_namespace, OPT_twolevel_namespace)) {
+          args.getLastArg(OPT_flat_namespace, OPT_twolevel_namespace))
     config->namespaceKind = arg->getOption().getID() == OPT_twolevel_namespace
                                 ? NamespaceKind::twolevel
                                 : NamespaceKind::flat;
-  }
+
+  config->undefinedSymbolTreatment = getUndefinedSymbolTreatment(args);
 
   config->systemLibraryRoots = getSystemLibraryRoots(args);
   config->librarySearchPaths =
@@ -832,6 +845,10 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 
   config->saveTemps = args.hasArg(OPT_save_temps);
 
+  config->adhocCodesign = args.hasFlag(
+      OPT_adhoc_codesign, OPT_no_adhoc_codesign,
+      config->target.Arch == AK_arm64 || config->target.Arch == AK_arm64e);
+
   if (args.hasArg(OPT_v)) {
     message(getLLDVersion());
     message(StringRef("Library search paths:") +
@@ -846,12 +863,13 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 
   initLLVM(); // must be run before any call to addFile()
 
+  // This loop should be reserved for options whose exact ordering matters.
+  // Other options should be handled via filtered() and/or getLastArg().
   for (const auto &arg : args) {
     const auto &opt = arg->getOption();
     warnIfDeprecatedOption(opt);
     warnIfUnimplementedOption(opt);
 
-    // TODO: are any of these better handled via filtered() or getLastArg()?
     switch (opt.getID()) {
     case OPT_INPUT:
       addFile(arg->getValue(), false);
@@ -874,12 +892,6 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     case OPT_framework:
     case OPT_weak_framework:
       addFramework(arg->getValue(), opt.getID() == OPT_weak_framework);
-      break;
-    case OPT_platform_version:
-      handlePlatformVersion(arg);
-      break;
-    case OPT_undefined:
-      handleUndefined(arg);
       break;
     default:
       break;
@@ -940,7 +952,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     StringRef segName = arg->getValue(0);
     StringRef sectName = arg->getValue(1);
     StringRef fileName = arg->getValue(2);
-    Optional<MemoryBufferRef> buffer = readRawFile(fileName);
+    Optional<MemoryBufferRef> buffer = readFile(fileName);
     if (buffer)
       inputFiles.insert(make<OpaqueFile>(*buffer, segName, sectName));
   }
