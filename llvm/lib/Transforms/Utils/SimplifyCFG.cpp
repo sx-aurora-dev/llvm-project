@@ -253,7 +253,8 @@ class SimplifyCFGOpt {
   bool tryToSimplifyUncondBranchWithICmpInIt(ICmpInst *ICI,
                                              IRBuilder<> &Builder);
 
-  bool HoistThenElseCodeToIf(BranchInst *BI, const TargetTransformInfo &TTI);
+  bool HoistThenElseCodeToIf(BranchInst *BI, const TargetTransformInfo &TTI,
+                             bool EqTermsOnly);
   bool SpeculativelyExecuteBB(BranchInst *BI, BasicBlock *ThenBB,
                               const TargetTransformInfo &TTI);
   bool SimplifyTerminatorOnSelect(Instruction *OldTerm, Value *Cond,
@@ -1115,7 +1116,7 @@ bool SimplifyCFGOpt::PerformValueComparisonIntoPredecessorFolding(
   BasicBlock *BB = TI->getParent();
   BasicBlock *Pred = PTI->getParent();
 
-  std::vector<DominatorTree::UpdateType> Updates;
+  SmallVector<DominatorTree::UpdateType, 32> Updates;
 
   // Figure out which 'cases' to copy from SI to PSI.
   std::vector<ValueEqualityComparisonCase> BBCases;
@@ -1256,13 +1257,18 @@ bool SimplifyCFGOpt::PerformValueComparisonIntoPredecessorFolding(
   // Okay, at this point, we know which new successor Pred will get.  Make
   // sure we update the number of entries in the PHI nodes for these
   // successors.
+  SmallPtrSet<BasicBlock *, 2> SuccsOfPred;
+  if (DTU) {
+    SuccsOfPred = {succ_begin(Pred), succ_end(Pred)};
+    Updates.reserve(Updates.size() + NewSuccessors.size());
+  }
   for (const std::pair<BasicBlock *, int /*Num*/> &NewSuccessor :
        NewSuccessors) {
     for (auto I : seq(0, NewSuccessor.second)) {
       (void)I;
       AddPredecessorToBlock(NewSuccessor.first, Pred, BB);
     }
-    if (DTU && !is_contained(successors(Pred), NewSuccessor.first))
+    if (DTU && !SuccsOfPred.contains(NewSuccessor.first))
       Updates.push_back({DominatorTree::Insert, Pred, NewSuccessor.first});
   }
 
@@ -1383,9 +1389,12 @@ static bool passingValueIsAlwaysUndefined(Value *V, Instruction *I, bool PtrValu
 
 /// Given a conditional branch that goes to BB1 and BB2, hoist any common code
 /// in the two blocks up into the branch block. The caller of this function
-/// guarantees that BI's block dominates BB1 and BB2.
+/// guarantees that BI's block dominates BB1 and BB2. If EqTermsOnly is given,
+/// only perform hoisting in case both blocks only contain a terminator. In that
+/// case, only the original BI will be replaced and selects for PHIs are added.
 bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
-                                           const TargetTransformInfo &TTI) {
+                                           const TargetTransformInfo &TTI,
+                                           bool EqTermsOnly) {
   // This does very trivial matching, with limited scanning, to find identical
   // instructions in the two blocks.  In particular, we don't want to get into
   // O(M*N) situations here where M and N are the sizes of BB1 and BB2.  As
@@ -1421,6 +1430,16 @@ bool SimplifyCFGOpt::HoistThenElseCodeToIf(BranchInst *BI,
     if (Changed)
       ++NumHoistCommonCode;
   });
+
+  // Check if only hoisting terminators is allowed. This does not add new
+  // instructions to the hoist location.
+  if (EqTermsOnly) {
+    if (!I1->isIdenticalToWhenDefined(I2))
+      return false;
+    if (!I1->isTerminator())
+      return false;
+    goto HoistTerminator;
+  }
 
   do {
     // If we are hoisting the terminator instruction, don't move one (making a
@@ -2529,8 +2548,9 @@ static bool FoldCondBranchOnPHI(BranchInst *BI, DomTreeUpdater *DTU,
         EdgeBB->getInstList().insert(InsertPt, N);
 
         // Register the new instruction with the assumption cache if necessary.
-        if (AC && match(N, m_Intrinsic<Intrinsic::assume>()))
-          AC->registerAssumption(cast<IntrinsicInst>(N));
+        if (auto *Assume = dyn_cast<AssumeInst>(N))
+          if (AC)
+            AC->registerAssumption(Assume);
       }
     }
 
@@ -5287,11 +5307,9 @@ InitializeUniqueCases(SwitchInst *SI, PHINode *&PHI, BasicBlock *&CommonDest,
 static Value *ConvertTwoCaseSwitch(const SwitchCaseResultVectorTy &ResultVector,
                                    Constant *DefaultResult, Value *Condition,
                                    IRBuilder<> &Builder) {
-  assert(ResultVector.size() == 2 &&
-         "We should have exactly two unique results at this point");
   // If we are selecting between only two cases transform into a simple
   // select or a two-way select if default is possible.
-  if (ResultVector[0].second.size() == 1 &&
+  if (ResultVector.size() == 2 && ResultVector[0].second.size() == 1 &&
       ResultVector[1].second.size() == 1) {
     ConstantInt *const FirstCase = ResultVector[0].second[0];
     ConstantInt *const SecondCase = ResultVector[1].second[0];
@@ -5308,6 +5326,17 @@ static Value *ConvertTwoCaseSwitch(const SwitchCaseResultVectorTy &ResultVector,
         Builder.CreateICmpEQ(Condition, FirstCase, "switch.selectcmp");
     return Builder.CreateSelect(ValueCompare, ResultVector[0].first,
                                 SelectValue, "switch.select");
+  }
+
+  // Handle the degenerate case where two cases have the same value.
+  if (ResultVector.size() == 1 && ResultVector[0].second.size() == 2 &&
+      DefaultResult) {
+    Value *Cmp1 = Builder.CreateICmpEQ(
+        Condition, ResultVector[0].second[0], "switch.selectcmp.case1");
+    Value *Cmp2 = Builder.CreateICmpEQ(
+        Condition, ResultVector[0].second[1], "switch.selectcmp.case2");
+    Value *Cmp = Builder.CreateOr(Cmp1, Cmp2, "switch.selectcmp");
+    return Builder.CreateSelect(Cmp, ResultVector[0].first, DefaultResult);
   }
 
   return nullptr;
@@ -5334,13 +5363,14 @@ static void RemoveSwitchAfterSelectConversion(SwitchInst *SI, PHINode *PHI,
     PHI->removeIncomingValue(SelectBB);
   PHI->addIncoming(SelectValue, SelectBB);
 
+  SmallPtrSet<BasicBlock *, 4> RemovedSuccessors;
   for (unsigned i = 0, e = SI->getNumSuccessors(); i < e; ++i) {
     BasicBlock *Succ = SI->getSuccessor(i);
 
     if (Succ == DestBB)
       continue;
     Succ->removePredecessor(SelectBB);
-    if (DTU)
+    if (DTU && RemovedSuccessors.insert(Succ).second)
       Updates.push_back({DominatorTree::Delete, SelectBB, Succ});
   }
   SI->eraseFromParent();
@@ -5361,10 +5391,8 @@ static bool switchToSelect(SwitchInst *SI, IRBuilder<> &Builder,
   SwitchCaseResultVectorTy UniqueResults;
   // Collect all the cases that will deliver the same value from the switch.
   if (!InitializeUniqueCases(SI, PHI, CommonDest, UniqueResults, DefaultResult,
-                             DL, TTI, 2, 1))
-    return false;
-  // Selects choose between maximum two values.
-  if (UniqueResults.size() != 2)
+                             DL, TTI, /*MaxUniqueResults*/2,
+                             /*MaxCasesPerResult*/2))
     return false;
   assert(PHI != nullptr && "PHI for value select not found");
 
@@ -6429,9 +6457,9 @@ bool SimplifyCFGOpt::simplifyCondBranch(BranchInst *BI, IRBuilder<> &Builder) {
   // can hoist it up to the branching block.
   if (BI->getSuccessor(0)->getSinglePredecessor()) {
     if (BI->getSuccessor(1)->getSinglePredecessor()) {
-      if (HoistCommon && Options.HoistCommonInsts)
-        if (HoistThenElseCodeToIf(BI, TTI))
-          return requestResimplify();
+      if (HoistCommon &&
+          HoistThenElseCodeToIf(BI, TTI, !Options.HoistCommonInsts))
+        return requestResimplify();
     } else {
       // If Successor #1 has multiple preds, we may be able to conditionally
       // execute Successor #0 if it branches to Successor #1.

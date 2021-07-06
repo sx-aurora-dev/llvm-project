@@ -26,7 +26,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
-#include "llvm/IR/Statepoint.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/Support/CommandLine.h"
@@ -206,8 +205,7 @@ void Value::dropDroppableUsesIn(User &Usr) {
 
 void Value::dropDroppableUse(Use &U) {
   U.removeFromList();
-  if (auto *Assume = dyn_cast<IntrinsicInst>(U.getUser())) {
-    assert(Assume->getIntrinsicID() == Intrinsic::assume);
+  if (auto *Assume = dyn_cast<AssumeInst>(U.getUser())) {
     unsigned OpNo = U.getOperandNo();
     if (OpNo == 0)
       U.set(ConstantInt::getTrue(Assume->getContext()));
@@ -738,9 +736,18 @@ bool Value::canBeFreed() const {
 
   // Handle byval/byref/sret/inalloca/preallocated arguments.  The storage
   // lifetime is guaranteed to be longer than the callee's lifetime.
-  if (auto *A = dyn_cast<Argument>(this))
+  if (auto *A = dyn_cast<Argument>(this)) {
     if (A->hasPointeeInMemoryValueAttr())
       return false;
+    // A pointer to an object in a function which neither frees, nor can arrange
+    // for another thread to free on its behalf, can not be freed in the scope
+    // of the function.  Note that this logic is restricted to memory
+    // allocations in existance before the call; a nofree function *is* allowed
+    // to free memory it allocated.
+    const Function *F = A->getParent();
+    if (F->doesNotFreeMemory() && F->hasNoSync())
+      return false;
+  }
 
   const Function *F = nullptr;
   if (auto *I = dyn_cast<Instruction>(this))
@@ -750,12 +757,6 @@ bool Value::canBeFreed() const {
 
   if (!F)
     return true;
-
-  // A pointer to an object in a function which neither frees, nor can arrange
-  // for another thread to free on its behalf, can not be freed in the scope
-  // of the function.
-  if (F->doesNotFreeMemory() && F->hasNoSync())
-    return false;
 
   // With garbage collection, deallocation typically occurs solely at or after
   // safepoints.  If we're compiling for a collector which uses the

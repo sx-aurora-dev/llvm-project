@@ -119,7 +119,7 @@ void RegScavenger::determineKillsAndDefs() {
   DefRegUnits.reset();
   for (const MachineOperand &MO : MI.operands()) {
     if (MO.isRegMask()) {
-      TmpRegUnits.clear();
+      TmpRegUnits.reset();
       for (unsigned RU = 0, RUEnd = TRI->getNumRegUnits(); RU != RUEnd; ++RU) {
         for (MCRegUnitRootIterator RURI(RU, TRI); RURI.isValid(); ++RURI) {
           if (MO.clobbersPhysReg(*RURI)) {
@@ -369,6 +369,10 @@ findSurvivorBackwards(const MachineRegisterInfo &MRI,
   const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
   LiveRegUnits Used(TRI);
 
+  assert(From->getParent() == To->getParent() &&
+         "Target instruction is in other than current basic block, use "
+         "enterBasicBlockEnd first");
+
   for (MachineBasicBlock::iterator I = From;; --I) {
     const MachineInstr &MI = *I;
 
@@ -423,6 +427,8 @@ findSurvivorBackwards(const MachineRegisterInfo &MRI,
       if (I == MBB.begin())
         break;
     }
+    assert(I != MBB.begin() && "Did not find target instruction while "
+                               "iterating backwards");
   }
 
   return std::make_pair(Survivor, Pos);

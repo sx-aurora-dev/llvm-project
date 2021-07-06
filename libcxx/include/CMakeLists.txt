@@ -13,10 +13,20 @@ set(files
   __hash_table
   __libcpp_version
   __locale
+  __memory/addressof.h
+  __memory/allocation_guard.h
+  __memory/allocator.h
   __memory/allocator_traits.h
-  __memory/base.h
+  __memory/auto_ptr.h
+  __memory/compressed_pair.h
+  __memory/construct_at.h
+  __memory/pointer_safety.h
   __memory/pointer_traits.h
-  __memory/utilities.h
+  __memory/raw_storage_iterator.h
+  __memory/shared_ptr.h
+  __memory/temporary_buffer.h
+  __memory/uninitialized_algorithms.h
+  __memory/unique_ptr.h
   __mutex_base
   __node_handle
   __nullptr
@@ -204,7 +214,7 @@ foreach(f ${files})
   list(APPEND _all_includes "${dst}")
 endforeach()
 
-add_custom_target(generate-cxx-headers DEPENDS ${_all_includes})
+add_custom_target(generate-cxx-headers ALL DEPENDS ${_all_includes})
 
 add_library(cxx-headers INTERFACE)
 add_dependencies(cxx-headers generate-cxx-headers ${LIBCXX_CXX_ABI_HEADER_TARGET})
@@ -219,7 +229,7 @@ if (LIBCXX_INSTALL_HEADERS)
   foreach(file ${files})
     get_filename_component(dir ${file} DIRECTORY)
     install(FILES ${file}
-      DESTINATION ${LIBCXX_INSTALL_HEADER_PREFIX}include/c++/v1/${dir}
+      DESTINATION include/c++/v1/${dir}
       COMPONENT cxx-headers
       PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
     )
@@ -227,7 +237,7 @@ if (LIBCXX_INSTALL_HEADERS)
 
   # Install the generated __config_site.
   install(FILES ${LIBCXX_GENERATED_INCLUDE_DIR}/__config_site
-    DESTINATION ${LIBCXX_INSTALL_HEADER_PREFIX}include/c++/v1
+    DESTINATION include/c++/v1
     PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
     COMPONENT cxx-headers)
 

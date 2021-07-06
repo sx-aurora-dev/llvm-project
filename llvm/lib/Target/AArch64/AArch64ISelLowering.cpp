@@ -1180,6 +1180,13 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
 
     for (auto VT : {MVT::nxv2f16, MVT::nxv4f16, MVT::nxv8f16, MVT::nxv2f32,
                     MVT::nxv4f32, MVT::nxv2f64}) {
+      for (auto InnerVT : {MVT::nxv2f16, MVT::nxv4f16, MVT::nxv8f16,
+                           MVT::nxv2f32, MVT::nxv4f32, MVT::nxv2f64}) {
+        // Avoid marking truncating FP stores as legal to prevent the
+        // DAGCombiner from creating unsupported truncating stores.
+        setTruncStoreAction(VT, InnerVT, Expand);
+      }
+
       setOperationAction(ISD::CONCAT_VECTORS, VT, Custom);
       setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
       setOperationAction(ISD::MGATHER, VT, Custom);
@@ -2152,6 +2159,24 @@ MachineBasicBlock *AArch64TargetLowering::EmitInstrWithCustomInserter(
 //===----------------------------------------------------------------------===//
 // Lowering Code
 //===----------------------------------------------------------------------===//
+
+/// isZerosVector - Check whether SDNode N is a zero-filled vector.
+static bool isZerosVector(const SDNode *N) {
+  // Look through a bit convert.
+  while (N->getOpcode() == ISD::BITCAST)
+    N = N->getOperand(0).getNode();
+
+  if (ISD::isConstantSplatVectorAllZeros(N))
+    return true;
+
+  if (N->getOpcode() != AArch64ISD::DUP)
+    return false;
+
+  auto Opnd0 = N->getOperand(0);
+  auto *CINT = dyn_cast<ConstantSDNode>(Opnd0);
+  auto *CFP = dyn_cast<ConstantFPSDNode>(Opnd0);
+  return (CINT && CINT->isNullValue()) || (CFP && CFP->isZero());
+}
 
 /// changeIntCCToAArch64CC - Convert a DAG integer condition code to an AArch64
 /// CC
@@ -3924,9 +3949,13 @@ SDValue AArch64TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                        Op.getOperand(2));
   }
   case Intrinsic::aarch64_neon_sdot:
-  case Intrinsic::aarch64_neon_udot: {
-    unsigned Opcode = IntNo == Intrinsic::aarch64_neon_udot ? AArch64ISD::UDOT
-                                                            : AArch64ISD::SDOT;
+  case Intrinsic::aarch64_neon_udot:
+  case Intrinsic::aarch64_sve_sdot:
+  case Intrinsic::aarch64_sve_udot: {
+    unsigned Opcode = (IntNo == Intrinsic::aarch64_neon_udot ||
+                       IntNo == Intrinsic::aarch64_sve_udot)
+                          ? AArch64ISD::UDOT
+                          : AArch64ISD::SDOT;
     return DAG.getNode(Opcode, dl, Op.getValueType(), Op.getOperand(1),
                        Op.getOperand(2), Op.getOperand(3));
   }
@@ -4703,7 +4732,10 @@ SDValue AArch64TargetLowering::LowerFormalArguments(
       else if (ActualMVT == MVT::i16)
         ValVT = MVT::i16;
     }
-    CCAssignFn *AssignFn = CCAssignFnForCall(CallConv, /*IsVarArg=*/false);
+    bool UseVarArgCC = false;
+    if (IsWin64)
+      UseVarArgCC = isVarArg;
+    CCAssignFn *AssignFn = CCAssignFnForCall(CallConv, UseVarArgCC);
     bool Res =
         AssignFn(i, ValVT, ValVT, CCValAssign::Full, Ins[i].Flags, CCInfo);
     assert(!Res && "Call operand has unhandled type");
@@ -5333,6 +5365,8 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
   AArch64FunctionInfo *FuncInfo = MF.getInfo<AArch64FunctionInfo>();
   bool TailCallOpt = MF.getTarget().Options.GuaranteedTailCallOpt;
   bool IsSibCall = false;
+  bool IsWin64 =
+      Subtarget->isCallingConvWin64(MF.getFunction().getCallingConv());
 
   // Check callee args/returns for SVE registers and set calling convention
   // accordingly.
@@ -5382,8 +5416,12 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
                            "currently not supported");
 
       ISD::ArgFlagsTy ArgFlags = Outs[i].Flags;
-      CCAssignFn *AssignFn = CCAssignFnForCall(CallConv,
-                                               /*IsVarArg=*/ !Outs[i].IsFixed);
+      bool UseVarArgCC = !Outs[i].IsFixed;
+      // On Windows, the fixed arguments in a vararg call are passed in GPRs
+      // too, so use the vararg CC to force them to integer registers.
+      if (IsWin64)
+        UseVarArgCC = true;
+      CCAssignFn *AssignFn = CCAssignFnForCall(CallConv, UseVarArgCC);
       bool Res = AssignFn(i, ArgVT, ArgVT, CCValAssign::Full, ArgFlags, CCInfo);
       assert(!Res && "Call operand has unhandled type");
       (void)Res;
@@ -12544,6 +12582,44 @@ static SDValue tryCombineToBSL(SDNode *N,
   if (N1.getOpcode() != ISD::AND)
     return SDValue();
 
+  // InstCombine does (not (neg a)) => (add a -1).
+  // Try: (or (and (neg a) b) (and (add a -1) c)) => (bsl (neg a) b c)
+  // Loop over all combinations of AND operands.
+  for (int i = 1; i >= 0; --i) {
+    for (int j = 1; j >= 0; --j) {
+      SDValue O0 = N0->getOperand(i);
+      SDValue O1 = N1->getOperand(j);
+      SDValue Sub, Add, SubSibling, AddSibling;
+
+      // Find a SUB and an ADD operand, one from each AND.
+      if (O0.getOpcode() == ISD::SUB && O1.getOpcode() == ISD::ADD) {
+        Sub = O0;
+        Add = O1;
+        SubSibling = N0->getOperand(1 - i);
+        AddSibling = N1->getOperand(1 - j);
+      } else if (O0.getOpcode() == ISD::ADD && O1.getOpcode() == ISD::SUB) {
+        Add = O0;
+        Sub = O1;
+        AddSibling = N0->getOperand(1 - i);
+        SubSibling = N1->getOperand(1 - j);
+      } else
+        continue;
+
+      if (!ISD::isBuildVectorAllZeros(Sub.getOperand(0).getNode()))
+        continue;
+
+      // Constant ones is always righthand operand of the Add.
+      if (!ISD::isBuildVectorAllOnes(Add.getOperand(1).getNode()))
+        continue;
+
+      if (Sub.getOperand(1) != Add.getOperand(0))
+        continue;
+
+      return DAG.getNode(AArch64ISD::BSP, DL, VT, Sub, SubSibling, AddSibling);
+    }
+  }
+
+  // (or (and a b) (and (not a) c)) => (bsl a b c)
   // We only have to look for constant vectors here since the general, variable
   // case can be handled in TableGen.
   unsigned Bits = VT.getScalarSizeInBits();
@@ -13340,7 +13416,7 @@ static SDValue performAddDotCombine(SDNode *N, SelectionDAG &DAG) {
   auto isZeroDot = [](SDValue Dot) {
     return (Dot.getOpcode() == AArch64ISD::UDOT ||
             Dot.getOpcode() == AArch64ISD::SDOT) &&
-           ISD::isBuildVectorAllZeros(Dot.getOperand(0).getNode());
+           isZerosVector(Dot.getOperand(0).getNode());
   };
   if (!isZeroDot(Dot))
     std::swap(Dot, A);
