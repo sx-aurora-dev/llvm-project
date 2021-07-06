@@ -2882,9 +2882,8 @@ void Generic_GCC::AddMultilibIncludeArgs(const ArgList &DriverArgs,
 
 void Generic_GCC::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
                                                ArgStringList &CC1Args) const {
-  if (DriverArgs.hasArg(options::OPT_nostdinc) ||
-      DriverArgs.hasArg(options::OPT_nostdincxx) ||
-      DriverArgs.hasArg(options::OPT_nostdlibinc))
+  if (DriverArgs.hasArg(options::OPT_nostdinc, options::OPT_nostdincxx,
+                        options::OPT_nostdlibinc))
     return;
 
   switch (GetCXXStdlibType(DriverArgs)) {
@@ -2984,9 +2983,13 @@ Generic_GCC::addGCCLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
           TripleStr, Multilib.includeSuffix(), DriverArgs, CC1Args))
     return true;
   // Detect Debian g++-multiarch-incdir.diff.
+  StringRef DebianMultiarch =
+      GCCInstallation.getTriple().getArch() == llvm::Triple::x86
+          ? "i386-linux-gnu"
+          : TripleStr;
   if (addLibStdCXXIncludePaths(LibDir.str() + "/../include/c++/" + Version.Text,
-                               TripleStr, Multilib.includeSuffix(), DriverArgs,
-                               CC1Args, /*Debian=*/true))
+                               DebianMultiarch, Multilib.includeSuffix(),
+                               DriverArgs, CC1Args, /*Debian=*/true))
     return true;
 
   // Otherwise, fall back on a bunch of options which don't use multiarch

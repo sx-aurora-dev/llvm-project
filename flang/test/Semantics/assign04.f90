@@ -1,4 +1,4 @@
-! RUN: %S/test_errors.sh %s %t %f18
+! RUN: %S/test_errors.sh %s %t %flang_fc1
 ! 9.4.5
 subroutine s1
   type :: t(k, l)
@@ -8,7 +8,7 @@ subroutine s1
   type(t(1, 2)) :: x
   !ERROR: Assignment to constant 'x%k' is not allowed
   x%k = 4
-  !ERROR: Left-hand side of assignment is not modifiable
+  !ERROR: Assignment to constant 'x%l' is not allowed
   x%l = 3
 end
 

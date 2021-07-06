@@ -321,7 +321,7 @@ C++ for OpenCL Implementation Status
 
 Clang implements language version 1.0 published in `the official
 release of C++ for OpenCL Documentation
-<https://github.com/KhronosGroup/OpenCL-Docs/releases/tag/cxxforopencl-v1.0-r1>`_.
+<https://github.com/KhronosGroup/OpenCL-Docs/releases/tag/cxxforopencl-v1.0-r2>`_.
 
 Limited support of experimental C++ libraries is described in the :ref:`experimental features <opencl_experimenal>`.
 
@@ -380,7 +380,7 @@ implementation status.
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
 | Feature optionality          | Work group collective functions                              | :part:`worked on`    | https://reviews.llvm.org/D92004                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
-| New functionality            | RGBA vector components                                       | :none:`unclaimed`    |                                                                           |
+| New functionality            | RGBA vector components                                       | :good:`done`         | https://reviews.llvm.org/D99969                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
 | New functionality            | Subgroup functions                                           | :part:`worked on`    | https://reviews.llvm.org/D92004                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
@@ -398,7 +398,7 @@ Feel free to contact us on `cfe-dev
 <https://lists.llvm.org/mailman/listinfo/cfe-dev>`_ or via `Bugzilla
 <https://bugs.llvm.org/>`__.
 
-.. _opencl_experimenal_cxxlibs:
+.. _opencl_experimental_cxxlibs:
 
 C++ libraries for OpenCL
 ------------------------

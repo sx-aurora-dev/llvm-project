@@ -40,6 +40,8 @@ enum NodeType : unsigned {
   BuildPairF64,
   SplitF64,
   TAIL,
+  // Multiply high for signedxunsigned.
+  MULHSU,
   // RV64I shifts, directly matching the semantics of the named RISC-V
   // instructions.
   SLLW,
@@ -87,14 +89,13 @@ enum NodeType : unsigned {
   // Generalized Reverse and Generalized Or-Combine - directly matching the
   // semantics of the named RISC-V instructions. Lowered as custom nodes as
   // TableGen chokes when faced with commutative permutations in deeply-nested
-  // DAGs. Each node takes an input operand and a TargetConstant immediate
-  // shift amount, and outputs a bit-manipulated version of input. All operands
-  // are of type XLenVT.
-  GREVI,
-  GREVIW,
-  GORCI,
-  GORCIW,
-  SHFLI,
+  // DAGs. Each node takes an input operand and a control operand and outputs a
+  // bit-manipulated version of input. All operands are i32 or XLenVT.
+  GREV,
+  GREVW,
+  GORC,
+  GORCW,
+  SHFL,
   // Vector Extension
   // VMV_V_X_VL matches the semantics of vmv.v.x but includes an extra operand
   // for the VL value to be used for the operation.
@@ -105,9 +106,10 @@ enum NodeType : unsigned {
   // VMV_X_S matches the semantics of vmv.x.s. The result is always XLenVT sign
   // extended from the vector element size.
   VMV_X_S,
-  // VMV_S_XF_VL matches the semantics of vmv.s.x/vmv.s.f, depending on the
-  // types of its operands. It carries a VL operand.
-  VMV_S_XF_VL,
+  // VMV_S_X_VL matches the semantics of vmv.s.x. It carries a VL operand.
+  VMV_S_X_VL,
+  // VFMV_S_F_VL matches the semantics of vfmv.s.f. It carries a VL operand.
+  VFMV_S_F_VL,
   // Splats an i64 scalar to a vector type (with element type i64) where the
   // scalar is a sign-extended i32.
   SPLAT_VECTOR_I64,
@@ -125,10 +127,11 @@ enum NodeType : unsigned {
   // and the fifth the VL.
   VSLIDEUP_VL,
   VSLIDEDOWN_VL,
-  // Matches the semantics of vslide1up. The first operand is the source
-  // vector, the second is the XLenVT scalar value. The third and fourth
+  // Matches the semantics of vslide1up/slide1down. The first operand is the
+  // source vector, the second is the XLenVT scalar value. The third and fourth
   // operands are the mask and VL operands.
   VSLIDE1UP_VL,
+  VSLIDE1DOWN_VL,
   // Matches the semantics of the vid.v instruction, with a mask and VL
   // operand.
   VID_VL,
@@ -222,6 +225,24 @@ enum NodeType : unsigned {
   // Vector sign/zero extend with additional mask & VL operands.
   VSEXT_VL,
   VZEXT_VL,
+  //  vpopc.m with additional mask and VL operands.
+  VPOPC_VL,
+
+  // Reads value of CSR.
+  // The first operand is a chain pointer. The second specifies address of the
+  // required CSR. Two results are produced, the read value and the new chain
+  // pointer.
+  READ_CSR,
+  // Write value to CSR.
+  // The first operand is a chain pointer, the second specifies address of the
+  // required CSR and the third is the value to write. The result is the new
+  // chain pointer.
+  WRITE_CSR,
+  // Read and write value of CSR.
+  // The first operand is a chain pointer, the second specifies address of the
+  // required CSR and the third is the value to write. Two results are produced,
+  // the value read before the modification and the new chain pointer.
+  SWAP_CSR,
 
   // Memory opcodes start here.
   VLE_VL = ISD::FIRST_TARGET_MEMORY_OPCODE,
@@ -258,6 +279,19 @@ public:
   bool isCheapToSpeculateCtlz() const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
+
+  bool softPromoteHalfType() const override { return true; }
+
+  /// Return the register type for a given MVT, ensuring vectors are treated
+  /// as a series of gpr sized integers.
+  MVT getRegisterTypeForCallingConv(LLVMContext &Context, CallingConv::ID CC,
+                                    EVT VT) const override;
+
+  /// Return the number of registers for a given MVT, ensuring vectors are
+  /// treated as a series of gpr sized integers.
+  unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                         CallingConv::ID CC,
+                                         EVT VT) const override;
 
   /// Return true if the given shuffle mask can be codegen'd directly, or if it
   /// should be stack expanded.
@@ -474,6 +508,7 @@ private:
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVectorMaskVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFPVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerINSERT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
