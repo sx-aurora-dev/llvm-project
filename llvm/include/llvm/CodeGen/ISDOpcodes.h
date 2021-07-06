@@ -583,6 +583,23 @@ enum NodeType {
   /// implicitly truncated to it.
   SPLAT_VECTOR,
 
+  /// SPLAT_VECTOR_PARTS(SCALAR1, SCALAR2, ...) - Returns a vector with the
+  /// scalar values joined together and then duplicated in all lanes. This
+  /// represents a SPLAT_VECTOR that has had its scalar operand expanded. This
+  /// allows representing a 64-bit splat on a target with 32-bit integers. The
+  /// total width of the scalars must cover the element width. SCALAR1 contains
+  /// the least significant bits of the value regardless of endianness and all
+  /// scalars should have the same type.
+  SPLAT_VECTOR_PARTS,
+
+  /// STEP_VECTOR(IMM) - Returns a scalable vector whose lanes are comprised
+  /// of a linear sequence of unsigned values starting from 0 with a step of
+  /// IMM, where IMM must be a constant positive integer value. The operation
+  /// does not support returning fixed-width vectors or non-constant operands.
+  /// If the sequence value exceeds the limit allowed for the element type then
+  /// the values for those lanes are undefined.
+  STEP_VECTOR,
+
   /// MULHU/MULHS - Multiply high - Multiply two integers of type iN,
   /// producing an unsigned/signed value of type i[2*N], then return the top
   /// part.

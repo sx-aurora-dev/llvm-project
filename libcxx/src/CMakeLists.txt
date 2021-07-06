@@ -259,12 +259,13 @@ if (LIBCXX_ENABLE_SHARED)
   endif()
 endif()
 
+set(CMAKE_STATIC_LIBRARY_PREFIX "lib")
+
 # Build the static library.
 if (LIBCXX_ENABLE_STATIC)
   add_library(cxx_static STATIC ${exclude_from_all} ${LIBCXX_SOURCES} ${LIBCXX_HEADERS})
   target_link_libraries(cxx_static PUBLIC cxx-headers
                                    PRIVATE ${LIBCXX_LIBRARIES})
-  set(CMAKE_STATIC_LIBRARY_PREFIX "lib")
   set_target_properties(cxx_static
     PROPERTIES
       COMPILE_FLAGS "${LIBCXX_COMPILE_FLAGS}"
@@ -297,6 +298,9 @@ if (LIBCXX_ENABLE_STATIC)
     else()
       set(MERGE_ARCHIVES_ABI_TARGET
         "${CMAKE_STATIC_LIBRARY_PREFIX}${LIBCXX_CXX_STATIC_ABI_LIBRARY}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+      if (LIBCXX_CXX_ABI_LIBRARY_PATH)
+        set(MERGE_ARCHIVES_ABI_TARGET "${LIBCXX_CXX_ABI_LIBRARY_PATH}/${MERGE_ARCHIVES_ABI_TARGET}")
+      endif ()
     endif()
     if (APPLE)
       set(MERGE_ARCHIVES_LIBTOOL "--use-libtool" "--libtool" "${CMAKE_LIBTOOL}")
@@ -312,6 +316,7 @@ if (LIBCXX_ENABLE_STATIC)
       "${MERGE_ARCHIVES_ABI_TARGET}"
       "${MERGE_ARCHIVES_SEARCH_PATHS}"
     WORKING_DIRECTORY ${LIBCXX_BUILD_DIR}
+    DEPENDS ${MERGE_ARCHIVES_ABI_TARGET}
     )
   endif()
 endif()

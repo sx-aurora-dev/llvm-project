@@ -978,20 +978,14 @@ static bool shouldAssumeDSOLocal(const CodeGenModule &CGM,
   if (TT.isOSBinFormatCOFF() || (TT.isOSWindows() && TT.isOSBinFormatMachO()))
     return true;
 
-  const auto &CGOpts = CGM.getCodeGenOpts();
-  llvm::Reloc::Model RM = CGOpts.RelocationModel;
-  const auto &LOpts = CGM.getLangOpts();
-
-  if (TT.isOSBinFormatMachO()) {
-    if (RM == llvm::Reloc::Static)
-      return true;
-    return GV->isStrongDefinitionForLinker();
-  }
-
   // Only handle COFF and ELF for now.
   if (!TT.isOSBinFormatELF())
     return false;
 
+  // If this is not an executable, don't assume anything is local.
+  const auto &CGOpts = CGM.getCodeGenOpts();
+  llvm::Reloc::Model RM = CGOpts.RelocationModel;
+  const auto &LOpts = CGM.getLangOpts();
   if (RM != llvm::Reloc::Static && !LOpts.PIE) {
     // On ELF, if -fno-semantic-interposition is specified and the target
     // supports local aliases, there will be neither CC1
@@ -1175,18 +1169,13 @@ static void AppendTargetMangling(const CodeGenModule &CGM,
   }
 }
 
-// Returns true if GD is a function/var decl with internal linkage and
+// Returns true if GD is a function decl with internal linkage and
 // needs a unique suffix after the mangled name.
 static bool isUniqueInternalLinkageDecl(GlobalDecl GD,
                                         CodeGenModule &CGM) {
   const Decl *D = GD.getDecl();
-  if (!CGM.getModuleNameHash().empty() &&
-      ((isa<FunctionDecl>(D) &&
-        CGM.getFunctionLinkage(GD) == llvm::GlobalValue::InternalLinkage) ||
-       (isa<VarDecl>(D) && CGM.getContext().GetGVALinkageForVariable(
-                               cast<VarDecl>(D)) == GVA_Internal)))
-    return true;
-  return false;
+  return !CGM.getModuleNameHash().empty() && isa<FunctionDecl>(D) &&
+         (CGM.getFunctionLinkage(GD) == llvm::GlobalValue::InternalLinkage);
 }
 
 static std::string getMangledNameImpl(CodeGenModule &CGM, GlobalDecl GD,
@@ -4267,9 +4256,9 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
        D->getType()->isCUDADeviceBuiltinTextureType());
   if (getLangOpts().CUDA &&
       (IsCUDASharedVar || IsCUDAShadowVar || IsCUDADeviceShadowVar))
-    Init = llvm::UndefValue::get(getTypes().ConvertType(ASTTy));
+    Init = llvm::UndefValue::get(getTypes().ConvertTypeForMem(ASTTy));
   else if (D->hasAttr<LoaderUninitializedAttr>())
-    Init = llvm::UndefValue::get(getTypes().ConvertType(ASTTy));
+    Init = llvm::UndefValue::get(getTypes().ConvertTypeForMem(ASTTy));
   else if (!InitExpr) {
     // This is a tentative definition; tentative definitions are
     // implicitly initialized with { 0 }.
@@ -6263,15 +6252,16 @@ llvm::SanitizerStatReport &CodeGenModule::getSanStats() {
 
   return *SanStats;
 }
+
 llvm::Value *
 CodeGenModule::createOpenCLIntToSamplerConversion(const Expr *E,
                                                   CodeGenFunction &CGF) {
   llvm::Constant *C = ConstantEmitter(CGF).emitAbstract(E, E->getType());
-  auto SamplerT = getOpenCLRuntime().getSamplerType(E->getType().getTypePtr());
-  auto FTy = llvm::FunctionType::get(SamplerT, {C->getType()}, false);
-  return CGF.Builder.CreateCall(CreateRuntimeFunction(FTy,
-                                "__translate_sampler_initializer"),
-                                {C});
+  auto *SamplerT = getOpenCLRuntime().getSamplerType(E->getType().getTypePtr());
+  auto *FTy = llvm::FunctionType::get(SamplerT, {C->getType()}, false);
+  auto *Call = CGF.EmitRuntimeCall(
+      CreateRuntimeFunction(FTy, "__translate_sampler_initializer"), {C});
+  return Call;
 }
 
 CharUnits CodeGenModule::getNaturalPointeeTypeAlignment(

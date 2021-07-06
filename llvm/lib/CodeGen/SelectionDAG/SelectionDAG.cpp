@@ -1487,6 +1487,22 @@ SDValue SelectionDAG::getConstant(const ConstantInt &Val, const SDLoc &DL,
     const APInt &NewVal = Elt->getValue();
     EVT ViaEltVT = TLI->getTypeToTransformTo(*getContext(), EltVT);
     unsigned ViaEltSizeInBits = ViaEltVT.getSizeInBits();
+
+    // For scalable vectors, try to use a SPLAT_VECTOR_PARTS node.
+    if (VT.isScalableVector()) {
+      assert(EltVT.getSizeInBits() % ViaEltSizeInBits == 0 &&
+             "Can only handle an even split!");
+      unsigned Parts = EltVT.getSizeInBits() / ViaEltSizeInBits;
+
+      SmallVector<SDValue, 2> ScalarParts;
+      for (unsigned i = 0; i != Parts; ++i)
+        ScalarParts.push_back(getConstant(
+            NewVal.lshr(i * ViaEltSizeInBits).trunc(ViaEltSizeInBits), DL,
+            ViaEltVT, isT, isO));
+
+      return getNode(ISD::SPLAT_VECTOR_PARTS, DL, VT, ScalarParts);
+    }
+
     unsigned ViaVecNumElts = VT.getSizeInBits() / ViaEltSizeInBits;
     EVT ViaVecVT = EVT::getVectorVT(*getContext(), ViaEltVT, ViaVecNumElts);
 
@@ -1830,6 +1846,18 @@ SDValue SelectionDAG::getCondCode(ISD::CondCode Cond) {
   }
 
   return SDValue(CondCodeNodes[Cond], 0);
+}
+
+SDValue SelectionDAG::getStepVector(const SDLoc &DL, EVT ResVT, SDValue Step) {
+  if (ResVT.isScalableVector())
+    return getNode(ISD::STEP_VECTOR, DL, ResVT, Step);
+
+  EVT OpVT = Step.getValueType();
+  APInt StepVal = cast<ConstantSDNode>(Step)->getAPIntValue();
+  SmallVector<SDValue, 16> OpsStepConstants;
+  for (uint64_t i = 0; i < ResVT.getVectorNumElements(); i++)
+    OpsStepConstants.push_back(getConstant(StepVal * i, DL, OpVT));
+  return getBuildVector(ResVT, DL, OpsStepConstants);
 }
 
 /// Swaps the values of N1 and N2. Swaps all indices in the shuffle mask M that
@@ -2558,6 +2586,7 @@ bool SelectionDAG::isSplatValue(SDValue V, const APInt &DemandedElts,
     }
     break;
   }
+  case ISD::ABS:
   case ISD::TRUNCATE:
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
@@ -2612,6 +2641,9 @@ bool SelectionDAG::isSplatValue(SDValue V, const APInt &DemandedElts,
   case ISD::EXTRACT_SUBVECTOR: {
     // Offset the demanded elts by the subvector index.
     SDValue Src = V.getOperand(0);
+    // We don't support scalable vectors at the moment.
+    if (Src.getValueType().isScalableVector())
+      return false;
     uint64_t Idx = V.getConstantOperandVal(1);
     unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
     APInt UndefSrcElts;
@@ -3061,6 +3093,38 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
     Known = computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
     Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
     Known = KnownBits::computeForMul(Known, Known2);
+    break;
+  }
+  case ISD::MULHU: {
+    Known = computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
+    Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
+    Known = KnownBits::mulhu(Known, Known2);
+    break;
+  }
+  case ISD::MULHS: {
+    Known = computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
+    Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
+    Known = KnownBits::mulhs(Known, Known2);
+    break;
+  }
+  case ISD::UMUL_LOHI: {
+    assert((Op.getResNo() == 0 || Op.getResNo() == 1) && "Unknown result");
+    Known = computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
+    Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
+    if (Op.getResNo() == 0)
+      Known = KnownBits::computeForMul(Known, Known2);
+    else
+      Known = KnownBits::mulhu(Known, Known2);
+    break;
+  }
+  case ISD::SMUL_LOHI: {
+    assert((Op.getResNo() == 0 || Op.getResNo() == 1) && "Unknown result");
+    Known = computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
+    Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
+    if (Op.getResNo() == 0)
+      Known = KnownBits::computeForMul(Known, Known2);
+    else
+      Known = KnownBits::mulhs(Known, Known2);
     break;
   }
   case ISD::UDIV: {
@@ -4391,6 +4455,14 @@ bool SelectionDAG::haveNoCommonBitsSet(SDValue A, SDValue B) const {
   return (computeKnownBits(A).Zero | computeKnownBits(B).Zero).isAllOnesValue();
 }
 
+static SDValue FoldSTEP_VECTOR(const SDLoc &DL, EVT VT, SDValue Step,
+                               SelectionDAG &DAG) {
+  if (cast<ConstantSDNode>(Step)->isNullValue())
+    return DAG.getConstant(0, DL, VT);
+
+  return SDValue();
+}
+
 static SDValue FoldBUILD_VECTOR(const SDLoc &DL, EVT VT,
                                 ArrayRef<SDValue> Ops,
                                 SelectionDAG &DAG) {
@@ -4612,6 +4684,11 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
                         APFloat::rmNearestTiesToEven, &Ignored);
       return getConstantFP(FPV, DL, VT);
     }
+    case ISD::STEP_VECTOR: {
+      if (SDValue V = FoldSTEP_VECTOR(DL, VT, Operand, *this))
+        return V;
+      break;
+    }
     }
   }
 
@@ -4721,6 +4798,18 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
 
   unsigned OpOpcode = Operand.getNode()->getOpcode();
   switch (Opcode) {
+  case ISD::STEP_VECTOR:
+    assert(VT.isScalableVector() &&
+           "STEP_VECTOR can only be used with scalable types");
+    assert(VT.getScalarSizeInBits() >= 8 &&
+           "STEP_VECTOR can only be used with vectors of integers that are at "
+           "least 8 bits wide");
+    assert(Operand.getValueType().bitsGE(VT.getScalarType()) &&
+           "Operand type should be at least as large as the element type");
+    assert(isa<ConstantSDNode>(Operand) &&
+           cast<ConstantSDNode>(Operand)->getAPIntValue().isNonNegative() &&
+           "Expected positive integer constant for STEP_VECTOR");
+    break;
   case ISD::FREEZE:
     assert(VT == Operand.getValueType() && "Unexpected VT!");
     break;
@@ -5164,9 +5253,6 @@ SDValue SelectionDAG::FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL,
 
   assert(VT.getVectorNumElements() == Outputs.size() &&
          "Vector size mismatch!");
-
-  // We may have a vector type but a scalar result. Create a splat.
-  Outputs.resize(VT.getVectorNumElements(), Outputs.back());
 
   // Build a big vector out of the scalar elements we generated.
   return getBuildVector(VT, SDLoc(), Outputs);
@@ -6258,7 +6344,7 @@ static SDValue getMemcpyLoadsAndStores(SelectionDAG &DAG, const SDLoc &dl,
     // Don't promote to an alignment that would require dynamic stack
     // realignment.
     const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-    if (!TRI->needsStackRealignment(MF))
+    if (!TRI->hasStackRealignment(MF))
       while (NewAlign > Alignment && DL.exceedsNaturalStackAlignment(NewAlign))
         NewAlign = NewAlign / 2;
 

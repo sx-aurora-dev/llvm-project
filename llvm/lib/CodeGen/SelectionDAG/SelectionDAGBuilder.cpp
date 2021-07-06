@@ -436,14 +436,11 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, const SDLoc &DL,
      if (ValueVT.getSizeInBits() == PartEVT.getSizeInBits()) {
        return DAG.getNode(ISD::BITCAST, DL, ValueVT, Val);
      } else if (ValueVT.bitsLT(PartEVT)) {
-       // Bitcast Val back the original type and extract the corresponding
-       // vector we want.
-       unsigned Elts = PartEVT.getSizeInBits() / ValueVT.getScalarSizeInBits();
-       EVT WiderVecType = EVT::getVectorVT(*DAG.getContext(),
-                                           ValueVT.getVectorElementType(), Elts);
-       Val = DAG.getBitcast(WiderVecType, Val);
-       return DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, ValueVT, Val,
-                          DAG.getVectorIdxConstant(0, DL));
+       const uint64_t ValueSize = ValueVT.getFixedSizeInBits();
+       EVT IntermediateType = EVT::getIntegerVT(*DAG.getContext(), ValueSize);
+       // Drop the extra bits.
+       Val = DAG.getNode(ISD::TRUNCATE, DL, IntermediateType, Val);
+       return DAG.getBitcast(ValueVT, Val);
      }
 
      diagnosePossiblyInvalidConstraint(
@@ -714,12 +711,24 @@ static void getCopyToPartsVector(SelectionDAG &DAG, const SDLoc &DL,
 
   EVT BuiltVectorTy = EVT::getVectorVT(
       *DAG.getContext(), IntermediateVT.getScalarType(), DestEltCnt.getValue());
-  if (ValueVT != BuiltVectorTy) {
-    if (SDValue Widened = widenVectorToPartType(DAG, Val, DL, BuiltVectorTy))
-      Val = Widened;
 
+  if (ValueVT == BuiltVectorTy) {
+    // Nothing to do.
+  } else if (ValueVT.getSizeInBits() == BuiltVectorTy.getSizeInBits()) {
+    // Bitconvert vector->vector case.
     Val = DAG.getNode(ISD::BITCAST, DL, BuiltVectorTy, Val);
+  } else if (SDValue Widened =
+                 widenVectorToPartType(DAG, Val, DL, BuiltVectorTy)) {
+    Val = Widened;
+  } else if (BuiltVectorTy.getVectorElementType().bitsGE(
+                 ValueVT.getVectorElementType()) &&
+             BuiltVectorTy.getVectorElementCount() ==
+                 ValueVT.getVectorElementCount()) {
+    // Promoted vector extract
+    Val = DAG.getAnyExtOrTrunc(Val, DL, BuiltVectorTy);
   }
+
+  assert(Val.getValueType() == BuiltVectorTy && "Unexpected vector value type");
 
   // Split the vector into intermediate operands.
   SmallVector<SDValue, 8> Ops(NumIntermediates);
@@ -1251,7 +1260,8 @@ void SelectionDAGBuilder::salvageUnresolvedDbgValue(DanglingDebugInfo &DDI) {
   // variable. FIXME: Further work could recover those too.
   while (isa<Instruction>(V)) {
     Instruction &VAsInst = *cast<Instruction>(V);
-    DIExpression *NewExpr = salvageDebugInfoImpl(VAsInst, Expr, StackValue);
+    // Temporary "0", awaiting real implementation.
+    DIExpression *NewExpr = salvageDebugInfoImpl(VAsInst, Expr, StackValue, 0);
 
     // If we cannot salvage any further, and haven't yet found a suitable debug
     // expression, bail out.
@@ -6238,7 +6248,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     DILocalVariable *Variable = DI.getVariable();
     DIExpression *Expression = DI.getExpression();
     dropDanglingDebugInfo(Variable, Expression);
-    SmallVector<Value *> Values(DI.getValues());
+    SmallVector<Value *, 4> Values(DI.getValues());
     if (Values.empty())
       return;
 
@@ -7129,7 +7139,9 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   case Intrinsic::experimental_deoptimize:
     LowerDeoptimizeCall(&I);
     return;
-
+  case Intrinsic::experimental_stepvector:
+    visitStepVector(I);
+    return;
   case Intrinsic::vector_reduce_fadd:
   case Intrinsic::vector_reduce_fmul:
   case Intrinsic::vector_reduce_add:
@@ -11280,6 +11292,16 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
 
     lowerWorkItem(W, SI.getCondition(), SwitchMBB, DefaultMBB);
   }
+}
+
+void SelectionDAGBuilder::visitStepVector(const CallInst &I) {
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  auto DL = getCurSDLoc();
+  EVT ResultVT = TLI.getValueType(DAG.getDataLayout(), I.getType());
+  EVT OpVT =
+      TLI.getTypeToTransformTo(*DAG.getContext(), ResultVT.getScalarType());
+  SDValue Step = DAG.getConstant(1, DL, OpVT);
+  setValue(&I, DAG.getStepVector(DL, ResultVT, Step));
 }
 
 void SelectionDAGBuilder::visitVectorReverse(const CallInst &I) {

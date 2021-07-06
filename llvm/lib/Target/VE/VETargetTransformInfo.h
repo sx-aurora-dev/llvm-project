@@ -125,11 +125,18 @@ public:
     return 0;
   }
 
-  unsigned getRegisterBitWidth(bool Vector) const {
-    if (!makeVectorOpsExpensive() && (simd() || enableVPU()) && Vector) {
-      return 256 * 64;
+  TypeSize getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
+    switch (K) {
+    case TargetTransformInfo::RGK_Scalar:
+      return TypeSize::getFixed(64);
+    case TargetTransformInfo::RGK_FixedWidthVector:
+      // TODO report vregs once vector isel is stable.
+      return TypeSize::getFixed(0);
+    case TargetTransformInfo::RGK_ScalableVector:
+      return TypeSize::getScalable(0);
     }
-    return 0;
+
+    llvm_unreachable("Unsupported register kind");
   }
 
   unsigned getMinVectorRegisterBitWidth() const {

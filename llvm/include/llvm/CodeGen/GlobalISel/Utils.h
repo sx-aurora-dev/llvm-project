@@ -44,6 +44,39 @@ class TargetRegisterClass;
 class ConstantFP;
 class APFloat;
 
+// Convenience macros for dealing with vector reduction opcodes.
+#define GISEL_VECREDUCE_CASES_ALL                                              \
+  case TargetOpcode::G_VECREDUCE_SEQ_FADD:                                     \
+  case TargetOpcode::G_VECREDUCE_SEQ_FMUL:                                     \
+  case TargetOpcode::G_VECREDUCE_FADD:                                         \
+  case TargetOpcode::G_VECREDUCE_FMUL:                                         \
+  case TargetOpcode::G_VECREDUCE_FMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_FMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_ADD:                                          \
+  case TargetOpcode::G_VECREDUCE_MUL:                                          \
+  case TargetOpcode::G_VECREDUCE_AND:                                          \
+  case TargetOpcode::G_VECREDUCE_OR:                                           \
+  case TargetOpcode::G_VECREDUCE_XOR:                                          \
+  case TargetOpcode::G_VECREDUCE_SMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_SMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_UMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_UMIN:
+
+#define GISEL_VECREDUCE_CASES_NONSEQ                                           \
+  case TargetOpcode::G_VECREDUCE_FADD:                                         \
+  case TargetOpcode::G_VECREDUCE_FMUL:                                         \
+  case TargetOpcode::G_VECREDUCE_FMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_FMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_ADD:                                          \
+  case TargetOpcode::G_VECREDUCE_MUL:                                          \
+  case TargetOpcode::G_VECREDUCE_AND:                                          \
+  case TargetOpcode::G_VECREDUCE_OR:                                           \
+  case TargetOpcode::G_VECREDUCE_XOR:                                          \
+  case TargetOpcode::G_VECREDUCE_SMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_SMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_UMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_UMIN:
+
 /// Try to constrain Reg to the specified register class. If this fails,
 /// create a new virtual register in the correct class.
 ///
@@ -204,6 +237,9 @@ void getSelectionDAGFallbackAnalysisUsage(AnalysisUsage &AU);
 Optional<APInt> ConstantFoldBinOp(unsigned Opcode, const Register Op1,
                                   const Register Op2,
                                   const MachineRegisterInfo &MRI);
+Optional<APFloat> ConstantFoldFPBinOp(unsigned Opcode, const Register Op1,
+                                      const Register Op2,
+                                      const MachineRegisterInfo &MRI);
 
 Optional<APInt> ConstantFoldExtOp(unsigned Opcode, const Register Op1,
                                   uint64_t Imm, const MachineRegisterInfo &MRI);
@@ -324,6 +360,13 @@ bool isBuildVectorAllOnes(const MachineInstr &MI,
 /// In the above case, this will return a RegOrConstant containing 4.
 Optional<RegOrConstant> getVectorSplat(const MachineInstr &MI,
                                        const MachineRegisterInfo &MRI);
+
+/// Attempt to match a unary predicate against a scalar/splat constant or every
+/// element of a constant G_BUILD_VECTOR. If \p ConstVal is null, the source
+/// value was undef.
+bool matchUnaryPredicate(const MachineRegisterInfo &MRI, Register Reg,
+                         std::function<bool(const Constant *ConstVal)> Match,
+                         bool AllowUndefs = false);
 
 /// Returns true if given the TargetLowering's boolean contents information,
 /// the value \p Val contains a true value.

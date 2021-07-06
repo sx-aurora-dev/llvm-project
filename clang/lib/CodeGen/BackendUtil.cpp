@@ -81,6 +81,7 @@
 #include "llvm/Transforms/Scalar/LowerMatrixIntrinsics.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/CanonicalizeAliases.h"
+#include "llvm/Transforms/Utils/Debugify.h"
 #include "llvm/Transforms/Utils/EntryExitInstrumenter.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
@@ -549,7 +550,7 @@ static bool initTargetOptions(DiagnosticsEngine &Diags,
   Options.EnableMachineFunctionSplitter = CodeGenOpts.SplitMachineFunctions;
   Options.FunctionSections = CodeGenOpts.FunctionSections;
   Options.DataSections = CodeGenOpts.DataSections;
-  Options.IgnoreXCOFFVisibility = CodeGenOpts.IgnoreXCOFFVisibility;
+  Options.IgnoreXCOFFVisibility = LangOpts.IgnoreXCOFFVisibility;
   Options.UniqueSectionNames = CodeGenOpts.UniqueSectionNames;
   Options.UniqueBasicBlockSectionNames =
       CodeGenOpts.UniqueBasicBlockSectionNames;
@@ -945,7 +946,16 @@ void EmitAssemblyHelper::EmitAssembly(BackendAction Action,
   if (TM)
     TheModule->setDataLayout(TM->createDataLayout());
 
-  legacy::PassManager PerModulePasses;
+  DebugifyCustomPassManager PerModulePasses;
+  DebugInfoPerPassMap DIPreservationMap;
+  if (CodeGenOpts.EnableDIPreservationVerify) {
+    PerModulePasses.setDebugifyMode(DebugifyMode::OriginalDebugInfo);
+    PerModulePasses.setDIPreservationMap(DIPreservationMap);
+
+    if (!CodeGenOpts.DIBugsReportFilePath.empty())
+      PerModulePasses.setOrigDIVerifyBugsReportFilePath(
+          CodeGenOpts.DIBugsReportFilePath);
+  }
   PerModulePasses.add(
       createTargetTransformInfoWrapperPass(getTargetIRAnalysis()));
 
@@ -1493,10 +1503,7 @@ static void runThinLTOBackend(
   // we should only invoke this using the individual indexes written out
   // via a WriteIndexesThinBackend.
   FunctionImporter::ImportMapTy ImportList;
-  std::vector<std::unique_ptr<llvm::MemoryBuffer>> OwnedImports;
-  MapVector<llvm::StringRef, llvm::BitcodeModule> ModuleMap;
-  if (!lto::loadReferencedModules(*M, *CombinedIndex, ImportList, ModuleMap,
-                                  OwnedImports))
+  if (!lto::initImportList(*M, *CombinedIndex, ImportList))
     return;
 
   auto AddStream = [&](size_t Task) {
@@ -1573,7 +1580,7 @@ static void runThinLTOBackend(
   if (Error E =
           thinBackend(Conf, -1, AddStream, *M, *CombinedIndex, ImportList,
                       ModuleToDefinedGVSummaries[M->getModuleIdentifier()],
-                      ModuleMap, CGOpts.CmdArgs)) {
+                      /* ModuleMap */ nullptr, CGOpts.CmdArgs)) {
     handleAllErrors(std::move(E), [&](ErrorInfoBase &EIB) {
       errs() << "Error running ThinLTO backend: " << EIB.message() << '\n';
     });

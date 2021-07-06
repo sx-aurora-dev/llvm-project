@@ -11,6 +11,8 @@ import threading
 
 from mlir import ir
 from .comprehension import *
+from .config import *
+from .emitter import *
 
 _CONTEXT = threading.local()
 
@@ -42,9 +44,40 @@ class DefinedOpCallable:
     self.op_name = op_name
     self.model = model
 
-  def __call__(self, *args, **kwargs):
-    # TODO: Upstream the emitter and invoke here
-    raise NotImplementedError("Linalg generic emission not yet implemented")
+  def __call__(self, *args, emit_generic: bool = False, **kwargs):
+    """Emits the corresponding op definition as IR.
+
+    Most arguments are passed through to the underlying emitter. The following
+    are interpreted here:
+      emit_generic: Emits a generic form as appropriate (default True). If
+        False, a named form is emitted (which must have been built in to the
+        compiler).
+    """
+    op_configs = LinalgOpConfig.from_linalg_op_def(self.model,
+                                                   context=ir.Context.current)
+
+    if len(op_configs) != 1:
+      # TODO: Support composite ops.
+      raise NotImplementedError(
+          f"Emission of composite linalg ops not supported: {op_configs}")
+
+    ctx = ir.Context.current
+    linalgDialect = ctx.get_dialect_descriptor("linalg")
+    fully_qualified_name = 'linalg.' + self.op_name
+    emit_generic = (emit_generic or not ctx.is_registered_operation(fully_qualified_name))
+
+    op_config = op_configs[0]
+    if op_config.structured_op:
+      if emit_generic:
+        return emit_generic_structured_op(op_config.structured_op, *args,
+                                          **kwargs)
+      else:
+        return emit_named_structured_op(
+          op_config.structured_op, self.op_name,
+          self.model.metadata.cpp_class_name, *args, **kwargs)
+
+    raise NotImplementedError(
+        f"Emission of linalg op type not supported: {op_config}")
 
 
 def linalg_structured_op(dsl_func=None,
@@ -64,7 +97,7 @@ def linalg_structured_op(dsl_func=None,
     op_class_name = f"{''.join(x.title() for x in op_name.split('_'))}Op"
 
   tc_model = LinalgOpDef(name=op_name,
-                         cpp_op_name=op_class_name,
+                         cpp_class_name=op_class_name,
                          doc=inspect.getdoc(dsl_func))
 
   # Extract arguments and TensorDefs from the signature.

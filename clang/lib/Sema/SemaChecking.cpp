@@ -837,7 +837,8 @@ static bool checkOpenCLBlockArgs(Sema &S, Expr *BlockArg) {
 }
 
 static bool checkOpenCLSubgroupExt(Sema &S, CallExpr *Call) {
-  if (!S.getOpenCLOptions().isEnabled("cl_khr_subgroups")) {
+  if (!S.getOpenCLOptions().isAvailableOption("cl_khr_subgroups",
+                                              S.getLangOpts())) {
     S.Diag(Call->getBeginLoc(), diag::err_opencl_requires_extension)
         << 1 << Call->getDirectCallee() << "cl_khr_subgroups";
     return true;
@@ -1965,6 +1966,26 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
 
   case Builtin::BI__builtin_matrix_column_major_store:
     return SemaBuiltinMatrixColumnMajorStore(TheCall, TheCallResult);
+
+  case Builtin::BI__builtin_get_device_side_mangled_name: {
+    auto Check = [](CallExpr *TheCall) {
+      if (TheCall->getNumArgs() != 1)
+        return false;
+      auto *DRE = dyn_cast<DeclRefExpr>(TheCall->getArg(0)->IgnoreImpCasts());
+      if (!DRE)
+        return false;
+      auto *D = DRE->getDecl();
+      if (!isa<FunctionDecl>(D) && !isa<VarDecl>(D))
+        return false;
+      return D->hasAttr<CUDAGlobalAttr>() || D->hasAttr<CUDADeviceAttr>() ||
+             D->hasAttr<CUDAConstantAttr>() || D->hasAttr<HIPManagedAttr>();
+    };
+    if (!Check(TheCall)) {
+      Diag(TheCall->getBeginLoc(),
+           diag::err_hip_invalid_args_builtin_mangled_name);
+      return ExprError();
+    }
+  }
   }
 
   // Since the target specific builtins for each arch overlap, only check those
@@ -4491,7 +4512,8 @@ void Sema::CheckArgAlignment(SourceLocation Loc, NamedDecl *FDecl,
 
   // Find expected alignment, and the actual alignment of the passed object.
   // getTypeAlignInChars requires complete types
-  if (ParamTy->isIncompleteType() || ArgTy->isIncompleteType())
+  if (ParamTy->isIncompleteType() || ArgTy->isIncompleteType() ||
+      ParamTy->isUndeducedType() || ArgTy->isUndeducedType())
     return;
 
   CharUnits ParamAlign = Context.getTypeAlignInChars(ParamTy);
@@ -4503,7 +4525,7 @@ void Sema::CheckArgAlignment(SourceLocation Loc, NamedDecl *FDecl,
     Diag(Loc, diag::warn_param_mismatched_alignment)
         << (int)ArgAlign.getQuantity() << (int)ParamAlign.getQuantity()
         << ParamName << FDecl;
-};
+}
 
 /// Handles the checks for format strings, non-POD arguments to vararg
 /// functions, NULL arguments passed to non-NULL parameters, and diagnose_if
@@ -8730,8 +8752,11 @@ CheckPrintfHandler::checkFormatExpr(const analyze_printf::PrintfSpecifier &FS,
   } else if (const CharacterLiteral *CL = dyn_cast<CharacterLiteral>(E)) {
     // Special case for 'a', which has type 'int' in C.
     // Note, however, that we do /not/ want to treat multibyte constants like
-    // 'MooV' as characters! This form is deprecated but still exists.
-    if (ExprTy == S.Context.IntTy)
+    // 'MooV' as characters! This form is deprecated but still exists. In
+    // addition, don't treat expressions as of type 'char' if one byte length
+    // modifier is provided.
+    if (ExprTy == S.Context.IntTy &&
+        FS.getLengthModifier().getKind() != LengthModifier::AsChar)
       if (llvm::isUIntN(S.Context.getCharWidth(), CL->getValue()))
         ExprTy = S.Context.CharTy;
   }

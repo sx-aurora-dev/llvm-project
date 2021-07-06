@@ -258,7 +258,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       Builder.CreateBr(TheOnlyDest);
       BasicBlock *BB = SI->getParent();
 
-      SmallSetVector<BasicBlock *, 8> RemovedSuccessors;
+      SmallSet<BasicBlock *, 8> RemovedSuccessors;
 
       // Remove entries from PHI nodes which we no longer branch to...
       BasicBlock *SuccToKeep = TheOnlyDest;
@@ -330,7 +330,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
     if (auto *BA =
           dyn_cast<BlockAddress>(IBI->getAddress()->stripPointerCasts())) {
       BasicBlock *TheOnlyDest = BA->getBasicBlock();
-      SmallSetVector<BasicBlock *, 8> RemovedSuccessors;
+      SmallSet<BasicBlock *, 8> RemovedSuccessors;
 
       // Insert the new branch.
       Builder.CreateBr(TheOnlyDest);
@@ -411,7 +411,7 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     return true;
   }
   if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(I)) {
-    if (DVI->getValue())
+    if (DVI->hasArgList() || DVI->getValue(0))
       return false;
     return true;
   }
@@ -1360,7 +1360,7 @@ static bool PhiHasDebugValue(DILocalVariable *DIVar,
   SmallVector<DbgValueInst *, 1> DbgValues;
   findDbgValues(DbgValues, APN);
   for (auto *DVI : DbgValues) {
-    assert(DVI->getValue() == APN);
+    assert(is_contained(DVI->getValues(), APN));
     if ((DVI->getVariable() == DIVar) && (DVI->getExpression() == DIExpr))
       return true;
   }
@@ -1387,13 +1387,19 @@ static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
   // We can't always calculate the size of the DI variable (e.g. if it is a
   // VLA). Try to use the size of the alloca that the dbg intrinsic describes
   // intead.
-  if (DII->isAddressOfVariable())
-    if (auto *AI = dyn_cast_or_null<AllocaInst>(DII->getVariableLocationOp(0)))
+  if (DII->isAddressOfVariable()) {
+    // DII should have exactly 1 location when it is an address.
+    assert(DII->getNumVariableLocationOps() == 1 &&
+           "address of variable must have exactly 1 location operand.");
+    if (auto *AI =
+            dyn_cast_or_null<AllocaInst>(DII->getVariableLocationOp(0))) {
       if (Optional<TypeSize> FragmentSize = AI->getAllocationSizeInBits(DL)) {
         assert(ValueSize.isScalable() == FragmentSize->isScalable() &&
                "Both sizes should agree on the scalable flag.");
         return TypeSize::isKnownGE(ValueSize, *FragmentSize);
       }
+    }
+  }
   // Could not determine size of variable. Conservatively return false.
   return false;
 }
@@ -1596,17 +1602,26 @@ void llvm::insertDebugValuesForPHIs(BasicBlock *BB,
   ValueToValueMapTy DbgValueMap;
   for (auto &I : *BB) {
     if (auto DbgII = dyn_cast<DbgVariableIntrinsic>(&I)) {
-      if (auto *Loc =
-              dyn_cast_or_null<PHINode>(DbgII->getVariableLocationOp(0)))
-        DbgValueMap.insert({Loc, DbgII});
+      for (Value *V : DbgII->location_ops())
+        if (auto *Loc = dyn_cast_or_null<PHINode>(V))
+          DbgValueMap.insert({Loc, DbgII});
     }
   }
   if (DbgValueMap.size() == 0)
     return;
 
+  // Map a pair of the destination BB and old dbg.value to the new dbg.value,
+  // so that if a dbg.value is being rewritten to use more than one of the
+  // inserted PHIs in the same destination BB, we can update the same dbg.value
+  // with all the new PHIs instead of creating one copy for each.
+  MapVector<std::pair<BasicBlock *, DbgVariableIntrinsic *>,
+            DbgVariableIntrinsic *>
+      NewDbgValueMap;
   // Then iterate through the new PHIs and look to see if they use one of the
-  // previously mapped PHIs. If so, insert a new dbg.value intrinsic that will
-  // propagate the info through the new PHI.
+  // previously mapped PHIs. If so, create a new dbg.value intrinsic that will
+  // propagate the info through the new PHI. If we use more than one new PHI in
+  // a single destination BB with the same old dbg.value, merge the updates so
+  // that we get a single new dbg.value with all the new PHIs.
   for (auto PHI : InsertedPHIs) {
     BasicBlock *Parent = PHI->getParent();
     // Avoid inserting an intrinsic into an EH block.
@@ -1616,14 +1631,26 @@ void llvm::insertDebugValuesForPHIs(BasicBlock *BB,
       auto V = DbgValueMap.find(VI);
       if (V != DbgValueMap.end()) {
         auto *DbgII = cast<DbgVariableIntrinsic>(V->second);
-        DbgVariableIntrinsic *NewDbgII =
-            cast<DbgVariableIntrinsic>(DbgII->clone());
-        NewDbgII->replaceVariableLocationOp(VI, PHI);
-        auto InsertionPt = Parent->getFirstInsertionPt();
-        assert(InsertionPt != Parent->end() && "Ill-formed basic block");
-        NewDbgII->insertBefore(&*InsertionPt);
+        auto NewDI = NewDbgValueMap.find({Parent, DbgII});
+        if (NewDI == NewDbgValueMap.end()) {
+          auto *NewDbgII = cast<DbgVariableIntrinsic>(DbgII->clone());
+          NewDI = NewDbgValueMap.insert({{Parent, DbgII}, NewDbgII}).first;
+        }
+        DbgVariableIntrinsic *NewDbgII = NewDI->second;
+        // If PHI contains VI as an operand more than once, we may
+        // replaced it in NewDbgII; confirm that it is present.
+        if (is_contained(NewDbgII->location_ops(), VI))
+          NewDbgII->replaceVariableLocationOp(VI, PHI);
       }
     }
+  }
+  // Insert thew new dbg.values into their destination blocks.
+  for (auto DI : NewDbgValueMap) {
+    BasicBlock *Parent = DI.first.first;
+    auto *NewDbgII = DI.second;
+    auto InsertionPt = Parent->getFirstInsertionPt();
+    assert(InsertionPt != Parent->end() && "Ill-formed basic block");
+    NewDbgII->insertBefore(&*InsertionPt);
   }
 }
 
@@ -1665,11 +1692,25 @@ void llvm::findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V) {
   // DenseMap lookup.
   if (!V->isUsedByMetadata())
     return;
-  if (auto *L = LocalAsMetadata::getIfExists(V))
-    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L))
+  // TODO: If this value appears multiple times in a DIArgList, we should still
+  // only add the owning DbgValueInst once; use this set to track ArgListUsers.
+  // This behaviour can be removed when we can automatically remove duplicates.
+  SmallPtrSet<DbgValueInst *, 4> EncounteredDbgValues;
+  if (auto *L = LocalAsMetadata::getIfExists(V)) {
+    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L)) {
       for (User *U : MDV->users())
         if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(U))
           DbgValues.push_back(DVI);
+    }
+    for (Metadata *AL : L->getAllArgListUsers()) {
+      if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), AL)) {
+        for (User *U : MDV->users())
+          if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(U))
+            if (EncounteredDbgValues.insert(DVI).second)
+              DbgValues.push_back(DVI);
+      }
+    }
+  }
 }
 
 void llvm::findDbgUsers(SmallVectorImpl<DbgVariableIntrinsic *> &DbgUsers,
@@ -1678,11 +1719,25 @@ void llvm::findDbgUsers(SmallVectorImpl<DbgVariableIntrinsic *> &DbgUsers,
   // DenseMap lookup.
   if (!V->isUsedByMetadata())
     return;
-  if (auto *L = LocalAsMetadata::getIfExists(V))
-    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L))
+  // TODO: If this value appears multiple times in a DIArgList, we should still
+  // only add the owning DbgValueInst once; use this set to track ArgListUsers.
+  // This behaviour can be removed when we can automatically remove duplicates.
+  SmallPtrSet<DbgVariableIntrinsic *, 4> EncounteredDbgValues;
+  if (auto *L = LocalAsMetadata::getIfExists(V)) {
+    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L)) {
       for (User *U : MDV->users())
         if (DbgVariableIntrinsic *DII = dyn_cast<DbgVariableIntrinsic>(U))
           DbgUsers.push_back(DII);
+    }
+    for (Metadata *AL : L->getAllArgListUsers()) {
+      if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), AL)) {
+        for (User *U : MDV->users())
+          if (DbgVariableIntrinsic *DII = dyn_cast<DbgVariableIntrinsic>(U))
+            if (EncounteredDbgValues.insert(DII).second)
+              DbgUsers.push_back(DII);
+      }
+    }
+  }
 }
 
 bool llvm::replaceDbgDeclare(Value *Address, Value *NewAddress,
@@ -1752,9 +1807,14 @@ void llvm::salvageDebugInfoForDbgValues(
     // are implicitly pointing out the value as a DWARF memory location
     // description.
     bool StackValue = isa<DbgValueInst>(DII);
+    auto DIILocation = DII->location_ops();
+    assert(
+        is_contained(DIILocation, &I) &&
+        "DbgVariableIntrinsic must use salvaged instruction as its location");
+    unsigned LocNo = std::distance(DIILocation.begin(), find(DIILocation, &I));
 
     DIExpression *DIExpr =
-        salvageDebugInfoImpl(I, DII->getExpression(), StackValue);
+        salvageDebugInfoImpl(I, DII->getExpression(), StackValue, LocNo);
 
     // salvageDebugInfoImpl should fail on examining the first element of
     // DbgUsers, or none of them.
@@ -1776,9 +1836,78 @@ void llvm::salvageDebugInfoForDbgValues(
   }
 }
 
+bool getSalvageOpsForGEP(GetElementPtrInst *GEP, const DataLayout &DL,
+                         SmallVectorImpl<uint64_t> &Opcodes) {
+  unsigned BitWidth = DL.getIndexSizeInBits(GEP->getPointerAddressSpace());
+  // Rewrite a constant GEP into a DIExpression.
+  APInt ConstantOffset(BitWidth, 0);
+  if (!GEP->accumulateConstantOffset(DL, ConstantOffset))
+    return false;
+  DIExpression::appendOffset(Opcodes, ConstantOffset.getSExtValue());
+  return true;
+}
+
+uint64_t getDwarfOpForBinOp(Instruction::BinaryOps Opcode) {
+  switch (Opcode) {
+  case Instruction::Add:
+    return dwarf::DW_OP_plus;
+  case Instruction::Sub:
+    return dwarf::DW_OP_minus;
+  case Instruction::Mul:
+    return dwarf::DW_OP_mul;
+  case Instruction::SDiv:
+    return dwarf::DW_OP_div;
+  case Instruction::SRem:
+    return dwarf::DW_OP_mod;
+  case Instruction::Or:
+    return dwarf::DW_OP_or;
+  case Instruction::And:
+    return dwarf::DW_OP_and;
+  case Instruction::Xor:
+    return dwarf::DW_OP_xor;
+  case Instruction::Shl:
+    return dwarf::DW_OP_shl;
+  case Instruction::LShr:
+    return dwarf::DW_OP_shr;
+  case Instruction::AShr:
+    return dwarf::DW_OP_shra;
+  default:
+    // TODO: Salvage from each kind of binop we know about.
+    return 0;
+  }
+}
+
+bool getSalvageOpsForBinOp(BinaryOperator *BI,
+                           SmallVectorImpl<uint64_t> &Opcodes) {
+  // Rewrite binary operations with constant integer operands.
+  auto *ConstInt = dyn_cast<ConstantInt>(BI->getOperand(1));
+  if (!ConstInt || ConstInt->getBitWidth() > 64)
+    return false;
+  uint64_t Val = ConstInt->getSExtValue();
+  Instruction::BinaryOps BinOpcode = BI->getOpcode();
+  // Add or Sub Instructions with a constant operand can potentially be
+  // simplified.
+  if (BinOpcode == Instruction::Add || BinOpcode == Instruction::Sub) {
+    uint64_t Offset = BinOpcode == Instruction::Add ? Val : -int64_t(Val);
+    DIExpression::appendOffset(Opcodes, Offset);
+    return true;
+  }
+  // Add constant int operand to expression stack.
+  Opcodes.append({dwarf::DW_OP_constu, Val});
+
+  // Add salvaged binary operator to expression stack, if it has a valid
+  // representation in a DIExpression.
+  uint64_t DwarfBinOp = getDwarfOpForBinOp(BinOpcode);
+  if (!DwarfBinOp)
+    return false;
+  Opcodes.push_back(DwarfBinOp);
+
+  return true;
+}
+
 DIExpression *llvm::salvageDebugInfoImpl(Instruction &I,
                                          DIExpression *SrcDIExpr,
-                                         bool WithStackValue) {
+                                         bool WithStackValue, unsigned LocNo) {
   auto &M = *I.getModule();
   auto &DL = M.getDataLayout();
 
@@ -1786,16 +1915,9 @@ DIExpression *llvm::salvageDebugInfoImpl(Instruction &I,
   auto doSalvage = [&](SmallVectorImpl<uint64_t> &Ops) -> DIExpression * {
     DIExpression *DIExpr = SrcDIExpr;
     if (!Ops.empty()) {
-      DIExpr = DIExpression::prependOpcodes(DIExpr, Ops, WithStackValue);
+      DIExpr = DIExpression::appendOpsToArg(DIExpr, Ops, LocNo, WithStackValue);
     }
     return DIExpr;
-  };
-
-  // Apply the given offset to the source DIExpression.
-  auto applyOffset = [&](uint64_t Offset) -> DIExpression * {
-    SmallVector<uint64_t, 8> Ops;
-    DIExpression::appendOffset(Ops, Offset);
-    return doSalvage(Ops);
   };
 
   // initializer-list helper for applying operators to the source DIExpression.
@@ -1823,54 +1945,17 @@ DIExpression *llvm::salvageDebugInfoImpl(Instruction &I,
                                             isa<SExtInst>(&I)));
   }
 
+  SmallVector<uint64_t, 8> Ops;
   if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
-    unsigned BitWidth =
-        M.getDataLayout().getIndexSizeInBits(GEP->getPointerAddressSpace());
-    // Rewrite a constant GEP into a DIExpression.
-    APInt Offset(BitWidth, 0);
-    if (GEP->accumulateConstantOffset(M.getDataLayout(), Offset)) {
-      return applyOffset(Offset.getSExtValue());
-    } else {
-      return nullptr;
-    }
+    if (getSalvageOpsForGEP(GEP, DL, Ops))
+      return doSalvage(Ops);
   } else if (auto *BI = dyn_cast<BinaryOperator>(&I)) {
-    // Rewrite binary operations with constant integer operands.
-    auto *ConstInt = dyn_cast<ConstantInt>(I.getOperand(1));
-    if (!ConstInt || ConstInt->getBitWidth() > 64)
-      return nullptr;
-
-    uint64_t Val = ConstInt->getSExtValue();
-    switch (BI->getOpcode()) {
-    case Instruction::Add:
-      return applyOffset(Val);
-    case Instruction::Sub:
-      return applyOffset(-int64_t(Val));
-    case Instruction::Mul:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_mul});
-    case Instruction::SDiv:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_div});
-    case Instruction::SRem:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_mod});
-    case Instruction::Or:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_or});
-    case Instruction::And:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_and});
-    case Instruction::Xor:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_xor});
-    case Instruction::Shl:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_shl});
-    case Instruction::LShr:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_shr});
-    case Instruction::AShr:
-      return applyOps({dwarf::DW_OP_constu, Val, dwarf::DW_OP_shra});
-    default:
-      // TODO: Salvage constants from each kind of binop we know about.
-      return nullptr;
-    }
+    if (getSalvageOpsForBinOp(BI, Ops))
+      return doSalvage(Ops);
+  }
     // *Not* to do: we should not attempt to salvage load instructions,
     // because the validity and lifetime of a dbg.value containing
     // DW_OP_deref becomes difficult to analyze. See PR40628 for examples.
-  }
   return nullptr;
 }
 
@@ -2047,7 +2132,7 @@ unsigned llvm::changeToUnreachable(Instruction *I, bool UseLLVMTrap,
   if (MSSAU)
     MSSAU->changeToUnreachable(I);
 
-  SmallSetVector<BasicBlock *, 8> UniqueSuccessors;
+  SmallSet<BasicBlock *, 8> UniqueSuccessors;
 
   // Loop over all of the successors, removing BB's entry from any PHI
   // nodes.
@@ -2308,7 +2393,7 @@ static bool markAliveBlocks(Function &F,
         }
       };
 
-      SmallMapVector<BasicBlock *, int, 8> NumPerSuccessorCases;
+      SmallDenseMap<BasicBlock *, int, 8> NumPerSuccessorCases;
       // Set of unique CatchPads.
       SmallDenseMap<CatchPadInst *, detail::DenseSetEmpty, 4,
                     CatchPadDenseMapInfo, detail::DenseSetPair<CatchPadInst *>>
@@ -2318,22 +2403,25 @@ static bool markAliveBlocks(Function &F,
                                              E = CatchSwitch->handler_end();
            I != E; ++I) {
         BasicBlock *HandlerBB = *I;
-        ++NumPerSuccessorCases[HandlerBB];
+        if (DTU)
+          ++NumPerSuccessorCases[HandlerBB];
         auto *CatchPad = cast<CatchPadInst>(HandlerBB->getFirstNonPHI());
         if (!HandlerSet.insert({CatchPad, Empty}).second) {
-          --NumPerSuccessorCases[HandlerBB];
+          if (DTU)
+            --NumPerSuccessorCases[HandlerBB];
           CatchSwitch->removeHandler(I);
           --I;
           --E;
           Changed = true;
         }
       }
-      std::vector<DominatorTree::UpdateType> Updates;
-      for (const std::pair<BasicBlock *, int> &I : NumPerSuccessorCases)
-        if (I.second == 0)
-          Updates.push_back({DominatorTree::Delete, BB, I.first});
-      if (DTU)
+      if (DTU) {
+        std::vector<DominatorTree::UpdateType> Updates;
+        for (const std::pair<BasicBlock *, int> &I : NumPerSuccessorCases)
+          if (I.second == 0)
+            Updates.push_back({DominatorTree::Delete, BB, I.first});
         DTU->applyUpdates(Updates);
+      }
     }
 
     Changed |= ConstantFoldTerminator(BB, true, nullptr, DTU);
@@ -2419,7 +2507,7 @@ bool llvm::removeUnreachableBlocks(Function &F, DomTreeUpdater *DTU,
   // their internal references. Update DTU if available.
   std::vector<DominatorTree::UpdateType> Updates;
   for (auto *BB : BlocksToRemove) {
-    SmallSetVector<BasicBlock *, 8> UniqueSuccessors;
+    SmallSet<BasicBlock *, 8> UniqueSuccessors;
     for (BasicBlock *Successor : successors(BB)) {
       // Only remove references to BB in reachable successors of BB.
       if (Reachable.count(Successor))

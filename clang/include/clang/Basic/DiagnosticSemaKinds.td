@@ -5776,6 +5776,9 @@ def note_goto_ms_asm_label : Note<
 def warn_unused_label : Warning<"unused label %0">,
   InGroup<UnusedLabel>, DefaultIgnore;
 
+def err_continue_from_cond_var_init : Error<
+  "cannot jump from this continue statement to the loop increment; "
+  "jump bypasses initialization of loop condition variable">;
 def err_goto_into_protected_scope : Error<
   "cannot jump from this goto statement to its label">;
 def ext_goto_into_protected_scope : ExtWarn<
@@ -7462,6 +7465,8 @@ let CategoryName = "Lambda Issue" in {
     "duration">;
   def err_this_capture : Error<
     "'this' cannot be %select{implicitly |}0captured in this context">;
+  def note_lambda_this_capture_fixit : Note<
+    "explicitly capture 'this'">;
   def err_lambda_capture_anonymous_var : Error<
     "unnamed variable cannot be implicitly captured in a lambda expression">;
   def err_lambda_capture_flexarray_type : Error<
@@ -7470,6 +7475,10 @@ let CategoryName = "Lambda Issue" in {
   def err_lambda_impcap : Error<
     "variable %0 cannot be implicitly captured in a lambda with no "
     "capture-default specified">;
+  def note_lambda_variable_capture_fixit : Note<
+    "capture %0 by %select{value|reference}1">;
+  def note_lambda_default_capture_fixit : Note<
+    "default capture by %select{value|reference}0">;
   def note_lambda_decl : Note<"lambda expression begins here">;
   def err_lambda_unevaluated_operand : Error<
     "lambda expression in an unevaluated operand">;
@@ -8294,6 +8303,9 @@ def note_cuda_device_builtin_surftex_should_be_template_class : Note<
     "%0 needs to be instantiated from a class template with proper "
     "template arguments">;
 
+def err_hip_invalid_args_builtin_mangled_name : Error<
+    "invalid argument: symbol must be a device-side function or global variable">;
+
 def warn_non_pod_vararg_with_format_string : Warning<
   "cannot pass %select{non-POD|non-trivial}0 object of type %1 to variadic "
   "%select{function|block|method|constructor}2; expected type from format "
@@ -8377,6 +8389,9 @@ def note_change_calling_conv_fixit : Note<
 def warn_bad_function_cast : Warning<
   "cast from function call of type %0 to non-matching type %1">,
   InGroup<BadFunctionCast>, DefaultIgnore;
+def warn_cast_function_type : Warning<
+  "cast %diff{from $ to $ |}0,1converts to incompatible function type">,
+  InGroup<CastFunctionType>, DefaultIgnore;
 def err_cast_pointer_to_non_pointer_int : Error<
   "pointer cannot be cast to type %0">;
 def err_cast_to_bfloat16 : Error<"cannot type-cast to __bf16">;
@@ -8597,6 +8612,15 @@ def warn_initializer_out_of_order : Warning<
   "%select{field|base class}0 %1 will be initialized after "
   "%select{field|base}2 %3">,
   InGroup<ReorderCtor>, DefaultIgnore;
+
+def warn_some_initializers_out_of_order : Warning<
+  "initializer order does not match the declaration order">,
+  InGroup<ReorderCtor>, DefaultIgnore;
+
+def note_initializer_out_of_order : Note<
+  "%select{field|base class}0 %1 will be initialized after "
+  "%select{field|base}2 %3">;
+
 def warn_abstract_vbase_init_ignored : Warning<
   "initializer for virtual base class %0 of abstract class %1 "
   "will never be used">,
@@ -8973,8 +8997,8 @@ def note_defaulted_comparison_calls_deleted : Note<
   "defaulted %0 is implicitly deleted because it would invoke a deleted "
   "comparison function%select{| for member %2| for base class %2}1">;
 def note_defaulted_comparison_no_viable_function : Note<
-  "defaulted %0 is implicitly deleted because there is no viable comparison "
-  "function%select{| for member %2| for base class %2}1">;
+  "defaulted %0 is implicitly deleted because there is no viable three-way "
+  "comparison function for%select{| member| base class}1 %2">;
 def note_defaulted_comparison_no_viable_function_synthesized : Note<
   "three-way comparison cannot be synthesized because there is no viable "
   "function for %select{'=='|'<'}0 comparison">;
@@ -9917,7 +9941,7 @@ def warn_opencl_attr_deprecated_ignored : Warning <
 def err_opencl_variadic_function : Error<
   "invalid prototype, variadic arguments are not allowed in OpenCL">;
 def err_opencl_requires_extension : Error<
-  "use of %select{type|declaration}0 %1 requires %2 extension to be enabled">;
+  "use of %select{type|declaration}0 %1 requires %2 support">;
 def warn_opencl_generic_address_space_arg : Warning<
   "passing non-generic address space pointer to %0"
   " may cause dynamic conversion affecting performance">,
@@ -10581,6 +10605,20 @@ def note_omp_protected_structured_block
     : Note<"jump bypasses OpenMP structured block">;
 def note_omp_exits_structured_block
     : Note<"jump exits scope of OpenMP structured block">;
+def err_omp_interop_variable_expected : Error<
+  "expected%select{| non-const}0 variable of type 'omp_interop_t'">;
+def err_omp_interop_variable_wrong_type : Error<
+  "interop variable must be of type 'omp_interop_t'">;
+def err_omp_interop_prefer_type : Error<
+  "prefer_list item must be a string literal or constant integral "
+  "expression">;
+def err_omp_interop_bad_depend_clause : Error<
+  "'depend' clause requires the 'targetsync' interop type">;
+def err_omp_interop_var_multiple_actions : Error<
+  "interop variable %0 used in multiple action clauses">;
+def err_omp_dispatch_statement_call
+    : Error<"statement after '#pragma omp dispatch' must be a direct call"
+            " to a target function or an assignment to one">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {

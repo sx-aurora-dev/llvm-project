@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "InputFiles.h"
 #include "InputSection.h"
+#include "MapFile.h"
 #include "MergedOutputSection.h"
 #include "OutputSection.h"
 #include "OutputSegment.h"
@@ -19,13 +20,16 @@
 #include "Target.h"
 #include "UnwindInfoSection.h"
 
+#include "lld/Common/Arrays.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/xxhash.h"
 
 #include <algorithm>
@@ -47,12 +51,15 @@ public:
   void scanSymbols();
   void createOutputSections();
   void createLoadCommands();
+  void finalizeAddressses();
+  void finalizeLinkEditSegment();
   void assignAddresses(OutputSegment *);
 
   void openFile();
   void writeSections();
   void writeUuid();
   void writeCodeSignature();
+  void writeOutputFile();
 
   void run();
 
@@ -65,7 +72,10 @@ public:
   IndirectSymtabSection *indirectSymtabSection = nullptr;
   CodeSignatureSection *codeSignatureSection = nullptr;
   UnwindInfoSection *unwindInfoSection = nullptr;
+  FunctionStartsSection *functionStartsSection = nullptr;
+
   LCUuid *uuidCommand = nullptr;
+  OutputSegment *linkEditSegment = nullptr;
 };
 
 // LC_DYLD_INFO_ONLY stores the offsets of symbol import/export information.
@@ -116,8 +126,8 @@ public:
 
 class LCFunctionStarts : public LoadCommand {
 public:
-  explicit LCFunctionStarts(FunctionStartsSection *functionStarts)
-      : functionStarts(functionStarts) {}
+  explicit LCFunctionStarts(FunctionStartsSection *functionStartsSection)
+      : functionStartsSection(functionStartsSection) {}
 
   uint32_t getSize() const override { return sizeof(linkedit_data_command); }
 
@@ -125,12 +135,12 @@ public:
     auto *c = reinterpret_cast<linkedit_data_command *>(buf);
     c->cmd = LC_FUNCTION_STARTS;
     c->cmdsize = getSize();
-    c->dataoff = functionStarts->fileOff;
-    c->datasize = functionStarts->getFileSize();
+    c->dataoff = functionStartsSection->fileOff;
+    c->datasize = functionStartsSection->getFileSize();
   }
 
 private:
-  FunctionStartsSection *functionStarts;
+  FunctionStartsSection *functionStartsSection;
 };
 
 class LCDysymtab : public LoadCommand {
@@ -189,7 +199,7 @@ public:
         seg->lastSection()->addr + seg->lastSection()->getSize() - c->vmaddr;
     c->nsects = seg->numNonHiddenSections();
 
-    for (OutputSection *osec : seg->getSections()) {
+    for (const OutputSection *osec : seg->getSections()) {
       if (!isZeroFill(osec->flags)) {
         assert(osec->fileOff >= seg->fileOff);
         c->filesize = std::max(
@@ -442,9 +452,43 @@ public:
 
 } // namespace
 
-static void prepareSymbolRelocation(lld::macho::Symbol *sym,
-                                    const InputSection *isec, const Reloc &r) {
-  const TargetInfo::RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
+// Adds stubs and bindings where necessary (e.g. if the symbol is a
+// DylibSymbol.)
+static void prepareBranchTarget(Symbol *sym) {
+  if (auto *dysym = dyn_cast<DylibSymbol>(sym)) {
+    if (in.stubs->addEntry(dysym)) {
+      if (sym->isWeakDef()) {
+        in.binding->addEntry(dysym, in.lazyPointers->isec,
+                             sym->stubsIndex * WordSize);
+        in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                                 sym->stubsIndex * WordSize);
+      } else {
+        in.lazyBinding->addEntry(dysym);
+      }
+    }
+  } else if (auto *defined = dyn_cast<Defined>(sym)) {
+    if (defined->isExternalWeakDef()) {
+      if (in.stubs->addEntry(sym)) {
+        in.rebase->addEntry(in.lazyPointers->isec, sym->stubsIndex * WordSize);
+        in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                                 sym->stubsIndex * WordSize);
+      }
+    }
+  }
+}
+
+// Can a symbol's address can only be resolved at runtime?
+static bool needsBinding(const Symbol *sym) {
+  if (isa<DylibSymbol>(sym))
+    return true;
+  if (const auto *defined = dyn_cast<Defined>(sym))
+    return defined->isExternalWeakDef();
+  return false;
+}
+
+static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
+                                    const Reloc &r) {
+  const RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
 
   if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
     prepareBranchTarget(sym);
@@ -464,6 +508,7 @@ static void prepareSymbolRelocation(lld::macho::Symbol *sym,
 }
 
 void Writer::scanRelocations() {
+  TimeTraceScope timeScope("Scan relocations");
   for (InputSection *isec : inputSections) {
     if (isec->segname == segment_names::ld) {
       prepareCompactUnwind(isec);
@@ -477,15 +522,14 @@ void Writer::scanRelocations() {
         // minuend, and doesn't have the usual UNSIGNED semantics. We don't want
         // to emit rebase opcodes for it.
         it = std::next(it);
-        assert(isa<Defined>(it->referent.dyn_cast<lld::macho::Symbol *>()));
+        assert(isa<Defined>(it->referent.dyn_cast<Symbol *>()));
         continue;
       }
-      if (auto *sym = r.referent.dyn_cast<lld::macho::Symbol *>()) {
+      if (auto *sym = r.referent.dyn_cast<Symbol *>()) {
         if (auto *undefined = dyn_cast<Undefined>(sym))
           treatUndefinedSymbol(*undefined);
         // treatUndefinedSymbol() can replace sym with a DylibSymbol; re-check.
-        if (!isa<Undefined>(sym) &&
-            target->validateSymbolRelocation(sym, isec, r))
+        if (!isa<Undefined>(sym) && validateSymbolRelocation(sym, isec, r))
           prepareSymbolRelocation(sym, isec, r);
       } else {
         assert(r.referent.is<InputSection *>());
@@ -497,7 +541,8 @@ void Writer::scanRelocations() {
 }
 
 void Writer::scanSymbols() {
-  for (const macho::Symbol *sym : symtab->getSymbols()) {
+  TimeTraceScope timeScope("Scan symbols");
+  for (const Symbol *sym : symtab->getSymbols()) {
     if (const auto *defined = dyn_cast<Defined>(sym)) {
       if (defined->overridesWeakDef)
         in.weakBinding->addNonWeakDefinition(defined);
@@ -522,7 +567,8 @@ void Writer::createLoadCommands() {
   in.header->addLoadCommand(make<LCSymtab>(symtabSection, stringTableSection));
   in.header->addLoadCommand(
       make<LCDysymtab>(symtabSection, indirectSymtabSection));
-  in.header->addLoadCommand(make<LCFunctionStarts>(in.functionStarts));
+  if (functionStartsSection)
+    in.header->addLoadCommand(make<LCFunctionStarts>(functionStartsSection));
   for (StringRef path : config->runtimePaths)
     in.header->addLoadCommand(make<LCRPath>(path));
 
@@ -552,7 +598,7 @@ void Writer::createLoadCommands() {
   for (InputFile *file : inputFiles) {
     if (auto *dylibFile = dyn_cast<DylibFile>(file)) {
       if (dylibFile->isBundleLoader) {
-        dylibFile->ordinal = MachO::BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE;
+        dylibFile->ordinal = BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE;
         // Shortcut since bundle-loader does not re-export the symbols.
 
         dylibFile->reexport = false;
@@ -616,11 +662,12 @@ static DenseMap<const InputSection *, size_t> buildInputSectionPriorities() {
   };
 
   // TODO: Make sure this handles weak symbols correctly.
-  for (InputFile *file : inputFiles)
+  for (const InputFile *file : inputFiles) {
     if (isa<ObjFile>(file))
-      for (lld::macho::Symbol *sym : file->symbols)
+      for (Symbol *sym : file->symbols)
         if (auto *d = dyn_cast<Defined>(sym))
           addSym(*d);
+  }
 
   return sectionPriorities;
 }
@@ -672,11 +719,12 @@ static int sectionOrder(OutputSection *osec) {
     }
   } else if (segname == segment_names::linkEdit) {
     return StringSwitch<int>(osec->name)
-        .Case(section_names::rebase, -8)
-        .Case(section_names::binding, -7)
-        .Case(section_names::weakBinding, -6)
-        .Case(section_names::lazyBinding, -5)
-        .Case(section_names::export_, -4)
+        .Case(section_names::rebase, -9)
+        .Case(section_names::binding, -8)
+        .Case(section_names::weakBinding, -7)
+        .Case(section_names::lazyBinding, -6)
+        .Case(section_names::export_, -5)
+        .Case(section_names::functionStarts, -4)
         .Case(section_names::symbolTable, -3)
         .Case(section_names::indirectSymbolTable, -2)
         .Case(section_names::stringTable, -1)
@@ -699,6 +747,8 @@ static std::function<bool(T, T)> compareByOrder(F ord) {
 // segments, output sections within each segment, and input sections within each
 // output segment.
 static void sortSegmentsAndSections() {
+  TimeTraceScope timeScope("Sort segments and sections");
+
   llvm::stable_sort(outputSegments,
                     compareByOrder<OutputSegment *>(segmentOrder));
 
@@ -713,7 +763,6 @@ static void sortSegmentsAndSections() {
       // output section indices.
       if (!osec->isHidden())
         osec->index = ++sectionIndex;
-
       if (!firstTLVDataSection && isThreadLocalData(osec->flags))
         firstTLVDataSection = osec;
 
@@ -740,6 +789,7 @@ static NamePair maybeRenameSection(NamePair key) {
 }
 
 void Writer::createOutputSections() {
+  TimeTraceScope timeScope("Create output sections");
   // First, create hidden sections
   stringTableSection = make<StringTableSection>();
   unwindInfoSection = make<UnwindInfoSection>(); // TODO(gkm): only when no -r
@@ -747,6 +797,8 @@ void Writer::createOutputSections() {
   indirectSymtabSection = make<IndirectSymtabSection>();
   if (config->adhocCodesign)
     codeSignatureSection = make<CodeSignatureSection>();
+  if (config->emitFunctionStarts)
+    functionStartsSection = make<FunctionStartsSection>();
 
   switch (config->outputType) {
   case MH_EXECUTE:
@@ -791,6 +843,43 @@ void Writer::createOutputSections() {
             ssec->name);
     }
   }
+
+  // dyld requires __LINKEDIT segment to always exist (even if empty).
+  linkEditSegment = getOrCreateOutputSegment(segment_names::linkEdit);
+}
+
+void Writer::finalizeAddressses() {
+  TimeTraceScope timeScope("Finalize addresses");
+  // Ensure that segments (and the sections they contain) are allocated
+  // addresses in ascending order, which dyld requires.
+  //
+  // Note that at this point, __LINKEDIT sections are empty, but we need to
+  // determine addresses of other segments/sections before generating its
+  // contents.
+  for (OutputSegment *seg : outputSegments)
+    if (seg != linkEditSegment)
+      assignAddresses(seg);
+
+  // FIXME(gkm): create branch-extension thunks here, then adjust addresses
+}
+
+void Writer::finalizeLinkEditSegment() {
+  TimeTraceScope timeScope("Finalize __LINKEDIT segment");
+  // Fill __LINKEDIT contents.
+  in.rebase->finalizeContents();
+  in.binding->finalizeContents();
+  in.weakBinding->finalizeContents();
+  in.lazyBinding->finalizeContents();
+  in.exports->finalizeContents();
+  symtabSection->finalizeContents();
+  indirectSymtabSection->finalizeContents();
+
+  if (functionStartsSection)
+    functionStartsSection->finalizeContents();
+
+  // Now that __LINKEDIT is filled out, do a proper calculation of its
+  // addresses and offsets.
+  assignAddresses(linkEditSegment);
 }
 
 void Writer::assignAddresses(OutputSegment *seg) {
@@ -828,14 +917,26 @@ void Writer::openFile() {
 
 void Writer::writeSections() {
   uint8_t *buf = buffer->getBufferStart();
-  for (OutputSegment *seg : outputSegments)
-    for (OutputSection *osec : seg->getSections())
+  for (const OutputSegment *seg : outputSegments)
+    for (const OutputSection *osec : seg->getSections())
       osec->writeTo(buf + osec->fileOff);
 }
 
+// In order to utilize multiple cores, we first split the buffer into chunks,
+// compute a hash for each chunk, and then compute a hash value of the hash
+// values.
 void Writer::writeUuid() {
-  uint64_t digest =
-      xxHash64({buffer->getBufferStart(), buffer->getBufferEnd()});
+  TimeTraceScope timeScope("Computing UUID");
+  ArrayRef<uint8_t> data{buffer->getBufferStart(), buffer->getBufferEnd()};
+  unsigned chunkCount = parallel::strategy.compute_thread_count() * 10;
+  // Round-up integer division
+  size_t chunkSize = (data.size() + chunkCount - 1) / chunkCount;
+  std::vector<ArrayRef<uint8_t>> chunks = split(data, chunkSize);
+  std::vector<uint64_t> hashes(chunks.size());
+  parallelForEachN(0, chunks.size(),
+                   [&](size_t i) { hashes[i] = xxHash64(chunks[i]); });
+  uint64_t digest = xxHash64({reinterpret_cast<uint8_t *>(hashes.data()),
+                              hashes.size() * sizeof(uint64_t)});
   uuidCommand->writeUuid(digest);
 }
 
@@ -844,58 +945,33 @@ void Writer::writeCodeSignature() {
     codeSignatureSection->writeHashes(buffer->getBufferStart());
 }
 
-void Writer::run() {
-  // dyld requires __LINKEDIT segment to always exist (even if empty).
-  OutputSegment *linkEditSegment =
-      getOrCreateOutputSegment(segment_names::linkEdit);
-
-  prepareBranchTarget(config->entry);
-  scanRelocations();
-  if (in.stubHelper->isNeeded())
-    in.stubHelper->setup();
-  scanSymbols();
-
-  // Sort and assign sections to their respective segments. No more sections nor
-  // segments may be created after these methods run.
-  createOutputSections();
-  sortSegmentsAndSections();
-
-  createLoadCommands();
-
-  // Ensure that segments (and the sections they contain) are allocated
-  // addresses in ascending order, which dyld requires.
-  //
-  // Note that at this point, __LINKEDIT sections are empty, but we need to
-  // determine addresses of other segments/sections before generating its
-  // contents.
-  for (OutputSegment *seg : outputSegments)
-    if (seg != linkEditSegment)
-      assignAddresses(seg);
-
-  // Fill __LINKEDIT contents.
-  in.rebase->finalizeContents();
-  in.binding->finalizeContents();
-  in.weakBinding->finalizeContents();
-  in.lazyBinding->finalizeContents();
-  in.exports->finalizeContents();
-  in.functionStarts->finalizeContents();
-  symtabSection->finalizeContents();
-  indirectSymtabSection->finalizeContents();
-
-  // Now that __LINKEDIT is filled out, do a proper calculation of its
-  // addresses and offsets.
-  assignAddresses(linkEditSegment);
-
+void Writer::writeOutputFile() {
+  TimeTraceScope timeScope("Write output file");
   openFile();
   if (errorCount())
     return;
-
   writeSections();
   writeUuid();
   writeCodeSignature();
 
   if (auto e = buffer->commit())
     error("failed to write to the output file: " + toString(std::move(e)));
+}
+
+void Writer::run() {
+  prepareBranchTarget(config->entry);
+  scanRelocations();
+  if (in.stubHelper->isNeeded())
+    in.stubHelper->setup();
+  scanSymbols();
+  createOutputSections();
+  // No more sections nor segments are created beyond this point.
+  sortSegmentsAndSections();
+  createLoadCommands();
+  finalizeAddressses();
+  finalizeLinkEditSegment();
+  writeMapFile();
+  writeOutputFile();
 }
 
 void macho::writeResult() { Writer().run(); }
@@ -907,7 +983,6 @@ void macho::createSyntheticSections() {
   in.weakBinding = make<WeakBindingSection>();
   in.lazyBinding = make<LazyBindingSection>();
   in.exports = make<ExportSection>();
-  in.functionStarts = make<FunctionStartsSection>();
   in.got = make<GotSection>();
   in.tlvPointers = make<TlvPointerSection>();
   in.lazyPointers = make<LazyPointerSection>();
