@@ -177,7 +177,8 @@ tools.extend([
     ToolSubst('Kaleidoscope-Ch6', unresolved='ignore'),
     ToolSubst('Kaleidoscope-Ch7', unresolved='ignore'),
     ToolSubst('Kaleidoscope-Ch8', unresolved='ignore'),
-    ToolSubst('LLJITWithThinLTOSummaries', unresolved='ignore')])
+    ToolSubst('LLJITWithThinLTOSummaries', unresolved='ignore'),
+    ToolSubst('LLJITWithRemoteDebugging', unresolved='ignore')])
 
 llvm_config.add_tool_substitutions(tools, config.llvm_tools_dir)
 
@@ -267,6 +268,10 @@ if have_cxx_shared_library():
 
 if config.libcxx_used:
     config.available_features.add('libcxx-used')
+
+# Direct object generation
+if not 'xcore' in config.target_triple:
+    config.available_features.add('object-emission')
 
 # LLVM can be configured with an empty default triple
 # Some tests are "generic" and require a valid default triple

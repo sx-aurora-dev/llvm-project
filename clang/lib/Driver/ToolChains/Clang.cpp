@@ -2286,8 +2286,8 @@ void Clang::DumpCompilationDatabase(Compilation &C, StringRef Filename,
 
   if (!CompilationDatabase) {
     std::error_code EC;
-    auto File = std::make_unique<llvm::raw_fd_ostream>(Filename, EC,
-                                                        llvm::sys::fs::OF_Text);
+    auto File = std::make_unique<llvm::raw_fd_ostream>(
+        Filename, EC, llvm::sys::fs::OF_TextWithCRLF);
     if (EC) {
       D.Diag(clang::diag::err_drv_compilationdatabase) << Filename
                                                        << EC.message();
@@ -2574,6 +2574,8 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
         // -fdebug-compilation-dir (without '=') here.
         CmdArgs.push_back("-fdebug-compilation-dir");
         CmdArgs.push_back(Value.data());
+      } else if (Value == "--version") {
+        D.PrintVersion(C, llvm::outs());
       } else {
         D.Diag(diag::err_drv_unsupported_option_argument)
             << A->getOption().getName() << Value;
@@ -3685,6 +3687,9 @@ static void RenderObjCOptions(const ToolChain &TC, const Driver &D,
       WeakArg->render(Args, CmdArgs);
     }
   }
+
+  if (Args.hasArg(options::OPT_fobjc_disable_direct_methods_for_testing))
+    CmdArgs.push_back("-fobjc-disable-direct-methods-for-testing");
 }
 
 static void RenderDiagnosticsOptions(const Driver &D, const ArgList &Args,
@@ -3992,12 +3997,15 @@ static void renderDebugOptions(const ToolChain &TC, const Driver &D,
   // Column info is included by default for everything except SCE and
   // CodeView. Clang doesn't track end columns, just starting columns, which,
   // in theory, is fine for CodeView (and PDB).  In practice, however, the
-  // Microsoft debuggers don't handle missing end columns well, so it's better
-  // not to include any column info.
+  // Microsoft debuggers don't handle missing end columns well, and the AIX
+  // debugger DBX also doesn't handle the columns well, so it's better not to
+  // include any column info.
   if (const Arg *A = Args.getLastArg(options::OPT_gcolumn_info))
     (void)checkDebugInfoOption(A, Args, D, TC);
   if (!Args.hasFlag(options::OPT_gcolumn_info, options::OPT_gno_column_info,
-                    !EmitCodeView && DebuggerTuning != llvm::DebuggerKind::SCE))
+                    !EmitCodeView &&
+                        (DebuggerTuning != llvm::DebuggerKind::SCE &&
+                         DebuggerTuning != llvm::DebuggerKind::DBX)))
     CmdArgs.push_back("-gno-column-info");
 
   // FIXME: Move backend command line options to the module.
@@ -4173,7 +4181,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // include as part of the module. All other jobs are expected to have exactly
   // one input.
   bool IsCuda = JA.isOffloading(Action::OFK_Cuda);
+  bool IsCudaDevice = JA.isDeviceOffloading(Action::OFK_Cuda);
   bool IsHIP = JA.isOffloading(Action::OFK_HIP);
+  bool IsHIPDevice = JA.isDeviceOffloading(Action::OFK_HIP);
   bool IsOpenMPDevice = JA.isDeviceOffloading(Action::OFK_OpenMP);
   bool IsHeaderModulePrecompile = isa<HeaderModulePrecompileJobAction>(JA);
 
@@ -5017,8 +5027,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // Prepare `-aux-target-cpu` and `-aux-target-feature` unless
   // `--gpu-use-aux-triple-only` is specified.
   if (!Args.getLastArg(options::OPT_gpu_use_aux_triple_only) &&
-      ((IsCuda && JA.isDeviceOffloading(Action::OFK_Cuda)) ||
-       (IsHIP && JA.isDeviceOffloading(Action::OFK_HIP)))) {
+      (IsCudaDevice || IsHIPDevice)) {
     const ArgList &HostArgs =
         C.getArgsForToolChain(nullptr, StringRef(), Action::OFK_None);
     std::string HostCPU =
@@ -5067,6 +5076,21 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   RenderTargetOptions(Triple, Args, KernelOrKext, CmdArgs);
+
+  // FIXME: For now we want to demote any errors to warnings, when they have
+  // been raised for asking the wrong question of scalable vectors, such as
+  // asking for the fixed number of elements. This may happen because code that
+  // is not yet ported to work for scalable vectors uses the wrong interfaces,
+  // whereas the behaviour is actually correct. Emitting a warning helps bring
+  // up scalable vector support in an incremental way. When scalable vector
+  // support is stable enough, all uses of wrong interfaces should be considered
+  // as errors, but until then, we can live with a warning being emitted by the
+  // compiler. This way, Clang can be used to compile code with scalable vectors
+  // and identify possible issues.
+  if (isa<BackendJobAction>(JA)) {
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back("-treat-scalable-fixed-error-as-warning");
+  }
 
   // These two are potentially updated by AddClangCLArgs.
   codegenoptions::DebugInfoKind DebugInfoKind = codegenoptions::NoDebugInfo;
@@ -5154,6 +5178,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // crashes.
   if (D.CCGenDiagnostics)
     CmdArgs.push_back("-disable-pragma-debug-crash");
+
+  // Allow backend to put its diagnostic files in the same place as frontend
+  // crash diagnostics files.
+  if (Args.hasArg(options::OPT_fcrash_diagnostics_dir)) {
+    StringRef Dir = Args.getLastArgValue(options::OPT_fcrash_diagnostics_dir);
+    CmdArgs.push_back("-mllvm");
+    CmdArgs.push_back(Args.MakeArgString("-crash-diagnostics-dir=" + Dir));
+  }
 
   bool UseSeparateSections = isUseSeparateSections(Triple);
 
@@ -5815,29 +5847,32 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         Args.MakeArgString(Twine("-fcf-protection=") + A->getValue()));
   }
 
-  // Forward -f options with positive and negative forms; we translate
-  // these by hand.
-  if (Arg *A = getLastProfileSampleUseArg(Args)) {
-    auto *PGOArg = Args.getLastArg(
-        options::OPT_fprofile_generate, options::OPT_fprofile_generate_EQ,
-        options::OPT_fcs_profile_generate, options::OPT_fcs_profile_generate_EQ,
-        options::OPT_fprofile_use, options::OPT_fprofile_use_EQ);
-    if (PGOArg)
-      D.Diag(diag::err_drv_argument_not_allowed_with)
-          << "SampleUse with PGO options";
+  // Forward -f options with positive and negative forms; we translate these by
+  // hand.  Do not propagate PGO options to the GPU-side compilations as the
+  // profile info is for the host-side compilation only.
+  if (!(IsCudaDevice || IsHIPDevice)) {
+    if (Arg *A = getLastProfileSampleUseArg(Args)) {
+      auto *PGOArg = Args.getLastArg(
+          options::OPT_fprofile_generate, options::OPT_fprofile_generate_EQ,
+          options::OPT_fcs_profile_generate,
+          options::OPT_fcs_profile_generate_EQ, options::OPT_fprofile_use,
+          options::OPT_fprofile_use_EQ);
+      if (PGOArg)
+        D.Diag(diag::err_drv_argument_not_allowed_with)
+            << "SampleUse with PGO options";
 
-    StringRef fname = A->getValue();
-    if (!llvm::sys::fs::exists(fname))
-      D.Diag(diag::err_drv_no_such_file) << fname;
-    else
-      A->render(Args, CmdArgs);
+      StringRef fname = A->getValue();
+      if (!llvm::sys::fs::exists(fname))
+        D.Diag(diag::err_drv_no_such_file) << fname;
+      else
+        A->render(Args, CmdArgs);
+    }
+    Args.AddLastArg(CmdArgs, options::OPT_fprofile_remapping_file_EQ);
+
+    if (Args.hasFlag(options::OPT_fpseudo_probe_for_profiling,
+                     options::OPT_fno_pseudo_probe_for_profiling, false))
+      CmdArgs.push_back("-fpseudo-probe-for-profiling");
   }
-  Args.AddLastArg(CmdArgs, options::OPT_fprofile_remapping_file_EQ);
-
-  if (Args.hasFlag(options::OPT_fpseudo_probe_for_profiling,
-                   options::OPT_fno_pseudo_probe_for_profiling, false))
-    CmdArgs.push_back("-fpseudo-probe-for-profiling");
-
   RenderBuiltinOptions(TC, RawTriple, Args, CmdArgs);
 
   if (!Args.hasFlag(options::OPT_fassume_sane_operator_new,

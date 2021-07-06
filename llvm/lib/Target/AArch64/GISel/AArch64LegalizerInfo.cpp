@@ -715,7 +715,10 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
       .lower();
   getActionDefinitionsBuilder(G_ROTL).lower();
 
-  getActionDefinitionsBuilder({G_SBFX, G_UBFX}).customFor({s32, s64});
+  getActionDefinitionsBuilder({G_SBFX, G_UBFX})
+      .customFor({{s32, s32}, {s64, s64}});
+
+  getActionDefinitionsBuilder(G_CTPOP).legalFor({{v8s8, v8s8}, {v16s8, v16s8}});
 
   computeTables();
   verify(*ST.getInstrInfo());

@@ -136,11 +136,6 @@ Optional<FusionInfo> fuseProducerOfTensor(OpBuilder &b,
                                           OpResult producerOpResult,
                                           OpOperand &consumerOpOperand);
 
-/// Fuse linalg operation on tensors, with the producer of the operand at
-/// position `consumerIdx` of the consumer.
-Optional<SmallVector<Value, 1>> fuseTensorOps(PatternRewriter &rewriter,
-                                              OpOperand &consumerOpOperand);
-
 //===----------------------------------------------------------------------===//
 // Distribution utilities
 //===----------------------------------------------------------------------===//
@@ -212,6 +207,11 @@ struct LinalgLoopDistributionOptions {
   /// generated, then no distribution is applied.
   SmallVector<DistributionMethod, 0> distributionMethod = {};
 };
+
+/// Update the `lb`, `ub` and `step` to get per processor `lb`, `ub` and `step`.
+void updateBoundsForCyclicDistribution(OpBuilder &builder, Location loc,
+                                       Value procId, Value nprocs, Value &lb,
+                                       Value &ub, Value &step);
 
 //===----------------------------------------------------------------------===//
 // Generic op region utilities

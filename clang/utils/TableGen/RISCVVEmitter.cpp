@@ -31,11 +31,8 @@ using VScaleVal = Optional<unsigned>;
 namespace {
 
 // Exponential LMUL
-class LMULType {
-private:
+struct LMULType {
   int Log2LMUL;
-
-public:
   LMULType(int Log2LMUL);
   // Return the C/C++ string representation of LMUL
   std::string str() const;
@@ -50,6 +47,8 @@ class RVVType {
     Void,
     Size_t,
     Ptrdiff_t,
+    UnsignedLong,
+    SignedLong,
     Boolean,
     SignedInteger,
     UnsignedInteger,
@@ -186,6 +185,7 @@ public:
   bool isMask() const { return IsMask; }
   size_t getNumOperand() const { return InputTypes.size(); }
   StringRef getIRName() const { return IRName; }
+  StringRef getManualCodegen() const { return ManualCodegen; }
   uint8_t getRISCVExtensions() const { return RISCVExtensions; }
 
   // Return the type string for a BUILTIN() macro in Builtins.def.
@@ -369,9 +369,17 @@ void RVVType::initBuiltinStr() {
     BuiltinStr = "z";
     if (IsImmediate)
       BuiltinStr = "I" + BuiltinStr;
+    if (IsPointer)
+      BuiltinStr += "*";
     return;
   case ScalarTypeKind::Ptrdiff_t:
     BuiltinStr = "Y";
+    return;
+  case ScalarTypeKind::UnsignedLong:
+    BuiltinStr = "ULi";
+    return;
+  case ScalarTypeKind::SignedLong:
+    BuiltinStr = "Li";
     return;
   case ScalarTypeKind::Boolean:
     assert(ElementBitwidth == 1);
@@ -473,9 +481,17 @@ void RVVType::initTypeStr() {
     return;
   case ScalarTypeKind::Size_t:
     Str = "size_t";
+    if (IsPointer)
+      Str += " *";
     return;
   case ScalarTypeKind::Ptrdiff_t:
     Str = "ptrdiff_t";
+    return;
+  case ScalarTypeKind::UnsignedLong:
+    Str = "unsigned long";
+    return;
+  case ScalarTypeKind::SignedLong:
+    Str = "long";
     return;
   case ScalarTypeKind::Boolean:
     if (isScalar())
@@ -510,23 +526,25 @@ void RVVType::initTypeStr() {
 }
 
 void RVVType::initShortStr() {
-  assert(isVector() && "only handle vector type");
   switch (ScalarType) {
   case ScalarTypeKind::Boolean:
+    assert(isVector());
     ShortStr = "b" + utostr(64 / Scale.getValue());
-    break;
+    return;
   case ScalarTypeKind::Float:
-    ShortStr = "f" + utostr(ElementBitwidth) + LMUL.str();
+    ShortStr = "f" + utostr(ElementBitwidth);
     break;
   case ScalarTypeKind::SignedInteger:
-    ShortStr = "i" + utostr(ElementBitwidth) + LMUL.str();
+    ShortStr = "i" + utostr(ElementBitwidth);
     break;
   case ScalarTypeKind::UnsignedInteger:
-    ShortStr = "u" + utostr(ElementBitwidth) + LMUL.str();
+    ShortStr = "u" + utostr(ElementBitwidth);
     break;
   default:
-    llvm_unreachable("Unhandled case!");
+    PrintFatalError("Unhandled case!");
   }
+  if (isVector())
+    ShortStr += LMUL.str();
 }
 
 void RVVType::applyBasicType() {
@@ -606,10 +624,11 @@ void RVVType::applyModifier(StringRef Transformer) {
   case 't':
     ScalarType = ScalarTypeKind::Ptrdiff_t;
     break;
-  case 'c': // uint8_t
-    ScalarType = ScalarTypeKind::UnsignedInteger;
-    ElementBitwidth = 8;
-    Scale = 0;
+  case 'u':
+    ScalarType = ScalarTypeKind::UnsignedLong;
+    break;
+  case 'l':
+    ScalarType = ScalarTypeKind::SignedLong;
     break;
   default:
     PrintFatalError("Illegal primitive type transformers!");
@@ -634,6 +653,20 @@ void RVVType::applyModifier(StringRef Transformer) {
         PrintFatalError(
             "Illegal type transformer for Complex type transformer");
     };
+    auto ComputeFixedLog2LMUL =
+        [&](StringRef Value,
+            std::function<bool(const int32_t &, const int32_t &)> Compare) {
+          int32_t Log2LMUL;
+          Value.getAsInteger(10, Log2LMUL);
+          if (!Compare(Log2LMUL, LMUL.Log2LMUL)) {
+            ScalarType = Invalid;
+            return false;
+          }
+          // Update new LMUL
+          LMUL = LMULType(Log2LMUL);
+          UpdateAndCheckComplexProto();
+          return true;
+        };
     auto ComplexTT = ComplexType.split(":");
     if (ComplexTT.first == "Log2EEW") {
       uint32_t Log2EEW;
@@ -644,6 +677,25 @@ void RVVType::applyModifier(StringRef Transformer) {
       ElementBitwidth = 1 << Log2EEW;
       ScalarType = ScalarTypeKind::SignedInteger;
       UpdateAndCheckComplexProto();
+    } else if (ComplexTT.first == "FixedSEW") {
+      uint32_t NewSEW;
+      ComplexTT.second.getAsInteger(10, NewSEW);
+      // Set invalid type if src and dst SEW are same.
+      if (ElementBitwidth == NewSEW) {
+        ScalarType = Invalid;
+        return;
+      }
+      // Update new SEW
+      ElementBitwidth = NewSEW;
+      UpdateAndCheckComplexProto();
+    } else if (ComplexTT.first == "LFixedLog2LMUL") {
+      // New LMUL should be larger than old
+      if (!ComputeFixedLog2LMUL(ComplexTT.second, std::greater<int32_t>()))
+        return;
+    } else if (ComplexTT.first == "SFixedLog2LMUL") {
+      // New LMUL should be smaller than old
+      if (!ComputeFixedLog2LMUL(ComplexTT.second, std::less<int32_t>()))
+        return;
     } else {
       PrintFatalError("Illegal complex type transformers!");
     }
@@ -785,8 +837,8 @@ std::string RVVIntrinsic::getBuiltinTypeStr() const {
 }
 
 void RVVIntrinsic::emitCodeGenSwitchBody(raw_ostream &OS) const {
-
-  OS << "  ID = Intrinsic::riscv_" + getIRName() + ";\n";
+  if (!getIRName().empty())
+    OS << "  ID = Intrinsic::riscv_" + getIRName() + ";\n";
   if (hasManualCodegen()) {
     OS << ManualCodegen;
     OS << "break;\n";
@@ -986,18 +1038,20 @@ void RVVEmitter::createBuiltins(raw_ostream &OS) {
 void RVVEmitter::createCodeGen(raw_ostream &OS) {
   std::vector<std::unique_ptr<RVVIntrinsic>> Defs;
   createRVVIntrinsics(Defs);
-
-  // The same intrinsic IR name has the same switch body.
+  // IR name could be empty, use the stable sort preserves the relative order.
   std::stable_sort(Defs.begin(), Defs.end(),
                    [](const std::unique_ptr<RVVIntrinsic> &A,
                       const std::unique_ptr<RVVIntrinsic> &B) {
                      return A->getIRName() < B->getIRName();
                    });
-  // Print switch body when the ir name changes from previous iteration.
+  // Print switch body when the ir name or ManualCodegen changes from previous
+  // iteration.
   RVVIntrinsic *PrevDef = Defs.begin()->get();
   for (auto &Def : Defs) {
     StringRef CurIRName = Def->getIRName();
-    if (CurIRName != PrevDef->getIRName()) {
+    if (CurIRName != PrevDef->getIRName() ||
+        (CurIRName.empty() &&
+         Def->getManualCodegen() != PrevDef->getManualCodegen())) {
       PrevDef->emitCodeGenSwitchBody(OS);
     }
     PrevDef = Def.get();
@@ -1009,7 +1063,7 @@ void RVVEmitter::createCodeGen(raw_ostream &OS) {
 
 void RVVEmitter::parsePrototypes(StringRef Prototypes,
                                  std::function<void(StringRef)> Handler) {
-  const StringRef Primaries("evwqom0ztc");
+  const StringRef Primaries("evwqom0ztul");
   while (!Prototypes.empty()) {
     size_t Idx = 0;
     // Skip over complex prototype because it could contain primitive type
@@ -1173,7 +1227,7 @@ bool RVVEmitter::emitExtDefStr(uint8_t Extents, raw_ostream &OS) {
   if (Extents == RISCVExtension::Basic)
     return false;
   OS << "#if ";
-  ListSeparator LS(" || ");
+  ListSeparator LS(" && ");
   if (Extents & RISCVExtension::F)
     OS << LS << "defined(__riscv_f)";
   if (Extents & RISCVExtension::D)
