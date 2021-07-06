@@ -131,7 +131,8 @@ public:
       return TypeSize::getFixed(64);
     case TargetTransformInfo::RGK_FixedWidthVector:
       // TODO report vregs once vector isel is stable.
-      return TypeSize::getFixed(0);
+      return makeVectorOpsExpensive() ? TypeSize::getFixed(0)
+                                      : TypeSize::getFixed(256 * 64);
     case TargetTransformInfo::RGK_ScalableVector:
       return TypeSize::getScalable(0);
     }
