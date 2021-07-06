@@ -306,6 +306,12 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
     }
 
     DwarfRegs.clear();
+    // If we need to mask out a subregister, do it now, unless the next
+    // operation would emit an OpPiece anyway.
+    auto NextOp = ExprCursor.peek();
+    if (SubRegisterSizeInBits && NextOp &&
+        (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+      maskSubRegister();
     return true;
   }
 
@@ -358,6 +364,14 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
   else
     addBReg(Reg.DwarfRegNo, SignedOffset);
   DwarfRegs.clear();
+
+  // If we need to mask out a subregister, do it now, unless the next
+  // operation would emit an OpPiece anyway.
+  auto NextOp = ExprCursor.peek();
+  if (SubRegisterSizeInBits && NextOp &&
+      (NextOp->getOp() != dwarf::DW_OP_LLVM_fragment))
+    maskSubRegister();
+
   return true;
 }
 
@@ -455,15 +469,18 @@ static bool isMemoryLocation(DIExpressionCursor ExprCursor) {
 
 void DwarfExpression::addExpression(DIExpressionCursor &&ExprCursor,
                                     unsigned FragmentOffsetInBits) {
+  addExpression(std::move(ExprCursor),
+                [](unsigned Idx, DIExpressionCursor &Cursor) -> bool {
+                  llvm_unreachable("unhandled opcode found in expression");
+                });
+}
+
+void DwarfExpression::addExpression(
+    DIExpressionCursor &&ExprCursor,
+    llvm::function_ref<bool(unsigned, DIExpressionCursor &)> InsertArg) {
   // Entry values can currently only cover the initial register location,
   // and not any other parts of the following DWARF expression.
   assert(!IsEmittingEntryValue && "Can't emit entry value around expression");
-
-  // If we need to mask out a subregister, do it now, unless the next
-  // operation would emit an OpPiece anyway.
-  auto N = ExprCursor.peek();
-  if (SubRegisterSizeInBits && N && (N->getOp() != dwarf::DW_OP_LLVM_fragment))
-    maskSubRegister();
 
   Optional<DIExpression::ExprOperand> PrevConvertOp = None;
 
@@ -480,6 +497,12 @@ void DwarfExpression::addExpression(DIExpressionCursor &&ExprCursor,
     }
 
     switch (OpNum) {
+    case dwarf::DW_OP_LLVM_arg:
+      if (!InsertArg(Op->getArg(0), ExprCursor)) {
+        LocationKind = Unknown;
+        return;
+      }
+      break;
     case dwarf::DW_OP_LLVM_fragment: {
       unsigned SizeInBits = Op->getArg(1);
       unsigned FragmentOffset = Op->getArg(0);

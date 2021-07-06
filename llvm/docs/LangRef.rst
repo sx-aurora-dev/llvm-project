@@ -1119,7 +1119,7 @@ Currently, only the following parameter attributes are defined:
 
 .. _attr_inalloca:
 
-``inalloca``
+``inalloca(<ty>)``
 
     The ``inalloca`` argument attribute allows the caller to take the
     address of outgoing stack arguments. An ``inalloca`` argument must
@@ -1142,6 +1142,9 @@ Currently, only the following parameter attributes are defined:
     space after an argument allocation and before its call site, but it
     must be cleared off with :ref:`llvm.stackrestore
     <int_stackrestore>`.
+
+    The inalloca attribute requires a type argument, which must be the
+    same as the pointee type of the argument.
 
     See :doc:`InAlloca` for more information on how to use this
     attribute.
@@ -1992,6 +1995,11 @@ example:
     function does not satisfy this contract, the behavior is undefined.  This
     attribute does not apply transitively to callees, but does apply to call
     sites within the function. Note that `willreturn` implies `mustprogress`.
+``vscale_range(<min>[, <max>])``
+    This attribute indicates the minimum and maximum vscale value for the given
+    function. A value of 0 means unbounded. If the optional max value is omitted
+    then max is set to the value of min. If the attribute is not present, no
+    assumptions are made about the range of vscale.
 
 Call Site Attributes
 ----------------------
@@ -3200,6 +3208,63 @@ and a scalable property to represent vectors where the exact hardware
 vector length is unknown at compile time. Vector types are considered
 :ref:`first class <t_firstclass>`.
 
+:Memory Layout:
+
+In general vector elements are laid out in memory in the same way as
+:ref:`array types <t_array>`. Such an anology works fine as long as the vector
+elements are byte sized. However, when the elements of the vector aren't byte
+sized it gets a bit more complicated. One way to describe the layout is by
+describing what happens when a vector such as <N x iM> is bitcasted to an
+integer type with N*M bits, and then following the rules for storing such an
+integer to memory.
+
+A bitcast from a vector type to a scalar integer type will see the elements
+being packed together (without padding). The order in which elements are
+inserted in the integer depends on endianess. For little endian element zero
+is put in the least significant bits of the integer, and for big endian
+element zero is put in the most significant bits.
+
+Using a vector such as ``<i4 1, i4 2, i4 3, i4 5>`` as an example, together
+with the analogy that we can replace a vector store by a bitcast followed by
+an integer store, we get this for big endian:
+
+.. code-block:: llvm
+
+      %val = bitcast <4 x i4> <i4 1, i4 2, i4 3, i4 5> to i16
+
+      ; Bitcasting from a vector to an integral type can be seen as
+      ; concatenating the values:
+      ;   %val now has the hexadecimal value 0x1235.
+
+      store i16 %val, i16* %ptr
+
+      ; In memory the content will be (8-bit addressing):
+      ;
+      ;    [%ptr + 0]: 00010010  (0x12)
+      ;    [%ptr + 1]: 00110101  (0x35)
+
+The same example for little endian:
+
+.. code-block:: llvm
+
+      %val = bitcast <4 x i4> <i4 1, i4 2, i4 3, i4 5> to i16
+
+      ; Bitcasting from a vector to an integral type can be seen as
+      ; concatenating the values:
+      ;   %val now has the hexadecimal value 0x5321.
+
+      store i16 %val, i16* %ptr
+
+      ; In memory the content will be (8-bit addressing):
+      ;
+      ;    [%ptr + 0]: 01010011  (0x53)
+      ;    [%ptr + 1]: 00100001  (0x21)
+
+When ``<N*M>`` isn't evenly divisible by the byte size the exact memory layout
+is unspecified (just like it is for an integral type of the same size). This
+is because different targets could put the padding at different positions when
+the type size is smaller than the type's store size.
+
 :Syntax:
 
 ::
@@ -3392,9 +3457,10 @@ Opaque Structure Types
 
 :Overview:
 
-Opaque structure types are used to represent named structure types that
+Opaque structure types are used to represent structure types that
 do not have a body specified. This corresponds (for example) to the C
-notion of a forward declared structure.
+notion of a forward declared structure. They can be named (``%X``) or
+unnamed (``%52``).
 
 :Syntax:
 
@@ -9705,8 +9771,7 @@ this ``cmpxchg`` with other :ref:`volatile operations <volatile>`.
 
 The success and failure :ref:`ordering <ordering>` arguments specify how this
 ``cmpxchg`` synchronizes with other atomic operations. Both ordering parameters
-must be at least ``monotonic``, the ordering constraint on failure must be no
-stronger than that on success, and the failure ordering cannot be either
+must be at least ``monotonic``, the failure ordering cannot be either
 ``release`` or ``acq_rel``.
 
 A ``cmpxchg`` instruction can also take an optional
@@ -10603,14 +10668,19 @@ pointers) types with the same address space through this instruction.
 To convert pointers to other types, use the :ref:`inttoptr <i_inttoptr>`
 or :ref:`ptrtoint <i_ptrtoint>` instructions first.
 
+There is a caveat for bitcasts involving vector types in relation to
+endianess. For example ``bitcast <2 x i8> <value> to i16`` puts element zero
+of the vector in the least significant bits of the i16 for little-endian while
+element zero ends up in the most significant bits for big-endian.
+
 Example:
 """"""""
 
 .. code-block:: text
 
-      %X = bitcast i8 255 to i8              ; yields i8 :-1
-      %Y = bitcast i32* %x to sint*          ; yields sint*:%x
-      %Z = bitcast <2 x int> %V to i64;        ; yields i64: %V
+      %X = bitcast i8 255 to i8          ; yields i8 :-1
+      %Y = bitcast i32* %x to sint*      ; yields sint*:%x
+      %Z = bitcast <2 x int> %V to i64;  ; yields i64: %V (depends on endianess)
       %Z = bitcast <2 x i32*> %V to <2 x i64*> ; yields <2 x i64*>
 
 .. _i_addrspacecast:
@@ -11506,6 +11576,15 @@ functions such as ``i8 @llvm.ctpop.i8(i8 %val)`` and
 overloaded, and only one type suffix is required. Because the argument's
 type is matched against the return type, it does not require its own
 name suffix.
+
+:ref:`Unnamed types <t_opaque>` are encoded as ``s_s``. Overloaded intrinsics
+that depend on an unnamed type in one of its overloaded argument types get an
+additional ``.<number>`` suffix. This allows differentiating intrinsics with
+different unnamed types as arguments. (For example:
+``llvm.ssa.copy.p0s_s.2(%42*)``) The number is tracked in the LLVM module and
+it ensures unique names in the module. While linking together two modules, it is
+still possible to get a name clash. In that case one of the names will be
+changed by getting a new number.
 
 For target developers who are defining intrinsics for back-end code
 generation, any intrinsic overloads based solely the distinction between
@@ -15965,6 +16044,46 @@ set up the hardware-loop count with a target specific instruction, usually a
 move of this value to a special register or a hardware-loop instruction.
 The result is the conditional value of whether the given count is not zero.
 
+
+'``llvm.test.start.loop.iterations.*``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+This is an overloaded intrinsic.
+
+::
+
+      declare {i32, i1} @llvm.test.start.loop.iterations.i32(i32)
+      declare {i64, i1} @llvm.test.start.loop.iterations.i64(i64)
+
+Overview:
+"""""""""
+
+The '``llvm.test.start.loop.iterations.*``' intrinsics are similar to the
+'``llvm.test.set.loop.iterations.*``' and '``llvm.start.loop.iterations.*``'
+intrinsics, used to specify the hardware-loop trip count, but also produce a
+value identical to the input that can be used as the input to the loop. The
+second i1 output controls entry to a while-loop.
+
+Arguments:
+""""""""""
+
+The integer operand is the loop trip count of the hardware-loop, and thus
+not e.g. the loop back-edge taken count.
+
+Semantics:
+""""""""""
+
+The '``llvm.test.start.loop.iterations.*``' intrinsics do not perform any
+arithmetic on their operand. It's a hint to the backend that can use this to
+set up the hardware-loop count with a target specific instruction, usually a
+move of this value to a special register or a hardware-loop instruction.
+The result is a pair of the input and a conditional value of whether the
+given count is not zero.
+
+
 '``llvm.loop.decrement.reg.*``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -16555,6 +16674,36 @@ The first two operands are vectors with the same type. The third argument
 ``imm`` is the start index, modulo VL, where VL is the runtime vector length of
 the source/result vector. The ``imm`` is a signed integer constant in the range
 ``-VL <= imm < VL``. For values outside of this range the result is poison.
+
+
+'``llvm.experimental.stepvector``' Intrinsic
+
+This is an overloaded intrinsic. You can use ``llvm.experimental.stepvector``
+to generate a vector whose lane values comprise the linear sequence
+<0, 1, 2, ...>. It is primarily intended for scalable vectors.
+
+::
+
+      declare <vscale x 4 x i32> @llvm.experimental.stepvector.nxv4i32()
+      declare <vscale x 8 x i16> @llvm.experimental.stepvector.nxv8i16()
+
+The '``llvm.experimental.stepvector``' intrinsics are used to create vectors
+of integers whose elements contain a linear sequence of values starting from 0
+with a step of 1.  This experimental intrinsic can only be used for vectors
+with integer elements that are at least 8 bits in size. If the sequence value
+exceeds the allowed limit for the element type then the result for that lane is
+undefined.
+
+These intrinsics work for both fixed and scalable vectors. While this intrinsic
+is marked as experimental, the recommended way to express this operation for
+fixed-width vectors is still to generate a constant vector instead.
+
+
+Arguments:
+""""""""""
+
+None.
+
 
 Matrix Intrinsics
 -----------------

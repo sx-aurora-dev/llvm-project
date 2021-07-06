@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/KnownBits.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cassert>
 
 using namespace llvm;
@@ -489,6 +491,24 @@ KnownBits KnownBits::computeForMul(const KnownBits &LHS, const KnownBits &RHS) {
   return Res;
 }
 
+KnownBits KnownBits::mulhs(const KnownBits &LHS, const KnownBits &RHS) {
+  unsigned BitWidth = LHS.getBitWidth();
+  assert(BitWidth == RHS.getBitWidth() && !LHS.hasConflict() &&
+         !RHS.hasConflict() && "Operand mismatch");
+  KnownBits WideLHS = LHS.sext(2 * BitWidth);
+  KnownBits WideRHS = RHS.sext(2 * BitWidth);
+  return computeForMul(WideLHS, WideRHS).extractBits(BitWidth, BitWidth);
+}
+
+KnownBits KnownBits::mulhu(const KnownBits &LHS, const KnownBits &RHS) {
+  unsigned BitWidth = LHS.getBitWidth();
+  assert(BitWidth == RHS.getBitWidth() && !LHS.hasConflict() &&
+         !RHS.hasConflict() && "Operand mismatch");
+  KnownBits WideLHS = LHS.zext(2 * BitWidth);
+  KnownBits WideRHS = RHS.zext(2 * BitWidth);
+  return computeForMul(WideLHS, WideRHS).extractBits(BitWidth, BitWidth);
+}
+
 KnownBits KnownBits::udiv(const KnownBits &LHS, const KnownBits &RHS) {
   unsigned BitWidth = LHS.getBitWidth();
   assert(!LHS.hasConflict() && !RHS.hasConflict());
@@ -582,4 +602,12 @@ KnownBits &KnownBits::operator^=(const KnownBits &RHS) {
   One = (Zero & RHS.One) | (One & RHS.Zero);
   Zero = std::move(Z);
   return *this;
+}
+
+void KnownBits::print(raw_ostream &OS) const {
+  OS << "{Zero=" << Zero << ", One=" << One << "}";
+}
+void KnownBits::dump() const {
+  print(dbgs());
+  dbgs() << "\n";
 }

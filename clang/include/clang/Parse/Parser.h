@@ -941,8 +941,8 @@ private:
     bool isActive;
 
   public:
-    explicit TentativeParsingAction(Parser& p) : P(p) {
-      PrevPreferredType = P.PreferredType;
+    explicit TentativeParsingAction(Parser &p)
+        : P(p), PrevPreferredType(P.PreferredType) {
       PrevTok = P.Tok;
       PrevTentativelyDeclaredIdentifierCount =
           P.TentativelyDeclaredIdentifiers.size();
@@ -1991,7 +1991,8 @@ private:
   Sema::ConditionResult ParseCXXCondition(StmtResult *InitStmt,
                                           SourceLocation Loc,
                                           Sema::ConditionKind CK,
-                                          ForRangeInfo *FRI = nullptr);
+                                          ForRangeInfo *FRI = nullptr,
+                                          bool EnterForConditionScope = false);
 
   //===--------------------------------------------------------------------===//
   // C++ Coroutines
@@ -2638,7 +2639,8 @@ private:
   // which standard permits but we don't supported yet, for example, attributes
   // appertain to decl specifiers.
   void ProhibitCXX11Attributes(ParsedAttributesWithRange &Attrs,
-                               unsigned DiagID);
+                               unsigned DiagID,
+                               bool DiagnoseEmptyAttrs = false);
 
   /// Skip C++11 and C2x attributes and return the end location of the
   /// last one.
@@ -3291,6 +3293,14 @@ private:
   /// Expected format:
   /// '(' { <allocator> [ '(' <allocator_traits> ')' ] }+ ')'
   OMPClause *ParseOpenMPUsesAllocatorClause(OpenMPDirectiveKind DKind);
+
+  /// Parses clause with an interop variable of kind \a Kind.
+  ///
+  /// \param Kind Kind of current clause.
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  //
+  OMPClause *ParseOpenMPInteropClause(OpenMPClauseKind Kind, bool ParseOnly);
 
 public:
   /// Parses simple expression in parens for single-expression clauses of OpenMP

@@ -404,7 +404,7 @@ shouldUseExceptionTablesForObjCExceptions(const ObjCRuntime &runtime,
 /// master flag, -fexceptions and also language specific flags to enable/disable
 /// C++ and Objective-C exceptions. This makes it possible to for example
 /// disable C++ exceptions but enable Objective-C exceptions.
-static void addExceptionArgs(const ArgList &Args, types::ID InputType,
+static bool addExceptionArgs(const ArgList &Args, types::ID InputType,
                              const ToolChain &TC, bool KernelOrKext,
                              const ObjCRuntime &objcRuntime,
                              ArgStringList &CmdArgs) {
@@ -419,7 +419,7 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
     Args.ClaimAllArgs(options::OPT_fno_objc_exceptions);
     Args.ClaimAllArgs(options::OPT_fcxx_exceptions);
     Args.ClaimAllArgs(options::OPT_fno_cxx_exceptions);
-    return;
+    return false;
   }
 
   // See if the user explicitly enabled exceptions.
@@ -462,6 +462,7 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
 
   if (EH)
     CmdArgs.push_back("-fexceptions");
+  return EH;
 }
 
 static bool ShouldEnableAutolink(const ArgList &Args, const ToolChain &TC,
@@ -1050,6 +1051,9 @@ static void RenderDebugEnablingArgs(const ArgList &Args, ArgStringList &CmdArgs,
     break;
   case llvm::DebuggerKind::SCE:
     CmdArgs.push_back("-debugger-tuning=sce");
+    break;
+  case llvm::DebuggerKind::DBX:
+    CmdArgs.push_back("-debugger-tuning=dbx");
     break;
   default:
     break;
@@ -2357,7 +2361,8 @@ void Clang::DumpCompilationDatabaseFragmentToDir(
       Twine(llvm::sys::path::filename(Input.getFilename())) + ".%%%%.json");
   int FD;
   SmallString<256> TempPath;
-  Err = llvm::sys::fs::createUniqueFile(Path, FD, TempPath);
+  Err = llvm::sys::fs::createUniqueFile(Path, FD, TempPath,
+                                        llvm::sys::fs::OF_Text);
   if (Err) {
     Driver.Diag(diag::err_drv_compilationdatabase) << Path << Err.message();
     return;
@@ -3915,6 +3920,8 @@ static void renderDebugOptions(const ToolChain &TC, const Driver &D,
         DebuggerTuning = llvm::DebuggerKind::LLDB;
       else if (A->getOption().matches(options::OPT_gsce))
         DebuggerTuning = llvm::DebuggerKind::SCE;
+      else if (A->getOption().matches(options::OPT_gdbx))
+        DebuggerTuning = llvm::DebuggerKind::DBX;
       else
         DebuggerTuning = llvm::DebuggerKind::GDB;
     }
@@ -4272,7 +4279,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (Args.hasFlag(options::OPT_fsycl, options::OPT_fno_sycl, false)) {
-    CmdArgs.push_back("-fsycl");
     CmdArgs.push_back("-fsycl-is-device");
 
     if (Arg *A = Args.getLastArg(options::OPT_sycl_std_EQ)) {
@@ -4890,9 +4896,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_ffine_grained_bitfield_accesses,
                   options::OPT_fno_fine_grained_bitfield_accesses);
 
+  Args.AddLastArg(CmdArgs, options::OPT_fexperimental_relative_cxx_abi_vtables,
+                  options::OPT_fno_experimental_relative_cxx_abi_vtables);
+
   // Handle segmented stacks.
-  if (Args.hasArg(options::OPT_fsplit_stack))
-    CmdArgs.push_back("-split-stacks");
+  if (Args.hasFlag(options::OPT_fsplit_stack, options::OPT_fno_split_stack,
+                   false))
+    CmdArgs.push_back("-fsplit-stack");
 
   RenderFloatingPointOptions(TC, D, OFastEnabled, Args, CmdArgs, JA);
 
@@ -4993,14 +5003,15 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // This is a coarse approximation of what llvm-gcc actually does, both
   // -fasynchronous-unwind-tables and -fnon-call-exceptions interact in more
   // complicated ways.
-  bool AsynchronousUnwindTables =
+  bool UnwindTables =
       Args.hasFlag(options::OPT_fasynchronous_unwind_tables,
                    options::OPT_fno_asynchronous_unwind_tables,
                    (TC.IsUnwindTablesDefault(Args) ||
                     TC.getSanitizerArgs().needsUnwindTables()) &&
                        !Freestanding);
-  if (Args.hasFlag(options::OPT_funwind_tables, options::OPT_fno_unwind_tables,
-                   AsynchronousUnwindTables))
+  UnwindTables = Args.hasFlag(options::OPT_funwind_tables,
+                              options::OPT_fno_unwind_tables, UnwindTables);
+  if (UnwindTables)
     CmdArgs.push_back("-munwind-tables");
 
   // Prepare `-aux-target-cpu` and `-aux-target-feature` unless
@@ -5124,8 +5135,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (D.CCPrintHeaders && !D.CCGenDiagnostics) {
     CmdArgs.push_back("-header-include-file");
-    CmdArgs.push_back(D.CCPrintHeadersFilename ? D.CCPrintHeadersFilename
-                                               : "-");
+    CmdArgs.push_back(!D.CCPrintHeadersFilename.empty()
+                          ? D.CCPrintHeadersFilename.c_str()
+                          : "-");
     CmdArgs.push_back("-sys-header-deps");
   }
   Args.AddLastArg(CmdArgs, options::OPT_P);
@@ -5133,8 +5145,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (D.CCLogDiagnostics && !D.CCGenDiagnostics) {
     CmdArgs.push_back("-diagnostic-log-file");
-    CmdArgs.push_back(D.CCLogDiagnosticsFilename ? D.CCLogDiagnosticsFilename
-                                                 : "-");
+    CmdArgs.push_back(!D.CCLogDiagnosticsFilename.empty()
+                          ? D.CCLogDiagnosticsFilename.c_str()
+                          : "-");
   }
 
   // Give the gen diagnostics more chances to succeed, by avoiding intentional
@@ -5631,8 +5644,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Arg *A = Args.getLastArg(options::OPT_fpatchable_function_entry_EQ)) {
     StringRef S0 = A->getValue(), S = S0;
     unsigned Size, Offset = 0;
-    if (!Triple.isAArch64() && Triple.getArch() != llvm::Triple::x86 &&
-        Triple.getArch() != llvm::Triple::x86_64)
+    if (!Triple.isAArch64() && !Triple.isRISCV() && !Triple.isX86())
       D.Diag(diag::err_drv_unsupported_opt_for_target)
           << A->getAsString(Args) << TripleStr;
     else if (S.consumeInteger(10, Size) ||
@@ -6061,8 +6073,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fapplication-extension");
 
   // Handle GCC-style exception args.
+  bool EH = false;
   if (!C.getDriver().IsCLMode())
-    addExceptionArgs(Args, InputType, TC, KernelOrKext, Runtime, CmdArgs);
+    EH = addExceptionArgs(Args, InputType, TC, KernelOrKext, Runtime, CmdArgs);
 
   // Handle exception personalities
   Arg *A = Args.getLastArg(
@@ -6623,6 +6636,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        !Distro(D.getVFS(), TC.getTriple()).IsGentoo() &&
                        !TC.getTriple().isAndroid() && TC.useIntegratedAs()))
     CmdArgs.push_back("-faddrsig");
+
+  if ((Triple.isOSBinFormatELF() || Triple.isOSBinFormatMachO()) &&
+      (EH || UnwindTables || DebugInfoKind != codegenoptions::NoDebugInfo))
+    CmdArgs.push_back("-D__GCC_HAVE_DWARF2_CFI_ASM=1");
 
   if (Arg *A = Args.getLastArg(options::OPT_fsymbol_partition_EQ)) {
     std::string Str = A->getAsString(Args);

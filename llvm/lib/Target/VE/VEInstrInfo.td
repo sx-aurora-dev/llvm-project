@@ -874,7 +874,7 @@ multiclass PFCHm<string opcStr, bits<8>opc> {
 let Constraints = "$dest = $sd", DisableEncoding = "$sd",
     mayStore=1, mayLoad = 1, hasSideEffects = 0 in
 multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
-                    Operand immOp, Operand MEM, Operand ADDR,
+                    Operand immOp, Operand MEM, ComplexPattern ADDR,
                     SDPatternOperator OpNode = null_frag> {
   def r : RRM<opc, (outs RC:$dest), (ins MEM:$addr, RC:$sy, RC:$sd),
               !strconcat(opcStr, " $dest, $addr, $sy"),
@@ -1855,10 +1855,10 @@ def : Pat<(i64 (anyext i32:$sy)), (i2l $sy)>;
 
 // extload, sextload and zextload stuff
 multiclass EXT64m<SDPatternOperator from,
-                  SDPatternOperator torri,
-                  SDPatternOperator torii,
-                  SDPatternOperator tozri,
-                  SDPatternOperator tozii> {
+                  RM torri,
+                  RM torii,
+                  RM tozri,
+                  RM tozii> {
   def : Pat<(i64 (from ADDRrri:$addr)),
             (i2l (torri MEMrri:$addr))>;
   def : Pat<(i64 (from ADDRrii:$addr)),
@@ -1880,10 +1880,10 @@ defm : EXT64m<extloadi32, LDLSXrri, LDLSXrii, LDLSXzri, LDLSXzii>;
 
 // anyextload
 multiclass EXT32m<SDPatternOperator from,
-                  SDPatternOperator torri,
-                  SDPatternOperator torii,
-                  SDPatternOperator tozri,
-                  SDPatternOperator tozii> {
+                  RM torri,
+                  RM torii,
+                  RM tozri,
+                  RM tozii> {
   def : Pat<(from ADDRrri:$addr), (torri MEMrri:$addr)>;
   def : Pat<(from ADDRrii:$addr), (torii MEMrii:$addr)>;
   def : Pat<(from ADDRzri:$addr), (tozri MEMzri:$addr)>;
@@ -1894,10 +1894,10 @@ defm : EXT32m<extloadi16, LD2BZXrri, LD2BZXrii, LD2BZXzri, LD2BZXzii>;
 
 // truncstore
 multiclass TRUNC64m<SDPatternOperator from,
-                    SDPatternOperator torri,
-                    SDPatternOperator torii,
-                    SDPatternOperator tozri,
-                    SDPatternOperator tozii> {
+                    RM torri,
+                    RM torii,
+                    RM tozri,
+                    RM tozii> {
   def : Pat<(from i64:$src, ADDRrri:$addr),
             (torri MEMrri:$addr, (l2i $src))>;
   def : Pat<(from i64:$src, ADDRrii:$addr),
@@ -1913,8 +1913,8 @@ defm : TRUNC64m<truncstorei32, STLrri, STLrii, STLzri, ST1Bzii>;
 
 // Atomic loads
 multiclass ATMLDm<SDPatternOperator from,
-                  SDPatternOperator torri, SDPatternOperator torii,
-                  SDPatternOperator tozri, SDPatternOperator tozii> {
+                  RM torri, RM torii,
+                  RM tozri, RM tozii> {
   def : Pat<(from ADDRrri:$addr), (torri MEMrri:$addr)>;
   def : Pat<(from ADDRrii:$addr), (torii MEMrii:$addr)>;
   def : Pat<(from ADDRzri:$addr), (tozri MEMzri:$addr)>;
@@ -1926,9 +1926,9 @@ defm : ATMLDm<atomic_load_32, LDLZXrri, LDLZXrii, LDLZXzri, LDLZXzii>;
 defm : ATMLDm<atomic_load_64, LDrri, LDrii, LDzri, LDzii>;
 
 // Optimized atomic loads with sext
-multiclass SXATMLDm<SDPatternOperator from, Operand TY,
-                    SDPatternOperator torri, SDPatternOperator torii,
-                    SDPatternOperator tozri, SDPatternOperator tozii> {
+multiclass SXATMLDm<SDPatternOperator from, ValueType TY,
+                    RM torri, RM torii,
+                    RM tozri, RM tozii> {
   def : Pat<(i64 (sext_inreg (i64 (anyext (from ADDRrri:$addr))), TY)),
             (i2l (torri MEMrri:$addr))>;
   def : Pat<(i64 (sext_inreg (i64 (anyext (from ADDRrii:$addr))), TY)),
@@ -1939,8 +1939,8 @@ multiclass SXATMLDm<SDPatternOperator from, Operand TY,
             (i2l (tozii MEMzii:$addr))>;
 }
 multiclass SXATMLD32m<SDPatternOperator from,
-                      SDPatternOperator torri, SDPatternOperator torii,
-                      SDPatternOperator tozri, SDPatternOperator tozii> {
+                      RM torri, RM torii,
+                      RM tozri, RM tozii> {
   def : Pat<(i64 (sext (from ADDRrri:$addr))),
             (i2l (torri MEMrri:$addr))>;
   def : Pat<(i64 (sext (from ADDRrii:$addr))),
@@ -1956,9 +1956,9 @@ defm : SXATMLDm<atomic_load_16, i16, LD2BSXrri, LD2BSXrii, LD2BSXzri,
 defm : SXATMLD32m<atomic_load_32, LDLSXrri, LDLSXrii, LDLSXzri, LDLSXzii>;
 
 // Optimized atomic loads with zext
-multiclass ZXATMLDm<SDPatternOperator from, Operand VAL,
-                    SDPatternOperator torri, SDPatternOperator torii,
-                    SDPatternOperator tozri, SDPatternOperator tozii> {
+multiclass ZXATMLDm<SDPatternOperator from, int VAL,
+                    RM torri, RM torii,
+                    RM tozri, RM tozii> {
   def : Pat<(i64 (and (anyext (from ADDRrri:$addr)), VAL)),
             (i2l (torri MEMrri:$addr))>;
   def : Pat<(i64 (and (anyext (from ADDRrii:$addr)), VAL)),
@@ -1968,9 +1968,9 @@ multiclass ZXATMLDm<SDPatternOperator from, Operand VAL,
   def : Pat<(i64 (and (anyext (from ADDRzii:$addr)), VAL)),
             (i2l (tozii MEMzii:$addr))>;
 }
-multiclass ZXATMLD32m<SDPatternOperator from, Operand VAL,
-                      SDPatternOperator torri, SDPatternOperator torii,
-                      SDPatternOperator tozri, SDPatternOperator tozii> {
+multiclass ZXATMLD32m<SDPatternOperator from, int VAL,
+                      RM torri, RM torii,
+                      RM tozri, RM tozii> {
   def : Pat<(i64 (zext (from ADDRrri:$addr))),
             (i2l (torri MEMrri:$addr))>;
   def : Pat<(i64 (zext (from ADDRrii:$addr))),
@@ -1989,8 +1989,8 @@ defm : ZXATMLD32m<atomic_load_32, 0xFFFFFFFF, LDLZXrri, LDLZXrii, LDLZXzri,
 
 // Atomic stores
 multiclass ATMSTm<SDPatternOperator from, ValueType ty,
-                  SDPatternOperator torri, SDPatternOperator torii,
-                  SDPatternOperator tozri, SDPatternOperator tozii> {
+                  RM torri, RM torii,
+                  RM tozri, RM tozii> {
   def : Pat<(from ADDRrri:$addr, ty:$src), (torri MEMrri:$addr, $src)>;
   def : Pat<(from ADDRrii:$addr, ty:$src), (torii MEMrii:$addr, $src)>;
   def : Pat<(from ADDRzri:$addr, ty:$src), (tozri MEMzri:$addr, $src)>;
@@ -2004,10 +2004,10 @@ defm : ATMSTm<atomic_store_64, i64, STrri, STrii, STzri, STzii>;
 // Optimized atomic stores with truncate
 multiclass TRATMSTm<SDPatternOperator from,
                   ValueType ty,
-                  SDPatternOperator torri,
-                  SDPatternOperator torii,
-                  SDPatternOperator tozri,
-                  SDPatternOperator tozii> {
+                  RM torri,
+                  RM torii,
+                  RM tozri,
+                  RM tozii> {
   def : Pat<(from ADDRrri:$addr, (i32 (trunc i64:$src))),
             (torri MEMrri:$addr, (l2i $src))>;
   def : Pat<(from ADDRrii:$addr, (i32 (trunc i64:$src))),
@@ -2061,10 +2061,10 @@ def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;
 
 // brcc
 // integer brcc
-multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
-                 SDPatternOperator BrOpNode2,
-                 SDPatternOperator CmpOpNode1,
-                 SDPatternOperator CmpOpNode2> {
+multiclass BRCCIm<ValueType ty, CF BrOpNode1,
+                 CF BrOpNode2,
+                 RR CmpOpNode1,
+                 RR CmpOpNode2> {
   def : Pat<(brcc CCSIOp:$cond, ty:$l, simm7:$r, bb:$addr),
             (BrOpNode2 (icond2ccSwap $cond), (LO7 $r), $l, bb:$addr)>;
   def : Pat<(brcc CCSIOp:$cond, ty:$l, ty:$r, bb:$addr),
@@ -2079,8 +2079,7 @@ defm : BRCCIm<i32, BRCFWrr, BRCFWir, CMPUWrr, CMPUWir>;
 defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPULrr, CMPULir>;
 
 // floating point brcc
-multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
-                 SDPatternOperator BrOpNode2> {
+multiclass BRCCFm<ValueType ty, CF BrOpNode1, CF BrOpNode2> {
   def : Pat<(brcc cond:$cond, ty:$l, simm7fp:$r, bb:$addr),
             (BrOpNode2 (fcond2ccSwap $cond), (LO7FP $r), $l, bb:$addr)>;
   def : Pat<(brcc cond:$cond, ty:$l, ty:$r, bb:$addr),
@@ -2191,9 +2190,8 @@ multiclass SETCCREGm<ValueType TY, Operand COND,
 }
 
 // Integer setcc multiclass.
-multiclass SETCCIm<ValueType TY, SDPatternOperator CMOV,
-                   SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
-                   SDPatternOperator CMPUir, SDPatternOperator CMPUrr> :
+multiclass SETCCIm<ValueType TY, RR CMOV,
+                   RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr> :
   // Avoid CMP instruction iff rhs == 0 and signed comparison.
   SETCCZEROm<TY, zero, CCSIOp, CMOV, icond2cc>,
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
@@ -2205,8 +2203,7 @@ multiclass SETCCIm<ValueType TY, SDPatternOperator CMOV,
   SETCCREGm<TY, CCUIOp, CMOV, icond2cc, (CMPUrr $l, $r)>;
 
 // Floating point setcc multiclass.
-multiclass SETCCFm<ValueType TY, SDPatternOperator CMOV,
-                   SDPatternOperator CMPir, SDPatternOperator CMPrr> :
+multiclass SETCCFm<ValueType TY, RR CMOV, RR CMPir, RR CMPrr> :
   // Avoid CMP instruction iff rhs == 0 and no-nans.
   SETCCZEROm<TY, fpzero, cond, CMOV, fcond2cc>,
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
@@ -2215,8 +2212,7 @@ multiclass SETCCFm<ValueType TY, SDPatternOperator CMOV,
   // Otherwise, we use generic register comparison.
   SETCCREGm<TY, cond, CMOV, fcond2cc, (CMPrr $l, $r)>;
 
-multiclass SETCCF128m<ValueType TY, SDPatternOperator CMOV,
-                   SDPatternOperator CMPir, SDPatternOperator CMPrr> :
+multiclass SETCCF128m<ValueType TY, RR CMOV, RR CMPir, RR CMPrr> :
   // Avoiding CMP instruction is not possible for f128 since VE's CMOV uses
   // a f64 result of a f128 comparison.
 
@@ -2304,11 +2300,11 @@ class cmovrr<Instruction INSN> :
 class cmovrm<Instruction INSN, SDNodeXForm MOP = MIMM> :
     OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
                (INSN $cond, $comp, (MOP $t), $f)>;
-class cmovirrr<SDPatternOperator CMPIR, Instruction INSN,
+class cmovirrr<RR CMPIR, Instruction INSN,
                SDNodeXForm IOP = LO7> :
     OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
                (INSN $cond, (CMPIR (IOP $l), $r), $t, $f)>;
-class cmovirrm<SDPatternOperator CMPIR, Instruction INSN,
+class cmovirrm<RR CMPIR, Instruction INSN,
                SDNodeXForm IOP = LO7, SDNodeXForm MOP = MIMM> :
     OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
                (INSN $cond, (CMPIR (IOP $l), $r), (MOP $t), $f)>;
@@ -2326,7 +2322,7 @@ class cmov32rm<Instruction INSN, SubRegIndex sub_oty, SDNodeXForm MOP = MIMM> :
                          (MOP $t),
                          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
                    sub_oty)>;
-class cmov32irrr<SDPatternOperator CMPIR, Instruction INSN, SubRegIndex sub_oty,
+class cmov32irrr<RR CMPIR, Instruction INSN, SubRegIndex sub_oty,
                  SDNodeXForm IOP = LO7> :
     OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
                (EXTRACT_SUBREG
@@ -2334,7 +2330,7 @@ class cmov32irrr<SDPatternOperator CMPIR, Instruction INSN, SubRegIndex sub_oty,
                          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_oty),
                          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
                    sub_oty)>;
-class cmov32irrm<SDPatternOperator CMPIR, Instruction INSN, SubRegIndex sub_oty,
+class cmov32irrm<RR CMPIR, Instruction INSN, SubRegIndex sub_oty,
                  SDNodeXForm IOP = LO7, SDNodeXForm MOP = MIMM> :
     OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
                (EXTRACT_SUBREG
@@ -2360,8 +2356,7 @@ class cmov128rr<Instruction INSN> :
 //   CMOV %res, %t, %tmp     ; set %t if %tmp is true
 
 multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
-                      SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
-                      SDPatternOperator CMPUir, SDPatternOperator CMPUrr,
+                      RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2397,8 +2392,8 @@ multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
             (cmovirrm<CMPUir, cmovrm, LO7, MOP> (icond2ccSwap $cond), $r, $l,
                                                 $t, $f)>;
 }
-multiclass SEL64CMPFm<ValueType oty, ValueType cty, SDPatternOperator Insn,
-                      SDPatternOperator CMPir, SDPatternOperator CMPrr,
+multiclass SEL64CMPFm<ValueType oty, ValueType cty, string Insn,
+                      RR CMPir, RR CMPrr,
                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2414,8 +2409,8 @@ multiclass SEL64CMPFm<ValueType oty, ValueType cty, SDPatternOperator Insn,
             (cmovirrr<CMPir, cmovrr, LO7FP> (fcond2ccSwap $cond), $r, $l, $t,
                                             $f)>;
 }
-multiclass SEL64CMPF128m<ValueType oty, ValueType cty, SDPatternOperator Insn,
-                         SDPatternOperator CMPir, SDPatternOperator CMPrr,
+multiclass SEL64CMPF128m<ValueType oty, ValueType cty, string Insn,
+                         RR CMPir, RR CMPrr,
                          Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2441,9 +2436,7 @@ defm : SEL64CMPFm<f64, f64, "CMOVD", FCMPDir, FCMPDrr, mimmfp, MIMMFP>;
 defm : SEL64CMPF128m<f64, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp, MIMMFP>;
 
 multiclass SEL32CMPIm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                      SDPatternOperator Insn,
-                      SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
-                      SDPatternOperator CMPUir, SDPatternOperator CMPUrr,
+                      string Insn, RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2484,8 +2477,7 @@ multiclass SEL32CMPIm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
 }
 multiclass SEL32CMPFm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                      SDPatternOperator Insn,
-                      SDPatternOperator CMPir, SDPatternOperator CMPrr,
+                      string Insn, RR CMPir, RR CMPrr,
                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2501,8 +2493,7 @@ multiclass SEL32CMPFm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
 }
 multiclass SEL32CMPF128m<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                         SDPatternOperator Insn,
-                         SDPatternOperator CMPir, SDPatternOperator CMPrr,
+                         string Insn, RR CMPir, RR CMPrr,
                          Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
   defvar cmovrm = !cast<Instruction>(Insn#"rm");
@@ -2532,9 +2523,7 @@ defm : SEL32CMPF128m<f32, sub_f32, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp,
                      MIMMFP>;
 
 multiclass SEL128CMPIm<ValueType oty, ValueType cty,
-                       SDPatternOperator Insn,
-                       SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
-                       SDPatternOperator CMPUir, SDPatternOperator CMPUrr,
+                       string Insn, RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
                        Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
 
@@ -2546,8 +2535,7 @@ multiclass SEL128CMPIm<ValueType oty, ValueType cty,
             (cmov128rr<cmovrr> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
 }
 multiclass SEL128CMPFm<ValueType oty, ValueType cty,
-                       SDPatternOperator Insn,
-                       SDPatternOperator CMPir, SDPatternOperator CMPrr,
+                       string Insn, RR CMPir, RR CMPrr,
                        Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
 
@@ -2557,8 +2545,7 @@ multiclass SEL128CMPFm<ValueType oty, ValueType cty,
             (cmov128rr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
 }
 multiclass SEL128CMPF128m<ValueType oty, ValueType cty,
-                          SDPatternOperator Insn,
-                          SDPatternOperator CMPir, SDPatternOperator CMPrr,
+                          string Insn, RR CMPir, RR CMPrr,
                           Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
   defvar cmovrr = !cast<Instruction>(Insn#"rr");
 
@@ -2578,7 +2565,7 @@ defm : SEL128CMPF128m<f128, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp, MIMMFP>;
 //   i32/f32/f64/f128 $t, $f, and result.
 
 // CMOV for i32
-multiclass CMOVI32m<ValueType TY, SDPatternOperator Insn> {
+multiclass CMOVI32m<ValueType TY, string Insn> {
   def : Pat<(i32 (CMOV TY:$cmp, i32:$t, i32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rr") (CCOP $cond), $cmp,
@@ -2598,7 +2585,7 @@ defm : CMOVI32m<f64, "CMOVD">;
 defm : CMOVI32m<f32, "CMOVS">;
 
 // CMOV for f32
-multiclass CMOVF32m<ValueType TY, SDPatternOperator Insn> {
+multiclass CMOVF32m<ValueType TY, string Insn> {
   def : Pat<(f32 (CMOV TY:$cmp, f32:$t, f32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rr")
@@ -2619,7 +2606,7 @@ defm : CMOVF32m<f64, "CMOVD">;
 defm : CMOVF32m<f32, "CMOVS">;
 
 // CMOV for f64
-multiclass CMOVF64m<ValueType TY, SDPatternOperator Insn> {
+multiclass CMOVF64m<ValueType TY, string Insn> {
   def : Pat<(f64 (CMOV TY:$cmp, f64:$t, f64:$f, (i32 CCOp:$cond))),
             (!cast<Instruction>(Insn#"rr") (CCOP $cond), $cmp, $t, $f)>;
   def : Pat<(f64 (CMOV TY:$cmp, (f64 mimmfp:$t), f64:$f, (i32 CCOp:$cond))),
@@ -2632,7 +2619,7 @@ defm : CMOVF64m<f64, "CMOVD">;
 defm : CMOVF64m<f32, "CMOVS">;
 
 // CMOV for f128
-multiclass CMOVF128m<ValueType TY, SDPatternOperator Insn> {
+multiclass CMOVF128m<ValueType TY, string Insn> {
   def : Pat<(f128 (CMOV TY:$cmp, f128:$t, f128:$f, (i32 CCOp:$cond))),
             (INSERT_SUBREG
               (INSERT_SUBREG (f128 (IMPLICIT_DEF)),

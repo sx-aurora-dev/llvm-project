@@ -419,6 +419,9 @@ Constant *Constant::getAllOnesValue(Type *Ty) {
 }
 
 Constant *Constant::getAggregateElement(unsigned Elt) const {
+  assert((getType()->isAggregateType() || getType()->isVectorTy()) &&
+         "Must be an aggregate/vector constant");
+
   if (const auto *CC = dyn_cast<ConstantAggregate>(this))
     return Elt < CC->getNumOperands() ? CC->getOperand(Elt) : nullptr;
 
@@ -1914,6 +1917,12 @@ Value *DSOLocalEquivalent::handleOperandChangeImpl(Value *From, Value *To) {
   getContext().pImpl->DSOLocalEquivalents.erase(getGlobalValue());
   NewEquiv = this;
   setOperand(0, Func);
+
+  if (Func->getType() != getType()) {
+    // It is ok to mutate the type here because this constant should always
+    // reflect the type of the function it's holding.
+    mutateType(Func->getType());
+  }
   return nullptr;
 }
 

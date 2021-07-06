@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -584,14 +585,26 @@ bool LoopInterchangeLegality::containsUnsafeInstructions(BasicBlock *BB) {
 }
 
 bool LoopInterchangeLegality::tightlyNested(Loop *OuterLoop, Loop *InnerLoop) {
-  LLVM_DEBUG(dbgs() << "Checking if loops are tightly nested\n");
-
-  if (!LoopNest::checkLoopsStructure(*OuterLoop, *InnerLoop, *SE))
-    return false;
   BasicBlock *OuterLoopHeader = OuterLoop->getHeader();
   BasicBlock *InnerLoopPreHeader = InnerLoop->getLoopPreheader();
   BasicBlock *OuterLoopLatch = OuterLoop->getLoopLatch();
 
+  LLVM_DEBUG(dbgs() << "Checking if loops are tightly nested\n");
+
+  // A perfectly nested loop will not have any branch in between the outer and
+  // inner block i.e. outer header will branch to either inner preheader and
+  // outerloop latch.
+  BranchInst *OuterLoopHeaderBI =
+      dyn_cast<BranchInst>(OuterLoopHeader->getTerminator());
+  if (!OuterLoopHeaderBI)
+    return false;
+
+  for (BasicBlock *Succ : successors(OuterLoopHeaderBI))
+    if (Succ != InnerLoopPreHeader && Succ != InnerLoop->getHeader() &&
+        Succ != OuterLoopLatch)
+      return false;
+
+  LLVM_DEBUG(dbgs() << "Checking instructions in Loop header and Loop latch\n");
   // We do not have any basic block in between now make sure the outer header
   // and outer loop latch doesn't contain any unsafe instructions.
   if (containsUnsafeInstructions(OuterLoopHeader) ||
@@ -603,6 +616,22 @@ bool LoopInterchangeLegality::tightlyNested(Loop *OuterLoop, Loop *InnerLoop) {
   // the outer loop header when interchanging.
   if (InnerLoopPreHeader != OuterLoopHeader &&
       containsUnsafeInstructions(InnerLoopPreHeader))
+    return false;
+
+  BasicBlock *InnerLoopExit = InnerLoop->getExitBlock();
+  // Ensure the inner loop exit block flows to the outer loop latch possibly
+  // through empty blocks.
+  const BasicBlock &SuccInner =
+      LoopNest::skipEmptyBlockUntil(InnerLoopExit, OuterLoopLatch);
+  if (&SuccInner != OuterLoopLatch) {
+    LLVM_DEBUG(dbgs() << "Inner loop exit block " << *InnerLoopExit
+                      << " does not lead to the outer loop latch.\n";);
+    return false;
+  }
+  // The inner loop exit block does flow to the outer loop latch and not some
+  // other BBs, now make sure it contains safe instructions, since it will be
+  // moved into the (new) inner loop after interchange.
+  if (containsUnsafeInstructions(InnerLoopExit))
     return false;
 
   LLVM_DEBUG(dbgs() << "Loops are perfectly nested\n");

@@ -62,7 +62,9 @@ struct FunctionTypeStorage : public TypeStorage {
   /// The hash key used for uniquing.
   using KeyTy = std::pair<TypeRange, TypeRange>;
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(getInputs(), getResults());
+    if (std::get<0>(key) == getInputs())
+      return std::get<1>(key) == getResults();
+    return false;
   }
 
   /// Construction.
@@ -129,6 +131,19 @@ struct TupleTypeStorage final
   /// The number of tuple elements.
   unsigned numElements;
 };
+
+/// Checks if the memorySpace has supported Attribute type.
+bool isSupportedMemorySpace(Attribute memorySpace);
+
+/// Wraps deprecated integer memory space to the new Attribute form.
+Attribute wrapIntegerMemorySpace(unsigned memorySpace, MLIRContext *ctx);
+
+/// Replaces default memorySpace (integer == `0`) with empty Attribute.
+Attribute skipDefaultMemorySpace(Attribute memorySpace);
+
+/// [deprecated] Returns the memory space in old raw integer representation.
+/// New `Attribute getMemorySpace()` method should be used instead.
+unsigned getMemorySpaceAsInt(Attribute memorySpace);
 
 } // namespace detail
 } // namespace mlir

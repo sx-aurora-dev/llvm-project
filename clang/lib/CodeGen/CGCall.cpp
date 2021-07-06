@@ -1765,8 +1765,7 @@ void CodeGenModule::getDefaultFunctionAttributes(StringRef Name,
 
   if (AttrOnCallSite) {
     // Attributes that should go on the call site only.
-    if (!CodeGenOpts.SimplifyLibCalls ||
-        CodeGenOpts.isNoBuiltinFunc(Name.data()))
+    if (!CodeGenOpts.SimplifyLibCalls || LangOpts.isNoBuiltinFunc(Name))
       FuncAttrs.addAttribute(llvm::Attribute::NoBuiltin);
     if (!CodeGenOpts.TrapFuncName.empty())
       FuncAttrs.addAttribute("trap-func-name", CodeGenOpts.TrapFuncName);
@@ -2291,7 +2290,7 @@ void CodeGenModule::ConstructAttributeList(
   // Attach attributes to inalloca argument.
   if (IRFunctionArgs.hasInallocaArg()) {
     llvm::AttrBuilder Attrs;
-    Attrs.addAttribute(llvm::Attribute::InAlloca);
+    Attrs.addInAllocaAttr(FI.getArgStruct());
     ArgAttrs[IRFunctionArgs.getInallocaArgNo()] =
         llvm::AttributeSet::get(getLLVMContext(), Attrs);
   }
@@ -3401,7 +3400,9 @@ void CodeGenFunction::EmitFunctionEpilog(const CGFunctionInfo &FI,
       llvm::Value *ArgStruct = &*EI;
       llvm::Value *SRet = Builder.CreateStructGEP(
           nullptr, ArgStruct, RetAI.getInAllocaFieldIndex());
-      RV = Builder.CreateAlignedLoad(SRet, getPointerAlign(), "sret");
+      llvm::Type *Ty =
+          cast<llvm::GetElementPtrInst>(SRet)->getResultElementType();
+      RV = Builder.CreateAlignedLoad(Ty, SRet, getPointerAlign(), "sret");
     }
     break;
 

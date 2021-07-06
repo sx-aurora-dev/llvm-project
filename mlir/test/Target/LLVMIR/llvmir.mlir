@@ -1265,6 +1265,29 @@ llvm.mlir.global internal constant @taker_of_address() : !llvm.ptr<func<void ()>
 
 // -----
 
+// CHECK: @forward_use_of_address = linkonce global float* @address_declared_after_use
+llvm.mlir.global linkonce @forward_use_of_address() : !llvm.ptr<f32> {
+  %0 = llvm.mlir.addressof @address_declared_after_use : !llvm.ptr<f32>
+  llvm.return %0 : !llvm.ptr<f32>
+}
+
+llvm.mlir.global linkonce @address_declared_after_use() : f32
+
+// -----
+
+// CHECK: @take_self_address = linkonce global { i32, i32* } {{.*}} { i32, i32* }* @take_self_address
+llvm.mlir.global linkonce @take_self_address() : !llvm.struct<(i32, !llvm.ptr<i32>)> {
+  %z32 = llvm.mlir.constant(0 : i32) : i32
+  %0 = llvm.mlir.undef : !llvm.struct<(i32, !llvm.ptr<i32>)>
+  %1 = llvm.mlir.addressof @take_self_address : !llvm.ptr<!llvm.struct<(i32, !llvm.ptr<i32>)>>
+  %2 = llvm.getelementptr %1[%z32, %z32] : (!llvm.ptr<!llvm.struct<(i32, !llvm.ptr<i32>)>>, i32, i32) -> !llvm.ptr<i32>
+  %3 = llvm.insertvalue %z32, %0[0 : i32] : !llvm.struct<(i32, !llvm.ptr<i32>)>
+  %4 = llvm.insertvalue %2, %3[1 : i32] : !llvm.struct<(i32, !llvm.ptr<i32>)>
+  llvm.return %4 : !llvm.struct<(i32, !llvm.ptr<i32>)>
+}
+
+// -----
+
 // Check that branch weight attributes are exported properly as metadata.
 llvm.func @cond_br_weights(%cond : i1, %arg0 : i32,  %arg1 : i32) -> i32 {
   // CHECK: !prof ![[NODE:[0-9]+]]
@@ -1480,13 +1503,13 @@ module {
     ^bb3(%1: i32):
       %2 = llvm.icmp "slt" %1, %arg1 : i32
       // CHECK: br i1 {{.*}} !llvm.loop ![[LOOP_NODE:[0-9]+]]
-      llvm.cond_br %2, ^bb4, ^bb5 {llvm.loop = {parallel_access = [@metadata::@group1, @metadata::@group2], options = [#llvm.loopopt<disable_unroll = true>, #llvm.loopopt<disable_licm = true>, #llvm.loopopt<interleave_count = 1>]}}
+      llvm.cond_br %2, ^bb4, ^bb5 {llvm.loop = {parallel_access = [@metadata::@group1, @metadata::@group2], options = #llvm.loopopts<disable_licm = true, disable_unroll = true, interleave_count = 1, disable_pipeline = true, pipeline_initiation_interval = 2>}}
     ^bb4:
       %3 = llvm.add %1, %arg2  : i32
       // CHECK: = load i32, i32* %{{.*}} !llvm.access.group ![[ACCESS_GROUPS_NODE:[0-9]+]]
       %5 = llvm.load %4 { access_groups = [@metadata::@group1, @metadata::@group2] } : !llvm.ptr<i32>
       // CHECK: br label {{.*}} !llvm.loop ![[LOOP_NODE]]
-      llvm.br ^bb3(%3 : i32) {llvm.loop = {parallel_access = [@metadata::@group1, @metadata::@group2], options = [#llvm.loopopt<disable_unroll = true>, #llvm.loopopt<disable_licm = true>, #llvm.loopopt<interleave_count = 1>]}}
+      llvm.br ^bb3(%3 : i32) {llvm.loop = {parallel_access = [@metadata::@group1, @metadata::@group2], options = #llvm.loopopts<disable_unroll = true, disable_licm = true, interleave_count = 1, disable_pipeline = true, pipeline_initiation_interval = 2>}}
     ^bb5:
       llvm.return
   }
@@ -1498,11 +1521,13 @@ module {
   }
 }
 
-// CHECK: ![[LOOP_NODE]] = distinct !{![[LOOP_NODE]], ![[PA_NODE:[0-9]+]], ![[UNROLL_DISABLE_NODE:[0-9]+]], ![[LICM_DISABLE_NODE:[0-9]+]], ![[INTERLEAVE_NODE:[0-9]+]]}
+// CHECK: ![[LOOP_NODE]] = distinct !{![[LOOP_NODE]], ![[PA_NODE:[0-9]+]], ![[UNROLL_DISABLE_NODE:[0-9]+]], ![[LICM_DISABLE_NODE:[0-9]+]], ![[INTERLEAVE_NODE:[0-9]+]], ![[PIPELINE_DISABLE_NODE:[0-9]+]], ![[II_NODE:[0-9]+]]}
 // CHECK: ![[PA_NODE]] = !{!"llvm.loop.parallel_accesses", ![[GROUP_NODE1:[0-9]+]], ![[GROUP_NODE2:[0-9]+]]}
 // CHECK: ![[GROUP_NODE1]] = distinct !{}
 // CHECK: ![[GROUP_NODE2]] = distinct !{}
 // CHECK: ![[UNROLL_DISABLE_NODE]] = !{!"llvm.loop.unroll.disable", i1 true}
 // CHECK: ![[LICM_DISABLE_NODE]] = !{!"llvm.licm.disable", i1 true}
 // CHECK: ![[INTERLEAVE_NODE]] = !{!"llvm.loop.interleave.count", i32 1}
+// CHECK: ![[PIPELINE_DISABLE_NODE]] = !{!"llvm.loop.pipeline.disable", i1 true}
+// CHECK: ![[II_NODE]] = !{!"llvm.loop.pipeline.initiationinterval", i32 2}
 // CHECK: ![[ACCESS_GROUPS_NODE]] = !{![[GROUP_NODE1]], ![[GROUP_NODE2]]}

@@ -105,7 +105,7 @@ protected:
   Symbol *DeclarePrivateAccessEntity(Symbol &, Symbol::Flag, Scope &);
   Symbol *DeclareOrMarkOtherAccessEntity(const parser::Name &, Symbol::Flag);
 
-  SymbolSet dataSharingAttributeObjects_; // on one directive
+  UnorderedSymbolSet dataSharingAttributeObjects_; // on one directive
   SemanticsContext &context_;
   std::vector<DirContext> dirContext_; // used as a stack
 };
@@ -365,6 +365,32 @@ public:
         x.u);
     return false;
   }
+
+  bool Pre(const parser::OmpClause::Reduction &x) {
+    const parser::OmpReductionOperator &opr{
+        std::get<parser::OmpReductionOperator>(x.v.t)};
+    if (const auto *procD{parser::Unwrap<parser::ProcedureDesignator>(opr.u)}) {
+      if (const auto *name{parser::Unwrap<parser::Name>(procD->u)}) {
+        if (!name->symbol) {
+          const auto namePair{currScope().try_emplace(
+              name->source, Attrs{}, ProcEntityDetails{})};
+          auto &symbol{*namePair.first->second};
+          name->symbol = &symbol;
+          name->symbol->set(Symbol::Flag::OmpReduction);
+          AddToContextObjectWithDSA(*name->symbol, Symbol::Flag::OmpReduction);
+        }
+      }
+      if (const auto *procRef{
+              parser::Unwrap<parser::ProcComponentRef>(procD->u)}) {
+        ResolveOmp(*procRef->v.thing.component.symbol,
+            Symbol::Flag::OmpReduction, currScope());
+      }
+    }
+    const auto &objList{std::get<parser::OmpObjectList>(x.v.t)};
+    ResolveOmpObjectList(objList, Symbol::Flag::OmpReduction);
+    return false;
+  }
+
   bool Pre(const parser::OmpAlignedClause &x) {
     const auto &alignedNameList{std::get<std::list<parser::Name>>(x.t)};
     ResolveOmpNameList(alignedNameList, Symbol::Flag::OmpAligned);
@@ -426,8 +452,8 @@ private:
       Symbol::Flag::OmpCopyIn, Symbol::Flag::OmpCopyPrivate};
 
   std::vector<const parser::Name *> allocateNames_; // on one directive
-  SymbolSet privateDataSharingAttributeObjects_; // on one directive
-  SymbolSet stmtFunctionExprSymbols_;
+  UnorderedSymbolSet privateDataSharingAttributeObjects_; // on one directive
+  UnorderedSymbolSet stmtFunctionExprSymbols_;
   std::multimap<const parser::Label,
       std::pair<parser::CharBlock, std::optional<DirContext>>>
       sourceLabels_;

@@ -9,6 +9,7 @@
 #ifndef MLIR_IR_BUILTINTYPES_H
 #define MLIR_IR_BUILTINTYPES_H
 
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Types.h"
 
 namespace llvm {
@@ -175,6 +176,10 @@ public:
   static bool classof(Type type);
 
   /// Returns the memory space in which data referred to by this memref resides.
+  Attribute getMemorySpace() const;
+
+  /// [deprecated] Returns the memory space in old raw integer representation.
+  /// New `Attribute getMemorySpace()` method should be used instead.
   unsigned getMemorySpaceAsInt() const;
 };
 
@@ -199,12 +204,12 @@ public:
   // Build from another MemRefType.
   explicit Builder(MemRefType other)
       : shape(other.getShape()), elementType(other.getElementType()),
-        affineMaps(other.getAffineMaps()),
-        memorySpace(other.getMemorySpaceAsInt()) {}
+        affineMaps(other.getAffineMaps()), memorySpace(other.getMemorySpace()) {
+  }
 
   // Build from scratch.
   Builder(ArrayRef<int64_t> shape, Type elementType)
-      : shape(shape), elementType(elementType), affineMaps(), memorySpace(0) {}
+      : shape(shape), elementType(elementType), affineMaps() {}
 
   Builder &setShape(ArrayRef<int64_t> newShape) {
     shape = newShape;
@@ -221,10 +226,13 @@ public:
     return *this;
   }
 
-  Builder &setMemorySpace(unsigned newMemorySpace) {
+  Builder &setMemorySpace(Attribute newMemorySpace) {
     memorySpace = newMemorySpace;
     return *this;
   }
+
+  // [deprecated] `setMemorySpace(Attribute)` should be used instead.
+  Builder &setMemorySpace(unsigned newMemorySpace);
 
   operator MemRefType() {
     return MemRefType::get(shape, elementType, affineMaps, memorySpace);
@@ -234,8 +242,20 @@ private:
   ArrayRef<int64_t> shape;
   Type elementType;
   ArrayRef<AffineMap> affineMaps;
-  unsigned memorySpace;
+  Attribute memorySpace;
 };
+
+/// Given an `originalShape` and a `reducedShape` assumed to be a subset of
+/// `originalShape` with some `1` entries erased, return the set of indices
+/// that specifies which of the entries of `originalShape` are dropped to obtain
+/// `reducedShape`. The returned mask can be applied as a projection to
+/// `originalShape` to obtain the `reducedShape`. This mask is useful to track
+/// which dimensions must be kept when e.g. compute MemRef strides under
+/// rank-reducing operations. Return None if reducedShape cannot be obtained
+/// by dropping only `1` entries in `originalShape`.
+llvm::Optional<llvm::SmallDenseSet<unsigned>>
+computeRankReductionMask(ArrayRef<int64_t> originalShape,
+                         ArrayRef<int64_t> reducedShape);
 
 //===----------------------------------------------------------------------===//
 // Deferred Method Definitions

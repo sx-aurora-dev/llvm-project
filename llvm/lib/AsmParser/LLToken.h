@@ -242,6 +242,7 @@ enum Kind {
   kw_swifterror,
   kw_swiftself,
   kw_uwtable,
+  kw_vscale_range,
   kw_willreturn,
   kw_vlen,
   kw_writeonly,

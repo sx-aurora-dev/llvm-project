@@ -26,7 +26,7 @@ void setRandomTag(void *Ptr, uptr Size, uptr ExcludeMask, uptr *TaggedBegin,
 // We assume that Top-Byte Ignore is enabled if the architecture supports memory
 // tagging. Not all operating systems enable TBI, so we only claim architectural
 // support for memory tagging if the operating system enables TBI.
-#if SCUDO_LINUX
+#if SCUDO_LINUX && !defined(SCUDO_DISABLE_TBI)
 inline constexpr bool archSupportsMemoryTagging() { return true; }
 #else
 inline constexpr bool archSupportsMemoryTagging() { return false; }
@@ -298,6 +298,15 @@ inline void setRandomTag(void *Ptr, uptr Size, uptr ExcludeMask,
 
 inline void *untagPointer(void *Ptr) {
   return reinterpret_cast<void *>(untagPointer(reinterpret_cast<uptr>(Ptr)));
+}
+
+inline void *loadTag(void *Ptr) {
+  return reinterpret_cast<void *>(loadTag(reinterpret_cast<uptr>(Ptr)));
+}
+
+inline void *addFixedTag(void *Ptr, uptr Tag) {
+  return reinterpret_cast<void *>(
+      addFixedTag(reinterpret_cast<uptr>(Ptr), Tag));
 }
 
 template <typename Config>

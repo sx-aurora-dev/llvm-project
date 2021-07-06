@@ -560,10 +560,10 @@ def int_pcmarker      : DefaultAttrsIntrinsic<[], [llvm_i32_ty]>;
 
 def int_readcyclecounter : DefaultAttrsIntrinsic<[llvm_i64_ty]>;
 
-// The assume intrinsic is marked as arbitrarily writing so that proper
-// control dependencies will be maintained.
-def int_assume        : DefaultAttrsIntrinsic<[], [llvm_i1_ty], [IntrWillReturn,
-                                                     NoUndef<ArgIndex<0>>]>;
+// The assume intrinsic is marked InaccessibleMemOnly so that proper control
+// dependencies will be maintained.
+def int_assume : DefaultAttrsIntrinsic<
+    [], [llvm_i1_ty], [IntrInaccessibleMemOnly, NoUndef<ArgIndex<0>>]>;
 
 // 'llvm.experimental.noalias.scope.decl' intrinsic: Inserted at the location of
 // noalias scope declaration. Makes it possible to identify that a noalias scope
@@ -991,18 +991,19 @@ def int_eh_sjlj_setup_dispatch  : Intrinsic<[], []>;
 
 //===---------------- Generic Variable Attribute Intrinsics----------------===//
 //
-def int_var_annotation : DefaultAttrsIntrinsic<[],
-                                   [llvm_ptr_ty, llvm_ptr_ty,
-                                    llvm_ptr_ty, llvm_i32_ty, llvm_ptr_ty],
-                                   [IntrWillReturn], "llvm.var.annotation">;
-def int_ptr_annotation : DefaultAttrsIntrinsic<[LLVMAnyPointerType<llvm_anyint_ty>],
-                                   [LLVMMatchType<0>, llvm_ptr_ty, llvm_ptr_ty,
-                                    llvm_i32_ty, llvm_ptr_ty],
-                                   [IntrWillReturn], "llvm.ptr.annotation">;
-def int_annotation : DefaultAttrsIntrinsic<[llvm_anyint_ty],
-                               [LLVMMatchType<0>, llvm_ptr_ty,
-                                llvm_ptr_ty, llvm_i32_ty],
-                               [IntrWillReturn], "llvm.annotation">;
+def int_var_annotation : DefaultAttrsIntrinsic<
+    [], [llvm_ptr_ty, llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_ptr_ty],
+    [IntrInaccessibleMemOnly], "llvm.var.annotation">;
+
+def int_ptr_annotation : DefaultAttrsIntrinsic<
+    [LLVMAnyPointerType<llvm_anyint_ty>],
+    [LLVMMatchType<0>, llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_ptr_ty],
+    [IntrInaccessibleMemOnly], "llvm.ptr.annotation">;
+
+def int_annotation : DefaultAttrsIntrinsic<
+    [llvm_anyint_ty],
+    [LLVMMatchType<0>, llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty],
+    [IntrInaccessibleMemOnly], "llvm.annotation">;
 
 // Annotates the current program point with metadata strings which are emitted
 // as CodeView debug info records. This is expensive, as it disables inlining
@@ -1354,6 +1355,9 @@ def int_is_constant : DefaultAttrsIntrinsic<[llvm_i1_ty], [llvm_any_ty],
 // Intrinsic to mask out bits of a pointer.
 def int_ptrmask: DefaultAttrsIntrinsic<[llvm_anyptr_ty], [LLVMMatchType<0>, llvm_anyint_ty],
                            [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+def int_experimental_stepvector : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
+                                                        [], [IntrNoMem]>;
 
 //===---------------- Vector Predication Intrinsics --------------===//
 
@@ -1940,6 +1944,12 @@ def int_start_loop_iterations :
 // control entry to a 'while' loop.
 def int_test_set_loop_iterations :
   DefaultAttrsIntrinsic<[llvm_i1_ty], [llvm_anyint_ty], [IntrNoDuplicate]>;
+
+// Same as the above, but produces an extra value (the same as the input
+// operand) to be fed into the loop.
+def int_test_start_loop_iterations :
+  DefaultAttrsIntrinsic<[llvm_anyint_ty, llvm_i1_ty], [LLVMMatchType<0>],
+                        [IntrNoDuplicate]>;
 
 // Decrement loop counter by the given argument. Return false if the loop
 // should exit.

@@ -46,6 +46,10 @@ using namespace llvm;
 
 STATISTIC(NumNotRotatedDueToHeaderSize,
           "Number of loops not rotated due to the header size");
+STATISTIC(NumInstrsHoisted,
+          "Number of instructions hoisted into loop preheader");
+STATISTIC(NumInstrsDuplicated,
+          "Number of instructions cloned into loop preheader");
 STATISTIC(NumRotated, "Number of loops rotated");
 
 static cl::opt<bool>
@@ -384,11 +388,14 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
     // possible or create a clone in the OldPreHeader if not.
     Instruction *LoopEntryBranch = OrigPreheader->getTerminator();
 
-    // Record all debug intrinsics preceding LoopEntryBranch to avoid duplication.
+    // Record all debug intrinsics preceding LoopEntryBranch to avoid
+    // duplication.
     using DbgIntrinsicHash =
-      std::pair<std::pair<Value *, DILocalVariable *>, DIExpression *>;
+        std::pair<std::pair<hash_code, DILocalVariable *>, DIExpression *>;
     auto makeHash = [](DbgVariableIntrinsic *D) -> DbgIntrinsicHash {
-      return {{D->getVariableLocationOp(0), D->getVariable()},
+      auto VarLocOps = D->location_ops();
+      return {{hash_combine_range(VarLocOps.begin(), VarLocOps.end()),
+               D->getVariable()},
               D->getExpression()};
     };
     SmallDenseSet<DbgIntrinsicHash, 8> DbgIntrinsics;
@@ -421,11 +428,13 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
           !Inst->mayWriteToMemory() && !Inst->isTerminator() &&
           !isa<DbgInfoIntrinsic>(Inst) && !isa<AllocaInst>(Inst)) {
         Inst->moveBefore(LoopEntryBranch);
+        ++NumInstrsHoisted;
         continue;
       }
 
       // Otherwise, create a duplicate of the instruction.
       Instruction *C = Inst->clone();
+      ++NumInstrsDuplicated;
 
       // Eagerly remap the operands of the instruction.
       RemapInstruction(C, ValueMap,

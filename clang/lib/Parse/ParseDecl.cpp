@@ -1607,7 +1607,30 @@ void Parser::DiagnoseProhibitedAttributes(
 }
 
 void Parser::ProhibitCXX11Attributes(ParsedAttributesWithRange &Attrs,
-                                     unsigned DiagID) {
+                                     unsigned DiagID, bool DiagnoseEmptyAttrs) {
+
+  if (DiagnoseEmptyAttrs && Attrs.empty() && Attrs.Range.isValid()) {
+    // An attribute list has been parsed, but it was empty.
+    // This is the case for [[]].
+    const auto &LangOpts = getLangOpts();
+    auto &SM = PP.getSourceManager();
+    Token FirstLSquare;
+    Lexer::getRawToken(Attrs.Range.getBegin(), FirstLSquare, SM, LangOpts);
+
+    if (FirstLSquare.is(tok::l_square)) {
+      llvm::Optional<Token> SecondLSquare =
+          Lexer::findNextToken(FirstLSquare.getLocation(), SM, LangOpts);
+
+      if (SecondLSquare && SecondLSquare->is(tok::l_square)) {
+        // The attribute range starts with [[, but is empty. So this must
+        // be [[]], which we are supposed to diagnose because
+        // DiagnoseEmptyAttrs is true.
+        Diag(Attrs.Range.getBegin(), DiagID) << Attrs.Range;
+        return;
+      }
+    }
+  }
+
   for (const ParsedAttr &AL : Attrs) {
     if (!AL.isCXX11Attribute() && !AL.isC2xAttribute())
       continue;
@@ -1970,8 +1993,8 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
   // Check to see if we have a function *definition* which must have a body.
   if (D.isFunctionDeclarator()) {
     if (Tok.is(tok::equal) && NextToken().is(tok::code_completion)) {
-      Actions.CodeCompleteAfterFunctionEquals(D);
       cutOffParsing();
+      Actions.CodeCompleteAfterFunctionEquals(D);
       return nullptr;
     }
     // Look at the next token to make sure that this isn't a function
@@ -2310,9 +2333,9 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
       InitializerScopeRAII InitScope(*this, D, ThisDecl);
 
       if (Tok.is(tok::code_completion)) {
+        cutOffParsing();
         Actions.CodeCompleteInitializer(getCurScope(), ThisDecl);
         Actions.FinalizeDeclaration(ThisDecl);
-        cutOffParsing();
         return nullptr;
       }
 
@@ -3090,10 +3113,11 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
           = DSContext == DeclSpecContext::DSC_top_level ||
             (DSContext == DeclSpecContext::DSC_class && DS.isFriendSpecified());
 
+        cutOffParsing();
         Actions.CodeCompleteDeclSpec(getCurScope(), DS,
                                      AllowNonIdentifiers,
                                      AllowNestedNameSpecifiers);
-        return cutOffParsing();
+        return;
       }
 
       if (getCurScope()->getFnParent() || getCurScope()->getBlockParent())
@@ -3106,8 +3130,9 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       else if (CurParsedObjCImpl)
         CCC = Sema::PCC_ObjCImplementation;
 
+      cutOffParsing();
       Actions.CodeCompleteOrdinaryName(getCurScope(), CCC);
-      return cutOffParsing();
+      return;
     }
 
     case tok::coloncolon: // ::foo::bar
@@ -3646,8 +3671,8 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       // C++ for OpenCL does not allow virtual function qualifier, to avoid
       // function pointers restricted in OpenCL v2.0 s6.9.a.
       if (getLangOpts().OpenCLCPlusPlus &&
-          !getActions().getOpenCLOptions().isEnabled(
-              "__cl_clang_function_pointers")) {
+          !getActions().getOpenCLOptions().isAvailableOption(
+              "__cl_clang_function_pointers", getLangOpts())) {
         DiagID = diag::err_openclcxx_virtual_function;
         PrevSpec = Tok.getIdentifierInfo()->getNameStart();
         isInvalid = true;
@@ -4362,8 +4387,9 @@ void Parser::ParseEnumSpecifier(SourceLocation StartLoc, DeclSpec &DS,
   // Parse the tag portion of this.
   if (Tok.is(tok::code_completion)) {
     // Code completion for an enum name.
+    cutOffParsing();
     Actions.CodeCompleteTag(getCurScope(), DeclSpec::TST_enum);
-    return cutOffParsing();
+    return;
   }
 
   // If attributes exist after tag, parse them.
@@ -4627,7 +4653,8 @@ void Parser::ParseEnumSpecifier(SourceLocation StartLoc, DeclSpec &DS,
   // or opaque-enum-declaration anywhere.
   if (IsElaboratedTypeSpecifier && !getLangOpts().MicrosoftExt &&
       !getLangOpts().ObjC) {
-    ProhibitAttributes(attrs);
+    ProhibitCXX11Attributes(attrs, diag::err_attributes_not_allowed,
+                            /*DiagnoseEmptyAttrs=*/true);
     if (BaseType.isUsable())
       Diag(BaseRange.getBegin(), diag::ext_enum_base_in_type_specifier)
           << (AllowEnumSpecifier == AllowDefiningTypeSpec::Yes) << BaseRange;
@@ -5457,11 +5484,12 @@ void Parser::ParseTypeQualifierListOpt(
 
     switch (Tok.getKind()) {
     case tok::code_completion:
+      cutOffParsing();
       if (CodeCompletionHandler)
         (*CodeCompletionHandler)();
       else
         Actions.CodeCompleteTypeQualifiers(DS);
-      return cutOffParsing();
+      return;
 
     case tok::kw_const:
       isInvalid = DS.SetTypeQual(DeclSpec::TQ_const   , Loc, PrevSpec, DiagID,
@@ -6998,8 +7026,9 @@ void Parser::ParseBracketDeclarator(Declarator &D) {
                   std::move(attrs), T.getCloseLocation());
     return;
   } else if (Tok.getKind() == tok::code_completion) {
+    cutOffParsing();
     Actions.CodeCompleteBracketDeclarator(getCurScope());
-    return cutOffParsing();
+    return;
   }
 
   // If valid, this location is the position where we read the 'static' keyword.

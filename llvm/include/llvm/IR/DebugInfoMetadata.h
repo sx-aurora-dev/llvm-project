@@ -335,10 +335,9 @@ public:
 
   Metadata *getRawStride() const { return getOperand(3).get(); }
 
-  typedef PointerUnion<ConstantInt*, DIVariable*> CountType;
   typedef PointerUnion<ConstantInt *, DIVariable *, DIExpression *> BoundType;
 
-  CountType getCount() const;
+  BoundType getCount() const;
 
   BoundType getLowerBound() const;
 
@@ -2583,11 +2582,10 @@ public:
     return Elements[I];
   }
 
-  /// Determine whether this represents a standalone constant value.
-  bool isConstant() const;
-
-  /// Determine whether this represents a standalone signed constant value.
-  bool isSignedConstant() const;
+  enum SignedOrUnsignedConstant { SignedConstant, UnsignedConstant };
+  /// Determine whether this represents a constant value, if so
+  // return it's sign information.
+  llvm::Optional<SignedOrUnsignedConstant> isConstant() const;
 
   using element_iterator = ArrayRef<uint64_t>::iterator;
 
@@ -2778,6 +2776,15 @@ public:
   static DIExpression *appendOpsToArg(const DIExpression *Expr,
                                       ArrayRef<uint64_t> Ops, unsigned ArgNo,
                                       bool StackValue = false);
+
+  /// Create a copy of \p Expr with each instance of
+  /// `DW_OP_LLVM_arg, \p OldArg` replaced with `DW_OP_LLVM_arg, \p NewArg`,
+  /// and each instance of `DW_OP_LLVM_arg, Arg` with `DW_OP_LLVM_arg, Arg - 1`
+  /// for all Arg > \p OldArg.
+  /// This is used when replacing one of the operands of a debug value list
+  /// with another operand in the same list and deleting the old operand.
+  static DIExpression *replaceArg(const DIExpression *Expr, uint64_t OldArg,
+                                  uint64_t NewArg);
 
   /// Create a DIExpression to describe one part of an aggregate variable that
   /// is fragmented across multiple Values. The DW_OP_LLVM_fragment operation

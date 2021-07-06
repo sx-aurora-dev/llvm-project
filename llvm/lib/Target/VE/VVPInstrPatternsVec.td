@@ -34,7 +34,7 @@ defm : VectorScatter<v256f32, v256i64, v256i1, "VSCU">;
 defm : VectorScatter<v256i32, v256i64, v256i1, "VSCL">;
 
 // Vector Load and Store
-multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode GTWithMask, SDNode LDNoMask> {
+multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string GTWithMask, string LDNoMask> {
   // Unmasked (imm stride).
   def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(LDNoMask#"irl") (LO7 $stride), $addr, $avl)>;
@@ -57,7 +57,7 @@ multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNod
               $avl)>;
 }
 
-multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode LDNoMask, SDNode STNoMask> {
+multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string LDNoMask, SDNode STNoMask> {
   // Unmasked (imm stride).
   def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(LDNoMask#"irl") (LO7 $stride), $addr, $avl)>;
@@ -88,7 +88,7 @@ defm : VectorLoad<v256i32, i64, v256i1, "VGTLZX", "VLDLZX">;
 // defm : VectorLoadStore_Packed<v512i32, i64, v512i1, "VLD", "VST">;
 // defm : VectorLoadStore_Packed<v512f32, i64, v512i1, "VLD", "VST">;
 
-multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode STWithMask, SDNode STNoMask> {
+multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string STWithMask, string STNoMask> {
   // Unmasked (imm stride).
   def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl),
             (!cast<Instruction>(STNoMask#"irvl") (LO7 $stride), $addr, $val, $avl)>;
@@ -342,7 +342,7 @@ multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string
                     (!cast<Instruction>(FmkBaseName#"v"#MaskTag#"l") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vm, $vl)>;
 }
 
-multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
+multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDNodeXForm CCConv>
   : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
 
 // SETCC (256)
@@ -411,7 +411,7 @@ multiclass conv_x_to_y_rd<SDPatternOperator MatchOp, ValueType MaskVT, ValueType
                     (!cast<Instruction>(ConvBaseName#"v"#MaskToken#"l_v") RDFlag, $vx, $vm, $vl, (SrcVT (IMPLICIT_DEF)))>;
 }
 
-multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="m"> {
+multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, ValueType IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="m"> {
  defm : conv_x_to_y<vvp_sint_to_fp, MaskVT, FPVT, IVT, ConvBaseName#FPTag#ITag, MaskToken>;
  defm : conv_x_to_y_rd<vvp_fp_to_sint, MaskVT, IVT, FPVT, ConvBaseName#ITag#FPTag#IExtTag, MaskToken, RDFlag>;
 }
@@ -548,7 +548,7 @@ defm: Reduce_FMinMax<v256f32,I64,f32,"SFST">;
 
 
 /// reduce AND/OR/XOR/ADD {
-multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResRC, ValueType ResVT, string VVPRedOp, string RedInstName> {
+multiclass Reduce_GenericInt<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VVPRedOp, string RedInstName> {
   // Unmasked.
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VVPRedOp) VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
              (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(RedInstName#"vl") $vx, $vl), 0), ResRC)>;
