@@ -3794,7 +3794,6 @@ private:
 # endif
 };
 
-
 inline Registers_riscv::Registers_riscv(const void *registers) {
   static_assert((check_fit<Registers_riscv, unw_context_t>::does_fit),
                 "riscv registers do not fit into unw_context_t");

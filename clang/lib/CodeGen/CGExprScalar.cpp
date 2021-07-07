@@ -2099,6 +2099,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
       DestLV.setTBAAInfo(TBAAAccessInfo::getMayAliasInfo());
       return EmitLoadOfLValue(DestLV, CE->getExprLoc());
     }
+
     return Builder.CreateBitCast(Src, DstTy);
   }
   case CK_AddressSpaceConversion: {
