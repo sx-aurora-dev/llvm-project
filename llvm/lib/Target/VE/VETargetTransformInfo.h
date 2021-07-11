@@ -367,6 +367,8 @@ public:
     return !isSupportedReduction(II->getIntrinsicID(), Unordered);
   }
 
+  bool shouldBuildRelLookupTables() const;
+
   void getUnrollingPreferences(Loop *L, ScalarEvolution &,
                                TargetTransformInfo::UnrollingPreferences &UP);
 };
