@@ -37,6 +37,7 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
+                        make clean
                         make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
                             THREADS= cmake build
                     """
