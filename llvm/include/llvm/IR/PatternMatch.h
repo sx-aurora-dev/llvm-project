@@ -191,6 +191,10 @@ struct undef_match {
     return true;
   }
   template <typename ITy> bool match(ITy *V) { return check(V); }
+  template <typename ITy, typename MatcherContext>
+  bool match_context(ITy *V, MatcherContext &MC) {
+    return check(V);
+  }
 };
 
 /// Match an arbitrary undef constant. This matches poison as well.
