@@ -26,12 +26,6 @@
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
-// Global API.
-//===----------------------------------------------------------------------===//
-
-void mlirEnableGlobalDebug(bool enable) { ::llvm::DebugFlag = true; }
-
-//===----------------------------------------------------------------------===//
 // Context API.
 //===----------------------------------------------------------------------===//
 
@@ -355,6 +349,11 @@ intptr_t mlirOperationGetNumOperands(MlirOperation op) {
 
 MlirValue mlirOperationGetOperand(MlirOperation op, intptr_t pos) {
   return wrap(unwrap(op)->getOperand(static_cast<unsigned>(pos)));
+}
+
+void mlirOperationSetOperand(MlirOperation op, intptr_t pos,
+                             MlirValue newValue) {
+  unwrap(op)->setOperand(static_cast<unsigned>(pos), unwrap(newValue));
 }
 
 intptr_t mlirOperationGetNumResults(MlirOperation op) {

@@ -1092,8 +1092,8 @@ defm "" : SIMDConvert<I32x4, F32x4, fp_to_sint, "trunc_sat_f32x4_s", 248>;
 defm "" : SIMDConvert<I32x4, F32x4, fp_to_uint, "trunc_sat_f32x4_u", 249>;
 
 // Support the saturating variety as well.
-def trunc_s_sat32 : PatFrag<(ops node:$x), (fp_to_sint_sat $x, (i32 32))>;
-def trunc_u_sat32 : PatFrag<(ops node:$x), (fp_to_uint_sat $x, (i32 32))>;
+def trunc_s_sat32 : PatFrag<(ops node:$x), (fp_to_sint_sat $x, i32)>;
+def trunc_u_sat32 : PatFrag<(ops node:$x), (fp_to_uint_sat $x, i32)>;
 def : Pat<(v4i32 (trunc_s_sat32 (v4f32 V128:$src))), (fp_to_sint_I32x4 $src)>;
 def : Pat<(v4i32 (trunc_u_sat32 (v4f32 V128:$src))), (fp_to_uint_I32x4 $src)>;
 
@@ -1160,12 +1160,15 @@ defm "" : SIMDNarrow<I32x4, 133>;
 // Use narrowing operations for truncating stores. Since the narrowing
 // operations are saturating instead of truncating, we need to mask
 // the stored values first.
-// TODO: Use consts instead of splats
 def store_v8i8_trunc_v8i16 :
   OutPatFrag<(ops node:$val),
              (EXTRACT_LANE_I64x2
                (NARROW_U_I8x16
-                 (AND (SPLAT_I32x4 (CONST_I32 0x00ff00ff)), node:$val),
+                 (AND
+                   (CONST_V128_I16x8
+                     0x00ff, 0x00ff, 0x00ff, 0x00ff,
+                     0x00ff, 0x00ff, 0x00ff, 0x00ff),
+                   node:$val),
                  $val), // Unused input
                0)>;
 
@@ -1173,7 +1176,10 @@ def store_v4i16_trunc_v4i32 :
   OutPatFrag<(ops node:$val),
              (EXTRACT_LANE_I64x2
                (NARROW_U_I16x8
-                 (AND (SPLAT_I32x4 (CONST_I32 0x0000ffff)), node:$val),
+                 (AND
+                  (CONST_V128_I32x4
+                    0x0000ffff, 0x0000ffff, 0x0000ffff, 0x0000ffff),
+                  node:$val),
                  $val), // Unused input
                0)>;
 

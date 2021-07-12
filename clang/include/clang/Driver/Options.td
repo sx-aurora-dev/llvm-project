@@ -631,6 +631,12 @@ def G_EQ : Joined<["-"], "G=">, Flags<[NoXarchOption]>, Group<m_Group>, Alias<G>
 def H : Flag<["-"], "H">, Flags<[CC1Option]>, Group<Preprocessor_Group>,
     HelpText<"Show header includes and nesting depth">,
     MarshallingInfoFlag<DependencyOutputOpts<"ShowHeaderIncludes">>;
+def fshow_skipped_includes : Flag<["-"], "fshow-skipped-includes">,
+  Flags<[CC1Option]>, HelpText<"Show skipped includes in -H output.">,
+  DocBrief<[{#include files may be "skipped" due to include guard optimization
+             or #pragma once. This flag makes -H show also such includes.}]>,
+  MarshallingInfoFlag<DependencyOutputOpts<"ShowSkippedHeaderIncludes">>;
+
 def I_ : Flag<["-"], "I-">, Group<I_Group>,
     HelpText<"Restrict all prior -I flags to double-quoted inclusion and "
              "remove current directory from include path">;
@@ -830,7 +836,7 @@ def cl_denorms_are_zero : Flag<["-"], "cl-denorms-are-zero">, Group<opencl_Group
   HelpText<"OpenCL only. Allow denormals to be flushed to zero.">;
 def cl_fp32_correctly_rounded_divide_sqrt : Flag<["-"], "cl-fp32-correctly-rounded-divide-sqrt">, Group<opencl_Group>, Flags<[CC1Option]>,
   HelpText<"OpenCL only. Specify that single precision floating-point divide and sqrt used in the program source are correctly rounded.">,
-  MarshallingInfoFlag<CodeGenOpts<"CorrectlyRoundedDivSqrt">>;
+  MarshallingInfoFlag<CodeGenOpts<"OpenCLCorrectlyRoundedDivSqrt">>;
 def cl_uniform_work_group_size : Flag<["-"], "cl-uniform-work-group-size">, Group<opencl_Group>, Flags<[CC1Option]>,
   HelpText<"OpenCL only. Defines that the global work-size be a multiple of the work-group size specified to clEnqueueNDRangeKernel">,
   MarshallingInfoFlag<CodeGenOpts<"UniformWGSize">>;
@@ -920,6 +926,8 @@ def rocm_path_EQ : Joined<["--"], "rocm-path=">, Group<i_Group>,
   HelpText<"ROCm installation path, used for finding and automatically linking required bitcode libraries.">;
 def hip_path_EQ : Joined<["--"], "hip-path=">, Group<i_Group>,
   HelpText<"HIP runtime installation path, used for finding HIP version and adding HIP include path.">;
+def amdgpu_arch_tool_EQ : Joined<["--"], "amdgpu-arch-tool=">, Group<i_Group>,
+  HelpText<"Tool used for detecting AMD GPU arch in the system.">;
 def rocm_device_lib_path_EQ : Joined<["--"], "rocm-device-lib-path=">, Group<Link_Group>,
   HelpText<"ROCm device library path. Alternative to rocm-path.">;
 def : Joined<["--"], "hip-device-lib-path=">, Alias<rocm_device_lib_path_EQ>;
@@ -933,10 +941,17 @@ defm hip_new_launch_api : BoolFOption<"hip-new-launch-api",
   LangOpts<"HIPUseNewLaunchAPI">, DefaultFalse,
   PosFlag<SetTrue, [CC1Option], "Use">, NegFlag<SetFalse, [], "Don't use">,
   BothFlags<[], " new kernel launching API for HIP">>;
+defm hip_fp32_correctly_rounded_divide_sqrt : BoolFOption<"hip-fp32-correctly-rounded-divide-sqrt",
+  CodeGenOpts<"HIPCorrectlyRoundedDivSqrt">, DefaultTrue,
+  PosFlag<SetTrue, [], "Specify">,
+  NegFlag<SetFalse, [CC1Option], "Don't specify">,
+  BothFlags<[], " that single precision floating-point divide and sqrt used in "
+  "the program source are correctly rounded (HIP device compilation only)">>,
+  ShouldParseIf<hip.KeyPath>;
 defm gpu_allow_device_init : BoolFOption<"gpu-allow-device-init",
   LangOpts<"GPUAllowDeviceInit">, DefaultFalse,
   PosFlag<SetTrue, [CC1Option], "Allow">, NegFlag<SetFalse, [], "Don't allow">,
-  BothFlags<[], " device side init function in HIP">>,
+  BothFlags<[], " device side init function in HIP (experimental)">>,
   ShouldParseIf<hip.KeyPath>;
 defm gpu_defer_diag : BoolFOption<"gpu-defer-diag",
   LangOpts<"GPUDeferDiag">, DefaultFalse,
@@ -952,6 +967,9 @@ def gpu_max_threads_per_block_EQ : Joined<["--"], "gpu-max-threads-per-block=">,
   HelpText<"Default max threads per block for kernel launch bounds for HIP">,
   MarshallingInfoInt<LangOpts<"GPUMaxThreadsPerBlock">, "1024">,
   ShouldParseIf<hip.KeyPath>;
+def fgpu_inline_threshold_EQ : Joined<["-"], "fgpu-inline-threshold=">,
+  Flags<[HelpHidden]>,
+  HelpText<"Inline threshold for device compilation for CUDA/HIP">;
 def gpu_instrument_lib_EQ : Joined<["--"], "gpu-instrument-lib=">,
   HelpText<"Instrument device library for HIP, which is a LLVM bitcode containing "
   "__cyg_profile_func_enter and __cyg_profile_func_exit">;
@@ -1378,7 +1396,7 @@ def fwasm_exceptions : Flag<["-"], "fwasm-exceptions">, Group<f_Group>,
 def exception_model : Separate<["-"], "exception-model">,
   Flags<[CC1Option, NoDriverOption]>, HelpText<"The exception model: dwarf|sjlj|seh|wasm">,
   Values<"dwarf,sjlj,seh,wasm">,
-  NormalizedValuesScope<"llvm::ExceptionHandling">,
+  NormalizedValuesScope<"LangOptions::ExceptionHandlingKind">,
   NormalizedValues<["DwarfCFI", "SjLj", "WinEH", "Wasm"]>,
   MarshallingInfoEnum<LangOpts<"ExceptionHandling">, "None">;
 def exception_model_EQ : Joined<["-"], "exception-model=">,
@@ -1530,16 +1548,15 @@ defm sanitize_address_use_odr_indicator : BoolOption<"f", "sanitize-address-use-
             " reports in partially sanitized programs at the cost of an increase in binary size">,
   NegFlag<SetFalse, [], "Disable ODR indicator globals">>,
   Group<f_clang_Group>;
-def sanitize_address_destructor_kind_EQ
-    : Joined<["-"], "fsanitize-address-destructor-kind=">,
-      MetaVarName<"<kind>">,
+def sanitize_address_destructor_EQ
+    : Joined<["-"], "fsanitize-address-destructor=">,
       Flags<[CC1Option]>,
       HelpText<"Set destructor type used in ASan instrumentation">,
       Group<f_clang_Group>,
       Values<"none,global">,
       NormalizedValuesScope<"llvm::AsanDtorKind">,
       NormalizedValues<["None", "Global"]>,
-      MarshallingInfoEnum<CodeGenOpts<"SanitizeAddressDtorKind">, "Global">;
+      MarshallingInfoEnum<CodeGenOpts<"SanitizeAddressDtor">, "Global">;
 // Note: This flag was introduced when it was necessary to distinguish between
 //       ABI for correct codegen.  This is no longer needed, but the flag is
 //       not removed since targeting either ABI will behave the same.
@@ -2781,8 +2798,10 @@ def gno_record_command_line : Flag<["-"], "gno-record-command-line">,
   Group<g_flags_Group>;
 def : Flag<["-"], "grecord-gcc-switches">, Alias<grecord_command_line>;
 def : Flag<["-"], "gno-record-gcc-switches">, Alias<gno_record_command_line>;
-def gstrict_dwarf : Flag<["-"], "gstrict-dwarf">, Group<g_flags_Group>;
-def gno_strict_dwarf : Flag<["-"], "gno-strict-dwarf">, Group<g_flags_Group>;
+defm strict_dwarf : BoolOption<"g", "strict-dwarf",
+  CodeGenOpts<"DebugStrictDwarf">, DefaultFalse,
+  PosFlag<SetTrue, [CC1Option]>, NegFlag<SetFalse>, BothFlags<[CoreOption]>>,
+  Group<g_flags_Group>;
 defm column_info : BoolOption<"g", "column-info",
   CodeGenOpts<"DebugColumnInfo">, DefaultTrue,
   NegFlag<SetFalse, [CC1Option]>, PosFlag<SetTrue>, BothFlags<[CoreOption]>>,
@@ -3167,6 +3186,14 @@ def mexec_model_EQ : Joined<["-"], "mexec-model=">, Group<m_wasm_Features_Driver
                      Values<"command,reactor">,
                      HelpText<"Execution model (WebAssembly only)">;
 
+defm amdgpu_ieee : BoolOption<"m", "amdgpu-ieee",
+  CodeGenOpts<"EmitIEEENaNCompliantInsts">, DefaultTrue,
+  PosFlag<SetTrue, [], "Sets the IEEE bit in the expected default floating point "
+  " mode register. Floating point opcodes that support exception flag "
+  "gathering quiet and propagate signaling NaN inputs per IEEE 754-2008. "
+  "This option changes the ABI. (AMDGPU only)">,
+  NegFlag<SetFalse, [CC1Option]>>, Group<m_Group>;
+
 def mcode_object_version_EQ : Joined<["-"], "mcode-object-version=">, Group<m_Group>,
   HelpText<"Specify code object ABI version. Defaults to 3. (AMDGPU only)">,
   MetaVarName<"<version>">, Values<"2,3,4">;
@@ -3334,7 +3361,7 @@ def mstack_protector_guard_EQ : Joined<["-"], "mstack-protector-guard=">, Group<
   MarshallingInfoString<CodeGenOpts<"StackProtectorGuard">>;
 def mstack_protector_guard_offset_EQ : Joined<["-"], "mstack-protector-guard-offset=">, Group<m_Group>, Flags<[CC1Option]>,
   HelpText<"Use the given offset for addressing the stack-protector guard">,
-  MarshallingInfoInt<CodeGenOpts<"StackProtectorGuardOffset">, "(unsigned)-1">;
+  MarshallingInfoInt<CodeGenOpts<"StackProtectorGuardOffset">, "INT_MAX">;
 def mstack_protector_guard_reg_EQ : Joined<["-"], "mstack-protector-guard-reg=">, Group<m_Group>, Flags<[CC1Option]>,
   HelpText<"Use the given reg for addressing the stack-protector guard">,
   MarshallingInfoString<CodeGenOpts<"StackProtectorGuardReg">, [{"none"}]>;
@@ -3573,6 +3600,8 @@ def print_target_triple : Flag<["-", "--"], "print-target-triple">,
   HelpText<"Print the normalized target triple">;
 def print_effective_triple : Flag<["-", "--"], "print-effective-triple">,
   HelpText<"Print the effective target triple">;
+def print_multiarch : Flag<["-", "--"], "print-multiarch">,
+  HelpText<"Print the multiarch target triple">;
 def print_prog_name_EQ : Joined<["-", "--"], "print-prog-name=">,
   HelpText<"Print the full program path of <name>">, MetaVarName<"<name>">;
 def print_resource_dir : Flag<["-", "--"], "print-resource-dir">,
@@ -4398,6 +4427,9 @@ def J : JoinedOrSeparate<["-"], "J">,
 //===----------------------------------------------------------------------===//
 let Flags = [FC1Option, FlangOnlyOption] in {
 
+def fget_definition : MultiArg<["-"], "fget-definition", 3>,
+  HelpText<"Get the symbol definition from <line> <start-column> <end-column>">,
+  Group<Action_Group>;
 def test_io : Flag<["-"], "test-io">, Group<Action_Group>,
   HelpText<"Run the InputOuputTest action. Use for development and testing only.">;
 def fdebug_unparse_no_sema : Flag<["-"], "fdebug-unparse-no-sema">, Group<Action_Group>,
@@ -4968,11 +5000,6 @@ def fdenormal_fp_math_f32_EQ : Joined<["-"], "fdenormal-fp-math-f32=">,
 def sys_header_deps : Flag<["-"], "sys-header-deps">,
   HelpText<"Include system headers in dependency output">,
   MarshallingInfoFlag<DependencyOutputOpts<"IncludeSystemHeaders">>;
-def show_skipped_includes : Flag<["-"], "show-skipped-includes">,
-  HelpText<"Show skipped includes in -H output.">,
-  DocBrief<[{#include files may be "skipped" due to include guard optimization
-             or #pragma once. This flag makes -H show also such includes.}]>,
-  MarshallingInfoFlag<DependencyOutputOpts<"ShowSkippedHeaderIncludes">>;
 def module_file_deps : Flag<["-"], "module-file-deps">,
   HelpText<"Include module files in dependency output">,
   MarshallingInfoFlag<DependencyOutputOpts<"IncludeModuleFiles">>;
@@ -5763,6 +5790,9 @@ def _SLASH_fp_fast : CLFlag<"fp:fast">, HelpText<"">, Alias<ffast_math>;
 def _SLASH_fp_precise : CLFlag<"fp:precise">,
   HelpText<"">, Alias<fno_fast_math>;
 def _SLASH_fp_strict : CLFlag<"fp:strict">, HelpText<"">, Alias<fno_fast_math>;
+def _SLASH_fsanitize_EQ_address : CLFlag<"fsanitize=address">,
+  HelpText<"Enable AddressSanitizer">,
+  Alias<fsanitize_EQ>, AliasArgs<["address"]>;
 def _SLASH_GA : CLFlag<"GA">, Alias<ftlsmodel_EQ>, AliasArgs<["local-exec"]>,
   HelpText<"Assume thread-local variables are defined in the executable">;
 def _SLASH_GR : CLFlag<"GR">, HelpText<"Emit RTTI data (default)">;
@@ -5945,6 +5975,9 @@ def _SLASH_openmp_experimental : CLFlag<"openmp:experimental">,
 def _SLASH_tune : CLCompileJoined<"tune:">,
   HelpText<"Set CPU for optimization without affecting instruction set">,
   Alias<mtune_EQ>;
+def _SLASH_QIntel_jcc_erratum : CLFlag<"QIntel-jcc-erratum">,
+  HelpText<"Align branches within 32-byte boundaries to mitigate the performance impact of the Intel JCC erratum.">,
+  Alias<mbranches_within_32B_boundaries>;
 
 // Non-aliases:
 
@@ -6114,8 +6147,12 @@ def _SLASH_Bt_plus : CLFlag<"Bt+">;
 def _SLASH_clr : CLJoined<"clr">;
 def _SLASH_d2 : CLJoined<"d2">;
 def _SLASH_doc : CLJoined<"doc">;
+def _SLASH_experimental : CLJoined<"experimental:">;
+def _SLASH_exportHeader : CLFlag<"exportHeader">;
 def _SLASH_FA_joined : CLJoined<"FA">;
 def _SLASH_favor : CLJoined<"favor">;
+def _SLASH_fsanitize_address_use_after_return : CLJoined<"fsanitize-address-use-after-return">;
+def _SLASH_fno_sanitize_address_vcasan_lib : CLJoined<"fno-sanitize-address-vcasan-lib">;
 def _SLASH_F : CLJoinedOrSeparate<"F">;
 def _SLASH_Fm : CLJoined<"Fm">;
 def _SLASH_Fr : CLJoined<"Fr">;
@@ -6134,6 +6171,10 @@ def _SLASH_Gm_ : CLFlag<"Gm-">;
 def _SLASH_GT : CLFlag<"GT">;
 def _SLASH_GZ : CLFlag<"GZ">;
 def _SLASH_H : CLFlag<"H">;
+def _SLASH_headername : CLJoined<"headerName:">;
+def _SLASH_headerUnit : CLJoinedOrSeparate<"headerUnit">;
+def _SLASH_headerUnitAngle : CLJoinedOrSeparate<"headerUnit:angle">;
+def _SLASH_headerUnitQuote : CLJoinedOrSeparate<"headerUnit:quote">;
 def _SLASH_homeparams : CLFlag<"homeparams">;
 def _SLASH_hotpatch : CLFlag<"hotpatch">;
 def _SLASH_kernel : CLFlag<"kernel">;
@@ -6141,7 +6182,6 @@ def _SLASH_LN : CLFlag<"LN">;
 def _SLASH_MP : CLJoined<"MP">;
 def _SLASH_Qfast_transcendentals : CLFlag<"Qfast_transcendentals">;
 def _SLASH_QIfist : CLFlag<"QIfist">;
-def _SLASH_QIntel_jcc_erratum : CLFlag<"QIntel-jcc-erratum">;
 def _SLASH_Qimprecise_fwaits : CLFlag<"Qimprecise_fwaits">;
 def _SLASH_Qpar : CLFlag<"Qpar">;
 def _SLASH_Qpar_report : CLJoined<"Qpar-report">;
@@ -6150,6 +6190,10 @@ def _SLASH_Qspectre : CLFlag<"Qspectre">;
 def _SLASH_Qspectre_load : CLFlag<"Qspectre-load">;
 def _SLASH_Qspectre_load_cf : CLFlag<"Qspectre-load-cf">;
 def _SLASH_Qvec_report : CLJoined<"Qvec-report">;
+def _SLASH_reference : CLJoinedOrSeparate<"reference">;
+def _SLASH_sourceDependencies : CLJoinedOrSeparate<"sourceDependencies">;
+def _SLASH_sourceDependenciesDirectives : CLJoinedOrSeparate<"sourceDependencies:directives">;
+def _SLASH_translateInclude : CLFlag<"translateInclude">;
 def _SLASH_u : CLFlag<"u">;
 def _SLASH_V : CLFlag<"V">;
 def _SLASH_WL : CLFlag<"WL">;

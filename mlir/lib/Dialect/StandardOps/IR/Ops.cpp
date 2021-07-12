@@ -283,6 +283,62 @@ static SmallVector<int64_t, 4> extractFromI64ArrayAttr(Attribute attr) {
       }));
 }
 
+/// Canonicalize a sum of a constant and (constant - something) to simply be
+/// a sum of constants minus something. This transformation does similar
+/// transformations for additions of a constant with a subtract/add of
+/// a constant. This may result in some operations being reordered (but should
+/// remain equivalent).
+struct AddConstantReorder : public OpRewritePattern<AddIOp> {
+  using OpRewritePattern<AddIOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(AddIOp addop,
+                                PatternRewriter &rewriter) const override {
+    for (int i = 0; i < 2; i++) {
+      APInt origConst;
+      APInt midConst;
+      if (matchPattern(addop.getOperand(i), m_ConstantInt(&origConst))) {
+        if (auto midAddOp = addop.getOperand(1 - i).getDefiningOp<AddIOp>()) {
+          for (int j = 0; j < 2; j++) {
+            if (matchPattern(midAddOp.getOperand(j),
+                             m_ConstantInt(&midConst))) {
+              auto nextConstant = rewriter.create<ConstantOp>(
+                  addop.getLoc(), rewriter.getIntegerAttr(
+                                      addop.getType(), origConst + midConst));
+              rewriter.replaceOpWithNewOp<AddIOp>(addop, nextConstant,
+                                                  midAddOp.getOperand(1 - j));
+              return success();
+            }
+          }
+        }
+        if (auto midSubOp = addop.getOperand(1 - i).getDefiningOp<SubIOp>()) {
+          if (matchPattern(midSubOp.getOperand(0), m_ConstantInt(&midConst))) {
+            auto nextConstant = rewriter.create<ConstantOp>(
+                addop.getLoc(),
+                rewriter.getIntegerAttr(addop.getType(), origConst + midConst));
+            rewriter.replaceOpWithNewOp<SubIOp>(addop, nextConstant,
+                                                midSubOp.getOperand(1));
+            return success();
+          }
+          if (matchPattern(midSubOp.getOperand(1), m_ConstantInt(&midConst))) {
+            auto nextConstant = rewriter.create<ConstantOp>(
+                addop.getLoc(),
+                rewriter.getIntegerAttr(addop.getType(), origConst - midConst));
+            rewriter.replaceOpWithNewOp<AddIOp>(addop, nextConstant,
+                                                midSubOp.getOperand(0));
+            return success();
+          }
+        }
+      }
+    }
+    return failure();
+  }
+};
+
+void AddIOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  results.insert<AddConstantReorder>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // AndOp
 //===----------------------------------------------------------------------===//
@@ -1241,6 +1297,29 @@ OpFoldResult IndexCastOp::fold(ArrayRef<Attribute> cstOperands) {
   return {};
 }
 
+namespace {
+///  index_cast(sign_extend x) => index_cast(x)
+struct IndexCastOfSExt : public OpRewritePattern<IndexCastOp> {
+  using OpRewritePattern<IndexCastOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(IndexCastOp op,
+                                PatternRewriter &rewriter) const override {
+
+    if (auto extop = op.getOperand().getDefiningOp<SignExtendIOp>()) {
+      op.setOperand(extop.getOperand());
+      return success();
+    }
+    return failure();
+  }
+};
+
+} // namespace
+
+void IndexCastOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                              MLIRContext *context) {
+  results.insert<IndexCastOfSExt>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // MulFOp
 //===----------------------------------------------------------------------===//
@@ -1437,6 +1516,20 @@ static LogicalResult verify(SignExtendIOp op) {
            << dstType << " must be wider than operand type " << srcType;
 
   return success();
+}
+
+OpFoldResult SignExtendIOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.size() == 1 && "unary operation takes one operand");
+
+  if (!operands[0])
+    return {};
+
+  if (auto lhs = operands[0].dyn_cast<IntegerAttr>()) {
+    return IntegerAttr::get(
+        getType(), lhs.getValue().sext(getType().getIntOrFloatBitWidth()));
+  }
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1667,6 +1760,153 @@ OpFoldResult SubIOp::fold(ArrayRef<Attribute> operands) {
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a - b; });
+}
+
+/// Canonicalize a sub of a constant and (constant +/- something) to simply be
+/// a single operation that merges the two constants.
+struct SubConstantReorder : public OpRewritePattern<SubIOp> {
+  using OpRewritePattern<SubIOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SubIOp subOp,
+                                PatternRewriter &rewriter) const override {
+    APInt origConst;
+    APInt midConst;
+
+    if (matchPattern(subOp.getOperand(0), m_ConstantInt(&origConst))) {
+      if (auto midAddOp = subOp.getOperand(1).getDefiningOp<AddIOp>()) {
+        // origConst - (midConst + something) == (origConst - midConst) -
+        // something
+        for (int j = 0; j < 2; j++) {
+          if (matchPattern(midAddOp.getOperand(j), m_ConstantInt(&midConst))) {
+            auto nextConstant = rewriter.create<ConstantOp>(
+                subOp.getLoc(),
+                rewriter.getIntegerAttr(subOp.getType(), origConst - midConst));
+            rewriter.replaceOpWithNewOp<SubIOp>(subOp, nextConstant,
+                                                midAddOp.getOperand(1 - j));
+            return success();
+          }
+        }
+      }
+
+      if (auto midSubOp = subOp.getOperand(0).getDefiningOp<SubIOp>()) {
+        if (matchPattern(midSubOp.getOperand(0), m_ConstantInt(&midConst))) {
+          // (midConst - something) - origConst == (midConst - origConst) -
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), midConst - origConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(1));
+          return success();
+        }
+
+        if (matchPattern(midSubOp.getOperand(1), m_ConstantInt(&midConst))) {
+          // (something - midConst) - origConst == something - (origConst +
+          // midConst)
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), origConst + midConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, midSubOp.getOperand(0),
+                                              nextConstant);
+          return success();
+        }
+      }
+
+      if (auto midSubOp = subOp.getOperand(1).getDefiningOp<SubIOp>()) {
+        if (matchPattern(midSubOp.getOperand(0), m_ConstantInt(&midConst))) {
+          // origConst - (midConst - something) == (origConst - midConst) +
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), origConst - midConst));
+          rewriter.replaceOpWithNewOp<AddIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(1));
+          return success();
+        }
+
+        if (matchPattern(midSubOp.getOperand(1), m_ConstantInt(&midConst))) {
+          // origConst - (something - midConst) == (origConst + midConst) -
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), origConst + midConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(0));
+          return success();
+        }
+      }
+    }
+
+    if (matchPattern(subOp.getOperand(1), m_ConstantInt(&origConst))) {
+      if (auto midAddOp = subOp.getOperand(0).getDefiningOp<AddIOp>()) {
+        // (midConst + something) - origConst == (midConst - origConst) +
+        // something
+        for (int j = 0; j < 2; j++) {
+          if (matchPattern(midAddOp.getOperand(j), m_ConstantInt(&midConst))) {
+            auto nextConstant = rewriter.create<ConstantOp>(
+                subOp.getLoc(),
+                rewriter.getIntegerAttr(subOp.getType(), midConst - origConst));
+            rewriter.replaceOpWithNewOp<AddIOp>(subOp, nextConstant,
+                                                midAddOp.getOperand(1 - j));
+            return success();
+          }
+        }
+      }
+
+      if (auto midSubOp = subOp.getOperand(0).getDefiningOp<SubIOp>()) {
+        if (matchPattern(midSubOp.getOperand(0), m_ConstantInt(&midConst))) {
+          // (midConst - something) - origConst == (midConst - origConst) -
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), midConst - origConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(1));
+          return success();
+        }
+
+        if (matchPattern(midSubOp.getOperand(1), m_ConstantInt(&midConst))) {
+          // (something - midConst) - origConst == something - (midConst +
+          // origConst)
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), midConst + origConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, midSubOp.getOperand(0),
+                                              nextConstant);
+          return success();
+        }
+      }
+
+      if (auto midSubOp = subOp.getOperand(1).getDefiningOp<SubIOp>()) {
+        if (matchPattern(midSubOp.getOperand(0), m_ConstantInt(&midConst))) {
+          // origConst - (midConst - something) == (origConst - midConst) +
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), origConst - midConst));
+          rewriter.replaceOpWithNewOp<AddIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(1));
+          return success();
+        }
+        if (matchPattern(midSubOp.getOperand(1), m_ConstantInt(&midConst))) {
+          // origConst - (something - midConst) == (origConst - midConst) -
+          // something
+          auto nextConstant = rewriter.create<ConstantOp>(
+              subOp.getLoc(),
+              rewriter.getIntegerAttr(subOp.getType(), origConst - midConst));
+          rewriter.replaceOpWithNewOp<SubIOp>(subOp, nextConstant,
+                                              midSubOp.getOperand(0));
+          return success();
+        }
+      }
+    }
+    return failure();
+  }
+};
+
+void SubIOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  results.insert<SubConstantReorder>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1917,6 +2157,25 @@ static LogicalResult verify(SubTensorOp op) {
   return produceSubTensorErrorMsg(result, op, expectedType);
 }
 
+/// Infer the canonical type of the result of a subtensor operation. Returns a
+/// type with rank `resultRank` that is either the rank of the rank-reduced
+/// type, or the non-rank-reduced type.
+static RankedTensorType getCanonicalSubTensorResultType(
+    unsigned resultRank, RankedTensorType sourceType,
+    ArrayRef<OpFoldResult> mixedOffsets, ArrayRef<OpFoldResult> mixedSizes,
+    ArrayRef<OpFoldResult> mixedStrides) {
+  auto resultType =
+      SubTensorOp::inferRankReducedResultType(
+          resultRank, sourceType, mixedOffsets, mixedSizes, mixedStrides)
+          .cast<RankedTensorType>();
+  if (resultType.getRank() != resultRank) {
+    resultType = SubTensorOp::inferResultType(sourceType, mixedOffsets,
+                                              mixedSizes, mixedStrides)
+                     .cast<RankedTensorType>();
+  }
+  return resultType;
+}
+
 namespace {
 /// Pattern to rewrite a subtensor op with tensor::Cast arguments.
 /// This essentially pushes memref_cast past its consuming subtensor when
@@ -1951,13 +2210,9 @@ public:
     if (!canFoldIntoConsumerOp(castOp))
       return failure();
 
-    /// Deduce the resultType of SubTensorOp with `inferRankReducedResultType`
-    /// on the cast source operand type and the SubTensorOp static information.
-    /// This is the resulting type if the tensor::CastOp were folded and
-    /// rank-reduced to the desired result rank.
-    auto resultType = SubTensorOp::inferRankReducedResultType(
-        subTensorOp.getType().getRank(),
-        castOp.source().getType().cast<RankedTensorType>(),
+    /// Deduce the type of the result to use for the canonicalized operation.
+    RankedTensorType resultType = getCanonicalSubTensorResultType(
+        subTensorOp.getType().getRank(), subTensorOp.getSourceType(),
         subTensorOp.getMixedOffsets(), subTensorOp.getMixedSizes(),
         subTensorOp.getMixedStrides());
     Value newSubTensor = rewriter.create<SubTensorOp>(
@@ -1971,6 +2226,18 @@ public:
   }
 };
 } // namespace
+
+/// Return the canonical type of the result of a subtensor.
+struct SubTensorReturnTypeCanonicalizer {
+  RankedTensorType operator()(SubTensorOp op,
+                              ArrayRef<OpFoldResult> mixedOffsets,
+                              ArrayRef<OpFoldResult> mixedSizes,
+                              ArrayRef<OpFoldResult> mixedStrides) {
+    return getCanonicalSubTensorResultType(op.getType().getRank(),
+                                           op.getSourceType(), mixedOffsets,
+                                           mixedSizes, mixedStrides);
+  }
+};
 
 /// A canonicalizer wrapper to replace SubTensorOps.
 struct SubTensorCanonicalizer {
@@ -1987,7 +2254,8 @@ struct SubTensorCanonicalizer {
 void SubTensorOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                               MLIRContext *context) {
   results.add<OpWithOffsetSizesAndStridesConstantArgumentFolder<
-                  SubTensorOp, SubTensorCanonicalizer>,
+                  SubTensorOp, SubTensorReturnTypeCanonicalizer,
+                  SubTensorCanonicalizer>,
               SubTensorOpCastFolder>(context);
 }
 
@@ -2093,22 +2361,9 @@ public:
     canonicalizeSubViewPart(mixedStrides, ShapedType::isDynamicStrideOrOffset);
 
     // Create the new op in canonical form.
-    Value source = subTensorInsertOp.source();
-    RankedTensorType sourceType = source.getType().cast<RankedTensorType>();
-    SmallVector<int64_t, 4> shape = llvm::to_vector<4>(
-        llvm::map_range(mixedSizes, [](OpFoldResult valueOrAttr) -> int64_t {
-          if (auto attr = valueOrAttr.dyn_cast<Attribute>())
-            return attr.cast<IntegerAttr>().getInt();
-          return ShapedType::kDynamicSize;
-        }));
-    RankedTensorType newSourceType =
-        RankedTensorType::get(shape, sourceType.getElementType());
-    Location loc = subTensorInsertOp.getLoc();
-    if (sourceType != newSourceType)
-      source = rewriter.create<tensor::CastOp>(loc, newSourceType, source);
     rewriter.replaceOpWithNewOp<SubTensorInsertOp>(
-        subTensorInsertOp, source, subTensorInsertOp.dest(), mixedOffsets,
-        mixedSizes, mixedStrides);
+        subTensorInsertOp, subTensorInsertOp.source(), subTensorInsertOp.dest(),
+        mixedOffsets, mixedSizes, mixedStrides);
     return success();
   }
 };
@@ -2213,7 +2468,6 @@ parseSwitchOpCases(OpAsmParser &parser, Type &flagType,
                    SmallVectorImpl<OpAsmParser::OperandType> &caseOperands,
                    SmallVectorImpl<Type> &caseOperandTypes,
                    DenseIntElementsAttr &caseOperandOffsets) {
-
   if (failed(parser.parseKeyword("default")) || failed(parser.parseColon()) ||
       failed(parser.parseSuccessor(defaultDestination)))
     return failure();
@@ -2457,7 +2711,6 @@ static LogicalResult simplifyConstSwitchValue(SwitchOp op,
 /// ]
 static LogicalResult simplifyPassThroughSwitch(SwitchOp op,
                                                PatternRewriter &rewriter) {
-
   SmallVector<Block *> newCaseDests;
   SmallVector<ValueRange> newCaseOperands;
   SmallVector<SmallVector<Value>> argStorage;
@@ -2673,7 +2926,18 @@ OpFoldResult TruncateIOp::fold(ArrayRef<Attribute> operands) {
       matchPattern(getOperand(), m_Op<SignExtendIOp>()))
     return getOperand().getDefiningOp()->getOperand(0);
 
-  return nullptr;
+  assert(operands.size() == 1 && "unary operation takes one operand");
+
+  if (!operands[0])
+    return {};
+
+  if (auto lhs = operands[0].dyn_cast<IntegerAttr>()) {
+
+    return IntegerAttr::get(
+        getType(), lhs.getValue().trunc(getType().getIntOrFloatBitWidth()));
+  }
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

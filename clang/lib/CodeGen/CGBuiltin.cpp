@@ -5461,7 +5461,6 @@ static const ARMVectorIntrinsicInfo ARMSIMDIntrinsicMap [] = {
   NEONMAP1(vabsq_v, arm_neon_vabs, 0),
   NEONMAP0(vadd_v),
   NEONMAP0(vaddhn_v),
-  NEONMAP0(vaddq_p128),
   NEONMAP0(vaddq_v),
   NEONMAP1(vaesdq_v, arm_neon_aesd, 0),
   NEONMAP1(vaeseq_v, arm_neon_aese, 0),
@@ -15115,6 +15114,25 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     return Builder.CreateCall(F, X);
   }
 
+  // Fastmath by default
+  case PPC::BI__builtin_ppc_recipdivf:
+  case PPC::BI__builtin_ppc_recipdivd:
+  case PPC::BI__builtin_ppc_rsqrtf:
+  case PPC::BI__builtin_ppc_rsqrtd: {
+    Builder.getFastMathFlags().setFast();
+    llvm::Type *ResultType = ConvertType(E->getType());
+    Value *X = EmitScalarExpr(E->getArg(0));
+
+    if (BuiltinID == PPC::BI__builtin_ppc_recipdivf ||
+        BuiltinID == PPC::BI__builtin_ppc_recipdivd) {
+      Value *Y = EmitScalarExpr(E->getArg(1));
+      return Builder.CreateFDiv(X, Y, "recipdiv");
+    }
+    auto *One = ConstantFP::get(ResultType, 1.0);
+    llvm::Function *F = CGM.getIntrinsic(Intrinsic::sqrt, ResultType);
+    return Builder.CreateFDiv(One, Builder.CreateCall(F, X), "rsqrt");
+  }
+
   // FMA variations
   case PPC::BI__builtin_vsx_xvmaddadp:
   case PPC::BI__builtin_vsx_xvmaddasp:
@@ -17158,7 +17176,7 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(IntNo, ConvertType(E->getType()));
     return Builder.CreateCall(Callee, Value);
   }
-  case WebAssembly::BI__builtin_wasm_swizzle_v8x16: {
+  case WebAssembly::BI__builtin_wasm_swizzle_i8x16: {
     Value *Src = EmitScalarExpr(E->getArg(0));
     Value *Indices = EmitScalarExpr(E->getArg(1));
     Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_swizzle);
@@ -17257,7 +17275,8 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
   }
   case WebAssembly::BI__builtin_wasm_abs_i8x16:
   case WebAssembly::BI__builtin_wasm_abs_i16x8:
-  case WebAssembly::BI__builtin_wasm_abs_i32x4: {
+  case WebAssembly::BI__builtin_wasm_abs_i32x4:
+  case WebAssembly::BI__builtin_wasm_abs_i64x2: {
     Value *Vec = EmitScalarExpr(E->getArg(0));
     Value *Neg = Builder.CreateNeg(Vec, "neg");
     Constant *Zero = llvm::Constant::getNullValue(Vec->getType());
@@ -17403,20 +17422,14 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_popcnt);
     return Builder.CreateCall(Callee, {Vec});
   }
-  case WebAssembly::BI__builtin_wasm_any_true_i8x16:
-  case WebAssembly::BI__builtin_wasm_any_true_i16x8:
-  case WebAssembly::BI__builtin_wasm_any_true_i32x4:
-  case WebAssembly::BI__builtin_wasm_any_true_i64x2:
+  case WebAssembly::BI__builtin_wasm_any_true_v128:
   case WebAssembly::BI__builtin_wasm_all_true_i8x16:
   case WebAssembly::BI__builtin_wasm_all_true_i16x8:
   case WebAssembly::BI__builtin_wasm_all_true_i32x4:
   case WebAssembly::BI__builtin_wasm_all_true_i64x2: {
     unsigned IntNo;
     switch (BuiltinID) {
-    case WebAssembly::BI__builtin_wasm_any_true_i8x16:
-    case WebAssembly::BI__builtin_wasm_any_true_i16x8:
-    case WebAssembly::BI__builtin_wasm_any_true_i32x4:
-    case WebAssembly::BI__builtin_wasm_any_true_i64x2:
+    case WebAssembly::BI__builtin_wasm_any_true_v128:
       IntNo = Intrinsic::wasm_anytrue;
       break;
     case WebAssembly::BI__builtin_wasm_all_true_i8x16:
@@ -17567,7 +17580,7 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(IntNo);
     return Builder.CreateCall(Callee, {Ptr, Vec, LaneIdx});
   }
-  case WebAssembly::BI__builtin_wasm_shuffle_v8x16: {
+  case WebAssembly::BI__builtin_wasm_shuffle_i8x16: {
     Value *Ops[18];
     size_t OpIdx = 0;
     Ops[OpIdx++] = EmitScalarExpr(E->getArg(0));
@@ -17850,6 +17863,22 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
   case RISCV::BI__builtin_riscv_clmul:
   case RISCV::BI__builtin_riscv_clmulh:
   case RISCV::BI__builtin_riscv_clmulr:
+  case RISCV::BI__builtin_riscv_bcompress_32:
+  case RISCV::BI__builtin_riscv_bcompress_64:
+  case RISCV::BI__builtin_riscv_bdecompress_32:
+  case RISCV::BI__builtin_riscv_bdecompress_64:
+  case RISCV::BI__builtin_riscv_grev_32:
+  case RISCV::BI__builtin_riscv_grev_64:
+  case RISCV::BI__builtin_riscv_gorc_32:
+  case RISCV::BI__builtin_riscv_gorc_64:
+  case RISCV::BI__builtin_riscv_shfl_32:
+  case RISCV::BI__builtin_riscv_shfl_64:
+  case RISCV::BI__builtin_riscv_unshfl_32:
+  case RISCV::BI__builtin_riscv_unshfl_64:
+  case RISCV::BI__builtin_riscv_xperm_n:
+  case RISCV::BI__builtin_riscv_xperm_b:
+  case RISCV::BI__builtin_riscv_xperm_h:
+  case RISCV::BI__builtin_riscv_xperm_w:
   case RISCV::BI__builtin_riscv_crc32_b:
   case RISCV::BI__builtin_riscv_crc32_h:
   case RISCV::BI__builtin_riscv_crc32_w:
@@ -17875,6 +17904,46 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
       break;
     case RISCV::BI__builtin_riscv_clmulr:
       ID = Intrinsic::riscv_clmulr;
+      break;
+
+    // Zbe
+    case RISCV::BI__builtin_riscv_bcompress_32:
+    case RISCV::BI__builtin_riscv_bcompress_64:
+      ID = Intrinsic::riscv_bcompress;
+      break;
+    case RISCV::BI__builtin_riscv_bdecompress_32:
+    case RISCV::BI__builtin_riscv_bdecompress_64:
+      ID = Intrinsic::riscv_bdecompress;
+      break;
+
+    // Zbp
+    case RISCV::BI__builtin_riscv_grev_32:
+    case RISCV::BI__builtin_riscv_grev_64:
+      ID = Intrinsic::riscv_grev;
+      break;
+    case RISCV::BI__builtin_riscv_gorc_32:
+    case RISCV::BI__builtin_riscv_gorc_64:
+      ID = Intrinsic::riscv_gorc;
+      break;
+    case RISCV::BI__builtin_riscv_shfl_32:
+    case RISCV::BI__builtin_riscv_shfl_64:
+      ID = Intrinsic::riscv_shfl;
+      break;
+    case RISCV::BI__builtin_riscv_unshfl_32:
+    case RISCV::BI__builtin_riscv_unshfl_64:
+      ID = Intrinsic::riscv_unshfl;
+      break;
+    case RISCV::BI__builtin_riscv_xperm_n:
+      ID = Intrinsic::riscv_xperm_n;
+      break;
+    case RISCV::BI__builtin_riscv_xperm_b:
+      ID = Intrinsic::riscv_xperm_b;
+      break;
+    case RISCV::BI__builtin_riscv_xperm_h:
+      ID = Intrinsic::riscv_xperm_h;
+      break;
+    case RISCV::BI__builtin_riscv_xperm_w:
+      ID = Intrinsic::riscv_xperm_w;
       break;
 
     // Zbr

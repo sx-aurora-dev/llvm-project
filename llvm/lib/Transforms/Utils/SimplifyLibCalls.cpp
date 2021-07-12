@@ -575,8 +575,10 @@ Value *LibCallSimplifier::optimizeStrNCpy(CallInst *CI, IRBuilderBase &B) {
   }
 
   if (SrcLen == 0) {
-    // strncpy(x, "", y) -> memset(align 1 x, '\0', y)
-    CallInst *NewCI = B.CreateMemSet(Dst, B.getInt8('\0'), Size, Align(1));
+    // strncpy(x, "", y) -> memset(x, '\0', y)
+    Align MemSetAlign =
+        CI->getAttributes().getParamAttributes(0).getAlignment().valueOrOne();
+    CallInst *NewCI = B.CreateMemSet(Dst, B.getInt8('\0'), Size, MemSetAlign);
     AttrBuilder ArgAttrs(CI->getAttributes().getParamAttributes(0));
     NewCI->setAttributes(NewCI->getAttributes().addParamAttributes(
         CI->getContext(), 0, ArgAttrs));
@@ -2375,18 +2377,28 @@ Value *LibCallSimplifier::optimizePrintFString(CallInst *CI, IRBuilderBase &B) {
   if (FormatStr.size() == 1 || FormatStr == "%%")
     return emitPutChar(B.getInt32(FormatStr[0]), B, TLI);
 
-  // printf("%s", "a") --> putchar('a')
+  // Try to remove call or emit putchar/puts.
   if (FormatStr == "%s" && CI->getNumArgOperands() > 1) {
-    StringRef ChrStr;
-    if (!getConstantStringInfo(CI->getOperand(1), ChrStr))
+    StringRef OperandStr;
+    if (!getConstantStringInfo(CI->getOperand(1), OperandStr))
       return nullptr;
-    if (ChrStr.size() != 1)
-      return nullptr;
-    return emitPutChar(B.getInt32(ChrStr[0]), B, TLI);
+    // printf("%s", "") --> NOP
+    if (OperandStr.empty())
+      return (Value *)CI;
+    // printf("%s", "a") --> putchar('a')
+    if (OperandStr.size() == 1)
+      return emitPutChar(B.getInt32(OperandStr[0]), B, TLI);
+    // printf("%s", str"\n") --> puts(str)
+    if (OperandStr.back() == '\n') {
+      OperandStr = OperandStr.drop_back();
+      Value *GV = B.CreateGlobalString(OperandStr, "str");
+      return emitPutS(GV, B, TLI);
+    }
+    return nullptr;
   }
 
   // printf("foo\n") --> puts("foo")
-  if (FormatStr[FormatStr.size() - 1] == '\n' &&
+  if (FormatStr.back() == '\n' &&
       FormatStr.find('%') == StringRef::npos) { // No format characters.
     // Create a string literal with no \n on it.  We expect the constant merge
     // pass to be run after this pass, to merge duplicate strings.

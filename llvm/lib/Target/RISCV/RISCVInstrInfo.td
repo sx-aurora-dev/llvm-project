@@ -145,7 +145,7 @@ def uimmlog2xlen : Operand<XLenVT>, ImmLeaf<XLenVT, [{
     if (!MCOp.evaluateAsConstantImm(Imm))
       return false;
     if (STI.getTargetTriple().isArch64Bit())
-      return  isUInt<6>(Imm);
+      return isUInt<6>(Imm);
     return isUInt<5>(Imm);
   }];
   let OperandType = "OPERAND_UIMMLOG2XLEN";
@@ -340,6 +340,22 @@ def ImmSubFromXLen : SDNodeXForm<imm, [{
 // Return an immediate subtracted from 32.
 def ImmSubFrom32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(32 - N->getZExtValue(), SDLoc(N),
+                                   N->getValueType(0));
+}]>;
+
+// Check if an addition can be broken to a pair of ADDI.
+def AddiPair : ComplexPattern<XLenVT, 1, "selectAddiPair">;
+
+// Return imm/2.
+def AddiPairImmA : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getSExtValue() / 2, SDLoc(N),
+                                   N->getValueType(0));
+}]>;
+
+// Return imm - imm/2.
+def AddiPairImmB : SDNodeXForm<imm, [{
+  int64_t Imm = N->getSExtValue();
+  return CurDAG->getTargetConstant(Imm - Imm / 2, SDLoc(N),
                                    N->getValueType(0));
 }]>;
 
@@ -869,6 +885,10 @@ def SLLIUWPat : PatFrag<(ops node:$A, node:$B),
   return MatchSLLIUW(N);
 }]>;
 
+def add_oneuse : PatFrag<(ops node:$A, node:$B), (add node:$A, node:$B), [{
+  return N->hasOneUse();
+}]>;
+
 /// Simple arithmetic operations
 
 def : PatGprGpr<add, ADD>;
@@ -948,7 +968,7 @@ class SelectCC_rrirr<RegisterClass valty, RegisterClass cmpty>
              (ins cmpty:$lhs, cmpty:$rhs, ixlenimm:$imm,
               valty:$truev, valty:$falsev),
              [(set valty:$dst, (riscv_selectcc cmpty:$lhs, cmpty:$rhs,
-              (XLenVT imm:$imm), valty:$truev, valty:$falsev))]>;
+              (XLenVT timm:$imm), valty:$truev, valty:$falsev))]>;
 
 def Select_GPR_Using_CC_GPR : SelectCC_rrirr<GPR, GPR>;
 
@@ -1182,6 +1202,10 @@ class SwapSysRegImm<SysReg SR, list<Register> Regs>
   let Defs = Regs;
 }
 
+def ReadFRM : ReadSysReg<SysRegFRM, [FRM]>;
+def WriteFRM : WriteSysReg<SysRegFRM, [FRM]>;
+def WriteFRMImm : WriteSysRegImm<SysRegFRM, [FRM]>;
+
 /// Other pseudo-instructions
 
 // Pessimistically assume the stack pointer will be clobbered
@@ -1273,6 +1297,17 @@ def : Pat<(trap), (UNIMP)>;
 // We lower `debugtrap` to `ebreak`, as this will get the attention of the
 // debugger if possible.
 def : Pat<(debugtrap), (EBREAK)>;
+
+/// Simple optimization
+def : Pat<(add GPR:$rs1, (AddiPair GPR:$rs2)),
+          (ADDI (ADDI GPR:$rs1, (AddiPairImmB GPR:$rs2)),
+                (AddiPairImmA GPR:$rs2))>;
+
+let Predicates = [IsRV64] in {
+def : Pat<(sext_inreg (add_oneuse GPR:$rs1, (AddiPair GPR:$rs2)), i32),
+          (ADDIW (ADDIW GPR:$rs1, (AddiPairImmB GPR:$rs2)),
+                 (AddiPairImmA GPR:$rs2))>;
+}
 
 //===----------------------------------------------------------------------===//
 // Standard extensions

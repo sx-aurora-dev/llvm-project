@@ -31,7 +31,7 @@ static constexpr StringLiteral ImplicitAttrNames[] = {
     "amdgpu-work-item-id-z",  "amdgpu-work-group-id-x",
     "amdgpu-work-group-id-y", "amdgpu-work-group-id-z",
     "amdgpu-dispatch-ptr",    "amdgpu-dispatch-id",
-    "amdgpu-implicitarg-ptr"};
+    "amdgpu-queue-ptr",       "amdgpu-implicitarg-ptr"};
 
 class AMDGPUAnnotateKernelFeatures : public CallGraphSCCPass {
 private:
@@ -403,9 +403,11 @@ bool AMDGPUAnnotateKernelFeatures::runOnSCC(CallGraphSCC &SCC) {
     }
 
     Function *F = I->getFunction();
-    // Add feature attributes
-    if (!F || F->isDeclaration())
+    // Ignore functions with graphics calling conventions, these are currently
+    // not allowed to have kernel arguments.
+    if (!F || F->isDeclaration() || AMDGPU::isGraphics(F->getCallingConv()))
       continue;
+    // Add feature attributes
     Changed |= addFeatureAttributes(*F);
   }
 

@@ -224,6 +224,8 @@ func @logical_scalar(%arg0 : i1, %arg1 : i1) {
   %0 = and %arg0, %arg1 : i1
   // CHECK: spv.LogicalOr
   %1 = or %arg0, %arg1 : i1
+  // CHECK: spv.LogicalNotEqual
+  %2 = xor %arg0, %arg1 : i1
   return
 }
 
@@ -233,6 +235,8 @@ func @logical_vector(%arg0 : vector<4xi1>, %arg1 : vector<4xi1>) {
   %0 = and %arg0, %arg1 : vector<4xi1>
   // CHECK: spv.LogicalOr
   %1 = or %arg0, %arg1 : vector<4xi1>
+  // CHECK: spv.LogicalNotEqual
+  %2 = xor %arg0, %arg1 : vector<4xi1>
   return
 }
 
@@ -1244,4 +1248,19 @@ func @tensor_extract_constant(%a : index, %b: index, %c: index) -> i32 {
   %extract = tensor.extract %cst[%a, %b, %c] : tensor<2x2x3xi32>
   // CHECK: spv.ReturnValue %[[VAL]]
   return %extract : i32
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// splat
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: func @splat
+//  CHECK-SAME: (%[[A:.+]]: f32)
+//       CHECK:   %[[VAL:.+]] = spv.CompositeConstruct %[[A]], %[[A]], %[[A]], %[[A]] : vector<4xf32>
+//       CHECK:   spv.ReturnValue %[[VAL]]
+func @splat(%f : f32) -> vector<4xf32> {
+  %splat = splat %f : vector<4xf32>
+  return %splat : vector<4xf32>
 }

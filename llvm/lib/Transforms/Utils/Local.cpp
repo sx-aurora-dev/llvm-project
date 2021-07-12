@@ -24,7 +24,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Analysis/AssumeBundleQueries.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/DomTreeUpdater.h"
@@ -149,7 +148,12 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       Dest1->removePredecessor(BI->getParent());
 
       // Replace the conditional branch with an unconditional one.
-      Builder.CreateBr(Dest1);
+      BranchInst *NewBI = Builder.CreateBr(Dest1);
+
+      // Transfer the metadata to the new branch instruction.
+      NewBI->copyMetadata(*BI, {LLVMContext::MD_loop, LLVMContext::MD_dbg,
+                                LLVMContext::MD_annotation});
+
       Value *Cond = BI->getCondition();
       BI->eraseFromParent();
       if (DeleteDeadConditions)
@@ -168,7 +172,12 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       OldDest->removePredecessor(BB);
 
       // Replace the conditional branch with an unconditional one.
-      Builder.CreateBr(Destination);
+      BranchInst *NewBI = Builder.CreateBr(Destination);
+
+      // Transfer the metadata to the new branch instruction.
+      NewBI->copyMetadata(*BI, {LLVMContext::MD_loop, LLVMContext::MD_dbg,
+                                LLVMContext::MD_annotation});
+
       BI->eraseFromParent();
       if (DTU)
         DTU->applyUpdates({{DominatorTree::Delete, BB, OldDest}});
@@ -1655,92 +1664,6 @@ void llvm::insertDebugValuesForPHIs(BasicBlock *BB,
     auto InsertionPt = Parent->getFirstInsertionPt();
     assert(InsertionPt != Parent->end() && "Ill-formed basic block");
     NewDbgII->insertBefore(&*InsertionPt);
-  }
-}
-
-/// Finds all intrinsics declaring local variables as living in the memory that
-/// 'V' points to. This may include a mix of dbg.declare and
-/// dbg.addr intrinsics.
-TinyPtrVector<DbgVariableIntrinsic *> llvm::FindDbgAddrUses(Value *V) {
-  // This function is hot. Check whether the value has any metadata to avoid a
-  // DenseMap lookup.
-  if (!V->isUsedByMetadata())
-    return {};
-  auto *L = LocalAsMetadata::getIfExists(V);
-  if (!L)
-    return {};
-  auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L);
-  if (!MDV)
-    return {};
-
-  TinyPtrVector<DbgVariableIntrinsic *> Declares;
-  for (User *U : MDV->users()) {
-    if (auto *DII = dyn_cast<DbgVariableIntrinsic>(U))
-      if (DII->isAddressOfVariable())
-        Declares.push_back(DII);
-  }
-
-  return Declares;
-}
-
-TinyPtrVector<DbgDeclareInst *> llvm::FindDbgDeclareUses(Value *V) {
-  TinyPtrVector<DbgDeclareInst *> DDIs;
-  for (DbgVariableIntrinsic *DVI : FindDbgAddrUses(V))
-    if (auto *DDI = dyn_cast<DbgDeclareInst>(DVI))
-      DDIs.push_back(DDI);
-  return DDIs;
-}
-
-void llvm::findDbgValues(SmallVectorImpl<DbgValueInst *> &DbgValues, Value *V) {
-  // This function is hot. Check whether the value has any metadata to avoid a
-  // DenseMap lookup.
-  if (!V->isUsedByMetadata())
-    return;
-  // TODO: If this value appears multiple times in a DIArgList, we should still
-  // only add the owning DbgValueInst once; use this set to track ArgListUsers.
-  // This behaviour can be removed when we can automatically remove duplicates.
-  SmallPtrSet<DbgValueInst *, 4> EncounteredDbgValues;
-  if (auto *L = LocalAsMetadata::getIfExists(V)) {
-    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L)) {
-      for (User *U : MDV->users())
-        if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(U))
-          DbgValues.push_back(DVI);
-    }
-    for (Metadata *AL : L->getAllArgListUsers()) {
-      if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), AL)) {
-        for (User *U : MDV->users())
-          if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(U))
-            if (EncounteredDbgValues.insert(DVI).second)
-              DbgValues.push_back(DVI);
-      }
-    }
-  }
-}
-
-void llvm::findDbgUsers(SmallVectorImpl<DbgVariableIntrinsic *> &DbgUsers,
-                        Value *V) {
-  // This function is hot. Check whether the value has any metadata to avoid a
-  // DenseMap lookup.
-  if (!V->isUsedByMetadata())
-    return;
-  // TODO: If this value appears multiple times in a DIArgList, we should still
-  // only add the owning DbgValueInst once; use this set to track ArgListUsers.
-  // This behaviour can be removed when we can automatically remove duplicates.
-  SmallPtrSet<DbgVariableIntrinsic *, 4> EncounteredDbgValues;
-  if (auto *L = LocalAsMetadata::getIfExists(V)) {
-    if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), L)) {
-      for (User *U : MDV->users())
-        if (DbgVariableIntrinsic *DII = dyn_cast<DbgVariableIntrinsic>(U))
-          DbgUsers.push_back(DII);
-    }
-    for (Metadata *AL : L->getAllArgListUsers()) {
-      if (auto *MDV = MetadataAsValue::getIfExists(V->getContext(), AL)) {
-        for (User *U : MDV->users())
-          if (DbgVariableIntrinsic *DII = dyn_cast<DbgVariableIntrinsic>(U))
-            if (EncounteredDbgValues.insert(DII).second)
-              DbgUsers.push_back(DII);
-      }
-    }
   }
 }
 

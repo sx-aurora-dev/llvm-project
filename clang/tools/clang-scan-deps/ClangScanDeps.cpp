@@ -138,9 +138,29 @@ static llvm::cl::opt<ScanningOutputFormat> Format(
     llvm::cl::init(ScanningOutputFormat::Make),
     llvm::cl::cat(DependencyScannerCategory));
 
-static llvm::cl::opt<bool> FullCommandLine(
-    "full-command-line",
-    llvm::cl::desc("Include the full command lines to use to build modules"),
+// This mode is mostly useful for development of explicitly built modules.
+// Command lines will contain arguments specifying modulemap file paths and
+// absolute paths to PCM files in the module cache directory.
+//
+// Build tools that want to put the PCM files in a different location should use
+// the C++ APIs instead, of which there are two flavors:
+//
+// 1. APIs that generate arguments with paths to modulemap and PCM files via
+//    callbacks provided by the client:
+//     * ModuleDeps::getCanonicalCommandLine(LookupPCMPath, LookupModuleDeps)
+//     * FullDependencies::getAdditionalArgs(LookupPCMPath, LookupModuleDeps)
+//
+// 2. APIs that don't generate arguments with paths to modulemap or PCM files
+//    and instead expect the client to append them manually after the fact:
+//     * ModuleDeps::getCanonicalCommandLineWithoutModulePaths()
+//     * FullDependencies::getAdditionalArgsWithoutModulePaths()
+//
+static llvm::cl::opt<bool> GenerateModulesPathArgs(
+    "generate-modules-path-args",
+    llvm::cl::desc(
+        "With '-format experimental-full', include arguments specifying "
+        "modules-related paths in the generated command lines: "
+        "'-fmodule-file=', '-o', '-fmodule-map-file='."),
     llvm::cl::init(false), llvm::cl::cat(DependencyScannerCategory));
 
 llvm::cl::opt<unsigned>
@@ -265,12 +285,14 @@ public:
       Modules.insert(I, {{MD.ID, InputIndex}, std::move(MD)});
     }
 
-    if (FullCommandLine)
-      ID.AdditonalCommandLine = FD.getAdditionalCommandLine(
-          [&](ModuleID MID) { return lookupPCMPath(MID); },
-          [&](ModuleID MID) -> const ModuleDeps & {
-            return lookupModuleDeps(MID);
-          });
+    ID.AdditionalCommandLine =
+        GenerateModulesPathArgs
+            ? FD.getAdditionalArgs(
+                  [&](ModuleID MID) { return lookupPCMPath(MID); },
+                  [&](ModuleID MID) -> const ModuleDeps & {
+                    return lookupModuleDeps(MID);
+                  })
+            : FD.getAdditionalArgsWithoutModulePaths();
 
     Inputs.push_back(std::move(ID));
   }
@@ -302,13 +324,13 @@ public:
           {"clang-module-deps", toJSONSorted(MD.ClangModuleDeps)},
           {"clang-modulemap-file", MD.ClangModuleMapFile},
           {"command-line",
-           FullCommandLine
-               ? MD.getFullCommandLine(
+           GenerateModulesPathArgs
+               ? MD.getCanonicalCommandLine(
                      [&](ModuleID MID) { return lookupPCMPath(MID); },
                      [&](ModuleID MID) -> const ModuleDeps & {
                        return lookupModuleDeps(MID);
                      })
-               : MD.NonPathCommandLine},
+               : MD.getCanonicalCommandLineWithoutModulePaths()},
       };
       OutModules.push_back(std::move(O));
     }
@@ -320,7 +342,7 @@ public:
           {"clang-context-hash", I.ContextHash},
           {"file-deps", I.FileDeps},
           {"clang-module-deps", toJSONSorted(I.ModuleDeps)},
-          {"command-line", I.AdditonalCommandLine},
+          {"command-line", I.AdditionalCommandLine},
       };
       TUs.push_back(std::move(O));
     }
@@ -367,7 +389,7 @@ private:
     std::string ContextHash;
     std::vector<std::string> FileDeps;
     std::vector<ModuleID> ModuleDeps;
-    std::vector<std::string> AdditonalCommandLine;
+    std::vector<std::string> AdditionalCommandLine;
   };
 
   std::mutex Lock;
@@ -437,6 +459,9 @@ int main(int argc, const char **argv) {
           for (auto I = R, E = Args.rend(); I != E; ++I) {
             StringRef Arg = *I;
             if (ClangCLMode) {
+              // Ignore arguments that are preceded by "-Xclang".
+              if ((I + 1) != E && I[1] == "-Xclang")
+                continue;
               if (LastO.empty()) {
                 // With clang-cl, the output obj file can be specified with
                 // "/opath", "/o path", "/Fopath", and the dash counterparts.

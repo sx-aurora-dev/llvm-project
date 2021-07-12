@@ -1115,11 +1115,18 @@ static const char *RelocationModelName(llvm::Reloc::Model Model) {
 static void handleAMDGPUCodeObjectVersionOptions(const Driver &D,
                                                  const ArgList &Args,
                                                  ArgStringList &CmdArgs) {
-  unsigned CodeObjVer = getOrCheckAMDGPUCodeObjectVersion(D, Args);
-  CmdArgs.insert(CmdArgs.begin() + 1,
-                 Args.MakeArgString(Twine("--amdhsa-code-object-version=") +
-                                    Twine(CodeObjVer)));
-  CmdArgs.insert(CmdArgs.begin() + 1, "-mllvm");
+  // If no version was requested by the user, use the default value from the
+  // back end. This is consistent with the value returned from
+  // getAMDGPUCodeObjectVersion. This lets clang emit IR for amdgpu without
+  // requiring the corresponding llvm to have the AMDGPU target enabled,
+  // provided the user (e.g. front end tests) can use the default.
+  if (haveAMDGPUCodeObjectVersionArgument(D, Args)) {
+    unsigned CodeObjVer = getAMDGPUCodeObjectVersion(D, Args);
+    CmdArgs.insert(CmdArgs.begin() + 1,
+                   Args.MakeArgString(Twine("--amdhsa-code-object-version=") +
+                                      Twine(CodeObjVer)));
+    CmdArgs.insert(CmdArgs.begin() + 1, "-mllvm");
+  }
 }
 
 void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
@@ -3139,7 +3146,7 @@ static void RenderSSPOptions(const Driver &D, const ToolChain &TC,
     if (!EffectiveTriple.isX86())
       D.Diag(diag::err_drv_unsupported_opt_for_target)
           << A->getAsString(Args) << TripleStr;
-    unsigned Offset;
+    int Offset;
     if (Value.getAsInteger(10, Offset)) {
       D.Diag(diag::err_drv_invalid_value) << A->getOption().getName() << Value;
       return;
@@ -3990,7 +3997,14 @@ static void renderDebugOptions(const ToolChain &TC, const Driver &D,
       DebugInfoKind == codegenoptions::DebugDirectivesOnly)
     DebugInfoKind = codegenoptions::NoDebugInfo;
 
-  // We ignore flag -gstrict-dwarf for now.
+  // strict DWARF is set to false by default. But for DBX, we need it to be set
+  // as true by default.
+  if (const Arg *A = Args.getLastArg(options::OPT_gstrict_dwarf))
+    (void)checkDebugInfoOption(A, Args, D, TC);
+  if (Args.hasFlag(options::OPT_gstrict_dwarf, options::OPT_gno_strict_dwarf,
+                   DebuggerTuning == llvm::DebuggerKind::DBX))
+    CmdArgs.push_back("-gstrict-dwarf");
+
   // And we handle flag -grecord-gcc-switches later with DWARFDebugFlags.
   Args.ClaimAllArgs(options::OPT_g_flags_Group);
 
@@ -5156,6 +5170,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-H");
     CmdArgs.push_back("-sys-header-deps");
   }
+  Args.AddAllArgs(CmdArgs, options::OPT_fshow_skipped_includes);
 
   if (D.CCPrintHeaders && !D.CCGenDiagnostics) {
     CmdArgs.push_back("-header-include-file");
@@ -6495,6 +6510,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (IsHIP)
     CmdArgs.push_back("-fcuda-allow-variadic-functions");
+
+  if (IsCudaDevice || IsHIPDevice) {
+    StringRef InlineThresh =
+        Args.getLastArgValue(options::OPT_fgpu_inline_threshold_EQ);
+    if (!InlineThresh.empty()) {
+      std::string ArgStr =
+          std::string("-inline-threshold=") + InlineThresh.str();
+      CmdArgs.append({"-mllvm", Args.MakeArgStringRef(ArgStr)});
+    }
+  }
 
   // OpenMP offloading device jobs take the argument -fopenmp-host-ir-file-path
   // to specify the result of the compile phase on the host, so the meaningful

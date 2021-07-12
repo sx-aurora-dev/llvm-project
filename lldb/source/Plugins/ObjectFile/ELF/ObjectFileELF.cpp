@@ -2901,8 +2901,11 @@ void ObjectFileELF::ParseUnwindSymbols(Symtab *symbol_table,
   // recalculate the index first.
   std::vector<Symbol> new_symbols;
 
-  eh_frame->ForEachFDEEntries([this, symbol_table, section_list, &new_symbols](
-      lldb::addr_t file_addr, uint32_t size, dw_offset_t) {
+  size_t num_symbols = symbol_table->GetNumSymbols();
+  uint64_t last_symbol_id =
+      num_symbols ? symbol_table->SymbolAtIndex(num_symbols - 1)->GetID() : 0;
+  eh_frame->ForEachFDEEntries([&](lldb::addr_t file_addr, uint32_t size,
+                                  dw_offset_t) {
     Symbol *symbol = symbol_table->FindSymbolAtFileAddress(file_addr);
     if (symbol) {
       if (!symbol->GetByteSizeIsValid()) {
@@ -2915,7 +2918,7 @@ void ObjectFileELF::ParseUnwindSymbols(Symtab *symbol_table,
       if (section_sp) {
         addr_t offset = file_addr - section_sp->GetFileAddress();
         const char *symbol_name = GetNextSyntheticSymbolName().GetCString();
-        uint64_t symbol_id = symbol_table->GetNumSymbols();
+        uint64_t symbol_id = ++last_symbol_id;
         Symbol eh_symbol(
             symbol_id,       // Symbol table index.
             symbol_name,     // Symbol name.

@@ -32,6 +32,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 #include <map>
@@ -997,7 +999,6 @@ struct TensorUse : public Expression {
   TensorUse() : TensorUse("", AffineMap()) {}
   TensorUse(StringRef name, AffineMap map)
       : Expression(Kind::TensorUse), tensorId(name), indexingMap(map) {}
-  TensorUse(const TensorUse &use) = default;
 
   static bool classof(const Expression *e) {
     return e->kind == Kind::TensorUse;

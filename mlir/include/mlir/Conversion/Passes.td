@@ -100,6 +100,20 @@ def ConvertComplexToLLVM : Pass<"convert-complex-to-llvm", "ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ComplexToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertComplexToStandard : FunctionPass<"convert-complex-to-standard"> {
+  let summary = "Convert Complex dialect to standard dialect";
+  let constructor = "mlir::createConvertComplexToStandardPass()";
+  let dependentDialects = [
+    "complex::ComplexDialect",
+    "math::MathDialect",
+    "StandardOpsDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // GPUCommon
 //===----------------------------------------------------------------------===//
 
@@ -226,6 +240,19 @@ def ConvertLinalgToSPIRV : Pass<"convert-linalg-to-spirv", "ModuleOp"> {
   }];
   let constructor = "mlir::createLinalgToSPIRVPass()";
   let dependentDialects = ["spirv::SPIRVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// MathToLibm
+//===----------------------------------------------------------------------===//
+
+def ConvertMathToLibm : Pass<"convert-math-to-libm", "ModuleOp"> {
+  let summary = "Convert Math dialect to libm calls";
+  let description = [{
+    This pass converts supported Math ops to libm calls.
+  }];
+  let constructor = "mlir::createConvertMathToLibmPass()";
+  let dependentDialects = ["StandardOpsDialect", "vector::VectorDialect"];
 }
 
 //===----------------------------------------------------------------------===//

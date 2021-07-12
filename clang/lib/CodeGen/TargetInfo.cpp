@@ -9166,6 +9166,9 @@ void AMDGPUTargetCodeGenInfo::setTargetAttributes(
 
   if (M.getContext().getTargetInfo().allowAMDGPUUnsafeFPAtomics())
     F->addFnAttr("amdgpu-unsafe-fp-atomics", "true");
+
+  if (!getABIInfo().getCodeGenOpts().EmitIEEENaNCompliantInsts)
+    F->addFnAttr("amdgpu-ieee", "false");
 }
 
 unsigned AMDGPUTargetCodeGenInfo::getOpenCLKernelCallingConv() const {
@@ -10068,6 +10071,12 @@ class SPIRTargetCodeGenInfo : public TargetCodeGenInfo {
 public:
   SPIRTargetCodeGenInfo(CodeGen::CodeGenTypes &CGT)
       : TargetCodeGenInfo(std::make_unique<SPIRABIInfo>(CGT)) {}
+
+  LangAS getASTAllocaAddressSpace() const override {
+    return getLangASFromTargetAS(
+        getABIInfo().getDataLayout().getAllocaAddrSpace());
+  }
+
   unsigned getOpenCLKernelCallingConv() const override;
 };
 

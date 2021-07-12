@@ -732,6 +732,7 @@ public:
           BO->getLHS()->getType().getCanonicalType());
       auto *RHSMatTy = dyn_cast<ConstantMatrixType>(
           BO->getRHS()->getType().getCanonicalType());
+      CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, Ops.FPFeatures);
       if (LHSMatTy && RHSMatTy)
         return MB.CreateMatrixMultiply(Ops.LHS, Ops.RHS, LHSMatTy->getNumRows(),
                                        LHSMatTy->getNumColumns(),
@@ -1204,10 +1205,6 @@ Value *ScalarExprEmitter::EmitScalarCast(Value *Src, QualType SrcType,
   QualType SrcElementType;
   QualType DstElementType;
   if (SrcType->isMatrixType() && DstType->isMatrixType()) {
-    // Allow bitcast between matrixes of the same size.
-    if (SrcTy->getPrimitiveSizeInBits() == DstTy->getPrimitiveSizeInBits())
-      return Builder.CreateBitCast(Src, DstTy, "conv");
-
     SrcElementTy = cast<llvm::VectorType>(SrcTy)->getElementType();
     DstElementTy = cast<llvm::VectorType>(DstTy)->getElementType();
     SrcElementType = SrcType->castAs<MatrixType>()->getElementType();
@@ -3206,6 +3203,7 @@ Value *ScalarExprEmitter::EmitDiv(const BinOpInfo &Ops) {
         "first operand must be a matrix");
     assert(BO->getRHS()->getType().getCanonicalType()->isArithmeticType() &&
            "second operand must be an arithmetic type");
+    CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, Ops.FPFeatures);
     return MB.CreateScalarDiv(Ops.LHS, Ops.RHS,
                               Ops.Ty->hasUnsignedIntegerRepresentation());
   }
@@ -3214,8 +3212,10 @@ Value *ScalarExprEmitter::EmitDiv(const BinOpInfo &Ops) {
     llvm::Value *Val;
     CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, Ops.FPFeatures);
     Val = Builder.CreateFDiv(Ops.LHS, Ops.RHS, "div");
-    if (CGF.getLangOpts().OpenCL &&
-        !CGF.CGM.getCodeGenOpts().CorrectlyRoundedDivSqrt) {
+    if ((CGF.getLangOpts().OpenCL &&
+         !CGF.CGM.getCodeGenOpts().OpenCLCorrectlyRoundedDivSqrt) ||
+        (CGF.getLangOpts().HIP && CGF.getLangOpts().CUDAIsDevice &&
+         !CGF.CGM.getCodeGenOpts().HIPCorrectlyRoundedDivSqrt)) {
       // OpenCL v1.1 s7.4: minimum accuracy of single precision / is 2.5ulp
       // OpenCL v1.2 s5.6.4.2: The -cl-fp32-correctly-rounded-divide-sqrt
       // build option allows an application to specify that single precision
@@ -3585,6 +3585,7 @@ Value *ScalarExprEmitter::EmitAdd(const BinOpInfo &op) {
 
   if (op.Ty->isConstantMatrixType()) {
     llvm::MatrixBuilder<CGBuilderTy> MB(Builder);
+    CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, op.FPFeatures);
     return MB.CreateAdd(op.LHS, op.RHS);
   }
 
@@ -3734,6 +3735,7 @@ Value *ScalarExprEmitter::EmitSub(const BinOpInfo &op) {
 
     if (op.Ty->isConstantMatrixType()) {
       llvm::MatrixBuilder<CGBuilderTy> MB(Builder);
+      CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, op.FPFeatures);
       return MB.CreateSub(op.LHS, op.RHS);
     }
 

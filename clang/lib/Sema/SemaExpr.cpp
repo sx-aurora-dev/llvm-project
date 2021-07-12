@@ -355,24 +355,6 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
 
   diagnoseUseOfInternalDeclInInlineFunction(*this, D, Loc);
 
-  // CUDA/HIP: Diagnose invalid references of host global variables in device
-  // functions. Reference of device global variables in host functions is
-  // allowed through shadow variables therefore it is not diagnosed.
-  if (LangOpts.CUDAIsDevice) {
-    auto *FD = dyn_cast_or_null<FunctionDecl>(CurContext);
-    auto Target = IdentifyCUDATarget(FD);
-    if (FD && Target != CFT_Host) {
-      const auto *VD = dyn_cast<VarDecl>(D);
-      if (VD && VD->hasGlobalStorage() && !VD->hasAttr<CUDADeviceAttr>() &&
-          !VD->hasAttr<CUDAConstantAttr>() && !VD->hasAttr<CUDASharedAttr>() &&
-          !VD->getType()->isCUDADeviceBuiltinSurfaceType() &&
-          !VD->getType()->isCUDADeviceBuiltinTextureType() &&
-          !VD->isConstexpr() && !VD->getType().isConstQualified())
-        targetDiag(*Locs.begin(), diag::err_ref_bad_target)
-            << /*host*/ 2 << /*variable*/ 1 << VD << Target;
-    }
-  }
-
   if (LangOpts.SYCLIsDevice || (LangOpts.OpenMP && LangOpts.OpenMPIsDevice)) {
     if (auto *VD = dyn_cast<ValueDecl>(D))
       checkDeviceDecl(VD, Loc);
@@ -5929,7 +5911,8 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                (!Param || !Param->hasAttr<CFConsumedAttr>()))
         CFAudited = true;
 
-      if (Proto->getExtParameterInfo(i).isNoEscape())
+      if (Proto->getExtParameterInfo(i).isNoEscape() &&
+          ProtoArgType->isBlockPointerType())
         if (auto *BE = dyn_cast<BlockExpr>(Arg->IgnoreParenNoopCasts(Context)))
           BE->getBlockDecl()->setDoesNotEscape();
 
@@ -17204,6 +17187,31 @@ MarkVarDeclODRUsed(VarDecl *Var, SourceLocation Loc, Sema &SemaRef,
     CaptureType, DeclRefType,
     FunctionScopeIndexToStopAt);
 
+  // Diagnose ODR-use of host global variables in device functions. Reference
+  // of device global variables in host functions is allowed through shadow
+  // variables therefore it is not diagnosed.
+  if (SemaRef.LangOpts.CUDA && SemaRef.LangOpts.CUDAIsDevice) {
+    auto *FD = dyn_cast_or_null<FunctionDecl>(SemaRef.CurContext);
+    auto Target = SemaRef.IdentifyCUDATarget(FD);
+    auto IsEmittedOnDeviceSide = [](VarDecl *Var) {
+      if (Var->hasAttr<CUDADeviceAttr>() || Var->hasAttr<CUDAConstantAttr>() ||
+          Var->hasAttr<CUDASharedAttr>() ||
+          Var->getType()->isCUDADeviceBuiltinSurfaceType() ||
+          Var->getType()->isCUDADeviceBuiltinTextureType())
+        return true;
+      // Function-scope static variable in device functions or kernels are
+      // emitted on device side.
+      if (auto *FD = dyn_cast<FunctionDecl>(Var->getDeclContext())) {
+        return FD->hasAttr<CUDADeviceAttr>() || FD->hasAttr<CUDAGlobalAttr>();
+      }
+      return false;
+    };
+    if (Var && Var->hasGlobalStorage() && !IsEmittedOnDeviceSide(Var)) {
+      SemaRef.targetDiag(Loc, diag::err_ref_bad_target)
+          << /*host*/ 2 << /*variable*/ 1 << Var << Target;
+    }
+  }
+
   Var->markUsed(SemaRef.Context);
 }
 
@@ -19715,8 +19723,10 @@ ExprResult Sema::CreateRecoveryExpr(SourceLocation Begin, SourceLocation End,
   if (isSFINAEContext())
     return ExprError();
 
-  if (T.isNull() || !Context.getLangOpts().RecoveryASTType)
+  if (T.isNull() || T->isUndeducedType() ||
+      !Context.getLangOpts().RecoveryASTType)
     // We don't know the concrete type, fallback to dependent type.
     T = Context.DependentTy;
+
   return RecoveryExpr::Create(Context, T, Begin, End, SubExprs);
 }
