@@ -37,6 +37,7 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
+                        make clean
                         make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
                             THREADS= cmake build
                     """
@@ -47,7 +48,7 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make check-clang check-llvm
+                        make THREADS= check-clang check-llvm
                     """
                 }
             }
@@ -71,7 +72,7 @@ pipeline {
                                 url: "${REPO_URL}/llvm-ve-intrinsic-test.git"
                             sh """
                                 make clean
-                                make CLANG=${TOP}/llvm-dev/install/bin/clang -j8
+                                make CLANG=${TOP}/llvm-dev/install/bin/clang -j
                                 ./test.sh
                             """
                         }
