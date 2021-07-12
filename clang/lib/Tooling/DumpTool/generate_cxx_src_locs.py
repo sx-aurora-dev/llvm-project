@@ -4,12 +4,18 @@
 import os
 import sys
 import json
-
+import filecmp
+import shutil
 import argparse
 
 class Generator(object):
 
     implementationContent = ''
+
+    RefClades = {"DeclarationNameInfo",
+        "NestedNameSpecifierLoc",
+        "TemplateArgumentLoc",
+        "TypeLoc"}
 
     def __init__(self, templateClasses):
         self.templateClasses = templateClasses
@@ -54,7 +60,7 @@ std::vector<clang::TypeLoc> &TLRG;
 
     def GenerateBaseGetLocationsDeclaration(self, CladeName):
         InstanceDecoration = "*"
-        if CladeName == "TypeLoc":
+        if CladeName in self.RefClades:
             InstanceDecoration = "&"
 
         self.implementationContent += \
@@ -117,7 +123,9 @@ static void GetLocations{0}(SharedLocationCall const& Prefix,
 
             self.implementationContent += '\n'
 
-        if 'typeLocs' in ClassData or 'typeSourceInfos' in ClassData:
+        if 'typeLocs' in ClassData or 'typeSourceInfos' in ClassData \
+                or 'nestedNameLocs' in ClassData \
+                or 'declNameInfos' in ClassData:
             if CreateLocalRecursionGuard:
                 self.implementationContent += \
                     'std::vector<clang::TypeLoc> TypeLocRecursionGuard;\n'
@@ -151,6 +159,26 @@ static void GetLocations{0}(SharedLocationCall const& Prefix,
 
                 self.implementationContent += '\n'
 
+            if 'nestedNameLocs' in ClassData:
+                for NN in ClassData['nestedNameLocs']:
+                    self.implementationContent += \
+                        """
+              if (Object.{0}())
+                GetLocationsImpl(
+                    llvm::makeIntrusiveRefCnt<LocationCall>(Prefix, "{0}"),
+                    Object.{0}(), Locs, Rngs, TypeLocRecursionGuard);
+              """.format(NN)
+
+            if 'declNameInfos' in ClassData:
+                for declName in ClassData['declNameInfos']:
+
+                    self.implementationContent += \
+                        """
+                      GetLocationsImpl(
+                          llvm::makeIntrusiveRefCnt<LocationCall>(Prefix, "{0}"),
+                          Object.{0}(), Locs, Rngs, TypeLocRecursionGuard);
+                      """.format(declName)
+
         self.implementationContent += '}\n'
 
     def GenerateFiles(self, OutputFile):
@@ -164,7 +192,7 @@ static void GetLocations{0}(SharedLocationCall const& Prefix,
 
         MethodReturnType = 'NodeLocationAccessors'
         InstanceDecoration = "*"
-        if CladeName == "TypeLoc":
+        if CladeName in self.RefClades:
             InstanceDecoration = "&"
 
         Signature = \
@@ -196,7 +224,7 @@ static void GetLocations{0}(SharedLocationCall const& Prefix,
             RecursionGuardParam = ', TypeLocRecursionGuard'
 
         ArgPrefix = '*'
-        if CladeName == "TypeLoc":
+        if CladeName in self.RefClades:
             ArgPrefix = ''
         self.implementationContent += \
             'GetLocations{0}(Prefix, {1}Object, Locs, Rngs {2});'.format(
@@ -285,12 +313,14 @@ if (auto Derived = llvm::dyn_cast<clang::{0}>(Object)) {{
             + ' NodeIntrospection::' + Signature + '{'
 
         for CladeName in CladeNames:
+            if CladeName == "DeclarationNameInfo":
+                continue
             self.implementationContent += \
                 """
     if (const auto *N = Node.get<{0}>())
     """.format(CladeName)
             ArgPrefix = ""
-            if CladeName == "TypeLoc":
+            if CladeName in self.RefClades:
                 ArgPrefix = "*"
             self.implementationContent += \
             """
@@ -312,13 +342,16 @@ def main():
                       help='Read API description from FILE', metavar='FILE')
     parser.add_argument('--output-file', help='Generate output in FILEPATH',
                       metavar='FILEPATH')
-    parser.add_argument('--empty-implementation',
+    parser.add_argument('--use-empty-implementation',
                       help='Generate empty implementation',
                       action="store", type=int)
+    parser.add_argument('--empty-implementation',
+                      help='Copy empty implementation from FILEPATH',
+                      action="store", metavar='FILEPATH')
 
     options = parser.parse_args()
 
-    use_empty_implementation = options.empty_implementation
+    use_empty_implementation = options.use_empty_implementation
 
     if (not use_empty_implementation
             and not os.path.exists(options.json_input_path)):
@@ -332,47 +365,9 @@ def main():
             use_empty_implementation = True
 
     if use_empty_implementation:
-        with open(os.path.join(os.getcwd(),
-                  options.output_file), 'w') as f:
-            f.write("""
-namespace clang {
-namespace tooling {
-
-bool NodeIntrospection::hasIntrospectionSupport() { return false; }
-
-NodeLocationAccessors NodeIntrospection::GetLocations(clang::Stmt const *) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(clang::Decl const *) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(
-    clang::CXXCtorInitializer const *) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(
-    clang::NestedNameSpecifierLoc const*) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(
-    clang::TemplateArgumentLoc const*) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(
-    clang::CXXBaseSpecifier const*) {
-  return {};
-}
-NodeLocationAccessors NodeIntrospection::GetLocations(
-    clang::TypeLoc const&) {
-  return {};
-}
-NodeLocationAccessors
-NodeIntrospection::GetLocations(clang::DynTypedNode const &) {
-  return {};
-}
-} // namespace tooling
-} // namespace clang
-    """)
+        if not os.path.exists(options.output_file) or \
+                not filecmp.cmp(options.empty_implementation, options.output_file):
+            shutil.copyfile(options.empty_implementation, options.output_file)
         sys.exit(0)
 
     templateClasses = []
@@ -396,10 +391,7 @@ NodeIntrospection::GetLocations(clang::DynTypedNode const &) {
         cladeName = getCladeName(ClassName)
         g.GenerateSrcLocMethod(
             ClassName, ClassAccessors,
-            cladeName not in [
-                      'NestedNameSpecifierLoc',
-                      'TemplateArgumentLoc',
-                      'TypeLoc'])
+            cladeName not in Generator.RefClades)
 
     for (CladeName, ClassNameData) in jsonData['classesInClade'].items():
         g.GenerateBaseGetLocationsFunction(
@@ -407,10 +399,7 @@ NodeIntrospection::GetLocations(clang::DynTypedNode const &) {
             jsonData['classEntries'],
             CladeName,
             jsonData["classInheritance"],
-            CladeName not in [
-                      'NestedNameSpecifierLoc',
-                      'TemplateArgumentLoc',
-                      'TypeLoc'])
+            CladeName not in Generator.RefClades)
 
     g.GenerateDynNodeVisitor(jsonData['classesInClade'].keys())
 

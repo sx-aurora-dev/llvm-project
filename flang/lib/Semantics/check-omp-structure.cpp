@@ -182,7 +182,62 @@ bool OmpStructureChecker::HasInvalidWorksharingNesting(
   return false;
 }
 
-void OmpStructureChecker::Enter(const parser::OpenMPConstruct &) {
+void OmpStructureChecker::HasInvalidDistributeNesting(
+    const parser::OpenMPLoopConstruct &x) {
+  bool violation{false};
+
+  OmpDirectiveSet distributeSet{llvm::omp::Directive::OMPD_distribute,
+      llvm::omp::Directive::OMPD_distribute_parallel_do,
+      llvm::omp::Directive::OMPD_distribute_parallel_do_simd,
+      llvm::omp::Directive::OMPD_distribute_parallel_for,
+      llvm::omp::Directive::OMPD_distribute_parallel_for_simd,
+      llvm::omp::Directive::OMPD_distribute_simd};
+
+  const auto &beginLoopDir{std::get<parser::OmpBeginLoopDirective>(x.t)};
+  const auto &beginDir{std::get<parser::OmpLoopDirective>(beginLoopDir.t)};
+  if (distributeSet.test(beginDir.v)) {
+    // `distribute` region has to be nested
+    if (!CurrentDirectiveIsNested()) {
+      violation = true;
+    } else {
+      // `distribute` region has to be strictly nested inside `teams`
+      if (!llvm::omp::teamSet.test(GetContextParent().directive)) {
+        violation = true;
+      }
+    }
+  }
+  if (violation) {
+    context_.Say(beginDir.source,
+        "`DISTRIBUTE` region has to be strictly nested inside `TEAMS` region."_err_en_US);
+  }
+}
+
+void OmpStructureChecker::HasInvalidTeamsNesting(
+    const llvm::omp::Directive &dir, const parser::CharBlock &source) {
+  OmpDirectiveSet allowedSet{llvm::omp::Directive::OMPD_parallel,
+      llvm::omp::Directive::OMPD_parallel_do,
+      llvm::omp::Directive::OMPD_parallel_do_simd,
+      llvm::omp::Directive::OMPD_parallel_for,
+      llvm::omp::Directive::OMPD_parallel_for_simd,
+      llvm::omp::Directive::OMPD_parallel_master,
+      llvm::omp::Directive::OMPD_parallel_master_taskloop,
+      llvm::omp::Directive::OMPD_parallel_master_taskloop_simd,
+      llvm::omp::Directive::OMPD_parallel_sections,
+      llvm::omp::Directive::OMPD_parallel_workshare,
+      llvm::omp::Directive::OMPD_distribute,
+      llvm::omp::Directive::OMPD_distribute_parallel_do,
+      llvm::omp::Directive::OMPD_distribute_parallel_do_simd,
+      llvm::omp::Directive::OMPD_distribute_parallel_for,
+      llvm::omp::Directive::OMPD_distribute_parallel_for_simd,
+      llvm::omp::Directive::OMPD_distribute_simd};
+
+  if (!allowedSet.test(dir)) {
+    context_.Say(source,
+        "Only `DISTRIBUTE` or `PARALLEL` regions are allowed to be strictly nested inside `TEAMS` region."_err_en_US);
+  }
+}
+
+void OmpStructureChecker::Enter(const parser::OpenMPConstruct &x) {
   // 2.8.1 TODO: Simd Construct with Ordered Construct Nesting check
 }
 
@@ -212,16 +267,8 @@ void OmpStructureChecker::Enter(const parser::OpenMPLoopConstruct &x) {
     //                    ordered-clause
 
     // nesting check
-    HasInvalidWorksharingNesting(beginDir.source,
-        {llvm::omp::Directive::OMPD_do, llvm::omp::Directive::OMPD_sections,
-            llvm::omp::Directive::OMPD_single,
-            llvm::omp::Directive::OMPD_workshare,
-            llvm::omp::Directive::OMPD_task,
-            llvm::omp::Directive::OMPD_taskloop,
-            llvm::omp::Directive::OMPD_critical,
-            llvm::omp::Directive::OMPD_ordered,
-            llvm::omp::Directive::OMPD_atomic,
-            llvm::omp::Directive::OMPD_master});
+    HasInvalidWorksharingNesting(
+        beginDir.source, llvm::omp::nestedWorkshareErrSet);
   }
   SetLoopInfo(x);
 
@@ -233,6 +280,11 @@ void OmpStructureChecker::Enter(const parser::OpenMPLoopConstruct &x) {
   CheckDoWhile(x);
   CheckLoopItrVariableIsInt(x);
   CheckCycleConstraints(x);
+  HasInvalidDistributeNesting(x);
+  if (CurrentDirectiveIsNested() &&
+      llvm::omp::teamSet.test(GetContextParent().directive)) {
+    HasInvalidTeamsNesting(beginDir.v, beginDir.source);
+  }
 }
 const parser::Name OmpStructureChecker::GetLoopIndex(
     const parser::DoConstruct *x) {
@@ -360,14 +412,12 @@ void OmpStructureChecker::Enter(const parser::OpenMPBlockConstruct &x) {
 
   PushContextAndClauseSets(beginDir.source, beginDir.v);
 
-  // TODO: This check needs to be extended while implementing nesting of regions
-  // checks.
-  if (beginDir.v == llvm::omp::Directive::OMPD_single) {
-    HasInvalidWorksharingNesting(
-        beginDir.source, {llvm::omp::Directive::OMPD_do});
-  }
-  if (CurrentDirectiveIsNested())
+  if (CurrentDirectiveIsNested()) {
     CheckIfDoOrderedClause(beginDir);
+    if (llvm::omp::teamSet.test(GetContextParent().directive)) {
+      HasInvalidTeamsNesting(beginDir.v, beginDir.source);
+    }
+  }
 
   CheckNoBranching(block, beginDir.v, beginDir.source);
 
@@ -375,6 +425,14 @@ void OmpStructureChecker::Enter(const parser::OpenMPBlockConstruct &x) {
   case llvm::omp::OMPD_workshare:
   case llvm::omp::OMPD_parallel_workshare:
     CheckWorkshareBlockStmts(block, beginDir.source);
+    HasInvalidWorksharingNesting(
+        beginDir.source, llvm::omp::nestedWorkshareErrSet);
+    break;
+  case llvm::omp::Directive::OMPD_single:
+    // TODO: This check needs to be extended while implementing nesting of
+    // regions checks.
+    HasInvalidWorksharingNesting(
+        beginDir.source, llvm::omp::nestedWorkshareErrSet);
     break;
   default:
     break;
@@ -420,6 +478,8 @@ void OmpStructureChecker::Enter(const parser::OpenMPSectionsConstruct &x) {
   for (const auto &block : sectionBlocks.v) {
     CheckNoBranching(block, beginDir.v, beginDir.source);
   }
+  HasInvalidWorksharingNesting(
+      beginDir.source, llvm::omp::nestedWorkshareErrSet);
 }
 
 void OmpStructureChecker::Leave(const parser::OpenMPSectionsConstruct &) {
@@ -462,10 +522,12 @@ void OmpStructureChecker::Leave(const parser::OpenMPDeclareSimdConstruct &) {
 
 void OmpStructureChecker::Enter(const parser::OpenMPDeclarativeAllocate &x) {
   const auto &dir{std::get<parser::Verbatim>(x.t)};
+  const auto &objectList{std::get<parser::OmpObjectList>(x.t)};
   PushContextAndClauseSets(dir.source, llvm::omp::Directive::OMPD_allocate);
+  CheckIsVarPartOfAnotherVar(dir.source, objectList);
 }
 
-void OmpStructureChecker::Leave(const parser::OpenMPDeclarativeAllocate &) {
+void OmpStructureChecker::Leave(const parser::OpenMPDeclarativeAllocate &x) {
   dirContext_.pop_back();
 }
 
@@ -484,7 +546,10 @@ void OmpStructureChecker::Leave(const parser::OpenMPDeclareTargetConstruct &) {
 
 void OmpStructureChecker::Enter(const parser::OpenMPExecutableAllocate &x) {
   const auto &dir{std::get<parser::Verbatim>(x.t)};
+  const auto &objectList{std::get<std::optional<parser::OmpObjectList>>(x.t)};
   PushContextAndClauseSets(dir.source, llvm::omp::Directive::OMPD_allocate);
+  if (objectList)
+    CheckIsVarPartOfAnotherVar(dir.source, *objectList);
 }
 
 void OmpStructureChecker::Leave(const parser::OpenMPExecutableAllocate &) {
@@ -954,26 +1019,37 @@ void OmpStructureChecker::Enter(const parser::OmpClause::Ordered &x) {
 
 void OmpStructureChecker::Enter(const parser::OmpClause::Shared &x) {
   CheckAllowed(llvm::omp::Clause::OMPC_shared);
-  CheckIsVarPartOfAnotherVar(x.v);
+  CheckIsVarPartOfAnotherVar(GetContext().clauseSource, x.v);
 }
 void OmpStructureChecker::Enter(const parser::OmpClause::Private &x) {
   CheckAllowed(llvm::omp::Clause::OMPC_private);
-  CheckIsVarPartOfAnotherVar(x.v);
+  CheckIsVarPartOfAnotherVar(GetContext().clauseSource, x.v);
   CheckIntentInPointer(x.v, llvm::omp::Clause::OMPC_private);
 }
 
 void OmpStructureChecker::CheckIsVarPartOfAnotherVar(
-    const parser::OmpObjectList &objList) {
+    const parser::CharBlock &source, const parser::OmpObjectList &objList) {
+
   for (const auto &ompObject : objList.v) {
-    if ((parser::Unwrap<parser::StructureComponent>(ompObject)) ||
-        (parser::Unwrap<parser::ArrayElement>(ompObject))) {
-      context_.Say(GetContext().clauseSource,
-          "A variable that is part of another variable (as an "
-          "array or structure element)"
-          " cannot appear in a PRIVATE or SHARED clause."_err_en_US);
-    }
+    std::visit(
+        common::visitors{
+            [&](const parser::Designator &designator) {
+              if (std::get_if<parser::DataRef>(&designator.u)) {
+                if ((parser::Unwrap<parser::StructureComponent>(ompObject)) ||
+                    (parser::Unwrap<parser::ArrayElement>(ompObject))) {
+                  context_.Say(source,
+                      "A variable that is part of another variable (as an "
+                      "array or structure element)"
+                      " cannot appear in a PRIVATE or SHARED clause or on the ALLOCATE directive."_err_en_US);
+                }
+              }
+            },
+            [&](const parser::Name &name) {},
+        },
+        ompObject.u);
   }
 }
+
 void OmpStructureChecker::Enter(const parser::OmpClause::Firstprivate &x) {
   CheckAllowed(llvm::omp::Clause::OMPC_firstprivate);
   CheckIsLoopIvPartOfClause(llvmOmpClause::OMPC_firstprivate, x.v);

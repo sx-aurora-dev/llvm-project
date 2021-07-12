@@ -178,7 +178,7 @@ def SDTFPToIntOpVP : SDTypeProfile<1, 3, [    // fp_to_[su]int
   SDTCisInt<0>, SDTCisFP<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 2>
 ]>;
 def SDTFPToIntSatOp : SDTypeProfile<1, 2, [    // fp_to_[su]int_sat
-  SDTCisInt<0>, SDTCisFP<1>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 1>
+  SDTCisInt<0>, SDTCisFP<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisVT<2, OtherVT>
 ]>;
 def SDTExtInreg : SDTypeProfile<1, 2, [     // sext_inreg
   SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisVT<2, OtherVT>,

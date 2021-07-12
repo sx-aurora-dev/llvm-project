@@ -12,5 +12,6 @@
 
 # Offloading from a nec sx aurora device to a nvidia device makes no sense
 if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+  add_subdirectory(amdgcn)
   add_subdirectory(nvptx)
 endif()

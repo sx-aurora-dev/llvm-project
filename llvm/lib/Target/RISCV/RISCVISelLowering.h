@@ -96,6 +96,17 @@ enum NodeType : unsigned {
   GORC,
   GORCW,
   SHFL,
+  SHFLW,
+  UNSHFL,
+  UNSHFLW,
+  // Bit Compress/Decompress implement the generic bit extract and bit deposit
+  // functions. This operation is also referred to as bit gather/scatter, bit
+  // pack/unpack, parallel extract/deposit, compress/expand, or right
+  // compress/right expand.
+  BCOMPRESS,
+  BCOMPRESSW,
+  BDECOMPRESS,
+  BDECOMPRESSW,
   // Vector Extension
   // VMV_V_X_VL matches the semantics of vmv.v.x but includes an extra operand
   // for the VL value to be used for the operation.
@@ -161,6 +172,8 @@ enum NodeType : unsigned {
   VECREDUCE_XOR_VL,
   VECREDUCE_FADD_VL,
   VECREDUCE_SEQ_FADD_VL,
+  VECREDUCE_FMIN_VL,
+  VECREDUCE_FMAX_VL,
 
   // Vector binary and unary ops with a mask as a third operand, and VL as a
   // fourth operand.
@@ -191,6 +204,8 @@ enum NodeType : unsigned {
   SMAX_VL,
   UMIN_VL,
   UMAX_VL,
+  FMINNUM_VL,
+  FMAXNUM_VL,
   MULHS_VL,
   MULHU_VL,
   FP_TO_SINT_VL,
@@ -465,10 +480,6 @@ public:
                                            unsigned InsertExtractIdx,
                                            const RISCVRegisterInfo *TRI);
   MVT getContainerForFixedLengthVector(MVT VT) const;
-  static MVT getContainerForFixedLengthVector(const TargetLowering &TLI, MVT VT,
-                                              const RISCVSubtarget &Subtarget);
-  static MVT getContainerForFixedLengthVector(SelectionDAG &DAG, MVT VT,
-                                              const RISCVSubtarget &Subtarget);
 
   bool shouldRemoveExtendFromGSIndex(EVT VT) const override;
 
@@ -500,6 +511,7 @@ private:
   SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG, bool IsSRA) const;
   SDValue lowerSPLAT_VECTOR_PARTS(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVectorMaskSplat(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVectorMaskExt(SDValue Op, SelectionDAG &DAG,
                              int64_t ExtTrueVal) const;
   SDValue lowerVectorMaskTrunc(SDValue Op, SelectionDAG &DAG) const;
@@ -533,6 +545,8 @@ private:
                             bool HasMask = true) const;
   SDValue lowerFixedLengthVectorExtendToRVV(SDValue Op, SelectionDAG &DAG,
                                             unsigned ExtendOpc) const;
+  SDValue lowerGET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
 
   bool isEligibleForTailCallOptimization(
       CCState &CCInfo, CallLoweringInfo &CLI, MachineFunction &MF,

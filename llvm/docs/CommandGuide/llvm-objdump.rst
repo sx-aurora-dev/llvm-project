@@ -93,7 +93,7 @@ combined with other commands:
 
   Display the unwind info of the input(s).
 
-.. option:: --version
+.. option:: -v, --version
 
   Display the version of the :program:`llvm-objdump` executable. Does not stack
   with other commands.
@@ -367,6 +367,10 @@ MACH-O ONLY OPTIONS AND COMMANDS
 
   Display rebasing information.
 
+.. option:: --rpaths
+
+  Display runtime search paths for the binary.
+
 .. option:: --universal-headers
 
   Display universal headers.
@@ -390,4 +394,5 @@ To report bugs, please visit <https://bugs.llvm.org/>.
 SEE ALSO
 --------
 
-:manpage:`llvm-nm(1)`, :manpage:`llvm-readelf(1)`, :manpage:`llvm-readobj(1)`
+:manpage:`llvm-nm(1)`, :manpage:`llvm-otool(1)`, :manpage:`llvm-readelf(1)`,
+:manpage:`llvm-readobj(1)`

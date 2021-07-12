@@ -262,7 +262,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUUseNativeCallsPass(*PR);
   initializeAMDGPUSimplifyLibCallsPass(*PR);
   initializeAMDGPUPrintfRuntimeBindingPass(*PR);
-  initializeGCNRegBankReassignPass(*PR);
   initializeGCNNSAReassignPass(*PR);
 }
 
@@ -1072,15 +1071,14 @@ void GCNPassConfig::addMachineSSAOptimization() {
   addPass(&SIFoldOperandsID);
   if (EnableDPPCombine)
     addPass(&GCNDPPCombineID);
-  addPass(&DeadMachineInstructionElimID);
   addPass(&SILoadStoreOptimizerID);
   if (EnableSDWAPeephole) {
     addPass(&SIPeepholeSDWAID);
     addPass(&EarlyMachineLICMID);
     addPass(&MachineCSEID);
     addPass(&SIFoldOperandsID);
-    addPass(&DeadMachineInstructionElimID);
   }
+  addPass(&DeadMachineInstructionElimID);
   addPass(createSIShrinkInstructionsPass());
 }
 
@@ -1178,10 +1176,8 @@ void GCNPassConfig::addOptimizedRegAlloc() {
 }
 
 bool GCNPassConfig::addPreRewrite() {
-  if (EnableRegReassign) {
+  if (EnableRegReassign)
     addPass(&GCNNSAReassignID);
-    addPass(createGCNRegBankReassignPass(AMDGPU::RM_BOTH));
-  }
   return true;
 }
 

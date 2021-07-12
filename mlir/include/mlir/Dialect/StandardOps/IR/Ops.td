@@ -277,6 +277,7 @@ def AddIOp : IntBinaryOp<"addi", [Commutative]> {
     ```
   }];
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1249,6 +1250,7 @@ def IndexCastOp : ArithmeticCastOp<"index_cast">, Arguments<(ins AnyType:$in)> {
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1541,13 +1543,13 @@ def SignedDivIOp : IntBinaryOp<"divi_signed"> {
 
     ```mlir
     // Scalar signed integer division.
-    %a = divis %b, %c : i64
+    %a = divi_signed %b, %c : i64
 
     // SIMD vector element-wise division.
-    %f = divis %g, %h : vector<4xi32>
+    %f = divi_signed %g, %h : vector<4xi32>
 
     // Tensor element-wise integer division.
-    %x = divis %y, %z : tensor<4x?xi8>
+    %x = divi_signed %y, %z : tensor<4x?xi8>
     ```
   }];
   let hasFolder = 1;
@@ -1633,13 +1635,13 @@ def SignedRemIOp : IntBinaryOp<"remi_signed"> {
 
     ```mlir
     // Scalar signed integer division remainder.
-    %a = remis %b, %c : i64
+    %a = remi_signed %b, %c : i64
 
     // SIMD vector element-wise division remainder.
-    %f = remis %g, %h : vector<4xi32>
+    %f = remi_signed %g, %h : vector<4xi32>
 
     // Tensor element-wise integer division remainder.
-    %x = remis %y, %z : tensor<4x?xi8>
+    %x = remi_signed %y, %z : tensor<4x?xi8>
     ```
   }];
   let hasFolder = 1;
@@ -1711,6 +1713,7 @@ def SignExtendIOp : Std_Op<"sexti", [NoSideEffect,
   let printer = [{
     return printStandardCastOp(this->getOperation(), p);
   }];
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1790,6 +1793,7 @@ def SubFOp : FloatBinaryOp<"subf"> {
 def SubIOp : IntBinaryOp<"subi"> {
   let summary = "integer subtraction operation";
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2194,13 +2198,13 @@ def UnsignedDivIOp : IntBinaryOp<"divi_unsigned"> {
 
     ```mlir
     // Scalar unsigned integer division.
-    %a = diviu %b, %c : i64
+    %a = divi_unsigned %b, %c : i64
 
     // SIMD vector element-wise division.
-    %f = diviu %g, %h : vector<4xi32>
+    %f = divi_unsigned %g, %h : vector<4xi32>
 
     // Tensor element-wise integer division.
-    %x = diviu %y, %z : tensor<4x?xi8>
+    %x = divi_unsigned %y, %z : tensor<4x?xi8>
     ```
   }];
   let hasFolder = 1;
@@ -2229,13 +2233,13 @@ def UnsignedRemIOp : IntBinaryOp<"remi_unsigned"> {
 
     ```mlir
     // Scalar unsigned integer division remainder.
-    %a = remiu %b, %c : i64
+    %a = remi_unsigned %b, %c : i64
 
     // SIMD vector element-wise division remainder.
-    %f = remiu %g, %h : vector<4xi32>
+    %f = remi_unsigned %g, %h : vector<4xi32>
 
     // Tensor element-wise integer division remainder.
-    %x = remiu %y, %z : tensor<4x?xi8>
+    %x = remi_unsigned %y, %z : tensor<4x?xi8>
     ```
   }];
   let hasFolder = 1;

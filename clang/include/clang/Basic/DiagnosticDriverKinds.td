@@ -67,6 +67,8 @@ def err_drv_no_hip_runtime : Error<
   "cannot find HIP runtime. Provide its path via --rocm-path, or pass "
   "-nogpuinc to build without HIP runtime.">;
 
+def err_drv_undetermined_amdgpu_arch : Error<
+  "Cannot determine AMDGPU architecture: %0. Consider passing it via --march.">;
 def err_drv_cuda_version_unsupported : Error<
   "GPU arch %0 is supported by CUDA versions between %1 and %2 (inclusive), "
   "but installation at %3 is %4. Use --cuda-path to specify a different CUDA "
@@ -127,6 +129,8 @@ def err_drv_invalid_Xopenmp_target_with_args : Error<
   "invalid -Xopenmp-target argument: '%0', options requiring arguments are unsupported">;
 def err_drv_argument_only_allowed_with : Error<
   "invalid argument '%0' only allowed with '%1'">;
+def err_drv_amdgpu_ieee_without_no_honor_nans : Error<
+  "invalid argument '-mno-amdgpu-ieee' only allowed with relaxed NaN handling">;
 def err_drv_argument_not_allowed_with : Error<
   "invalid argument '%0' not allowed with '%1'">;
 def err_drv_invalid_version_number : Error<

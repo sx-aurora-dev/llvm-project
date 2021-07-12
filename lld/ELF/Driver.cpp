@@ -1314,7 +1314,7 @@ static void readConfigs(opt::InputArgList &args) {
   }
 
   // When producing an executable, --dynamic-list specifies non-local defined
-  // symbols whith are required to be exported. When producing a shared object,
+  // symbols which are required to be exported. When producing a shared object,
   // symbols not specified by --dynamic-list are non-preemptible.
   config->symbolic =
       args.hasArg(OPT_Bsymbolic) || args.hasArg(OPT_dynamic_list);
@@ -1690,7 +1690,7 @@ static void handleLibcall(StringRef name) {
 // easily.
 static void writeDependencyFile() {
   std::error_code ec;
-  raw_fd_ostream os(config->dependencyFile, ec, sys::fs::F_None);
+  raw_fd_ostream os(config->dependencyFile, ec, sys::fs::OF_None);
   if (ec) {
     error("cannot open " + config->dependencyFile + ": " + ec.message());
     return;

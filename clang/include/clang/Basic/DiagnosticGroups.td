@@ -162,8 +162,12 @@ def CXX11CompatDeprecatedWritableStr :
 def DeprecatedArrayCompare : DiagGroup<"deprecated-array-compare">;
 def DeprecatedAttributes : DiagGroup<"deprecated-attributes">;
 def DeprecatedCommaSubscript : DiagGroup<"deprecated-comma-subscript">;
-def DeprecatedCopy : DiagGroup<"deprecated-copy">;
-def DeprecatedCopyDtor : DiagGroup<"deprecated-copy-dtor">;
+def DeprecatedCopyWithUserProvidedCopy : DiagGroup<"deprecated-copy-with-user-provided-copy">;
+def DeprecatedCopyWithUserProvidedDtor : DiagGroup<"deprecated-copy-with-user-provided-dtor">;
+def DeprecatedCopy : DiagGroup<"deprecated-copy", [DeprecatedCopyWithUserProvidedCopy]>;
+def DeprecatedCopyWithDtor : DiagGroup<"deprecated-copy-with-dtor", [DeprecatedCopyWithUserProvidedDtor]>;
+// For compatibility with GCC.
+def : DiagGroup<"deprecated-copy-dtor", [DeprecatedCopyWithDtor]>;
 def DeprecatedDeclarations : DiagGroup<"deprecated-declarations">;
 def UnavailableDeclarations : DiagGroup<"unavailable-declarations">;
 def UnguardedAvailabilityNew : DiagGroup<"unguarded-availability-new">;
@@ -186,7 +190,7 @@ def Deprecated : DiagGroup<"deprecated", [DeprecatedAnonEnumEnumConversion,
                                           DeprecatedAttributes,
                                           DeprecatedCommaSubscript,
                                           DeprecatedCopy,
-                                          DeprecatedCopyDtor,
+                                          DeprecatedCopyWithDtor,
                                           DeprecatedDeclarations,
                                           DeprecatedDynamicExceptionSpec,
                                           DeprecatedEnumCompare,
@@ -634,7 +638,8 @@ def : DiagGroup<"sequence-point", [Unsequenced]>;
 // Preprocessor warnings.
 def AmbiguousMacro : DiagGroup<"ambiguous-macro">;
 def KeywordAsMacro : DiagGroup<"keyword-macro">;
-def ReservedIdAsMacro : DiagGroup<"reserved-id-macro">;
+def ReservedIdAsMacro : DiagGroup<"reserved-macro-identifier">;
+def ReservedIdAsMacroAlias : DiagGroup<"reserved-id-macro", [ReservedIdAsMacro]>;
 
 // Just silence warnings about -Wstrict-aliasing for now.
 def : DiagGroup<"strict-aliasing=0">;
@@ -796,6 +801,9 @@ def CharSubscript : DiagGroup<"char-subscripts">;
 def LargeByValueCopy : DiagGroup<"large-by-value-copy">;
 def DuplicateArgDecl : DiagGroup<"duplicate-method-arg">;
 def SignedEnumBitfield : DiagGroup<"signed-enum-bitfield">;
+
+def ReservedIdentifier : DiagGroup<"reserved-identifier",
+    [ReservedIdAsMacro]>;
 
 // Unreachable code warning groups.
 //
@@ -1278,3 +1286,5 @@ in addition with the pragmas or -fmax-tokens flag to get any warnings.
 def WebAssemblyExceptionSpec : DiagGroup<"wasm-exception-spec">;
 
 def RTTI : DiagGroup<"rtti">;
+
+def OpenCLCoreFeaturesDiagGroup : DiagGroup<"pedantic-core-features">;

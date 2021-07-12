@@ -14,6 +14,8 @@ def help_hidden : Flag<["--"], "help-hidden">,
 def version : Flag<["--"], "version">,
   HelpText<"Display the version of this program">,
   Group<grp_generic>;
+def : Flag<["-"], "v">, Alias<version>, HelpText<"Alias for --version">,
+  Group<grp_generic>;
 
 
 
@@ -394,6 +396,11 @@ def dylibs_used : Flag<["--"], "dylibs-used">,
 def dylib_id : Flag<["--"], "dylib-id">,
   HelpText<"Print the shared library's id for the "
            "dylib Mach-O file (requires --macho)">,
+  Group<grp_mach_o>;
+
+def rpaths : Flag<["--"], "rpaths">,
+  HelpText<"Print the runtime search paths for the "
+           "Mach-O file (requires --macho)">,
   Group<grp_mach_o>;
 
 def non_verbose : Flag<["--"], "non-verbose">,

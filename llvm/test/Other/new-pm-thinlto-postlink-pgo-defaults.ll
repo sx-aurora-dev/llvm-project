@@ -44,6 +44,8 @@
 ; CHECK-O-NEXT: Running analysis: TargetLibraryAnalysis
 ; CHECK-O3-NEXT: Running pass: CallSiteSplittingPass
 ; CHECK-O-NEXT: Finished {{.*}}Function pass manager run.
+; CHECK-O2-NEXT: Running pass: OpenMPOptPass
+; CHECK-O3-NEXT: Running pass: OpenMPOptPass
 ; CHECK-O-NEXT: Running pass: LowerTypeTestsPass
 ; CHECK-O-NEXT: Running pass: IPSCCPPass
 ; CHECK-O-NEXT: Running pass: CalledValuePropagationPass
@@ -71,6 +73,8 @@
 ; CHECK-O-NEXT: Running pass: RequireAnalysisPass<{{.*}}GlobalsAA
 ; CHECK-O-NEXT: Running analysis: GlobalsAA
 ; CHECK-O-NEXT: Running analysis: CallGraphAnalysis
+; CHECK-O-NEXT: Running pass: InvalidateAnalysisPass<{{.*}}AAManager
+; CHECK-O-NEXT: Invalidating analysis: AAManager
 ; CHECK-O-NEXT: Running pass: RequireAnalysisPass<{{.*}}ProfileSummaryAnalysis
 ; CHECK-O-NEXT: Running analysis: InnerAnalysisManagerProxy
 ; CHECK-O-NEXT: Running analysis: LazyCallGraphAnalysis
@@ -81,9 +85,10 @@
 ; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: PostOrderFunctionAttrsPass
+; CHECK-O-NEXT: Running analysis: AAManager
 ; CHECK-O3-NEXT: Running pass: ArgumentPromotionPass
-; CHECK-O2-NEXT: Running pass: OpenMPOptPass
-; CHECK-O3-NEXT: Running pass: OpenMPOptPass
+; CHECK-O2-NEXT: Running pass: OpenMPOptCGSCCPass
+; CHECK-O3-NEXT: Running pass: OpenMPOptCGSCCPass
 ; CHECK-O-NEXT: Starting {{.*}}Function pass manager run.
 ; CHECK-O-NEXT: Running pass: SROA
 ; CHECK-O-NEXT: Running pass: EarlyCSEPass

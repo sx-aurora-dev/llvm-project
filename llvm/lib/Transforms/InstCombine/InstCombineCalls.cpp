@@ -425,6 +425,7 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombinerImpl &IC) {
          "Expected cttz or ctlz intrinsic");
   bool IsTZ = II.getIntrinsicID() == Intrinsic::cttz;
   Value *Op0 = II.getArgOperand(0);
+  Value *Op1 = II.getArgOperand(1);
   Value *X;
   // ctlz(bitreverse(x)) -> cttz(x)
   // cttz(bitreverse(x)) -> ctlz(x)
@@ -438,6 +439,23 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombinerImpl &IC) {
     // cttz(-x) -> cttz(x)
     if (match(Op0, m_Neg(m_Value(X))))
       return IC.replaceOperand(II, 0, X);
+
+    // cttz(sext(x)) -> cttz(zext(x))
+    if (match(Op0, m_OneUse(m_SExt(m_Value(X))))) {
+      auto *Zext = IC.Builder.CreateZExt(X, II.getType());
+      auto *CttzZext =
+          IC.Builder.CreateBinaryIntrinsic(Intrinsic::cttz, Zext, Op1);
+      return IC.replaceInstUsesWith(II, CttzZext);
+    }
+
+    // Zext doesn't change the number of trailing zeros, so narrow:
+    // cttz(zext(x)) -> zext(cttz(x)) if the 'ZeroIsUndef' parameter is 'true'.
+    if (match(Op0, m_OneUse(m_ZExt(m_Value(X)))) && match(Op1, m_One())) {
+      auto *Cttz = IC.Builder.CreateBinaryIntrinsic(Intrinsic::cttz, X,
+                                                    IC.Builder.getTrue());
+      auto *ZextCttz = IC.Builder.CreateZExt(Cttz, II.getType());
+      return IC.replaceInstUsesWith(II, ZextCttz);
+    }
 
     // cttz(abs(x)) -> cttz(x)
     // cttz(nabs(x)) -> cttz(x)
@@ -498,11 +516,17 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
   Type *Ty = II.getType();
   unsigned BitWidth = Ty->getScalarSizeInBits();
   Value *Op0 = II.getArgOperand(0);
-  Value *X;
+  Value *X, *Y;
 
   // ctpop(bitreverse(x)) -> ctpop(x)
   // ctpop(bswap(x)) -> ctpop(x)
   if (match(Op0, m_BitReverse(m_Value(X))) || match(Op0, m_BSwap(m_Value(X))))
+    return IC.replaceOperand(II, 0, X);
+
+  // ctpop(rot(x)) -> ctpop(x)
+  if ((match(Op0, m_FShl(m_Value(X), m_Value(Y), m_Value())) ||
+       match(Op0, m_FShr(m_Value(X), m_Value(Y), m_Value()))) &&
+      X == Y)
     return IC.replaceOperand(II, 0, X);
 
   // ctpop(x | -x) -> bitwidth - cttz(x, false)
@@ -521,6 +545,13 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
     Function *F =
         Intrinsic::getDeclaration(II.getModule(), Intrinsic::cttz, Ty);
     return CallInst::Create(F, {X, IC.Builder.getFalse()});
+  }
+
+  // Zext doesn't change the number of set bits, so narrow:
+  // ctpop (zext X) --> zext (ctpop X)
+  if (match(Op0, m_OneUse(m_ZExt(m_Value(X))))) {
+    Value *NarrowPop = IC.Builder.CreateUnaryIntrinsic(Intrinsic::ctpop, X);
+    return CastInst::Create(Instruction::ZExt, NarrowPop, Ty);
   }
 
   KnownBits Known(BitWidth);
@@ -691,6 +722,47 @@ static Optional<bool> getKnownSign(Value *Op, Instruction *CxtI,
 
   return isImpliedByDomCondition(
       ICmpInst::ICMP_SLT, Op, Constant::getNullValue(Op->getType()), CxtI, DL);
+}
+
+/// If we have a clamp pattern like max (min X, 42), 41 -- where the output
+/// can only be one of two possible constant values -- turn that into a select
+/// of constants.
+static Instruction *foldClampRangeOfTwo(IntrinsicInst *II,
+                                        InstCombiner::BuilderTy &Builder) {
+  Value *I0 = II->getArgOperand(0), *I1 = II->getArgOperand(1);
+  Value *X;
+  const APInt *C0, *C1;
+  if (!match(I1, m_APInt(C1)) || !I0->hasOneUse())
+    return nullptr;
+
+  CmpInst::Predicate Pred = CmpInst::BAD_ICMP_PREDICATE;
+  switch (II->getIntrinsicID()) {
+  case Intrinsic::smax:
+    if (match(I0, m_SMin(m_Value(X), m_APInt(C0))) && *C0 == *C1 + 1)
+      Pred = ICmpInst::ICMP_SGT;
+    break;
+  case Intrinsic::smin:
+    if (match(I0, m_SMax(m_Value(X), m_APInt(C0))) && *C1 == *C0 + 1)
+      Pred = ICmpInst::ICMP_SLT;
+    break;
+  case Intrinsic::umax:
+    if (match(I0, m_UMin(m_Value(X), m_APInt(C0))) && *C0 == *C1 + 1)
+      Pred = ICmpInst::ICMP_UGT;
+    break;
+  case Intrinsic::umin:
+    if (match(I0, m_UMax(m_Value(X), m_APInt(C0))) && *C1 == *C0 + 1)
+      Pred = ICmpInst::ICMP_ULT;
+    break;
+  default:
+    llvm_unreachable("Expected min/max intrinsic");
+  }
+  if (Pred == CmpInst::BAD_ICMP_PREDICATE)
+    return nullptr;
+
+  // max (min X, 42), 41 --> X > 41 ? 42 : 41
+  // min (max X, 42), 43 --> X < 43 ? 42 : 43
+  Value *Cmp = Builder.CreateICmp(Pred, X, I1);
+  return SelectInst::Create(Cmp, ConstantInt::get(II->getType(), *C0), I1);
 }
 
 /// CallInst simplification. This mostly only handles folding of intrinsic
@@ -944,6 +1016,9 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
         Abs = Builder.CreateNeg(Abs, "nabs", /* NUW */ false, IntMinIsPoison);
       return replaceInstUsesWith(CI, Abs);
     }
+
+    if (Instruction *Sel = foldClampRangeOfTwo(II, Builder))
+      return Sel;
 
     break;
   }
@@ -2058,7 +2133,7 @@ static IntrinsicInst *findInitTrampoline(Value *Callee) {
   return nullptr;
 }
 
-static void annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
+void InstCombinerImpl::annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
   unsigned NumArgs = Call.getNumArgOperands();
   ConstantInt *Op0C = dyn_cast<ConstantInt>(Call.getOperand(0));
   ConstantInt *Op1C =
@@ -2077,17 +2152,21 @@ static void annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
       Call.addAttribute(AttributeList::ReturnIndex,
                         Attribute::getWithDereferenceableOrNullBytes(
                             Call.getContext(), Op0C->getZExtValue()));
-  } else if (isAlignedAllocLikeFn(&Call, TLI) && Op1C) {
-    Call.addAttribute(AttributeList::ReturnIndex,
-                      Attribute::getWithDereferenceableOrNullBytes(
-                          Call.getContext(), Op1C->getZExtValue()));
+  } else if (isAlignedAllocLikeFn(&Call, TLI)) {
+    if (Op1C)
+      Call.addAttribute(AttributeList::ReturnIndex,
+                        Attribute::getWithDereferenceableOrNullBytes(
+                            Call.getContext(), Op1C->getZExtValue()));
     // Add alignment attribute if alignment is a power of two constant.
-    if (Op0C && Op0C->getValue().ult(llvm::Value::MaximumAlignment)) {
+    if (Op0C && Op0C->getValue().ult(llvm::Value::MaximumAlignment) &&
+        isKnownNonZero(Call.getOperand(1), DL, 0, &AC, &Call, &DT)) {
       uint64_t AlignmentVal = Op0C->getZExtValue();
-      if (llvm::isPowerOf2_64(AlignmentVal))
+      if (llvm::isPowerOf2_64(AlignmentVal)) {
+        Call.removeAttribute(AttributeList::ReturnIndex, Attribute::Alignment);
         Call.addAttribute(AttributeList::ReturnIndex,
                           Attribute::getWithAlignment(Call.getContext(),
                                                       Align(AlignmentVal)));
+      }
     }
   } else if (isReallocLikeFn(&Call, TLI) && Op1C) {
     Call.addAttribute(AttributeList::ReturnIndex,

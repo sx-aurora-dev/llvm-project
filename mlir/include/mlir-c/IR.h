@@ -76,13 +76,6 @@ struct MlirNamedAttribute {
 typedef struct MlirNamedAttribute MlirNamedAttribute;
 
 //===----------------------------------------------------------------------===//
-// Global API.
-//===----------------------------------------------------------------------===//
-
-/// Set the global debugging flag.
-MLIR_CAPI_EXPORTED void mlirEnableGlobalDebug(bool enable);
-
-//===----------------------------------------------------------------------===//
 // Context API.
 //===----------------------------------------------------------------------===//
 
@@ -372,6 +365,10 @@ MLIR_CAPI_EXPORTED intptr_t mlirOperationGetNumOperands(MlirOperation op);
 /// Returns `pos`-th operand of the operation.
 MLIR_CAPI_EXPORTED MlirValue mlirOperationGetOperand(MlirOperation op,
                                                      intptr_t pos);
+
+/// Sets the `pos`-th operand of the operation.
+MLIR_CAPI_EXPORTED void mlirOperationSetOperand(MlirOperation op, intptr_t pos,
+                                                MlirValue newValue);
 
 /// Returns the number of results of the operation.
 MLIR_CAPI_EXPORTED intptr_t mlirOperationGetNumResults(MlirOperation op);
