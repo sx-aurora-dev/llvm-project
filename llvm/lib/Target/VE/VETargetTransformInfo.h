@@ -140,6 +140,8 @@ public:
     llvm_unreachable("Unsupported register kind");
   }
 
+  /// Need to comment out after 02c5ba8679873e878ae7a76fb26808a47940275b
+#if 0
   /// \returns How the target needs this vector-predicated operation to be
   /// transformed.
   TargetTransformInfo::VPLegalization
@@ -147,6 +149,7 @@ public:
     using VPLegalization = TargetTransformInfo::VPLegalization;
     return VPLegalization(VPLegalization::Legal, VPLegalization::Legal);
   }
+#endif
 
   unsigned getMinVectorRegisterBitWidth() const {
     return !makeVectorOpsExpensive() && (simd() || enableVPU()) ? 256 * 64 : 0;
