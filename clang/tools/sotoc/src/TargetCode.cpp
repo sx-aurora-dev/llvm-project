@@ -27,6 +27,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "Debug.h"
@@ -62,6 +63,9 @@ bool TargetCode::addCodeFragmentFront(
 }
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
+  bool stdlib = false;
+  bool unistd = false;
+  
   for (auto &i : SystemHeaders) {
     std::string Header(i);
     size_t include_pos = Header.rfind("nclude/");
@@ -69,9 +73,21 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
       Header.erase(0, include_pos + strlen("nclude/"));
     }
     Out << "#include <" << Header << ">\n";
+    if (Header.compare("unistd.h") == 0) {
+        unistd = true;
+    } else if (Header.compare("stdlib.h") == 0) {
+        stdlib = true;
+    }
   }
 
-  // Override omp_is_initial_device() with macro, becuse this
+  if (!stdlib && std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY").getValueOr("0").c_str())) {
+    Out << "#include <stdlib.h>\n";
+  }
+  if (!unistd && std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY").getValueOr("0").c_str())) {
+    Out << "#include <unistd.h>\n";
+  }
+
+  // Override omp_is_initial_device() with macro, because this
   //   Out << "static inline int omp_is_initial_device(void) {return 0;}\n";
   // fails with the clang compiler. This still might cause problems, if
   // someone tries to include the omp.h header after the prolouge.
@@ -178,6 +194,11 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
 
   Out << ")\n{\n";
 
+  // Target Delay
+  if (std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY").getValueOr("0").c_str())) {
+    Out << "sleep(atoi((getenv(\"NEC_TARGET_DELAY\") != NULL) ? getenv(\"NEC_TARGET_DELAY\") : \"0\"));\n";
+  }
+  
   // bring captured scalars into scope
   for (auto &Var : TCR->capturedVars()) {
     // Ignore everything not passed by reference here
