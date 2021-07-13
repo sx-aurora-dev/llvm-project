@@ -10231,8 +10231,6 @@ def warn_omp_alignment_not_power_of_two : Warning<
   InGroup<OpenMPClauses>;
 def err_omp_invalid_target_decl : Error<
   "%0 used in declare target directive is not a variable or a function name">;
-def err_omp_declare_target_multiple : Error<
-  "%0 appears multiple times in clauses on the same declare target directive">;
 def err_omp_declare_target_to_and_link : Error<
   "%0 must not appear in both clauses 'to' and 'link'">;
 def warn_omp_not_in_target_context : Warning<
@@ -11269,4 +11267,6 @@ def warn_tcb_enforcement_violation : Warning<
 // RISC-V builtin required extension warning
 def err_riscv_builtin_requires_extension : Error<
   "builtin requires '%0' extension support to be enabled">;
+def err_riscv_builtin_invalid_lmul : Error<
+  "LMUL argument must be in the range [0,3] or [5,7]">;
 } // end of sema component.

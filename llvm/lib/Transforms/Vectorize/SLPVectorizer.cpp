@@ -1516,7 +1516,7 @@ private:
   bool areAllUsersVectorized(Instruction *I) const;
 
   /// \returns the cost of the vectorizable entry.
-  InstructionCost getEntryCost(TreeEntry *E);
+  InstructionCost getEntryCost(const TreeEntry *E);
 
   /// This is the recursive part of buildTree.
   void buildTree_rec(ArrayRef<Value *> Roots, unsigned Depth,
@@ -1557,7 +1557,7 @@ private:
 
   /// Set the Builder insert point to one after the last instruction in
   /// the bundle
-  void setInsertPointAfterBundle(TreeEntry *E);
+  void setInsertPointAfterBundle(const TreeEntry *E);
 
   /// \returns a vector from a collection of scalars in \p VL.
   Value *gather(ArrayRef<Value *> VL);
@@ -1636,7 +1636,7 @@ private:
     void setOperand(unsigned OpIdx, ArrayRef<Value *> OpVL) {
       if (Operands.size() < OpIdx + 1)
         Operands.resize(OpIdx + 1);
-      assert(Operands[OpIdx].size() == 0 && "Already resized?");
+      assert(Operands[OpIdx].empty() && "Already resized?");
       Operands[OpIdx].resize(Scalars.size());
       for (unsigned Lane = 0, E = Scalars.size(); Lane != E; ++Lane)
         Operands[OpIdx][Lane] = OpVL[Lane];
@@ -1787,7 +1787,7 @@ private:
   };
 
 #ifndef NDEBUG
-  void dumpTreeCosts(TreeEntry *E, InstructionCost ReuseShuffleCost,
+  void dumpTreeCosts(const TreeEntry *E, InstructionCost ReuseShuffleCost,
                      InstructionCost VecCost,
                      InstructionCost ScalarCost) const {
     dbgs() << "SLP: Calculated costs for Tree:\n"; E->dump();
@@ -3518,7 +3518,7 @@ computeExtractCost(ArrayRef<Value *> VL, FixedVectorType *VecTy,
   return Cost;
 }
 
-InstructionCost BoUpSLP::getEntryCost(TreeEntry *E) {
+InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E) {
   ArrayRef<Value*> VL = E->Scalars;
 
   Type *ScalarTy = VL[0]->getType();
@@ -3921,31 +3921,9 @@ InstructionCost BoUpSLP::getEntryCost(TreeEntry *E) {
                                          CostKind, VL0);
       } else {
         assert(E->State == TreeEntry::ScatterVectorize && "Unknown EntryState");
-        if (TTI->isLegalMaskedGather(VecTy, alignment)) {
-          VecLdCost = TTI->getGatherScatterOpCost(
-              Instruction::Load, VecTy,
-              cast<LoadInst>(VL0)->getPointerOperand(),
-              /*VariableMask=*/false, alignment, CostKind, VL0);
-        } else {
-          // Lower just to a gather if masked gather is not legal. Also,
-          // compensate the cost of next entry for pointers.
-          VecLdCost =
-              getGatherCost(VL);
-          // Tru to compensate the cost of the next entry for pointers iff all
-          // users are ScatterVectorize nodes.
-          const auto *It = find_if(
-              VectorizableTree, [E](const std::unique_ptr<TreeEntry> &TE) {
-                return !TE->UserTreeIndices.empty() &&
-                       all_of(TE->UserTreeIndices,
-                              [](const EdgeInfo &EI) {
-                                return EI.UserTE->State ==
-                                       TreeEntry::ScatterVectorize;
-                              }) &&
-                       TE->UserTreeIndices.front().UserTE == E;
-              });
-          if (It != VectorizableTree.end())
-            VecLdCost -= getEntryCost(It->get());
-        }
+        VecLdCost = TTI->getGatherScatterOpCost(
+            Instruction::Load, VecTy, cast<LoadInst>(VL0)->getPointerOperand(),
+            /*VariableMask=*/false, alignment, CostKind, VL0);
       }
       if (!NeedToShuffleReuses && !E->ReorderIndices.empty()) {
         SmallVector<int> NewMask;
@@ -4255,27 +4233,6 @@ InstructionCost BoUpSLP::getTreeCost() {
   for (unsigned I = 0, E = VectorizableTree.size(); I < E; ++I) {
     TreeEntry &TE = *VectorizableTree[I].get();
 
-    // We create duplicate tree entries for gather sequences that have multiple
-    // uses. However, we should not compute the cost of duplicate sequences.
-    // For example, if we have a build vector (i.e., insertelement sequence)
-    // that is used by more than one vector instruction, we only need to
-    // compute the cost of the insertelement instructions once. The redundant
-    // instructions will be eliminated by CSE.
-    //
-    // We should consider not creating duplicate tree entries for gather
-    // sequences, and instead add additional edges to the tree representing
-    // their uses. Since such an approach results in fewer total entries,
-    // existing heuristics based on tree size may yield different results.
-    //
-    if (TE.State == TreeEntry::NeedToGather &&
-        std::any_of(std::next(VectorizableTree.begin(), I + 1),
-                    VectorizableTree.end(),
-                    [TE](const std::unique_ptr<TreeEntry> &EntryPtr) {
-                      return EntryPtr->State == TreeEntry::NeedToGather &&
-                             EntryPtr->isSame(TE.Scalars);
-                    }))
-      continue;
-
     InstructionCost C = getEntryCost(&TE);
     Cost += C;
     LLVM_DEBUG(dbgs() << "SLP: Adding cost " << C
@@ -4457,7 +4414,7 @@ void BoUpSLP::reorderInputsAccordingToOpcode(ArrayRef<Value *> VL,
   Right = Ops.getVL(1);
 }
 
-void BoUpSLP::setInsertPointAfterBundle(TreeEntry *E) {
+void BoUpSLP::setInsertPointAfterBundle(const TreeEntry *E) {
   // Get the basic block this bundle is in. All instructions in the bundle
   // should be in this block.
   auto *Front = E->getMainOp();

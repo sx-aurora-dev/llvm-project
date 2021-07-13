@@ -88,7 +88,7 @@ finalizeBufferAllocationForGenericOp(ConversionPatternRewriter &rewriter,
       /*inputs=*/inputs,
       /*outputs=*/outputs, genericOp.indexing_maps(),
       genericOp.iterator_types(), genericOp.docAttr(),
-      genericOp.library_callAttr(), genericOp.sparseAttr());
+      genericOp.library_callAttr());
 
   // Create a new block in the region of the new Generic Op.
   Block *oldBlock = genericOp.getBody();
@@ -145,6 +145,23 @@ public:
     rewriter.replaceOpWithNewOp<memref::AllocOp>(
         op, getTypeConverter()->convertType(op.getType()).cast<MemRefType>(),
         adaptor.sizes());
+    return success();
+  }
+};
+
+/// Conversion pattern that replaces `linalg.tensor_reshape` with
+/// `linalg.reshape`.
+class BufferizeTensorReshapeOp : public OpConversionPattern<TensorReshapeOp> {
+public:
+  using OpConversionPattern<TensorReshapeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TensorReshapeOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    linalg::TensorReshapeOpAdaptor adaptor(operands, op->getAttrDictionary());
+    rewriter.replaceOpWithNewOp<linalg::ReshapeOp>(
+        op, getTypeConverter()->convertType(op.getType()).cast<MemRefType>(),
+        adaptor.src(), adaptor.reassociation());
     return success();
   }
 };
@@ -336,6 +353,7 @@ void mlir::linalg::populateLinalgBufferizePatterns(
       BufferizeAnyLinalgOp,
       BufferizeFillOp,
       BufferizeInitTensorOp,
+      BufferizeTensorReshapeOp,
       SubTensorOpConverter,
       SubTensorInsertOpConverter
     >(typeConverter, patterns.getContext());
