@@ -140,14 +140,6 @@ public:
     llvm_unreachable("Unsupported register kind");
   }
 
-  /// \returns How the target needs this vector-predicated operation to be
-  /// transformed.
-  TargetTransformInfo::VPLegalization
-  getVPLegalizationStrategy(const VPIntrinsic &PI) const {
-    using VPLegalization = TargetTransformInfo::VPLegalization;
-    return VPLegalization(VPLegalization::Legal, VPLegalization::Legal);
-  }
-
   unsigned getMinVectorRegisterBitWidth() const {
     return !makeVectorOpsExpensive() && (simd() || enableVPU()) ? 256 * 64 : 0;
   }
@@ -292,12 +284,20 @@ public:
   /// LLVM-VP Support
   /// {
 
-  /// \returns True if the vector length parameter should be folded into the
-  /// vector mask.
-  bool
-  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
-    return false; // FIXME (return true for masking operations)
+  bool supportsScalableVectors() const { return false; }
+
+  bool hasActiveVectorLength() const { return true; }
+
+  TargetTransformInfo::VPLegalization
+  getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
+    using VPTransform = TargetTransformInfo::VPLegalization;
+    auto &PI = cast<PredicatedInstruction>(VPI);
+    return TargetTransformInfo::VPLegalization(
+        /* EVLParamStrategy */ VPTransform::Legal,
+        /* OperatorStrategy */ supportsVPOperation(PI) ? VPTransform::Legal
+                                                       : VPTransform::Convert);
   }
+
 
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.

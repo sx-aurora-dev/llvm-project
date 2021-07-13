@@ -90,8 +90,43 @@ static bool isAllTrueMask(Value *MaskVal) {
 
 /// \returns A non-excepting divisor constant for this type.
 static Constant *getSafeDivisor(Type *DivTy) {
-  assert(DivTy->isIntOrIntVectorTy() && "Unsupported divisor type");
-  return ConstantInt::get(DivTy, 1u, false);
+  if (DivTy->isIntOrIntVectorTy())
+    return ConstantInt::get(DivTy, 1u, false);
+  return ConstantFP::get(DivTy, 1.0);
+}
+
+Value*
+getNeutralReductionVector(Intrinsic::ID ReductionID, Type *VecTy) {
+  uint64_t LowestSignedInt = 1 << (VecTy->getScalarSizeInBits() - 1);
+  uint64_t HighestSignedInt = LowestSignedInt - 1;
+
+  switch (ReductionID) {
+  default:
+    // FIXME: Reductions are being worked on in upstream. No need to implement
+    // this for any other paths than we need for VE.
+    report_fatal_error("Code path not implemented");
+  case Intrinsic::vector_reduce_umax:
+  case Intrinsic::vector_reduce_or:
+  case Intrinsic::vector_reduce_xor:
+  case Intrinsic::vector_reduce_add:
+    return ConstantInt::get(VecTy, 0, false);
+  case Intrinsic::vector_reduce_fadd:
+    return ConstantFP::get(VecTy, 1);
+
+  case Intrinsic::vector_reduce_smin:
+    return ConstantInt::get(VecTy, HighestSignedInt, false);
+  case Intrinsic::vector_reduce_smax:
+    return ConstantInt::get(VecTy, LowestSignedInt, false);
+
+  case Intrinsic::vector_reduce_umin:
+  case Intrinsic::vector_reduce_and:
+    return ConstantInt::getAllOnesValue(VecTy);
+
+  case Intrinsic::vector_reduce_mul:
+    return ConstantInt::get(VecTy, 1, false);
+  case Intrinsic::vector_reduce_fmul:
+    return ConstantFP::get(VecTy, 1);
+  };
 }
 
 /// Transfer operation properties from \p OldVPI to \p NewVal.
@@ -155,8 +190,13 @@ struct CachingVPExpander {
   void discardEVLParameter(VPIntrinsic &PI);
 
   /// \brief Lower this VP binary operator to a unpredicated binary operator.
+  Value *expandPredicationInUnaryOperator(IRBuilder<> &Builder,
+                                           VPIntrinsic &PI);
   Value *expandPredicationInBinaryOperator(IRBuilder<> &Builder,
                                            VPIntrinsic &PI);
+  // Value *expandPredicationInTernaryOperator(IRBuilder<> &Builder,
+  //                                          VPIntrinsic &PI);
+  Value *expandPredicationInReduction(IRBuilder<> &Builder, VPIntrinsic &VPI);
 
   /// \brief Query TTI and expand the vector predication in \p P accordingly.
   Value *expandPredication(VPIntrinsic &PI);
@@ -210,6 +250,52 @@ Value *CachingVPExpander::convertEVLToMask(IRBuilder<> &Builder,
   return Builder.CreateICmp(CmpInst::ICMP_ULT, IdxVec, VLSplat);
 }
 
+Value *CachingVPExpander::expandPredicationInUnaryOperator(IRBuilder<> &Builder,
+                                                           VPIntrinsic &VPI) {
+  assert((isSafeToSpeculativelyExecute(&VPI) ||
+          VPI.canIgnoreVectorLengthParam()) &&
+         "Implicitly dropping %evl in non-speculatable operator!");
+
+  auto OC = static_cast<Instruction::UnaryOps>(VPI.getFunctionalOpcode());
+  assert(Instruction::isUnaryOp(OC));
+
+  auto *Op0 = VPI.getOperand(0);
+  auto *NewUnOp = Builder.CreateUnOp(OC, Op0, VPI.getName());
+
+  replaceOperation(*NewUnOp, VPI);
+  return NewUnOp;
+}
+
+Value *CachingVPExpander::expandPredicationInReduction(IRBuilder<> &Builder,
+                                                       VPIntrinsic &VPI) {
+  assert((isSafeToSpeculativelyExecute(&VPI) ||
+          VPI.canIgnoreVectorLengthParam()) &&
+         "Implicitly dropping %evl in non-speculatable operator!");
+
+  auto *Start = VPI.getReductionAccuParam();
+  auto *Vec = VPI.getReductionVectorParam();
+  auto *Mask = VPI.getMaskParam();
+
+  auto ReductionID = VPI.getFunctionalIntrinsicID();
+
+  // Blend in safe operands.
+  if (Mask && !isAllTrueMask(Mask)) {
+    Value *NeutralElem = getNeutralReductionVector(ReductionID, Vec->getType());
+    Vec = Builder.CreateSelect(Mask, Vec, NeutralElem);
+  }
+
+  auto *RedFunc =
+      Intrinsic::getDeclaration(VPI.getModule(), ReductionID, {Vec->getType()});
+  Value *NewRedOp;
+  if (Start)
+    NewRedOp = Builder.CreateCall(RedFunc, {Start, Vec});
+  else
+    NewRedOp = Builder.CreateCall(RedFunc, Vec);
+
+  replaceOperation(*NewRedOp, VPI);
+  return NewRedOp;
+}
+
 Value *
 CachingVPExpander::expandPredicationInBinaryOperator(IRBuilder<> &Builder,
                                                      VPIntrinsic &VPI) {
@@ -232,6 +318,8 @@ CachingVPExpander::expandPredicationInBinaryOperator(IRBuilder<> &Builder,
       break;
 
     // Division operators need a safe divisor on masked-off lanes (1).
+    case Instruction::FDiv:
+    case Instruction::FRem:
     case Instruction::UDiv:
     case Instruction::SDiv:
     case Instruction::URem:
@@ -318,8 +406,15 @@ Value *CachingVPExpander::expandPredication(VPIntrinsic &VPI) {
   // Try lowering to a LLVM instruction first.
   unsigned OC = VPI.getFunctionalOpcode();
 
+  if (Instruction::isUnaryOp(OC))
+    return expandPredicationInUnaryOperator(Builder, VPI);
   if (Instruction::isBinaryOp(OC))
     return expandPredicationInBinaryOperator(Builder, VPI);
+  if (VPI.isReductionOp())
+    return expandPredicationInReduction(Builder, VPI);
+
+  llvm::errs() << VPI << "\n";
+  report_fatal_error("Missing expansion path for this VP intrinsic");
 
   return &VPI;
 }
