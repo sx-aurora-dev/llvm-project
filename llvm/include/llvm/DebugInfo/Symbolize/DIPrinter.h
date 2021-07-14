@@ -29,6 +29,8 @@ class raw_ostream;
 
 namespace symbolize {
 
+class SourceCode;
+
 struct Request {
   StringRef ModuleName;
   Optional<uint64_t> Address;
@@ -36,8 +38,8 @@ struct Request {
 
 class DIPrinter {
 public:
-  DIPrinter(){};
-  virtual ~DIPrinter(){};
+  DIPrinter() {}
+  virtual ~DIPrinter() {}
 
   virtual void print(const Request &Request, const DILineInfo &Info) = 0;
   virtual void print(const Request &Request, const DIInliningInfo &Info) = 0;
@@ -74,7 +76,7 @@ protected:
   void printFunctionName(StringRef FunctionName, bool Inlined);
   virtual void printSimpleLocation(StringRef Filename,
                                    const DILineInfo &Info) = 0;
-  void printContext(StringRef FileName, int64_t Line);
+  void printContext(SourceCode SourceCode);
   void printVerbose(StringRef Filename, const DILineInfo &Info);
   virtual void printFooter() {}
 
@@ -96,8 +98,8 @@ public:
   bool printError(const Request &Request, const ErrorInfoBase &ErrorInfo,
                   StringRef ErrorBanner) override;
 
-  void listBegin() override{};
-  void listEnd() override{};
+  void listBegin() override {}
+  void listEnd() override {}
 };
 
 class LLVMPrinter : public PlainPrinterBase {

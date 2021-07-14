@@ -160,8 +160,8 @@ void Symbol::markLive() {
     // (splittable) sections, each piece of data has independent liveness bit.
     // So we explicitly tell it which offset is in use.
     if (auto *d = dyn_cast<DefinedData>(this)) {
-      if (auto *ms = dyn_cast<MergeInputSegment>(c)) {
-        ms->getSegmentPiece(d->value)->live = true;
+      if (auto *ms = dyn_cast<MergeInputChunk>(c)) {
+        ms->getSectionPiece(d->value)->live = true;
       }
     }
     c->live = true;
@@ -286,10 +286,10 @@ DefinedFunction::DefinedFunction(StringRef name, uint32_t flags, InputFile *f,
                      function ? &function->signature : nullptr),
       function(function) {}
 
-uint64_t DefinedData::getVA(uint64_t addend) const {
+uint64_t DefinedData::getVA() const {
   LLVM_DEBUG(dbgs() << "getVA: " << getName() << "\n");
   if (segment)
-    return segment->getVA(value + addend);
+    return segment->getVA(value);
   return value;
 }
 
@@ -301,7 +301,7 @@ void DefinedData::setVA(uint64_t value_) {
 
 uint64_t DefinedData::getOutputSegmentOffset() const {
   LLVM_DEBUG(dbgs() << "getOutputSegmentOffset: " << getName() << "\n");
-  return segment->outputSegmentOffset + value;
+  return segment->getSegmentOffset(value);
 }
 
 uint64_t DefinedData::getOutputSegmentIndex() const {

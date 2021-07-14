@@ -1517,21 +1517,19 @@ public:
   /// instructions that may divide by zero.
   /// If a non-zero VF has been calculated, we check if I will be scalarized
   /// predication for that VF.
-  bool
-  isScalarWithPredication(Instruction *I,
-                          ElementCount VF = ElementCount::getFixed(1)) const;
+  bool isScalarWithPredication(Instruction *I) const;
 
   // Returns true if \p I is an instruction that will be predicated either
   // through scalar predication or masked load/store or masked gather/scatter.
   // Superset of instructions that return true for isScalarWithPredication.
-  bool isPredicatedInst(Instruction *I, ElementCount VF) {
+  bool isPredicatedInst(Instruction *I) {
     if (!blockNeedsPredication(I->getParent()))
       return false;
     // Loads and stores that need some form of masked operation are predicated
     // instructions.
     if (isa<LoadInst>(I) || isa<StoreInst>(I))
       return Legal->isMaskRequired(I);
-    return isScalarWithPredication(I, VF);
+    return isScalarWithPredication(I);
   }
 
   /// Returns true if \p I is a memory instruction with consecutive memory
@@ -3336,8 +3334,8 @@ Value *InnerLoopVectorizer::emitTransformedIndex(
   SCEVExpander Exp(*SE, DL, "induction");
   auto Step = ID.getStep();
   auto StartValue = ID.getStartValue();
-  assert(Index->getType() == Step->getType() &&
-         "Index type does not match StepValue type");
+  assert(Index->getType()->getScalarType() == Step->getType() &&
+         "Index scalar type does not match StepValue type");
 
   // Note: the IR at this point is broken. We cannot use SE to create any new
   // SCEV and then expand it, hoping that SCEV's simplification will give us
@@ -3356,14 +3354,20 @@ Value *InnerLoopVectorizer::emitTransformedIndex(
     return B.CreateAdd(X, Y);
   };
 
+  // We allow X to be a vector type, in which case Y will potentially be
+  // splatted into a vector with the same element count.
   auto CreateMul = [&B](Value *X, Value *Y) {
-    assert(X->getType() == Y->getType() && "Types don't match!");
+    assert(X->getType()->getScalarType() == Y->getType() &&
+           "Types don't match!");
     if (auto *CX = dyn_cast<ConstantInt>(X))
       if (CX->isOne())
         return Y;
     if (auto *CY = dyn_cast<ConstantInt>(Y))
       if (CY->isOne())
         return X;
+    VectorType *XVTy = dyn_cast<VectorType>(X->getType());
+    if (XVTy && !isa<VectorType>(Y->getType()))
+      Y = B.CreateVectorSplat(XVTy->getElementCount(), Y);
     return B.CreateMul(X, Y);
   };
 
@@ -3382,6 +3386,8 @@ Value *InnerLoopVectorizer::emitTransformedIndex(
 
   switch (ID.getKind()) {
   case InductionDescriptor::IK_IntInduction: {
+    assert(!isa<VectorType>(Index->getType()) &&
+           "Vector indices not supported for integer inductions yet");
     assert(Index->getType() == StartValue->getType() &&
            "Index type does not match StartValue type");
     if (ID.getConstIntStepValue() && ID.getConstIntStepValue()->isMinusOne())
@@ -3396,9 +3402,12 @@ Value *InnerLoopVectorizer::emitTransformedIndex(
     return B.CreateGEP(
         StartValue->getType()->getPointerElementType(), StartValue,
         CreateMul(Index,
-                  Exp.expandCodeFor(Step, Index->getType(), GetInsertPoint())));
+                  Exp.expandCodeFor(Step, Index->getType()->getScalarType(),
+                                    GetInsertPoint())));
   }
   case InductionDescriptor::IK_FpInduction: {
+    assert(!isa<VectorType>(Index->getType()) &&
+           "Vector indices not supported for FP inductions yet");
     assert(Step->getType()->isFloatingPointTy() && "Expected FP Step value");
     auto InductionBinOp = ID.getInductionBinOp();
     assert(InductionBinOp &&
@@ -4817,13 +4826,33 @@ void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN,
       // iteration. If the instruction is uniform, we only need to generate the
       // first lane. Otherwise, we generate all VF values.
       bool IsUniform = Cost->isUniformAfterVectorization(P, State.VF);
-      assert((IsUniform || !VF.isScalable()) &&
-             "Currently unsupported for scalable vectors");
-      unsigned Lanes = IsUniform ? 1 : State.VF.getFixedValue();
+      unsigned Lanes = IsUniform ? 1 : State.VF.getKnownMinValue();
+
+      bool NeedsVectorIndex = !IsUniform && VF.isScalable();
+      Value *UnitStepVec = nullptr, *PtrIndSplat = nullptr;
+      if (NeedsVectorIndex) {
+        Type *VecIVTy = VectorType::get(PtrInd->getType(), VF);
+        UnitStepVec = Builder.CreateStepVector(VecIVTy);
+        PtrIndSplat = Builder.CreateVectorSplat(VF, PtrInd);
+      }
 
       for (unsigned Part = 0; Part < UF; ++Part) {
         Value *PartStart = createStepForVF(
             Builder, ConstantInt::get(PtrInd->getType(), Part), VF);
+
+        if (NeedsVectorIndex) {
+          Value *PartStartSplat = Builder.CreateVectorSplat(VF, PartStart);
+          Value *Indices = Builder.CreateAdd(PartStartSplat, UnitStepVec);
+          Value *GlobalIndices = Builder.CreateAdd(PtrIndSplat, Indices);
+          Value *SclrGep =
+              emitTransformedIndex(Builder, GlobalIndices, PSE.getSE(), DL, II);
+          SclrGep->setName("next.gep");
+          State.set(PhiR, SclrGep, Part);
+          // We've cached the whole vector, which means we can support the
+          // extraction of any lane.
+          continue;
+        }
+
         for (unsigned Lane = 0; Lane < Lanes; ++Lane) {
           Value *Idx = Builder.CreateAdd(
               PartStart, ConstantInt::get(PtrInd->getType(), Lane));
@@ -5295,8 +5324,7 @@ void LoopVectorizationCostModel::collectLoopScalars(ElementCount VF) {
   Scalars[VF].insert(Worklist.begin(), Worklist.end());
 }
 
-bool LoopVectorizationCostModel::isScalarWithPredication(
-    Instruction *I, ElementCount VF) const {
+bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I) const {
   if (!blockNeedsPredication(I->getParent()))
     return false;
   switch(I->getOpcode()) {
@@ -5308,14 +5336,6 @@ bool LoopVectorizationCostModel::isScalarWithPredication(
       return false;
     auto *Ptr = getLoadStorePointerOperand(I);
     auto *Ty = getMemInstValueType(I);
-    // We have already decided how to vectorize this instruction, get that
-    // result.
-    if (VF.isVector()) {
-      InstWidening WideningDecision = getWideningDecision(I, VF);
-      assert(WideningDecision != CM_Unknown &&
-             "Widening decision should be ready at this moment");
-      return WideningDecision == CM_Scalarize;
-    }
     const Align Alignment = getLoadStoreAlignment(I);
     return isa<LoadInst>(I) ? !(isLegalMaskedLoad(Ty, Ptr, Alignment) ||
                                 isLegalMaskedGather(Ty, Alignment))
@@ -5433,7 +5453,7 @@ void LoopVectorizationCostModel::collectLoopUniforms(ElementCount VF) {
                         << *I << "\n");
       return;
     }
-    if (isScalarWithPredication(I, VF)) {
+    if (isScalarWithPredication(I)) {
       LLVM_DEBUG(dbgs() << "LV: Found not uniform being ScalarWithPredication: "
                         << *I << "\n");
       return;
@@ -6653,7 +6673,7 @@ bool LoopVectorizationCostModel::useEmulatedMaskMemRefHack(Instruction *I){
   // from moving "masked load/store" check from legality to cost model.
   // Masked Load/Gather emulation was previously never allowed.
   // Limited number of Masked Store/Scatter emulation was allowed.
-  assert(isPredicatedInst(I, ElementCount::getFixed(1)) &&
+  assert(isPredicatedInst(I) &&
          "Expecting a scalar emulated instruction");
   return isa<LoadInst>(I) ||
          (isa<StoreInst>(I) &&
@@ -6926,7 +6946,7 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
   // If we have a predicated load/store, it will need extra i1 extracts and
   // conditional branches, but may not be executed for each vector lane. Scale
   // the cost by the probability of executing the predicated block.
-  if (isPredicatedInst(I, ElementCount::getFixed(1))) {
+  if (isPredicatedInst(I)) {
     Cost /= getReciprocalPredBlockProb();
 
     // Add the cost of an i1 extract and a branch
@@ -8687,9 +8707,7 @@ VPWidenCallRecipe *VPRecipeBuilder::tryToWidenCall(CallInst *CI,
                                                    VFRange &Range) const {
 
   bool IsPredicated = LoopVectorizationPlanner::getDecisionAndClampRange(
-      [this, CI](ElementCount VF) {
-        return CM.isScalarWithPredication(CI, VF);
-      },
+      [this, CI](ElementCount VF) { return CM.isScalarWithPredication(CI); },
       Range);
 
   if (IsPredicated)
@@ -8731,8 +8749,7 @@ bool VPRecipeBuilder::shouldWiden(Instruction *I, VFRange &Range) const {
   // scalarization is profitable or it is predicated.
   auto WillScalarize = [this, I](ElementCount VF) -> bool {
     return CM.isScalarAfterVectorization(I, VF) ||
-           CM.isProfitableToScalarize(I, VF) ||
-           CM.isScalarWithPredication(I, VF);
+           CM.isProfitableToScalarize(I, VF) || CM.isScalarWithPredication(I);
   };
   return !LoopVectorizationPlanner::getDecisionAndClampRange(WillScalarize,
                                                              Range);
@@ -8806,7 +8823,7 @@ VPBasicBlock *VPRecipeBuilder::handleReplication(
       Range);
 
   bool IsPredicated = LoopVectorizationPlanner::getDecisionAndClampRange(
-      [&](ElementCount VF) { return CM.isPredicatedInst(I, VF); }, Range);
+      [&](ElementCount VF) { return CM.isPredicatedInst(I); }, Range);
 
   auto *Recipe = new VPReplicateRecipe(I, Plan->mapToVPValues(I->operands()),
                                        IsUniform, IsPredicated);
@@ -9069,7 +9086,12 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
               Instr, Operands, Range, Plan)) {
         // If Instr can be simplified to an existing VPValue, use it.
         if (RecipeOrValue.is<VPValue *>()) {
-          Plan->addVPValue(Instr, RecipeOrValue.get<VPValue *>());
+          auto *VPV = RecipeOrValue.get<VPValue *>();
+          Plan->addVPValue(Instr, VPV);
+          // If the re-used value is a recipe, register the recipe for the
+          // instruction, in case the recipe for Instr needs to be recorded.
+          if (auto *R = dyn_cast_or_null<VPRecipeBase>(VPV->getDef()))
+            RecipeBuilder.setRecipe(Instr, R);
           continue;
         }
         // Otherwise, add the new recipe.

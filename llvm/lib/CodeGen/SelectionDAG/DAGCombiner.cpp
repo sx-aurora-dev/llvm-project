@@ -461,8 +461,7 @@ namespace {
     SDValue visitAssertExt(SDNode *N);
     SDValue visitAssertAlign(SDNode *N);
     SDValue visitSIGN_EXTEND_INREG(SDNode *N);
-    SDValue visitSIGN_EXTEND_VECTOR_INREG(SDNode *N);
-    SDValue visitZERO_EXTEND_VECTOR_INREG(SDNode *N);
+    SDValue visitEXTEND_VECTOR_INREG(SDNode *N);
     SDValue visitTRUNCATE(SDNode *N);
     SDValue visitBITCAST(SDNode *N);
     SDValue visitFREEZE(SDNode *N);
@@ -1831,8 +1830,8 @@ SDValue DAGCombiner::visit(SDNode *N) {
   case ISD::AssertZext:         return visitAssertExt(N);
   case ISD::AssertAlign:        return visitAssertAlign(N);
   case ISD::SIGN_EXTEND_INREG:  return visitSIGN_EXTEND_INREG(N);
-  case ISD::SIGN_EXTEND_VECTOR_INREG: return visitSIGN_EXTEND_VECTOR_INREG(N);
-  case ISD::ZERO_EXTEND_VECTOR_INREG: return visitZERO_EXTEND_VECTOR_INREG(N);
+  case ISD::SIGN_EXTEND_VECTOR_INREG:
+  case ISD::ZERO_EXTEND_VECTOR_INREG: return visitEXTEND_VECTOR_INREG(N);
   case ISD::TRUNCATE:           return visitTRUNCATE(N);
   case ISD::BITCAST:            return visitBITCAST(N);
   case ISD::BUILD_PAIR:         return visitBUILD_PAIR(N);
@@ -9383,8 +9382,8 @@ static SDValue foldSelectOfConstantsUsingSra(SDNode *N, SelectionDAG &DAG) {
   SDValue Cond = N->getOperand(0);
   SDValue C1 = N->getOperand(1);
   SDValue C2 = N->getOperand(2);
-  assert(isConstantOrConstantVector(C1) && isConstantOrConstantVector(C2) &&
-         "Expected select-of-constants");
+  if (!isConstantOrConstantVector(C1) || !isConstantOrConstantVector(C2))
+    return SDValue();
 
   EVT VT = N->getValueType(0);
   if (Cond.getOpcode() != ISD::SETCC || !Cond.hasOneUse() ||
@@ -12139,28 +12138,11 @@ SDValue DAGCombiner::visitSIGN_EXTEND_INREG(SDNode *N) {
   return SDValue();
 }
 
-SDValue DAGCombiner::visitSIGN_EXTEND_VECTOR_INREG(SDNode *N) {
+SDValue DAGCombiner::visitEXTEND_VECTOR_INREG(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   EVT VT = N->getValueType(0);
 
-  // sext_vector_inreg(undef) = 0 because the top bit will all be the same.
-  if (N0.isUndef())
-    return DAG.getConstant(0, SDLoc(N), VT);
-
-  if (SDValue Res = tryToFoldExtendOfConstant(N, TLI, DAG, LegalTypes))
-    return Res;
-
-  if (SimplifyDemandedVectorElts(SDValue(N, 0)))
-    return SDValue(N, 0);
-
-  return SDValue();
-}
-
-SDValue DAGCombiner::visitZERO_EXTEND_VECTOR_INREG(SDNode *N) {
-  SDValue N0 = N->getOperand(0);
-  EVT VT = N->getValueType(0);
-
-  // zext_vector_inreg(undef) = 0 because the top bits will be zero.
+  // {s/z}ext_vector_inreg(undef) = 0 because the top bits must be the same.
   if (N0.isUndef())
     return DAG.getConstant(0, SDLoc(N), VT);
 
@@ -18093,6 +18075,7 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
   if (LoadSDNode *Ld = dyn_cast<LoadSDNode>(Value)) {
     if (Ld->getBasePtr() == Ptr && ST->getMemoryVT() == Ld->getMemoryVT() &&
         ST->isUnindexed() && ST->isSimple() &&
+        Ld->getAddressSpace() == ST->getAddressSpace() &&
         // There can't be any side effects between the load and store, such as
         // a call or store.
         Chain.reachesChainWithoutSideEffects(SDValue(Ld, 1))) {
@@ -18106,7 +18089,8 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
     if (ST->isUnindexed() && ST->isSimple() &&
         ST1->isUnindexed() && ST1->isSimple()) {
       if (ST1->getBasePtr() == Ptr && ST1->getValue() == Value &&
-          ST->getMemoryVT() == ST1->getMemoryVT()) {
+          ST->getMemoryVT() == ST1->getMemoryVT() &&
+          ST->getAddressSpace() == ST1->getAddressSpace()) {
         // If this is a store followed by a store with the same value to the
         // same location, then the store is dead/noop.
         return Chain;
@@ -18117,7 +18101,8 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
           // BaseIndexOffset and the code below requires knowing the size
           // of a vector, so bail out if MemoryVT is scalable.
           !ST->getMemoryVT().isScalableVector() &&
-          !ST1->getMemoryVT().isScalableVector()) {
+          !ST1->getMemoryVT().isScalableVector() &&
+          ST->getAddressSpace() == ST1->getAddressSpace()) {
         const BaseIndexOffset STBase = BaseIndexOffset::match(ST, DAG);
         const BaseIndexOffset ChainBase = BaseIndexOffset::match(ST1, DAG);
         unsigned STBitSize = ST->getMemoryVT().getFixedSizeInBits();

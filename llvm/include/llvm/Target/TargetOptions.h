@@ -73,11 +73,7 @@ namespace llvm {
     None    // Do not use Basic Block Sections.
   };
 
-  enum class StackProtectorGuards {
-    None,
-    TLS,
-    Global
-  };
+  enum class StackProtectorGuards { None, TLS, Global, SysReg };
 
   enum class EABI {
     Unknown,
@@ -137,6 +133,7 @@ namespace llvm {
           SupportsDebugEntryValues(false), EnableDebugEntryValues(false),
           PseudoProbeForProfiling(false), ValueTrackingVariableLocations(false),
           ForceDwarfFrameSection(false), XRayOmitFunctionIndex(false),
+          DebugStrictDwarf(false),
           FPDenormalMode(DenormalMode::IEEE, DenormalMode::IEEE) {}
 
     /// DisableFramePointerElim - This returns true if frame pointer elimination
@@ -327,15 +324,24 @@ namespace llvm {
     /// Emit XRay Function Index section
     unsigned XRayOmitFunctionIndex : 1;
 
+    /// When set to true, don't use DWARF extensions in later DWARF versions.
+    /// By default, it is set to false.
+    unsigned DebugStrictDwarf : 1;
+
     /// Stack protector guard offset to use.
     int StackProtectorGuardOffset = INT_MAX;
 
-    /// Stack protector guard mode to use, e.g. tls, global.
+    /// Stack protector guard mode to use, e.g. tls, global, sysreg.
     StackProtectorGuards StackProtectorGuard =
                                          StackProtectorGuards::None;
 
     /// Stack protector guard reg to use, e.g. usually fs or gs in X86.
     std::string StackProtectorGuardReg = "None";
+
+    /// Name of the stack usage file (i.e., .su file) if user passes
+    /// -fstack-usage. If empty, it can be implied that -fstack-usage is not
+    /// passed on the command line.
+    std::string StackUsageOutput;
 
     /// FloatABIType - This setting is set by -float-abi=xxx option is specfied
     /// on the command line. This setting may either be Default, Soft, or Hard.

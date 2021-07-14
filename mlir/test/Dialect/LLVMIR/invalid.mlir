@@ -1,6 +1,11 @@
 // RUN: mlir-opt -allow-unregistered-dialect %s -split-input-file -verify-diagnostics
 
-// expected-error@+1{{llvm.noalias argument attribute of non boolean type}}
+// expected-error@+1{{alignment attribute is not a power of 2}}
+llvm.mlir.global private @invalid_global_alignment(42 : i64) {alignment = 63} : i64
+
+// -----
+
+// expected-error@+1{{expected llvm.noalias argument attribute to be a unit attribute}}
 func @invalid_noalias(%arg0: i32 {llvm.noalias = 3}) {
   "llvm.return"() : () -> ()
 }
@@ -256,6 +261,54 @@ func @constant_wrong_type() {
 func @constant_wrong_type_string() {
   // expected-error@below {{expected array type of 3 i8 elements for the string constant}}
   llvm.mlir.constant("foo") : !llvm.ptr<i8>
+}
+
+// -----
+
+llvm.func @array_attribute_one_element() -> !llvm.struct<(f64, f64)> {
+  // expected-error @+1 {{expected array attribute with two elements, representing a complex constant}}
+  %0 = llvm.mlir.constant([1.0 : f64]) : !llvm.struct<(f64, f64)>
+  llvm.return %0 : !llvm.struct<(f64, f64)>
+}
+
+// -----
+
+llvm.func @array_attribute_two_different_types() -> !llvm.struct<(f64, f64)> {
+  // expected-error @+1 {{expected array attribute with two elements, representing a complex constant}}
+  %0 = llvm.mlir.constant([1.0 : f64, 1.0 : f32]) : !llvm.struct<(f64, f64)>
+  llvm.return %0 : !llvm.struct<(f64, f64)>
+}
+
+// -----
+
+llvm.func @struct_wrong_attribute_type() -> !llvm.struct<(f64, f64)> {
+  // expected-error @+1 {{expected array attribute with two elements, representing a complex constant}}
+  %0 = llvm.mlir.constant(1.0 : f64) : !llvm.struct<(f64, f64)>
+  llvm.return %0 : !llvm.struct<(f64, f64)>
+}
+
+// -----
+
+llvm.func @struct_one_element() -> !llvm.struct<(f64)> {
+  // expected-error @+1 {{expected struct type with two elements of the same type, the type of a complex constant}}
+  %0 = llvm.mlir.constant([1.0 : f64, 1.0 : f64]) : !llvm.struct<(f64)>
+  llvm.return %0 : !llvm.struct<(f64)>
+}
+
+// -----
+
+llvm.func @struct_two_different_elements() -> !llvm.struct<(f64, f32)> {
+  // expected-error @+1 {{expected struct type with two elements of the same type, the type of a complex constant}}
+  %0 = llvm.mlir.constant([1.0 : f64, 1.0 : f64]) : !llvm.struct<(f64, f32)>
+  llvm.return %0 : !llvm.struct<(f64, f32)>
+}
+
+// -----
+
+llvm.func @struct_wrong_element_types() -> !llvm.struct<(!llvm.array<2 x f64>, !llvm.array<2 x f64>)> {
+  // expected-error @+1 {{expected struct element types to be floating point type or integer type}}
+  %0 = llvm.mlir.constant([dense<[1.0, 1.0]> : tensor<2xf64>, dense<[1.0, 1.0]> : tensor<2xf64>]) : !llvm.struct<(!llvm.array<2 x f64>, !llvm.array<2 x f64>)>
+  llvm.return %0 : !llvm.struct<(!llvm.array<2 x f64>, !llvm.array<2 x f64>)>
 }
 
 // -----

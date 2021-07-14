@@ -1996,6 +1996,7 @@ ARMTargetLowering::getEffectiveCallingConv(CallingConv::ID CC,
     return CallingConv::PreserveMost;
   case CallingConv::ARM_AAPCS_VFP:
   case CallingConv::Swift:
+  case CallingConv::SwiftTail:
     return isVarArg ? CallingConv::ARM_AAPCS : CallingConv::ARM_AAPCS_VFP;
   case CallingConv::C:
     if (!Subtarget->isAAPCS_ABI())
@@ -11319,7 +11320,7 @@ ARMTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     // 1) A terminator(t2WhileLoopStart) will be placed at that site.
     // 2) Since a TPLoopBody will be added later, any phis in successive blocks
     //    need to be updated. splitAt() already handles this.
-    TpExit = BB->splitAt(MI);
+    TpExit = BB->splitAt(MI, false);
     if (TpExit == BB) {
       assert(BB->canFallThrough() && "Exit Block must be Fallthrough of the "
                                      "block containing memcpy/memset Pseudo");
@@ -11327,7 +11328,7 @@ ARMTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
       BuildMI(BB, dl, TII->get(ARM::t2B))
           .addMBB(TpExit)
           .add(predOps(ARMCC::AL));
-      TpExit = BB->splitAt(MI);
+      TpExit = BB->splitAt(MI, false);
     }
 
     // Add logic for iteration count
@@ -19357,6 +19358,14 @@ ARMTargetLowering::shouldExpandAtomicLoadInIR(LoadInst *LI) const {
 TargetLowering::AtomicExpansionKind
 ARMTargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->isFloatingPointOperation())
+    return AtomicExpansionKind::CmpXChg;
+
+  // At -O0, fast-regalloc cannot cope with the live vregs necessary to
+  // implement atomicrmw without spilling. If the target address is also on the
+  // stack and close enough to the spill slot, this can lead to a situation
+  // where the monitor always gets cleared and the atomic operation can never
+  // succeed. So at -O0 lower this operation to a CAS loop.
+  if (getTargetMachine().getOptLevel() == CodeGenOpt::None)
     return AtomicExpansionKind::CmpXChg;
 
   unsigned Size = AI->getType()->getPrimitiveSizeInBits();
