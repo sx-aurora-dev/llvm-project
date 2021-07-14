@@ -257,18 +257,6 @@ ElementCount VPIntrinsic::getStaticVectorLength() const {
   return GetVectorLengthOfType(VPMask->getType());
 }
 
-void VPIntrinsic::setMaskParam(Value *NewMask) {
-  auto MaskPos = GetMaskParamPos(getIntrinsicID());
-  assert(MaskPos.hasValue());
-  this->setOperand(MaskPos.getValue(), NewMask);
-}
-
-void VPIntrinsic::setVectorLengthParam(Value *NewVL) {
-  auto VLPos = GetVectorLengthParamPos(getIntrinsicID());
-  assert(VLPos.hasValue());
-  this->setOperand(VLPos.getValue(), NewVL);
-}
-
 Value *VPIntrinsic::getMaskParam() const {
   auto maskPos = GetMaskParamPos(getIntrinsicID());
   if (maskPos)
@@ -276,11 +264,21 @@ Value *VPIntrinsic::getMaskParam() const {
   return nullptr;
 }
 
+void VPIntrinsic::setMaskParam(Value *NewMask) {
+  auto MaskPos = GetMaskParamPos(getIntrinsicID());
+  setArgOperand(*MaskPos, NewMask);
+}
+
 Value *VPIntrinsic::getVectorLengthParam() const {
   auto vlenPos = GetVectorLengthParamPos(getIntrinsicID());
   if (vlenPos)
     return getArgOperand(vlenPos.getValue());
   return nullptr;
+}
+
+void VPIntrinsic::setVectorLengthParam(Value *NewEVL) {
+  auto EVLPos = GetVectorLengthParamPos(getIntrinsicID());
+  setArgOperand(*EVLPos, NewEVL);
 }
 
 Optional<int> VPIntrinsic::GetMaskParamPos(Intrinsic::ID IntrinsicID) {

@@ -1278,6 +1278,12 @@ Currently, only the following parameter attributes are defined:
     a valid attribute for return values and can only be applied to one
     parameter.
 
+``swiftasync``
+    This indicates that the parameter is the asynchronous context parameter and
+    triggers the creation of a target-specific extended frame record to store
+    this pointer. This is not a valid attribute for return values and can only
+    be applied to one parameter.
+
 ``swifterror``
     This attribute is motivated to model and optimize Swift error handling. It
     can be applied to a parameter with pointer to pointer type or a
@@ -3341,7 +3347,7 @@ vector length is unknown at compile time. Vector types are considered
 :Memory Layout:
 
 In general vector elements are laid out in memory in the same way as
-:ref:`array types <t_array>`. Such an anology works fine as long as the vector
+:ref:`array types <t_array>`. Such an analogy works fine as long as the vector
 elements are byte sized. However, when the elements of the vector aren't byte
 sized it gets a bit more complicated. One way to describe the layout is by
 describing what happens when a vector such as <N x iM> is bitcasted to an
@@ -12350,6 +12356,29 @@ Note that calling this intrinsic does not prevent function inlining or
 other aggressive transformations, so the value returned may not be that
 of the obvious source-language caller.
 
+'``llvm.swift.async.context.addr``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare i8** @llvm.swift.async.context.addr()
+
+Overview:
+"""""""""
+
+The '``llvm.swift.async.context.addr``' intrinsic returns a pointer to
+the part of the extended frame record containing the asynchronous
+context of a Swift execution.
+
+Semantics:
+""""""""""
+
+If the function has a ``swiftasync`` parameter, that argument will initially
+be stored at the returned address. If not, it will be initialized to null.
+
 '``llvm.localescape``' and '``llvm.localrecover``' Intrinsics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -17575,7 +17604,7 @@ Examples:
       ;; For all lanes below %evl, %r is lane-wise equivalent to %also.r
 
       %t = sdiv <4 x i32> %a, %b
-      %also.r = select <4 x ii> %mask, <4 x i32> %t, <4 x i32> undef
+      %also.r = select <4 x i1> %mask, <4 x i32> %t, <4 x i32> undef
 
 
 .. _int_vp_udiv:
@@ -17620,7 +17649,7 @@ Examples:
       ;; For all lanes below %evl, %r is lane-wise equivalent to %also.r
 
       %t = udiv <4 x i32> %a, %b
-      %also.r = select <4 x ii> %mask, <4 x i32> %t, <4 x i32> undef
+      %also.r = select <4 x i1> %mask, <4 x i32> %t, <4 x i32> undef
 
 
 

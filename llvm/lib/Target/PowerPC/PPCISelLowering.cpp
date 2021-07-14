@@ -10444,6 +10444,8 @@ SDValue PPCTargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
     return Op;
 
   if (Subtarget.isISA3_1()) {
+    if ((VT == MVT::v2i64 || VT == MVT::v2f64) && !Subtarget.isPPC64())
+      return SDValue();
     // On P10, we have legal lowering for constant and variable indices for
     // integer vectors.
     if (VT == MVT::v16i8 || VT == MVT::v8i16 || VT == MVT::v4i32 ||
@@ -17061,8 +17063,6 @@ unsigned PPCTargetLowering::computeMOFlags(const SDNode *Parent, SDValue N,
   if (const LSBaseSDNode *LSB = dyn_cast<LSBaseSDNode>(Parent))
     if (LSB->isIndexed())
       return PPC::MOF_None;
-  if (isa<AtomicSDNode>(Parent))
-    return PPC::MOF_None;
 
   // Compute in-memory type flags. This is based on if there are scalars,
   // floats or vectors.

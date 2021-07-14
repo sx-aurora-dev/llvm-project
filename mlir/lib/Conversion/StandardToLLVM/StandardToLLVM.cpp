@@ -1211,8 +1211,10 @@ static void filterFuncAttributes(ArrayRef<NamedAttribute> attrs,
                                  SmallVectorImpl<NamedAttribute> &result) {
   for (const auto &attr : attrs) {
     if (attr.first == SymbolTable::getSymbolAttrName() ||
-        attr.first == impl::getTypeAttrName() || attr.first == "std.varargs" ||
-        (filterArgAttrs && impl::isArgAttrName(attr.first.strref())))
+        attr.first == function_like_impl::getTypeAttrName() ||
+        attr.first == "std.varargs" ||
+        (filterArgAttrs &&
+         attr.first == function_like_impl::getArgDictAttrName()))
       continue;
     result.push_back(attr);
   }
@@ -1395,19 +1397,19 @@ protected:
     SmallVector<NamedAttribute, 4> attributes;
     filterFuncAttributes(funcOp->getAttrs(), /*filterArgAttrs=*/true,
                          attributes);
-    for (unsigned i = 0, e = funcOp.getNumArguments(); i < e; ++i) {
-      auto attr = impl::getArgAttrDict(funcOp, i);
-      if (!attr)
-        continue;
-
-      auto mapping = result.getInputMapping(i);
-      assert(mapping.hasValue() && "unexpected deletion of function argument");
-
-      SmallString<8> name;
-      for (size_t j = 0; j < mapping->size; ++j) {
-        impl::getArgAttrName(mapping->inputNo + j, name);
-        attributes.push_back(rewriter.getNamedAttr(name, attr));
+    if (ArrayAttr argAttrDicts = funcOp.getAllArgAttrs()) {
+      SmallVector<Attribute, 4> newArgAttrs(
+          llvmType.cast<LLVM::LLVMFunctionType>().getNumParams());
+      for (unsigned i = 0, e = funcOp.getNumArguments(); i < e; ++i) {
+        auto mapping = result.getInputMapping(i);
+        assert(mapping.hasValue() &&
+               "unexpected deletion of function argument");
+        for (size_t j = 0; j < mapping->size; ++j)
+          newArgAttrs[mapping->inputNo + j] = argAttrDicts[i];
       }
+      attributes.push_back(
+          rewriter.getNamedAttr(function_like_impl::getArgDictAttrName(),
+                                rewriter.getArrayAttr(newArgAttrs)));
     }
 
     // Create an LLVM function, use external linkage by default until MLIR
@@ -2349,6 +2351,60 @@ struct GetGlobalMemrefOpLowering : public AllocLikeOpLowering {
     // Both allocated and aligned pointers are same. We could potentially stash
     // a nullptr for the allocated pointer since we do not expect any dealloc.
     return std::make_tuple(deadBeefPtr, gep);
+  }
+};
+
+// A `expm1` is converted into `exp - 1`.
+struct ExpM1OpLowering : public ConvertOpToLLVMPattern<math::ExpM1Op> {
+  using ConvertOpToLLVMPattern<math::ExpM1Op>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(math::ExpM1Op op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    math::ExpM1Op::Adaptor transformed(operands);
+    auto operandType = transformed.operand().getType();
+
+    if (!operandType || !LLVM::isCompatibleType(operandType))
+      return failure();
+
+    auto loc = op.getLoc();
+    auto resultType = op.getResult().getType();
+    auto floatType = getElementTypeOrSelf(resultType).cast<FloatType>();
+    auto floatOne = rewriter.getFloatAttr(floatType, 1.0);
+
+    if (!operandType.isa<LLVM::LLVMArrayType>()) {
+      LLVM::ConstantOp one;
+      if (LLVM::isCompatibleVectorType(operandType)) {
+        one = rewriter.create<LLVM::ConstantOp>(
+            loc, operandType,
+            SplatElementsAttr::get(resultType.cast<ShapedType>(), floatOne));
+      } else {
+        one = rewriter.create<LLVM::ConstantOp>(loc, operandType, floatOne);
+      }
+      auto exp = rewriter.create<LLVM::ExpOp>(loc, transformed.operand());
+      rewriter.replaceOpWithNewOp<LLVM::FSubOp>(op, operandType, exp, one);
+      return success();
+    }
+
+    auto vectorType = resultType.dyn_cast<VectorType>();
+    if (!vectorType)
+      return rewriter.notifyMatchFailure(op, "expected vector result type");
+
+    return handleMultidimensionalVectors(
+        op.getOperation(), operands, *getTypeConverter(),
+        [&](Type llvm1DVectorTy, ValueRange operands) {
+          auto splatAttr = SplatElementsAttr::get(
+              mlir::VectorType::get(
+                  {LLVM::getVectorNumElements(llvm1DVectorTy).getFixedValue()},
+                  floatType),
+              floatOne);
+          auto one =
+              rewriter.create<LLVM::ConstantOp>(loc, llvm1DVectorTy, splatAttr);
+          auto exp =
+              rewriter.create<LLVM::ExpOp>(loc, llvm1DVectorTy, operands[0]);
+          return rewriter.create<LLVM::FSubOp>(loc, llvm1DVectorTy, exp, one);
+        },
+        rewriter);
   }
 };
 
@@ -3924,6 +3980,7 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       DivFOpLowering,
       ExpOpLowering,
       Exp2OpLowering,
+      ExpM1OpLowering,
       FloorFOpLowering,
       FmaFOpLowering,
       GenericAtomicRMWOpLowering,

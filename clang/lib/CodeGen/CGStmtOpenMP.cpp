@@ -1006,12 +1006,14 @@ bool CodeGenFunction::EmitOMPCopyinClause(const OMPExecutableDirective &D) {
           // need to copy data.
           CopyBegin = createBasicBlock("copyin.not.master");
           CopyEnd = createBasicBlock("copyin.not.master.end");
+          // TODO: Avoid ptrtoint conversion.
+          auto *MasterAddrInt =
+              Builder.CreatePtrToInt(MasterAddr.getPointer(), CGM.IntPtrTy);
+          auto *PrivateAddrInt =
+              Builder.CreatePtrToInt(PrivateAddr.getPointer(), CGM.IntPtrTy);
           Builder.CreateCondBr(
-              Builder.CreateICmpNE(
-                  Builder.CreatePtrToInt(MasterAddr.getPointer(), CGM.IntPtrTy),
-                  Builder.CreatePtrToInt(PrivateAddr.getPointer(),
-                                         CGM.IntPtrTy)),
-              CopyBegin, CopyEnd);
+              Builder.CreateICmpNE(MasterAddrInt, PrivateAddrInt), CopyBegin,
+              CopyEnd);
           EmitBlock(CopyBegin);
         }
         const auto *SrcVD =
@@ -4293,7 +4295,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
     }
   }
   // Get list of lastprivate variables (for taskloops).
-  llvm::DenseMap<const VarDecl *, const DeclRefExpr *> LastprivateDstsOrigs;
+  llvm::MapVector<const VarDecl *, const DeclRefExpr *> LastprivateDstsOrigs;
   for (const auto *C : S.getClausesOfKind<OMPLastprivateClause>()) {
     auto IRef = C->varlist_begin();
     auto ID = C->destination_exprs().begin();
@@ -4304,8 +4306,8 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
         Data.LastprivateCopies.push_back(IInit);
       }
       LastprivateDstsOrigs.insert(
-          {cast<VarDecl>(cast<DeclRefExpr>(*ID)->getDecl()),
-           cast<DeclRefExpr>(*IRef)});
+          std::make_pair(cast<VarDecl>(cast<DeclRefExpr>(*ID)->getDecl()),
+                         cast<DeclRefExpr>(*IRef)));
       ++IRef;
       ++ID;
     }

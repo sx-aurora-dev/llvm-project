@@ -864,9 +864,6 @@ void TargetPassConfig::addIRPasses() {
   if (getOptLevel() != CodeGenOpt::None && !DisablePartialLibcallInlining)
     addPass(createPartiallyInlineLibCallsPass());
 
-  // Instrument function entry and exit, e.g. with calls to mcount().
-  addPass(createPostInlineEntryExitInstrumenterPass());
-
   // Expand vector predication intrinsics into standard IR instructions.
   // This pass has to run before ScalarizeMaskedMemIntrin and ExpandReduction
   // passes since it emits those kinds of intrinsics.
@@ -1324,6 +1321,10 @@ bool TargetPassConfig::addRegAssignAndRewriteFast() {
     report_fatal_error("Must use fast (default) register allocator for unoptimized regalloc.");
 
   addPass(createRegAllocPass(false));
+
+  // Allow targets to change the register assignments after
+  // fast register allocation.
+  addPostFastRegAllocRewrite();
   return true;
 }
 

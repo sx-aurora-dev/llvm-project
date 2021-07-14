@@ -180,19 +180,17 @@ define fastcc i64 @test_reduce_mul(<256 x i64> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
+; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    vbrd %v0, 1
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
@@ -304,23 +302,20 @@ define fastcc i64 @test_reduce_smin(<256 x i64> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
+; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
-; CHECK-NEXT:    lea %s1, -1
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, 2147483647(, %s1)
+; CHECK-NEXT:    lea %s1, 2147483647
+; CHECK-NEXT:    lea.sl %s1, -1(, %s1)
 ; CHECK-NEXT:    vbrd %v0, %s1
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s1, -128
@@ -421,19 +416,17 @@ define fastcc i64 @test_reduce_umin(<256 x i64> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
+; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    vbrd %v0, -1
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
@@ -522,19 +515,17 @@ define fastcc i64 @test_reduce_umax(<256 x i64> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
+; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    vbrd %v0, 0
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1

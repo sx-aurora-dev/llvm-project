@@ -409,20 +409,16 @@ public:
   EncodeTypeTokens(unsigned VPID, Type *VecRetTy,
                    Type *VecPtrTy, VectorType &VectorTy);
 
-  /// set the mask parameter.
-  /// this asserts if the underlying intrinsic has no mask parameter.
-  void setMaskParam(Value *);
-
-  /// set the vector length parameter.
-  /// this asserts if the underlying intrinsic has no vector length
-  /// parameter.
-  void setVectorLengthParam(Value *);
-
   /// \return the mask parameter or nullptr.
   Value *getMaskParam() const;
+  /// This asserts if the underlying intrinsic has no mask parameter.
+  void setMaskParam(Value *);
 
   /// \return the vector length parameter or nullptr.
   Value *getVectorLengthParam() const;
+  /// This asserts if the underlying intrinsic has no vector length
+  /// parameter.
+  void setVectorLengthParam(Value *);
 
   /// \return whether the vector length param can be ignored.
   bool canIgnoreVectorLengthParam() const;

@@ -191,6 +191,9 @@ public:
                                  AtomicOrdering Ord) const override;
   TargetLoweringBase::AtomicExpansionKind
   shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
+  ISD::NodeType getExtendForAtomicOps() const override {
+    return ISD::ANY_EXTEND;
+  }
 
   const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                                           const MachineBasicBlock *MBB,

@@ -1462,6 +1462,7 @@ bool LLParser::parseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_sret:
     case lltok::kw_swifterror:
     case lltok::kw_swiftself:
+    case lltok::kw_swiftasync:
     case lltok::kw_immarg:
     case lltok::kw_byref:
     case lltok::kw_vlen:
@@ -1804,6 +1805,7 @@ bool LLParser::parseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_signext:         B.addAttribute(Attribute::SExt); break;
     case lltok::kw_swifterror:      B.addAttribute(Attribute::SwiftError); break;
     case lltok::kw_swiftself:       B.addAttribute(Attribute::SwiftSelf); break;
+    case lltok::kw_swiftasync:      B.addAttribute(Attribute::SwiftAsync); break;
     case lltok::kw_vlen:            B.addAttribute(Attribute::VectorLength); break;
     case lltok::kw_writeonly:       B.addAttribute(Attribute::WriteOnly); break;
     case lltok::kw_zeroext:         B.addAttribute(Attribute::ZExt); break;
@@ -1913,6 +1915,7 @@ bool LLParser::parseOptionalReturnAttrs(AttrBuilder &B) {
     case lltok::kw_sret:
     case lltok::kw_swifterror:
     case lltok::kw_swiftself:
+    case lltok::kw_swiftasync:
     case lltok::kw_immarg:
     case lltok::kw_byref:
     case lltok::kw_vlen:
@@ -7587,9 +7590,6 @@ int LLParser::parseCmpXchg(Instruction *&Inst, PerFunctionState &PFS) {
   if (SuccessOrdering == AtomicOrdering::Unordered ||
       FailureOrdering == AtomicOrdering::Unordered)
     return tokError("cmpxchg cannot be unordered");
-  if (isStrongerThan(FailureOrdering, SuccessOrdering))
-    return tokError("cmpxchg failure argument shall be no stronger than the "
-                    "success argument");
   if (FailureOrdering == AtomicOrdering::Release ||
       FailureOrdering == AtomicOrdering::AcquireRelease)
     return tokError(

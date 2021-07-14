@@ -335,6 +335,8 @@ private:
   bool SelectSVEArithImm(SDValue N, MVT VT, SDValue &Imm);
   bool SelectSVERegRegAddrMode(SDValue N, unsigned Scale, SDValue &Base,
                                SDValue &Offset);
+
+  bool SelectAllActivePredicate(SDValue N);
 };
 } // end anonymous namespace
 
@@ -3887,6 +3889,18 @@ void AArch64DAGToDAGISel::Select(SDNode *Node) {
       if (tryMULLV64LaneV128(IntNo, Node))
         return;
       break;
+    case Intrinsic::swift_async_context_addr: {
+      SDLoc DL(Node);
+      CurDAG->SelectNodeTo(Node, AArch64::SUBXri, MVT::i64,
+                           CurDAG->getCopyFromReg(CurDAG->getEntryNode(), DL,
+                                                  AArch64::FP, MVT::i64),
+                           CurDAG->getTargetConstant(8, DL, MVT::i32),
+                           CurDAG->getTargetConstant(0, DL, MVT::i32));
+      auto &MF = CurDAG->getMachineFunction();
+      MF.getFrameInfo().setFrameAddressIsTaken(true);
+      MF.getInfo<AArch64FunctionInfo>()->setHasSwiftAsyncContext(true);
+      return;
+    }
     }
     break;
   }
@@ -4982,4 +4996,11 @@ bool AArch64DAGToDAGISel::SelectSVERegRegAddrMode(SDValue N, unsigned Scale,
     }
 
   return false;
+}
+
+bool AArch64DAGToDAGISel::SelectAllActivePredicate(SDValue N) {
+  const AArch64TargetLowering *TLI =
+      static_cast<const AArch64TargetLowering *>(getTargetLowering());
+
+  return TLI->isAllActivePredicate(N);
 }

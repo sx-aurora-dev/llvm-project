@@ -732,20 +732,6 @@ public:
     return VF;
   }
 
-  bool
-  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
-    return true;
-  }
-
-  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
-    return false;
-  }
-
-  bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
-                             TTI::ReductionFlags Flags) const {
-    return false;
-  }
-
   bool preferInLoopReduction(unsigned Opcode, Type *Ty,
                              TTI::ReductionFlags Flags) const {
     return false;
@@ -763,6 +749,13 @@ public:
   bool supportsScalableVectors() const { return false; }
 
   bool hasActiveVectorLength() const { return false; }
+
+  TargetTransformInfo::VPLegalization
+  getVPLegalizationStrategy(const VPIntrinsic &PI) const {
+    return TargetTransformInfo::VPLegalization(
+        /* EVLParamStrategy */ TargetTransformInfo::VPLegalization::Discard,
+        /* OperatorStrategy */ TargetTransformInfo::VPLegalization::Convert);
+  }
 
 protected:
   // Obtain the minimum required size to hold the value (without the sign)

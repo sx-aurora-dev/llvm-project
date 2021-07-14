@@ -116,6 +116,7 @@ void TargetLoweringBase::ArgListEntry::setAttributes(const CallBase *Call,
   IsInAlloca = Call->paramHasAttr(ArgIdx, Attribute::InAlloca);
   IsReturned = Call->paramHasAttr(ArgIdx, Attribute::Returned);
   IsSwiftSelf = Call->paramHasAttr(ArgIdx, Attribute::SwiftSelf);
+  IsSwiftAsync = Call->paramHasAttr(ArgIdx, Attribute::SwiftAsync);
   IsSwiftError = Call->paramHasAttr(ArgIdx, Attribute::SwiftError);
   Alignment = Call->getParamStackAlign(ArgIdx);
   ByValType = nullptr;
@@ -6644,6 +6645,58 @@ bool TargetLowering::expandROT(SDNode *Node, bool AllowVectorOps,
   }
   Result = DAG.getNode(ISD::OR, DL, VT, ShVal, HsVal);
   return true;
+}
+
+void TargetLowering::expandShiftParts(SDNode *Node, SDValue &Lo, SDValue &Hi,
+                                      SelectionDAG &DAG) const {
+  assert(Node->getNumOperands() == 3 && "Not a double-shift!");
+  EVT VT = Node->getValueType(0);
+  unsigned VTBits = VT.getScalarSizeInBits();
+  assert(isPowerOf2_32(VTBits) && "Power-of-two integer type expected");
+
+  bool IsSHL = Node->getOpcode() == ISD::SHL_PARTS;
+  bool IsSRA = Node->getOpcode() == ISD::SRA_PARTS;
+  SDValue ShOpLo = Node->getOperand(0);
+  SDValue ShOpHi = Node->getOperand(1);
+  SDValue ShAmt = Node->getOperand(2);
+  EVT ShAmtVT = ShAmt.getValueType();
+  EVT ShAmtCCVT =
+      getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), ShAmtVT);
+  SDLoc dl(Node);
+
+  // ISD::FSHL and ISD::FSHR have defined overflow behavior but ISD::SHL and
+  // ISD::SRA/L nodes haven't. Insert an AND to be safe, it's usually optimized
+  // away during isel.
+  SDValue SafeShAmt = DAG.getNode(ISD::AND, dl, ShAmtVT, ShAmt,
+                                  DAG.getConstant(VTBits - 1, dl, ShAmtVT));
+  SDValue Tmp1 = IsSRA ? DAG.getNode(ISD::SRA, dl, VT, ShOpHi,
+                                     DAG.getConstant(VTBits - 1, dl, ShAmtVT))
+                       : DAG.getConstant(0, dl, VT);
+
+  SDValue Tmp2, Tmp3;
+  if (IsSHL) {
+    Tmp2 = DAG.getNode(ISD::FSHL, dl, VT, ShOpHi, ShOpLo, ShAmt);
+    Tmp3 = DAG.getNode(ISD::SHL, dl, VT, ShOpLo, SafeShAmt);
+  } else {
+    Tmp2 = DAG.getNode(ISD::FSHR, dl, VT, ShOpHi, ShOpLo, ShAmt);
+    Tmp3 = DAG.getNode(IsSRA ? ISD::SRA : ISD::SRL, dl, VT, ShOpHi, SafeShAmt);
+  }
+
+  // If the shift amount is larger or equal than the width of a part we don't
+  // use the result from the FSHL/FSHR. Insert a test and select the appropriate
+  // values for large shift amounts.
+  SDValue AndNode = DAG.getNode(ISD::AND, dl, ShAmtVT, ShAmt,
+                                DAG.getConstant(VTBits, dl, ShAmtVT));
+  SDValue Cond = DAG.getSetCC(dl, ShAmtCCVT, AndNode,
+                              DAG.getConstant(0, dl, ShAmtVT), ISD::SETNE);
+
+  if (IsSHL) {
+    Hi = DAG.getNode(ISD::SELECT, dl, VT, Cond, Tmp3, Tmp2);
+    Lo = DAG.getNode(ISD::SELECT, dl, VT, Cond, Tmp1, Tmp3);
+  } else {
+    Lo = DAG.getNode(ISD::SELECT, dl, VT, Cond, Tmp3, Tmp2);
+    Hi = DAG.getNode(ISD::SELECT, dl, VT, Cond, Tmp1, Tmp3);
+  }
 }
 
 bool TargetLowering::expandFP_TO_SINT(SDNode *Node, SDValue &Result,

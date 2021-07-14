@@ -21,7 +21,6 @@
 ; CHECK-NEXT:       Shadow Stack GC Lowering
 ; CHECK-NEXT:       Lower constant intrinsics
 ; CHECK-NEXT:       Remove unreachable blocks from the CFG
-; CHECK-NEXT:       Instrument function entry/exit with calls to e.g. mcount() (post inlining)
 ; CHECK-NEXT:       Expand vector predication intrinsics
 ; CHECK-NEXT:       Scalarize Masked Memory Intrinsics
 ; CHECK-NEXT:       Expand reduction intrinsics
@@ -35,8 +34,8 @@
 ; CHECK-NEXT:       Analysis containing CSE Info
 ; CHECK-NEXT:       IRTranslator
 ; CHECK-NEXT:       Analysis for ComputingKnownBits
+; CHECK-NEXT:       AArch64O0PreLegalizerCombiner
 ; CHECK-NEXT:       Analysis containing CSE Info
-; CHECK-NEXT:       AArch64PreLegalizerCombiner
 ; CHECK-NEXT:       Legalizer
 ; CHECK-NEXT:       AArch64PostLegalizerLowering
 ; CHECK-NEXT:       RegBankSelect
