@@ -43,8 +43,8 @@ static Register extendRegisterMin32(CallLowering::ValueHandler &Handler,
 
 struct AMDGPUOutgoingValueHandler : public CallLowering::OutgoingValueHandler {
   AMDGPUOutgoingValueHandler(MachineIRBuilder &B, MachineRegisterInfo &MRI,
-                             MachineInstrBuilder MIB, CCAssignFn *AssignFn)
-      : OutgoingValueHandler(B, MRI, AssignFn), MIB(MIB) {}
+                             MachineInstrBuilder MIB)
+      : OutgoingValueHandler(B, MRI), MIB(MIB) {}
 
   MachineInstrBuilder MIB;
 
@@ -83,9 +83,8 @@ struct AMDGPUOutgoingValueHandler : public CallLowering::OutgoingValueHandler {
 struct AMDGPUIncomingArgHandler : public CallLowering::IncomingValueHandler {
   uint64_t StackUsed = 0;
 
-  AMDGPUIncomingArgHandler(MachineIRBuilder &B, MachineRegisterInfo &MRI,
-                           CCAssignFn *AssignFn)
-      : IncomingValueHandler(B, MRI, AssignFn) {}
+  AMDGPUIncomingArgHandler(MachineIRBuilder &B, MachineRegisterInfo &MRI)
+      : IncomingValueHandler(B, MRI) {}
 
   Register getStackAddress(uint64_t Size, int64_t Offset,
                            MachinePointerInfo &MPO,
@@ -145,9 +144,8 @@ struct AMDGPUIncomingArgHandler : public CallLowering::IncomingValueHandler {
 };
 
 struct FormalArgHandler : public AMDGPUIncomingArgHandler {
-  FormalArgHandler(MachineIRBuilder &B, MachineRegisterInfo &MRI,
-                   CCAssignFn *AssignFn)
-      : AMDGPUIncomingArgHandler(B, MRI, AssignFn) {}
+  FormalArgHandler(MachineIRBuilder &B, MachineRegisterInfo &MRI)
+      : AMDGPUIncomingArgHandler(B, MRI) {}
 
   void markPhysRegUsed(unsigned PhysReg) override {
     MIRBuilder.getMBB().addLiveIn(PhysReg);
@@ -156,8 +154,8 @@ struct FormalArgHandler : public AMDGPUIncomingArgHandler {
 
 struct CallReturnHandler : public AMDGPUIncomingArgHandler {
   CallReturnHandler(MachineIRBuilder &MIRBuilder, MachineRegisterInfo &MRI,
-                    MachineInstrBuilder MIB, CCAssignFn *AssignFn)
-      : AMDGPUIncomingArgHandler(MIRBuilder, MRI, AssignFn), MIB(MIB) {}
+                    MachineInstrBuilder MIB)
+      : AMDGPUIncomingArgHandler(MIRBuilder, MRI), MIB(MIB) {}
 
   void markPhysRegUsed(unsigned PhysReg) override {
     MIB.addDef(PhysReg, RegState::Implicit);
@@ -167,8 +165,6 @@ struct CallReturnHandler : public AMDGPUIncomingArgHandler {
 };
 
 struct AMDGPUOutgoingArgHandler : public AMDGPUOutgoingValueHandler {
-  CCAssignFn *AssignFnVarArg;
-
   /// For tail calls, the byte offset of the call's argument area from the
   /// callee's. Unused elsewhere.
   int FPDiff;
@@ -180,11 +176,9 @@ struct AMDGPUOutgoingArgHandler : public AMDGPUOutgoingValueHandler {
 
   AMDGPUOutgoingArgHandler(MachineIRBuilder &MIRBuilder,
                            MachineRegisterInfo &MRI, MachineInstrBuilder MIB,
-                           CCAssignFn *AssignFn, CCAssignFn *AssignFnVarArg,
                            bool IsTailCall = false, int FPDiff = 0)
-      : AMDGPUOutgoingValueHandler(MIRBuilder, MRI, MIB, AssignFn),
-        AssignFnVarArg(AssignFnVarArg), FPDiff(FPDiff), IsTailCall(IsTailCall) {
-  }
+      : AMDGPUOutgoingValueHandler(MIRBuilder, MRI, MIB), FPDiff(FPDiff),
+        IsTailCall(IsTailCall) {}
 
   Register getStackAddress(uint64_t Size, int64_t Offset,
                            MachinePointerInfo &MPO,
@@ -343,8 +337,11 @@ bool AMDGPUCallLowering::lowerReturnVal(MachineIRBuilder &B,
   }
 
   CCAssignFn *AssignFn = TLI.CCAssignFnForReturn(CC, F.isVarArg());
-  AMDGPUOutgoingValueHandler RetHandler(B, *MRI, Ret, AssignFn);
-  return handleAssignments(B, SplitRetInfos, RetHandler, CC, F.isVarArg());
+
+  OutgoingValueAssigner Assigner(AssignFn);
+  AMDGPUOutgoingValueHandler RetHandler(B, *MRI, Ret);
+  return determineAndHandleAssignments(RetHandler, Assigner, SplitRetInfos, B,
+                                       CC, F.isVarArg());
 }
 
 bool AMDGPUCallLowering::lowerReturn(MachineIRBuilder &B, const Value *Val,
@@ -713,11 +710,13 @@ bool AMDGPUCallLowering::lowerFormalArguments(
       TLI.allocateSpecialInputVGPRsFixed(CCInfo, MF, *TRI, *Info);
   }
 
-  FormalArgHandler Handler(B, MRI, AssignFn);
-  if (!handleAssignments(CCInfo, ArgLocs, B, SplitArgs, Handler))
+  IncomingValueAssigner Assigner(AssignFn);
+  if (!determineAssignments(Assigner, SplitArgs, CCInfo))
     return false;
 
-  uint64_t StackOffset = Assigner.StackOffset;
+  FormalArgHandler Handler(B, MRI);
+  if (!handleAssignments(Handler, SplitArgs, CCInfo, ArgLocs, B))
+    return false;
 
   uint64_t StackOffset = Assigner.StackOffset;
 
@@ -1175,7 +1174,8 @@ bool AMDGPUCallLowering::lowerTailCall(
     // particular across call boundaries. Therefore our own arguments started at
     // a 16-byte aligned SP and the delta applied for the tail call should
     // satisfy the same constraint.
-    assert(FPDiff % 16 == 0 && "unaligned stack on tail call");
+    assert(isAligned(ST.getStackAlignment(), FPDiff) &&
+           "unaligned stack on tail call");
   }
 
   SmallVector<CCValAssign, 16> ArgLocs;
@@ -1327,9 +1327,13 @@ bool AMDGPUCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
 
   // Do the actual argument marshalling.
   SmallVector<Register, 8> PhysRegs;
-  AMDGPUOutgoingArgHandler Handler(MIRBuilder, MRI, MIB, AssignFnFixed,
-                                   AssignFnVarArg, false);
-  if (!handleAssignments(CCInfo, ArgLocs, MIRBuilder, OutArgs, Handler))
+
+  OutgoingValueAssigner Assigner(AssignFnFixed, AssignFnVarArg);
+  if (!determineAssignments(Assigner, OutArgs, CCInfo))
+    return false;
+
+  AMDGPUOutgoingArgHandler Handler(MIRBuilder, MRI, MIB, false);
+  if (!handleAssignments(Handler, OutArgs, CCInfo, ArgLocs, MIRBuilder))
     return false;
 
   const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
@@ -1361,9 +1365,10 @@ bool AMDGPUCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   if (Info.CanLowerReturn && !Info.OrigRet.Ty->isVoidTy()) {
     CCAssignFn *RetAssignFn = TLI.CCAssignFnForReturn(Info.CallConv,
                                                       Info.IsVarArg);
-    CallReturnHandler Handler(MIRBuilder, MRI, MIB, RetAssignFn);
-    if (!handleAssignments(MIRBuilder, InArgs, Handler, Info.CallConv,
-                           Info.IsVarArg))
+    OutgoingValueAssigner Assigner(RetAssignFn);
+    CallReturnHandler Handler(MIRBuilder, MRI, MIB);
+    if (!determineAndHandleAssignments(Handler, Assigner, InArgs, MIRBuilder,
+                                       Info.CallConv, Info.IsVarArg))
       return false;
   }
 

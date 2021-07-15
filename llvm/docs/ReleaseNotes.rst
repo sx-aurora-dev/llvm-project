@@ -61,8 +61,15 @@ Changes to the LLVM IR
 * The ``inalloca`` attribute now has a mandatory type field, similar
   to ``byval`` and ``sret``.
 
+* The opaque pointer type ``ptr`` has been introduced. It is still in the
+  process of being worked on and should not be used yet.
+
 Changes to building LLVM
 ------------------------
+
+* The build system now supports building multiple distributions, so that you can
+  e.g. have one distribution containing just tools and another for libraries (to
+  enable development). See :ref:`Multi-distribution configurations` for details.
 
 Changes to TableGen
 -------------------
@@ -77,6 +84,10 @@ Changes to the MIPS Target
 
 During this release ...
 
+Changes to the Hexagon Target
+-----------------------------
+
+* The Hexagon target now supports V68/HVX ISA.
 
 Changes to the PowerPC Target
 -----------------------------

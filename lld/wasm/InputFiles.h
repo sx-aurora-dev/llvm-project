@@ -122,7 +122,6 @@ public:
   uint64_t calcNewValue(const WasmRelocation &reloc, uint64_t tombstone,
                         const InputChunk *chunk) const;
   uint64_t calcNewAddend(const WasmRelocation &reloc) const;
-  uint64_t calcExpectedValue(const WasmRelocation &reloc) const;
   Symbol *getSymbol(const WasmRelocation &reloc) const {
     return symbols[reloc.Index];
   };
@@ -137,7 +136,7 @@ public:
   std::vector<uint32_t> tableEntries;
   std::vector<uint32_t> tableEntriesRel;
   std::vector<bool> keptComdats;
-  std::vector<InputSegment *> segments;
+  std::vector<InputChunk *> segments;
   std::vector<InputFunction *> functions;
   std::vector<InputGlobal *> globals;
   std::vector<InputEvent *> events;

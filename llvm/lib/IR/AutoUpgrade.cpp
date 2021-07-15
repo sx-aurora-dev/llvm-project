@@ -553,6 +553,11 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
                                         F->arg_begin()->getType());
       return true;
     }
+    if (Name.startswith("aarch64.neon.rbit")) {
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::bitreverse,
+                                        F->arg_begin()->getType());
+      return true;
+    }
     if (Name.startswith("arm.neon.vclz")) {
       Type* args[2] = {
         F->arg_begin()->getType(),
@@ -4371,6 +4376,12 @@ void llvm::UpgradeFunctionAttributes(Function &F) {
     Attribute NewAttr = Attribute::getWithByValType(F.getContext(), ByValTy);
     F.addParamAttr(0, NewAttr);
   }
+
+  // If function has void return type, check it has align attribute. It has no
+  // affect on the return type and no longer passes the verifier.
+  if (F.getReturnType()->isVoidTy() &&
+      F.hasAttribute(AttributeList::ReturnIndex, Attribute::Alignment))
+    F.removeAttribute(AttributeList::ReturnIndex, Attribute::Alignment);
 }
 
 static bool isOldLoopArgument(Metadata *MD) {

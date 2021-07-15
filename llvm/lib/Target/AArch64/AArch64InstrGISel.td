@@ -132,28 +132,33 @@ def G_TRN2 : AArch64GenericInstruction {
 def G_EXT: AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$v1, type0:$v2, untyped_imm_0:$imm);
+  let hasSideEffects = 0;
 }
 
 // Represents a vector G_ASHR with an immediate.
 def G_VASHR : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src1, untyped_imm_0:$imm);
+  let hasSideEffects = 0;
 }
 
 // Represents a vector G_LSHR with an immediate.
 def G_VLSHR : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src1, untyped_imm_0:$imm);
+  let hasSideEffects = 0;
 }
 
 // Represents an integer to FP conversion on the FPR bank.
 def G_SITOF : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src);
+  let hasSideEffects = 0;
 }
 def G_UITOF : AArch64GenericInstruction {
   let OutOperandList = (outs type0:$dst);
   let InOperandList = (ins type0:$src);
+  let hasSideEffects = 0;
 }
 
 def G_FCMEQ : AArch64GenericInstruction {
@@ -275,3 +280,8 @@ def : Pat<(atomic_cmp_swap_32 GPR64:$addr, GPR32:$desired, GPR32:$new),
 def : Pat<(atomic_cmp_swap_64 GPR64:$addr, GPR64:$desired, GPR64:$new),
           (CMP_SWAP_64 GPR64:$addr, GPR64:$desired, GPR64:$new)>;
 }
+
+def : Pat<(int_aarch64_stlxp GPR64:$lo, GPR64:$hi, GPR64:$addr),
+          (STLXPX GPR64:$lo, GPR64:$hi, GPR64:$addr)>;
+def : Pat<(int_aarch64_stxp GPR64:$lo, GPR64:$hi, GPR64:$addr),
+          (STXPX GPR64:$lo, GPR64:$hi, GPR64:$addr)>;

@@ -460,10 +460,8 @@ void Writer::populateTargetFeatures() {
     }
 
     // Find TLS data segments
-    auto isTLS = [](InputSegment *segment) {
-      StringRef name = segment->getName();
-      return segment->live &&
-             (name.startswith(".tdata") || name.startswith(".tbss"));
+    auto isTLS = [](InputChunk *segment) {
+      return segment->live && segment->isTLS();
     };
     tlsUsed = tlsUsed ||
               std::any_of(file->segments.begin(), file->segments.end(), isTLS);
@@ -818,12 +816,12 @@ void Writer::assignIndexes() {
   out.tableSec->assignIndexes();
 }
 
-static StringRef getOutputDataSegmentName(StringRef name) {
-  // We only support one thread-local segment, so we must merge the segments
-  // despite --no-merge-data-segments.
-  // We also need to merge .tbss into .tdata so they share the same offsets.
-  if (name.startswith(".tdata") || name.startswith(".tbss"))
+static StringRef getOutputDataSegmentName(const InputChunk &seg) {
+  // We always merge .tbss and .tdata into a single TLS segment so all TLS
+  // symbols are be relative to single __tls_base.
+  if (seg.isTLS())
     return ".tdata";
+  StringRef name = seg.getName();
   if (!config->mergeDataSegments)
     return name;
   if (name.startswith(".text."))
@@ -854,10 +852,10 @@ OutputSegment *Writer::createOutputSegment(StringRef name) {
 
 void Writer::createOutputSegments() {
   for (ObjFile *file : symtab->objectFiles) {
-    for (InputSegment *segment : file->segments) {
+    for (InputChunk *segment : file->segments) {
       if (!segment->live)
         continue;
-      StringRef name = getOutputDataSegmentName(segment->getName());
+      StringRef name = getOutputDataSegmentName(*segment);
       OutputSegment *s = nullptr;
       // When running in relocatable mode we can't merge segments that are part
       // of comdat groups since the ultimate linker needs to be able exclude or
@@ -921,7 +919,7 @@ void Writer::combineOutputSegments() {
           combined->initFlags = WASM_DATA_SEGMENT_IS_PASSIVE;
       }
       bool first = true;
-      for (InputSegment *inSeg : s->inputSegments) {
+      for (InputChunk *inSeg : s->inputSegments) {
         if (first)
           inSeg->alignment = std::max(inSeg->alignment, s->alignment);
         first = false;
@@ -1203,7 +1201,7 @@ void Writer::createApplyDataRelocationsFunction() {
     raw_string_ostream os(bodyContent);
     writeUleb128(os, 0, "num locals");
     for (const OutputSegment *seg : segments)
-      for (const InputSegment *inSeg : seg->inputSegments)
+      for (const InputChunk *inSeg : seg->inputSegments)
         inSeg->generateRelocationCode(os);
 
     writeU8(os, WASM_OPCODE_END, "END");

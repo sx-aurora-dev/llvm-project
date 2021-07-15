@@ -2133,6 +2133,7 @@ void LLParser::parseOptionalDLLStorageClass(unsigned &Res) {
 ///   ::= 'preserve_allcc'
 ///   ::= 'ghccc'
 ///   ::= 'swiftcc'
+///   ::= 'swifttailcc'
 ///   ::= 'x86_intrcc'
 ///   ::= 'hhvmcc'
 ///   ::= 'hhvm_ccc'
@@ -2183,6 +2184,7 @@ bool LLParser::parseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_preserve_allcc: CC = CallingConv::PreserveAll; break;
   case lltok::kw_ghccc:          CC = CallingConv::GHC; break;
   case lltok::kw_swiftcc:        CC = CallingConv::Swift; break;
+  case lltok::kw_swifttailcc:    CC = CallingConv::SwiftTail; break;
   case lltok::kw_x86_intrcc:     CC = CallingConv::X86_INTR; break;
   case lltok::kw_hhvmcc:         CC = CallingConv::HHVM; break;
   case lltok::kw_hhvm_ccc:       CC = CallingConv::HHVM_C; break;
@@ -2605,6 +2607,13 @@ bool LLParser::parseType(Type *&Result, const Twine &Msg, bool AllowVoid) {
     Lex.Lex();
     break;
   }
+  }
+
+  if (Result->isPointerTy() && cast<PointerType>(Result)->isOpaque()) {
+    unsigned AddrSpace;
+    if (parseOptionalAddrSpace(AddrSpace))
+      return true;
+    Result = PointerType::get(getContext(), AddrSpace);
   }
 
   // parse the type suffixes.
@@ -3477,18 +3486,19 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS) {
   case lltok::kw_asm: {
     // ValID ::= 'asm' SideEffect? AlignStack? IntelDialect? STRINGCONSTANT ','
     //             STRINGCONSTANT
-    bool HasSideEffect, AlignStack, AsmDialect;
+    bool HasSideEffect, AlignStack, AsmDialect, CanThrow;
     Lex.Lex();
     if (parseOptionalToken(lltok::kw_sideeffect, HasSideEffect) ||
         parseOptionalToken(lltok::kw_alignstack, AlignStack) ||
         parseOptionalToken(lltok::kw_inteldialect, AsmDialect) ||
+        parseOptionalToken(lltok::kw_unwind, CanThrow) ||
         parseStringConstant(ID.StrVal) ||
         parseToken(lltok::comma, "expected comma in inline asm expression") ||
         parseToken(lltok::StringConstant, "expected constraint string"))
       return true;
     ID.StrVal2 = Lex.getStrVal();
-    ID.UIntVal = unsigned(HasSideEffect) | (unsigned(AlignStack)<<1) |
-      (unsigned(AsmDialect)<<2);
+    ID.UIntVal = unsigned(HasSideEffect) | (unsigned(AlignStack) << 1) |
+                 (unsigned(AsmDialect) << 2) | (unsigned(CanThrow) << 3);
     ID.Kind = ValID::t_InlineAsm;
     return false;
   }
@@ -5588,9 +5598,9 @@ bool LLParser::convertValIDToValue(Type *Ty, ValID &ID, Value *&V,
   case ValID::t_InlineAsm: {
     if (!ID.FTy || !InlineAsm::Verify(ID.FTy, ID.StrVal2))
       return error(ID.Loc, "invalid type for inline asm constraint string");
-    V = InlineAsm::get(ID.FTy, ID.StrVal, ID.StrVal2, ID.UIntVal & 1,
-                       (ID.UIntVal >> 1) & 1,
-                       (InlineAsm::AsmDialect(ID.UIntVal >> 2)));
+    V = InlineAsm::get(
+        ID.FTy, ID.StrVal, ID.StrVal2, ID.UIntVal & 1, (ID.UIntVal >> 1) & 1,
+        InlineAsm::AsmDialect((ID.UIntVal >> 2) & 1), (ID.UIntVal >> 3) & 1);
     return false;
   }
   case ValID::t_GlobalName:
