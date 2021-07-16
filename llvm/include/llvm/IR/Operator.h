@@ -385,8 +385,10 @@ public:
 
     // Judge based on function.
     auto *VPIntrin = dyn_cast<VPIntrinsic>(V);
-    if (VPIntrin)
-      Opcode = VPIntrin->getFunctionalOpcode();
+    if (VPIntrin) {
+      auto OCOpt = VPIntrin->getFunctionalOpcode();
+      Opcode = OCOpt ? *OCOpt : (unsigned) Instruction::Call;
+    }
 
     switch (Opcode) {
     case Instruction::FNeg:

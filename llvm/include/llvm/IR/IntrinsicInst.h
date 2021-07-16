@@ -507,15 +507,12 @@ public:
   static Intrinsic::ID GetFunctionalIntrinsicForVP(Intrinsic::ID VPID);
 
   // Equivalent non-predicated opcode
-  unsigned getFunctionalOpcode() const {
-    if (isConstrainedOp()) {
-      return Instruction::Call;
-    }
+  Optional<unsigned> getFunctionalOpcode() const {
     return GetFunctionalOpcodeForVP(getIntrinsicID());
   }
 
   // Equivalent non-predicated opcode
-  static unsigned GetFunctionalOpcodeForVP(Intrinsic::ID ID);
+  static Optional<unsigned> GetFunctionalOpcodeForVP(Intrinsic::ID ID);
 };
 
 

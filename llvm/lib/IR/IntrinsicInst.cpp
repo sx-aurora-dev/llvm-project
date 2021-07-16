@@ -347,8 +347,8 @@ Intrinsic::ID VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
 }
 
 // Equivalent non-predicated opcode
-unsigned VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
-  unsigned FunctionalOC = Instruction::Call;
+Optional<unsigned> VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
+  Optional<unsigned> FunctionalOC;
   switch (ID) {
   default:
     break;
