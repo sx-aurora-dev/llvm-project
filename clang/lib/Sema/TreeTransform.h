@@ -2399,6 +2399,19 @@ public:
     return SEHFinallyStmt::Create(getSema().getASTContext(), Loc, Block);
   }
 
+  ExprResult RebuildSYCLUniqueStableNameExpr(SourceLocation OpLoc,
+                                             SourceLocation LParen,
+                                             SourceLocation RParen, Expr *E) {
+    return getSema().BuildSYCLUniqueStableNameExpr(OpLoc, LParen, RParen, E);
+  }
+
+  ExprResult RebuildSYCLUniqueStableNameExpr(SourceLocation OpLoc,
+                                             SourceLocation LParen,
+                                             SourceLocation RParen,
+                                             TypeSourceInfo *TSI) {
+    return getSema().BuildSYCLUniqueStableNameExpr(OpLoc, LParen, RParen, TSI);
+  }
+
   /// Build a new predefined expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -4031,12 +4044,10 @@ Sema::ConditionResult TreeTransform<Derived>::TransformCondition(
   return Sema::ConditionResult();
 }
 
-template<typename Derived>
-NestedNameSpecifierLoc
-TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
-                                                    NestedNameSpecifierLoc NNS,
-                                                     QualType ObjectType,
-                                             NamedDecl *FirstQualifierInScope) {
+template <typename Derived>
+NestedNameSpecifierLoc TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
+    NestedNameSpecifierLoc NNS, QualType ObjectType,
+    NamedDecl *FirstQualifierInScope) {
   SmallVector<NestedNameSpecifierLoc, 4> Qualifiers;
   for (NestedNameSpecifierLoc Qualifier = NNS; Qualifier;
        Qualifier = Qualifier.getPrefix())
@@ -4050,28 +4061,26 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
     switch (QNNS->getKind()) {
     case NestedNameSpecifier::Identifier: {
       Sema::NestedNameSpecInfo IdInfo(QNNS->getAsIdentifier(),
-                          Q.getLocalBeginLoc(), Q.getLocalEndLoc(), ObjectType);
+                                      Q.getLocalBeginLoc(), Q.getLocalEndLoc(),
+                                      ObjectType);
       if (SemaRef.BuildCXXNestedNameSpecifier(/*Scope=*/nullptr, IdInfo, false,
                                               SS, FirstQualifierInScope, false))
         return NestedNameSpecifierLoc();
-    }
       break;
+    }
 
     case NestedNameSpecifier::Namespace: {
-      NamespaceDecl *NS
-        = cast_or_null<NamespaceDecl>(
-                                    getDerived().TransformDecl(
-                                                          Q.getLocalBeginLoc(),
-                                                       QNNS->getAsNamespace()));
+      NamespaceDecl *NS =
+          cast_or_null<NamespaceDecl>(getDerived().TransformDecl(
+              Q.getLocalBeginLoc(), QNNS->getAsNamespace()));
       SS.Extend(SemaRef.Context, NS, Q.getLocalBeginLoc(), Q.getLocalEndLoc());
       break;
     }
 
     case NestedNameSpecifier::NamespaceAlias: {
-      NamespaceAliasDecl *Alias
-        = cast_or_null<NamespaceAliasDecl>(
-                      getDerived().TransformDecl(Q.getLocalBeginLoc(),
-                                                 QNNS->getAsNamespaceAlias()));
+      NamespaceAliasDecl *Alias =
+          cast_or_null<NamespaceAliasDecl>(getDerived().TransformDecl(
+              Q.getLocalBeginLoc(), QNNS->getAsNamespaceAlias()));
       SS.Extend(SemaRef.Context, Alias, Q.getLocalBeginLoc(),
                 Q.getLocalEndLoc());
       break;
@@ -4107,7 +4116,7 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
         if (TL.getType()->isEnumeralType())
           SemaRef.Diag(TL.getBeginLoc(),
                        diag::warn_cxx98_compat_enum_nested_name_spec);
-        SS.Extend(SemaRef.Context, /*FIXME:*/SourceLocation(), TL,
+        SS.Extend(SemaRef.Context, /*FIXME:*/ SourceLocation(), TL,
                   Q.getLocalEndLoc());
         break;
       }
@@ -4116,7 +4125,7 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
       TypedefTypeLoc TTL = TL.getAs<TypedefTypeLoc>();
       if (!TTL || !TTL.getTypedefNameDecl()->isInvalidDecl()) {
         SemaRef.Diag(TL.getBeginLoc(), diag::err_nested_name_spec_non_tag)
-          << TL.getType() << SS.getRange();
+            << TL.getType() << SS.getRange();
       }
       return NestedNameSpecifierLoc();
     }
@@ -10174,6 +10183,24 @@ template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformConstantExpr(ConstantExpr *E) {
   return TransformExpr(E->getSubExpr());
+}
+
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformSYCLUniqueStableNameExpr(
+    SYCLUniqueStableNameExpr *E) {
+  if (!E->isTypeDependent())
+    return E;
+
+  TypeSourceInfo *NewT = getDerived().TransformType(E->getTypeSourceInfo());
+
+  if (!NewT)
+    return ExprError();
+
+  if (!getDerived().AlwaysRebuild() && E->getTypeSourceInfo() == NewT)
+    return E;
+
+  return getDerived().RebuildSYCLUniqueStableNameExpr(
+      E->getLocation(), E->getLParenLocation(), E->getRParenLocation(), NewT);
 }
 
 template<typename Derived>

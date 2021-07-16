@@ -2388,15 +2388,15 @@ void Clang::DumpCompilationDatabaseFragmentToDir(
   DumpCompilationDatabase(C, "", Target, Output, Input, Args);
 }
 
-static bool AddARMImplicitITArgs(const ArgList &Args, ArgStringList &CmdArgs,
+static bool CheckARMImplicitITArg(StringRef Value) {
+  return Value == "always" || Value == "never" || Value == "arm" ||
+         Value == "thumb";
+}
+
+static void AddARMImplicitITArgs(const ArgList &Args, ArgStringList &CmdArgs,
                                  StringRef Value) {
-  if (Value == "always" || Value == "never" || Value == "arm" ||
-      Value == "thumb") {
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back(Args.MakeArgString("-arm-implicit-it=" + Value));
-    return true;
-  }
-  return false;
+  CmdArgs.push_back("-mllvm");
+  CmdArgs.push_back(Args.MakeArgString("-arm-implicit-it=" + Value));
 }
 
 static void CollectArgsForIntegratedAssembler(Compilation &C,
@@ -2428,9 +2428,28 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
   bool UseRelaxRelocations = C.getDefaultToolChain().useRelaxRelocations();
   bool UseNoExecStack = C.getDefaultToolChain().isNoExecStackDefault();
   const char *MipsTargetFeature = nullptr;
+  StringRef ImplicitIt;
   for (const Arg *A :
-       Args.filtered(options::OPT_Wa_COMMA, options::OPT_Xassembler)) {
+       Args.filtered(options::OPT_Wa_COMMA, options::OPT_Xassembler,
+                     options::OPT_mimplicit_it_EQ)) {
     A->claim();
+
+    if (A->getOption().getID() == options::OPT_mimplicit_it_EQ) {
+      switch (C.getDefaultToolChain().getArch()) {
+      case llvm::Triple::arm:
+      case llvm::Triple::armeb:
+      case llvm::Triple::thumb:
+      case llvm::Triple::thumbeb:
+        // Only store the value; the last value set takes effect.
+        ImplicitIt = A->getValue();
+        if (!CheckARMImplicitITArg(ImplicitIt))
+          D.Diag(diag::err_drv_unsupported_option_argument)
+              << A->getOption().getName() << ImplicitIt;
+        continue;
+      default:
+        break;
+      }
+    }
 
     for (StringRef Value : A->getValues()) {
       if (TakeNextArg) {
@@ -2450,9 +2469,12 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
       case llvm::Triple::thumbeb:
       case llvm::Triple::arm:
       case llvm::Triple::armeb:
-        if (Value.startswith("-mimplicit-it=") &&
-            AddARMImplicitITArgs(Args, CmdArgs, Value.split("=").second))
-          continue;
+        if (Value.startswith("-mimplicit-it=")) {
+          // Only store the value; the last value set takes effect.
+          ImplicitIt = Value.split("=").second;
+          if (CheckARMImplicitITArg(ImplicitIt))
+            continue;
+        }
         if (Value == "-mthumb")
           // -mthumb has already been processed in ComputeLLVMTriple()
           // recognize but skip over here.
@@ -2582,6 +2604,8 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
       }
     }
   }
+  if (ImplicitIt.size())
+    AddARMImplicitITArgs(Args, CmdArgs, ImplicitIt);
   if (UseRelaxRelocations)
     CmdArgs.push_back("--mrelax-relocations");
   if (UseNoExecStack)
@@ -4198,6 +4222,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   bool IsHIPDevice = JA.isDeviceOffloading(Action::OFK_HIP);
   bool IsOpenMPDevice = JA.isDeviceOffloading(Action::OFK_OpenMP);
   bool IsHeaderModulePrecompile = isa<HeaderModulePrecompileJobAction>(JA);
+  bool IsDeviceOffloadAction = !(JA.isDeviceOffloading(Action::OFK_None) ||
+                                 JA.isDeviceOffloading(Action::OFK_Host));
+  bool IsUsingLTO = D.isUsingLTO(IsDeviceOffloadAction);
+  auto LTOMode = D.getLTOMode(IsDeviceOffloadAction);
 
   // A header module compilation doesn't have a main input file, so invent a
   // fake one as a placeholder.
@@ -4359,6 +4387,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.ClaimAllArgs(options::OPT_mno_relax_all);
       Args.ClaimAllArgs(options::OPT_mincremental_linker_compatible);
       Args.ClaimAllArgs(options::OPT_mno_incremental_linker_compatible);
+      switch (C.getDefaultToolChain().getArch()) {
+      case llvm::Triple::arm:
+      case llvm::Triple::armeb:
+      case llvm::Triple::thumb:
+      case llvm::Triple::thumbeb:
+        Args.ClaimAllArgs(options::OPT_mimplicit_it_EQ);
+        break;
+      default:
+        break;
+      }
     }
     Args.ClaimAllArgs(options::OPT_Wa_COMMA);
     Args.ClaimAllArgs(options::OPT_Xassembler);
@@ -4445,13 +4483,30 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (JA.getType() == types::TY_LLVM_BC)
       CmdArgs.push_back("-emit-llvm-uselists");
 
-    // Device-side jobs do not support LTO.
-    bool isDeviceOffloadAction = !(JA.isDeviceOffloading(Action::OFK_None) ||
-                                   JA.isDeviceOffloading(Action::OFK_Host));
-
-    if (D.isUsingLTO() && !isDeviceOffloadAction) {
-      Args.AddLastArg(CmdArgs, options::OPT_flto, options::OPT_flto_EQ);
-      CmdArgs.push_back("-flto-unit");
+    if (IsUsingLTO) {
+      if (!IsDeviceOffloadAction) {
+        if (Args.hasArg(options::OPT_flto))
+          CmdArgs.push_back("-flto");
+        else {
+          if (D.getLTOMode() == LTOK_Thin)
+            CmdArgs.push_back("-flto=thin");
+          else
+            CmdArgs.push_back("-flto=full");
+        }
+        CmdArgs.push_back("-flto-unit");
+      } else if (Triple.isAMDGPU()) {
+        // Only AMDGPU supports device-side LTO
+        assert(LTOMode == LTOK_Full || LTOMode == LTOK_Thin);
+        CmdArgs.push_back(Args.MakeArgString(
+            Twine("-flto=") + (LTOMode == LTOK_Thin ? "thin" : "full")));
+        CmdArgs.push_back("-flto-unit");
+      } else {
+        D.Diag(diag::err_drv_unsupported_opt_for_target)
+            << Args.getLastArg(options::OPT_foffload_lto,
+                               options::OPT_foffload_lto_EQ)
+                   ->getAsString(Args)
+            << Triple.getTriple();
+      }
     }
   }
 
@@ -4476,7 +4531,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Embed-bitcode option.
   // Only white-listed flags below are allowed to be embedded.
-  if (C.getDriver().embedBitcodeInObject() && !C.getDriver().isUsingLTO() &&
+  if (C.getDriver().embedBitcodeInObject() && !IsUsingLTO &&
       (isa<BackendJobAction>(JA) || isa<AssembleJobAction>(JA))) {
     // Add flags implied by -fembed-bitcode.
     Args.AddLastArg(CmdArgs, options::OPT_fembed_bitcode_EQ);
@@ -4593,7 +4648,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     return;
   }
 
-  if (C.getDriver().embedBitcodeMarkerOnly() && !C.getDriver().isUsingLTO())
+  if (C.getDriver().embedBitcodeMarkerOnly() && !IsUsingLTO)
     CmdArgs.push_back("-fembed-bitcode=marker");
 
   // We normally speed up the clang process a bit by skipping destructors at
@@ -4995,10 +5050,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Enable -mconstructor-aliases except on darwin, where we have to work around
   // a linker bug (see <rdar://problem/7651567>), and CUDA/AMDGPU device code,
-  // where aliases aren't supported. Similarly, aliases aren't yet supported
-  // for AIX.
-  if (!RawTriple.isOSDarwin() && !RawTriple.isNVPTX() &&
-      !RawTriple.isAMDGPU() && !RawTriple.isOSAIX())
+  // where aliases aren't supported.
+  if (!RawTriple.isOSDarwin() && !RawTriple.isNVPTX() && !RawTriple.isAMDGPU())
     CmdArgs.push_back("-mconstructor-aliases");
 
   // Darwin's kernel doesn't support guard variables; just die if we
@@ -6049,7 +6102,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       LanguageStandard = llvm::StringSwitch<StringRef>(StdArg->getValue())
                              .Case("c++14", "-std=c++14")
                              .Case("c++17", "-std=c++17")
-                             .Case("c++latest", "-std=c++20")
+                             .Case("c++20", "-std=c++20")
+                             .Case("c++latest", "-std=c++2b")
                              .Default("");
       if (LanguageStandard.empty())
         D.Diag(clang::diag::warn_drv_unused_argument)
@@ -6458,7 +6512,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // be added so both IR can be captured.
   if ((C.getDriver().isSaveTempsEnabled() ||
        JA.isHostOffloading(Action::OFK_OpenMP)) &&
-      !(C.getDriver().embedBitcodeInObject() && !C.getDriver().isUsingLTO()) &&
+      !(C.getDriver().embedBitcodeInObject() && !IsUsingLTO) &&
       isa<CompileJobAction>(JA))
     CmdArgs.push_back("-disable-llvm-passes");
 
@@ -6591,7 +6645,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (VirtualFunctionElimination) {
     // VFE requires full LTO (currently, this might be relaxed to allow ThinLTO
     // in the future).
-    if (D.getLTOMode() != LTOK_Full)
+    if (LTOMode != LTOK_Full)
       D.Diag(diag::err_drv_argument_only_allowed_with)
           << "-fvirtual-function-elimination"
           << "-flto=full";
@@ -6610,7 +6664,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (WholeProgramVTables) {
-    if (!D.isUsingLTO())
+    if (!IsUsingLTO)
       D.Diag(diag::err_drv_argument_only_allowed_with)
           << "-fwhole-program-vtables"
           << "-flto";
@@ -6619,7 +6673,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   bool DefaultsSplitLTOUnit =
       (WholeProgramVTables || Sanitize.needsLTO()) &&
-      (D.getLTOMode() == LTOK_Full || TC.canSplitThinLTOUnit());
+      (LTOMode == LTOK_Full || TC.canSplitThinLTOUnit());
   bool SplitLTOUnit =
       Args.hasFlag(options::OPT_fsplit_lto_unit,
                    options::OPT_fno_split_lto_unit, DefaultsSplitLTOUnit);
@@ -6665,7 +6719,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
      // Enable order file instrumentation when ThinLTO is not on. When ThinLTO is
      // on, we need to pass these flags as linker flags and that will be handled
      // outside of the compiler.
-     if (!D.isUsingLTO()) {
+     if (!IsUsingLTO) {
        CmdArgs.push_back("-mllvm");
        CmdArgs.push_back("-enable-order-file-instrumentation");
      }
