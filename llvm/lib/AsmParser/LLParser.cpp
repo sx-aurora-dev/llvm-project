@@ -32,6 +32,7 @@
 #include "llvm/IR/GlobalIFunc.h"
 #include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
@@ -1397,6 +1398,9 @@ bool LLParser::parseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_noprofile: B.addAttribute(Attribute::NoProfile); break;
     case lltok::kw_norecurse: B.addAttribute(Attribute::NoRecurse); break;
     case lltok::kw_nounwind: B.addAttribute(Attribute::NoUnwind); break;
+    case lltok::kw_nosanitize_coverage:
+      B.addAttribute(Attribute::NoSanitizeCoverage);
+      break;
     case lltok::kw_null_pointer_is_valid:
       B.addAttribute(Attribute::NullPointerIsValid); break;
     case lltok::kw_optforfuzzing:
@@ -1830,6 +1834,7 @@ bool LLParser::parseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_noreturn:
     case lltok::kw_nocf_check:
     case lltok::kw_nounwind:
+    case lltok::kw_nosanitize_coverage:
     case lltok::kw_optforfuzzing:
     case lltok::kw_optnone:
     case lltok::kw_optsize:
@@ -1944,6 +1949,7 @@ bool LLParser::parseOptionalReturnAttrs(AttrBuilder &B) {
     case lltok::kw_noreturn:
     case lltok::kw_nocf_check:
     case lltok::kw_nounwind:
+    case lltok::kw_nosanitize_coverage:
     case lltok::kw_optforfuzzing:
     case lltok::kw_optnone:
     case lltok::kw_optsize:
@@ -7598,19 +7604,20 @@ int LLParser::parseCmpXchg(Instruction *&Inst, PerFunctionState &PFS) {
       parseOptionalCommaAlign(Alignment, AteExtraComma))
     return true;
 
-  if (SuccessOrdering == AtomicOrdering::Unordered ||
-      FailureOrdering == AtomicOrdering::Unordered)
-    return tokError("cmpxchg cannot be unordered");
-  if (FailureOrdering == AtomicOrdering::Release ||
-      FailureOrdering == AtomicOrdering::AcquireRelease)
-    return tokError(
-        "cmpxchg failure ordering cannot include release semantics");
+  if (!AtomicCmpXchgInst::isValidSuccessOrdering(SuccessOrdering))
+    return tokError("invalid cmpxchg success ordering");
+  if (!AtomicCmpXchgInst::isValidFailureOrdering(FailureOrdering))
+    return tokError("invalid cmpxchg failure ordering");
   if (!Ptr->getType()->isPointerTy())
     return error(PtrLoc, "cmpxchg operand must be a pointer");
-  if (cast<PointerType>(Ptr->getType())->getElementType() != Cmp->getType())
+  if (!cast<PointerType>(Ptr->getType())
+           ->isOpaqueOrPointeeTypeMatches(Cmp->getType()))
     return error(CmpLoc, "compare value and pointer type do not match");
-  if (cast<PointerType>(Ptr->getType())->getElementType() != New->getType())
+  if (!cast<PointerType>(Ptr->getType())
+           ->isOpaqueOrPointeeTypeMatches(New->getType()))
     return error(NewLoc, "new value and pointer type do not match");
+  if (Cmp->getType() != New->getType())
+    return error(NewLoc, "compare value and new value type do not match");
   if (!New->getType()->isFirstClassType())
     return error(NewLoc, "cmpxchg operand must be a first class value");
 
@@ -7680,7 +7687,8 @@ int LLParser::parseAtomicRMW(Instruction *&Inst, PerFunctionState &PFS) {
     return tokError("atomicrmw cannot be unordered");
   if (!Ptr->getType()->isPointerTy())
     return error(PtrLoc, "atomicrmw operand must be a pointer");
-  if (cast<PointerType>(Ptr->getType())->getElementType() != Val->getType())
+  if (!cast<PointerType>(Ptr->getType())
+           ->isOpaqueOrPointeeTypeMatches(Val->getType()))
     return error(ValLoc, "atomicrmw value and pointer type do not match");
 
   if (Operation == AtomicRMWInst::Xchg) {
@@ -7757,7 +7765,7 @@ int LLParser::parseGetElementPtr(Instruction *&Inst, PerFunctionState &PFS) {
   if (!BasePointerType)
     return error(Loc, "base of getelementptr must be a pointer");
 
-  if (Ty != BasePointerType->getElementType()) {
+  if (!BasePointerType->isOpaqueOrPointeeTypeMatches(Ty)) {
     return error(
         ExplicitTypeLoc,
         typeComparisonErrorMessage(

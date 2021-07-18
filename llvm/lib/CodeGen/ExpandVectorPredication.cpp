@@ -256,7 +256,7 @@ Value *CachingVPExpander::expandPredicationInUnaryOperator(IRBuilder<> &Builder,
           VPI.canIgnoreVectorLengthParam()) &&
          "Implicitly dropping %evl in non-speculatable operator!");
 
-  auto OC = static_cast<Instruction::UnaryOps>(VPI.getFunctionalOpcode());
+  auto OC = static_cast<Instruction::UnaryOps>(*VPI.getFunctionalOpcode());
   assert(Instruction::isUnaryOp(OC));
 
   auto *Op0 = VPI.getOperand(0);
@@ -303,7 +303,7 @@ CachingVPExpander::expandPredicationInBinaryOperator(IRBuilder<> &Builder,
           VPI.canIgnoreVectorLengthParam()) &&
          "Implicitly dropping %evl in non-speculatable operator!");
 
-  auto OC = static_cast<Instruction::BinaryOps>(VPI.getFunctionalOpcode());
+  auto OC = static_cast<Instruction::BinaryOps>(*VPI.getFunctionalOpcode());
   assert(Instruction::isBinaryOp(OC));
 
   Value *Op0 = VPI.getOperand(0);
@@ -404,12 +404,15 @@ Value *CachingVPExpander::expandPredication(VPIntrinsic &VPI) {
   IRBuilder<> Builder(&VPI);
 
   // Try lowering to a LLVM instruction first.
-  unsigned OC = VPI.getFunctionalOpcode();
+  auto OC = VPI.getFunctionalOpcode();
 
-  if (Instruction::isUnaryOp(OC))
-    return expandPredicationInUnaryOperator(Builder, VPI);
-  if (Instruction::isBinaryOp(OC))
-    return expandPredicationInBinaryOperator(Builder, VPI);
+  if (OC) {
+    if (Instruction::isUnaryOp(*OC))
+      return expandPredicationInUnaryOperator(Builder, VPI);
+    if (Instruction::isBinaryOp(*OC))
+      return expandPredicationInBinaryOperator(Builder, VPI);
+  }
+
   if (VPI.isReductionOp())
     return expandPredicationInReduction(Builder, VPI);
 
