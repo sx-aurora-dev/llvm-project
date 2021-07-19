@@ -2924,7 +2924,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
     // with deopt state.
     LowerCallSiteWithDeoptBundle(&I, getValue(Callee), EHPadBB);
   } else {
-    LowerCallTo(I, getValue(Callee), false, EHPadBB);
+    LowerCallTo(I, getValue(Callee), false, false, EHPadBB);
   }
 
   // If the value of the invoke is used outside of its defining block, make it
@@ -4351,7 +4351,8 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
 }
 
 void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
-  SDLoc sdl = getCurSDLoc();
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDLoc DL = getCurSDLoc();
 
   auto getVPStoreOps = [&](Value *&Ptr, Value *&Mask, Value *&Src0,
                            Value *&VLen, MaybeAlign &Align) {
@@ -4371,6 +4372,10 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   SDValue Src0 = getValue(Src0Operand);
   SDValue Mask = getValue(MaskOperand);
   SDValue VLen = getValue(VLenOperand);
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
 
   EVT VT = Src0.getValueType();
   if (!Align)
@@ -4385,7 +4390,7 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
           .getTypeStoreSize(Src0Operand->getType())
           .getFixedSize(),
       Align.valueOrOne(), AAInfo);
-  SDValue StoreNode = DAG.getStoreVP(getRoot(), sdl, Src0, Ptr, Mask, VLen, VT,
+  SDValue StoreNode = DAG.getStoreVP(getRoot(), DL, Src0, Ptr, Mask, VLen, VT,
                                      MMO, false /* Truncating */);
   DAG.setRoot(StoreNode);
   setValue(&I, StoreNode);
@@ -4625,14 +4630,19 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
 }
 
 void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
-  SDLoc sdl = getCurSDLoc();
+  SDLoc DL = getCurSDLoc();
+
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   // @llvm.evl.gather.*(Ptrs, Mask, VLen)
   const Value *Ptr = I.getArgOperand(0);
   SDValue Mask = getValue(I.getArgOperand(1));
   SDValue VLen = getValue(I.getArgOperand(2));
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
 
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
   Align Alignment = I.getParamAlign(0).getValueOr(DAG.getEVTAlign(VT));
 
@@ -4656,14 +4666,14 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
       MemoryLocation::UnknownSize, Alignment, AAInfo, Ranges);
 
   if (!UniformBase) {
-    Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
+    Base = DAG.getConstant(0, DL, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(Ptr);
     IndexType = ISD::SIGNED_UNSCALED;
     Scale =
-        DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
+        DAG.getTargetConstant(1, DL, TLI.getPointerTy(DAG.getDataLayout()));
   }
   SDValue Ops[] = {Root, Base, Index, Scale, Mask, VLen};
-  SDValue Gather = DAG.getGatherVP(DAG.getVTList(VT, MVT::Other), VT, sdl, Ops,
+  SDValue Gather = DAG.getGatherVP(DAG.getVTList(VT, MVT::Other), VT, DL, Ops,
                                    MMO, IndexType);
 
   PendingLoads.push_back(Gather.getValue(1));
@@ -4671,16 +4681,20 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
 }
 
 void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
-  SDLoc sdl = getCurSDLoc();
+  SDLoc DL = getCurSDLoc();
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   // llvm.evl.scatter.*(Src0, Ptrs, Mask, VLen)
   const Value *Ptr = I.getArgOperand(1);
   SDValue Src0 = getValue(I.getArgOperand(0));
   SDValue Mask = getValue(I.getArgOperand(2));
   SDValue VLen = getValue(I.getArgOperand(3));
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
   EVT VT = Src0.getValueType();
   Align Alignment = I.getParamAlign(1).getValueOr(DAG.getEVTAlign(VT));
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   AAMDNodes AAInfo;
   I.getAAMetadata(AAInfo);
@@ -4699,21 +4713,22 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
       // vectors.
       MemoryLocation::UnknownSize, Alignment, AAInfo);
   if (!UniformBase) {
-    Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
+    Base = DAG.getConstant(0, DL, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(Ptr);
     IndexType = ISD::SIGNED_UNSCALED;
     Scale =
-        DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
+        DAG.getTargetConstant(1, DL, TLI.getPointerTy(DAG.getDataLayout()));
   }
   SDValue Ops[] = {getMemoryRoot(), Src0, Base, Index, Scale, Mask, VLen};
-  SDValue Scatter = DAG.getScatterVP(DAG.getVTList(MVT::Other), VT, sdl,
+  SDValue Scatter = DAG.getScatterVP(DAG.getVTList(MVT::Other), VT, DL,
                                          Ops, MMO, IndexType);
   DAG.setRoot(Scatter);
   setValue(&I, Scatter);
 }
 
 void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
-  SDLoc sdl = getCurSDLoc();
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDLoc DL = getCurSDLoc();
 
   auto getMaskedLoadOps = [&](Value *&Ptr, Value *&Mask, Value *&VLen,
                               MaybeAlign &Align) {
@@ -4730,10 +4745,13 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
 
   SDValue Ptr = getValue(PtrOperand);
   SDValue VLen = getValue(VLenOperand);
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
   SDValue Mask = getValue(MaskOperand);
 
   // infer the return type
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   SmallVector<EVT, 4> ValValueVTs;
   ComputeValueVTs(TLI, DAG.getDataLayout(), I.getType(), ValValueVTs);
   EVT VT = ValValueVTs[0];
@@ -4756,7 +4774,7 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
       MachinePointerInfo(PtrOperand), MachineMemOperand::MOLoad,
       VT.getStoreSize(), Align.valueOrOne(), AAInfo, Ranges);
 
-  SDValue Load = DAG.getLoadVP(VT, sdl, InChain, Ptr, Mask, VLen, VT, MMO,
+  SDValue Load = DAG.getLoadVP(VT, DL, InChain, Ptr, Mask, VLen, VT, MMO,
                                ISD::NON_EXTLOAD);
   if (AddToChain)
     PendingLoads.push_back(Load.getValue(1));
@@ -5928,7 +5946,7 @@ void SelectionDAGBuilder::lowerCallToExternalSymbol(const CallInst &I,
   SDValue Callee = DAG.getExternalSymbol(
       FunctionName,
       DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout()));
-  LowerCallTo(I, Callee, I.isTailCall());
+  LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
 /// Given a @llvm.call.preallocated.setup, return the corresponding
@@ -7473,6 +7491,9 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
 }
 
 void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDLoc DL = getCurSDLoc();
+
   ISD::CondCode Condition;
   CmpInst::Predicate predicate = I.getCmpPredicate();
   bool IsFP = I.getOperand(0)->getType()->isFPOrFPVectorTy();
@@ -7490,12 +7511,15 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
   SDValue Op2 = getValue(I.getOperand(1));
   // #2 is the condition code
   SDValue MaskOp = getValue(I.getOperand(3));
-  SDValue LenOp = getValue(I.getOperand(4));
+  SDValue VLen = getValue(I.getOperand(4));
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
 
   EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
                                                         I.getType());
-  setValue(&I, DAG.getVPSetCC(getCurSDLoc(), DestVT, Op1, Op2, Condition,
-                              MaskOp, LenOp));
+  setValue(&I, DAG.getVPSetCC(DL, DestVT, Op1, Op2, Condition, MaskOp, VLen));
 }
 
 static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
@@ -7543,11 +7567,15 @@ static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
 void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
   LLVM_DEBUG(dbgs() << "DABBuilder: visitReduceVP\n";);
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-  SDLoc dl = getCurSDLoc();
+  SDLoc DL = getCurSDLoc();
   EVT ResVT = TLI.getValueType(DAG.getDataLayout(), VPIntrin.getType());
 
   SDValue MaskV = getValue(VPIntrin.getMaskParam());
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
   SDValue EVLV = getValue(VPIntrin.getVectorLengthParam());
+  EVLV = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, EVLV);
 
   auto FMFSource = dyn_cast<FPMathOperator>(&VPIntrin);
   SDNodeFlags OpFlags;
@@ -7570,9 +7598,9 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
     // case
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    auto ReducedV = DAG.getNode(RelaxedOC.getValue(), dl, ResVT,
+    auto ReducedV = DAG.getNode(RelaxedOC.getValue(), DL, ResVT,
                                 {VectorV, MaskV, EVLV}, OpFlags);
-    ResV = DAG.getNode(ScalarOCOpt.getValue(), dl, ResVT, ScalarV, ReducedV,
+    ResV = DAG.getNode(ScalarOCOpt.getValue(), DL, ResVT, ScalarV, ReducedV,
                        OpFlags);
 
   } else if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
@@ -7580,14 +7608,14 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
     LLVM_DEBUG(dbgs() << "visitReduceVP: ordered FP\n";);
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    ResV = DAG.getNode(ReduceOC, dl, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
+    ResV = DAG.getNode(ReduceOC, DL, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
 
   } else {
     LLVM_DEBUG(dbgs() << "visitReduceVP: unordered\n";);
 
     // Re-associatable without strict case and no initial arg (eg ADD reduction)
     SDValue VectorV = getValue(VPIntrin.getArgOperand(0));
-    ResV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
+    ResV = DAG.getNode(ReduceOC, DL, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
   }
 
   setValue(&VPIntrin, ResV);
@@ -7623,6 +7651,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     visitCmpVP(VPIntrin);
     return;
   }
+  SDLoc DL = getCurSDLoc();
   unsigned Opcode = getISDForVPIntrinsic(VPIntrin);
 
   // TODO memory evl: SDValue Chain = getRoot();
@@ -7635,18 +7664,24 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   // ValueVTs.push_back(MVT::Other); // Out chain
 
   // Request Operands
-  SmallVector<SDValue, 7> OpValues;
   // TODO: Constrained FP.
   // auto ExceptPosOpt = None;
       // VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
   // auto RoundingModePosOpt = None;
       // VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
-  for (int i = 0; i < (int)VPIntrin.getNumArgOperands(); ++i) {
-    // if (ExceptPosOpt && (i == ExceptPosOpt.getValue()))
-    //   continue;
-    // if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue()))
-    //   continue;
-    OpValues.push_back(getValue(VPIntrin.getArgOperand(i)));
+  auto EVLParamPos =
+      VPIntrinsic::GetVectorLengthParamPos(VPIntrin.getIntrinsicID());
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+
+  // Request operands.
+  SmallVector<SDValue, 7> OpValues;
+  for (int I = 0; I < (int)VPIntrin.getNumArgOperands(); ++I) {
+    auto Op = getValue(VPIntrin.getArgOperand(I));
+    if (I == EVLParamPos)
+      Op = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, Op);
+    OpValues.push_back(Op);
   }
 
   // set exception flags where appropriate
@@ -7658,8 +7693,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   if (FPIntrin)
     NodeFlags.copyFMF(*FPIntrin);
 
-  SDLoc sdl = getCurSDLoc();
-  SDValue Result = DAG.getNode(Opcode, sdl, VTs, OpValues);
+  SDValue Result = DAG.getNode(Opcode, DL, VTs, OpValues);
   Result->setFlags(NodeFlags);
 
   // Attach chain
@@ -7772,6 +7806,7 @@ SelectionDAGBuilder::lowerInvokable(TargetLowering::CallLoweringInfo &CLI,
 
 void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
                                       bool isTailCall,
+                                      bool isMustTailCall,
                                       const BasicBlock *EHPadBB) {
   auto &DL = DAG.getDataLayout();
   FunctionType *FTy = CB.getFunctionType();
@@ -7788,7 +7823,7 @@ void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
     // attribute.
     auto *Caller = CB.getParent()->getParent();
     if (Caller->getFnAttribute("disable-tail-calls").getValueAsString() ==
-        "true")
+        "true" && !isMustTailCall)
       isTailCall = false;
 
     // We can't tail call inside a function with a swifterror argument. Lowering
@@ -8412,7 +8447,7 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
     // Check if we can potentially perform a tail call. More detailed checking
     // is be done within LowerCallTo, after more information about the call is
     // known.
-    LowerCallTo(I, Callee, I.isTailCall());
+    LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
 namespace {
