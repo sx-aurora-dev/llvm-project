@@ -113,6 +113,9 @@ Attribute Changes in Clang
 
 - ...
 
+- Added support for C++11-style ``[[]]`` attributes on using-declarations, as a
+  clang extension.
+
 Windows Support
 ---------------
 
@@ -230,6 +233,9 @@ clang-format
 - Option ``IndentAccessModifiers`` has been added to be able to give access
   modifiers their own indentation level inside records.
 
+- Option ``PPIndentWidth`` has been added to be able to configure pre-processor
+  indentation independent from regular code.
+
 - Option ``ShortNamespaceLines`` has been added to give better control
   over ``FixNamespaceComments`` when determining a namespace length.
 
@@ -250,8 +256,14 @@ clang-format
   accepts ``AllIfsAndElse`` value that allows to put "else if" and "else" short
   statements on a single line. (Fixes https://llvm.org/PR50019.)
 
+- Option ``BreakInheritanceList`` gets a new style, ``AfterComma``. It breaks
+  only after the commas that separate the base-specifiers.
+
 - ``git-clang-format`` no longer formats changes to symbolic links. (Fixes
   https://llvm.org/PR46992.)
+
+- Makes ``PointerAligment: Right`` working with ``AlignConsecutiveDeclarations``.
+  (Fixes https://llvm.org/PR27353)
 
 libclang
 --------

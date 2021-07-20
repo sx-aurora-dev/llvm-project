@@ -139,8 +139,7 @@ TEST_F(VPIntrinsicTest, VPModuleComplete) {
   for (const auto &VPDecl : *M) {
     if (!VPDecl.isIntrinsic()) abort();
     ASSERT_TRUE(VPDecl.isIntrinsic());
-    if (!VPIntrinsic::IsVPIntrinsic(VPDecl.getIntrinsicID())) abort();
-    ASSERT_TRUE(VPIntrinsic::IsVPIntrinsic(VPDecl.getIntrinsicID()));
+    ASSERT_TRUE(VPIntrinsic::isVPIntrinsic(VPDecl.getIntrinsicID()));
     SeenIDs.insert(VPDecl.getIntrinsicID());
   }
 
@@ -208,25 +207,25 @@ TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
 }
 
 /// Check that the argument returned by
-/// VPIntrinsic::Get<X>ParamPos(Intrinsic::ID) has the expected type.
+/// VPIntrinsic::get<X>ParamPos(Intrinsic::ID) has the expected type.
 TEST_F(VPIntrinsicTest, GetParamPos) {
   std::unique_ptr<Module> M = CreateVPDeclarationModule();
   assert(M);
 
   for (Function &F : *M) {
     ASSERT_TRUE(F.isIntrinsic());
-    Optional<int> MaskParamPos =
-        VPIntrinsic::GetMaskParamPos(F.getIntrinsicID());
-    if (MaskParamPos) {
-      Type *MaskParamType = F.getArg(*MaskParamPos)->getType();
+    Optional<unsigned> MaskParamPos =
+        VPIntrinsic::getMaskParamPos(F.getIntrinsicID());
+    if (MaskParamPos.hasValue()) {
+      Type *MaskParamType = F.getArg(MaskParamPos.getValue())->getType();
       ASSERT_TRUE(MaskParamType->isVectorTy());
       ASSERT_TRUE(cast<VectorType>(MaskParamType)->getElementType()->isIntegerTy(1));
     }
 
-    Optional<int> VecLenParamPos =
-        VPIntrinsic::GetVectorLengthParamPos(F.getIntrinsicID());
-    if (VecLenParamPos) {
-      Type *VecLenParamType = F.getArg(*VecLenParamPos)->getType();
+    Optional<unsigned> VecLenParamPos =
+        VPIntrinsic::getVectorLengthParamPos(F.getIntrinsicID());
+    if (VecLenParamPos.hasValue()) {
+      Type *VecLenParamType = F.getArg(VecLenParamPos.getValue())->getType();
       ASSERT_TRUE(VecLenParamType->isIntegerTy(32));
     }
 
@@ -251,13 +250,13 @@ TEST_F(VPIntrinsicTest, OpcodeRoundTrip) {
 
   unsigned FullTripCounts = 0;
   for (unsigned OC : Opcodes) {
-    Intrinsic::ID VPID = VPIntrinsic::GetForOpcode(OC);
+    Intrinsic::ID VPID = VPIntrinsic::getForOpcode(OC);
     // No equivalent VP intrinsic available.
     if (VPID == Intrinsic::not_intrinsic)
       continue;
 
     Optional<unsigned> RoundTripOC =
-        VPIntrinsic::GetFunctionalOpcodeForVP(VPID);
+        VPIntrinsic::getFunctionalOpcodeForVP(VPID);
     // No equivalent Opcode available.
     if (!RoundTripOC)
       continue;
@@ -277,13 +276,13 @@ TEST_F(VPIntrinsicTest, IntrinsicIDRoundTrip) {
   unsigned FullTripCounts = 0;
   for (const auto &VPDecl : *M) {
     auto VPID = VPDecl.getIntrinsicID();
-    Optional<unsigned> OC = VPIntrinsic::GetFunctionalOpcodeForVP(VPID);
+    Optional<unsigned> OC = VPIntrinsic::getFunctionalOpcodeForVP(VPID);
 
     // no equivalent Opcode available
     if (!OC)
       continue;
 
-    Intrinsic::ID RoundTripVPID = VPIntrinsic::GetForOpcode(*OC);
+    Intrinsic::ID RoundTripVPID = VPIntrinsic::getForOpcode(*OC);
 
     ASSERT_EQ(RoundTripVPID, VPID);
     ++FullTripCounts;

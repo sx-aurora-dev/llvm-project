@@ -256,6 +256,16 @@ def ConvertMathToLibm : Pass<"convert-math-to-libm", "ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACCToSCF
+//===----------------------------------------------------------------------===//
+
+def ConvertOpenACCToSCF : Pass<"convert-openacc-to-scf", "ModuleOp"> {
+  let summary = "Convert the OpenACC ops to OpenACC with SCF dialect";
+  let constructor = "mlir::createConvertOpenACCToSCFPass()";
+  let dependentDialects = ["scf::SCFDialect", "acc::OpenACCDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // OpenACCToLLVM
 //===----------------------------------------------------------------------===//
 
@@ -523,7 +533,9 @@ def ConvertVectorToSCF : FunctionPass<"convert-vector-to-scf"> {
            "Target vector rank to which transfer ops should be lowered">,
     Option<"lowerPermutationMaps", "lower-permutation-maps", "bool",
            /*default=*/"false", "Replace permutation maps with vector "
-           "transposes/broadcasts before lowering transfer ops">
+           "transposes/broadcasts before lowering transfer ops">,
+    Option<"lowerTensors", "lower-tensors", "bool", /*default=*/"false",
+           "Lower transfer ops that operate on tensors">
   ];
 }
 

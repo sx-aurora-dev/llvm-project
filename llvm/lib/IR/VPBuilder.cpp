@@ -41,13 +41,13 @@ Value &VPBuilder::RequestEVL() {
 
 Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   auto OC = Inst.getOpcode();
-  auto VPID = VPIntrinsic::GetForOpcode(OC);
+  auto VPID = VPIntrinsic::getForOpcode(OC);
   if (VPID == Intrinsic::not_intrinsic) {
     return nullptr;
   }
 
-  Optional<int> MaskPosOpt = VPIntrinsic::GetMaskParamPos(VPID);
-  Optional<int> VLenPosOpt = VPIntrinsic::GetVectorLengthParamPos(VPID);
+  Optional<unsigned> MaskPosOpt = VPIntrinsic::getMaskParamPos(VPID);
+  Optional<unsigned> VLenPosOpt = VPIntrinsic::getVectorLengthParamPos(VPID);
 
   Optional<int> CmpPredPos = None;
   if (isa<CmpInst>(Inst)) {
@@ -177,6 +177,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
                                 {Val.getType(), PointerVec.getType()});
   ShortValueVec Args{&Val, &PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &ScatterCall = *Builder.CreateCall(ScatterFunc, Args);
+#if 0
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_scatter).getValue();
@@ -184,6 +185,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
     // ScatterCall.addParamAttr(
     //     PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }
+#endif
   return ScatterCall;
 }
 
@@ -197,6 +199,7 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
 
   ShortValueVec Args{&PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &GatherCall = *Builder.CreateCall(GatherFunc, Args);
+#if 0
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_gather).getValue();
@@ -204,6 +207,7 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
     // GatherCall.addParamAttr(
     //     PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }
+#endif
   return GatherCall;
 }
 

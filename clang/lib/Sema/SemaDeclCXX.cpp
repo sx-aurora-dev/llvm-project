@@ -7000,7 +7000,7 @@ public:
       : S(S), UseLoc(UseLoc) {
     bool DiagnosedMultipleConstructedBases = false;
     CXXRecordDecl *ConstructedBase = nullptr;
-    UsingDecl *ConstructedBaseUsing = nullptr;
+    BaseUsingDecl *ConstructedBaseIntroducer = nullptr;
 
     // Find the set of such base class subobjects and check that there's a
     // unique constructed subobject.
@@ -7024,18 +7024,18 @@ public:
       //   of type B, the program is ill-formed.
       if (!ConstructedBase) {
         ConstructedBase = DConstructedBase;
-        ConstructedBaseUsing = D->getUsingDecl();
+        ConstructedBaseIntroducer = D->getIntroducer();
       } else if (ConstructedBase != DConstructedBase &&
                  !Shadow->isInvalidDecl()) {
         if (!DiagnosedMultipleConstructedBases) {
           S.Diag(UseLoc, diag::err_ambiguous_inherited_constructor)
               << Shadow->getTargetDecl();
-          S.Diag(ConstructedBaseUsing->getLocation(),
-               diag::note_ambiguous_inherited_constructor_using)
+          S.Diag(ConstructedBaseIntroducer->getLocation(),
+                 diag::note_ambiguous_inherited_constructor_using)
               << ConstructedBase;
           DiagnosedMultipleConstructedBases = true;
         }
-        S.Diag(D->getUsingDecl()->getLocation(),
+        S.Diag(D->getIntroducer()->getLocation(),
                diag::note_ambiguous_inherited_constructor_using)
             << DConstructedBase;
       }
@@ -11604,10 +11604,11 @@ Decl *Sema::ActOnUsingDeclaration(Scope *S, AccessSpecifier AS,
     }
   }
 
-  NamedDecl *UD =
-      BuildUsingDeclaration(S, AS, UsingLoc, TypenameLoc.isValid(), TypenameLoc,
-                            SS, TargetNameInfo, EllipsisLoc, AttrList,
-                            /*IsInstantiation*/false);
+  NamedDecl *UD = BuildUsingDeclaration(
+      S, AS, UsingLoc, TypenameLoc.isValid(), TypenameLoc, SS, TargetNameInfo,
+      EllipsisLoc, AttrList,
+      /*IsInstantiation=*/false,
+      AttrList.hasAttribute(ParsedAttr::AT_UsingIfExists));
   if (UD)
     PushOnScopeChains(UD, S, /*AddToContext*/ false);
 
@@ -11627,13 +11628,19 @@ IsEquivalentForUsingDecl(ASTContext &Context, NamedDecl *D1, NamedDecl *D2) {
       return Context.hasSameType(TD1->getUnderlyingType(),
                                  TD2->getUnderlyingType());
 
+  // Two using_if_exists using-declarations are equivalent if both are
+  // unresolved.
+  if (isa<UnresolvedUsingIfExistsDecl>(D1) &&
+      isa<UnresolvedUsingIfExistsDecl>(D2))
+    return true;
+
   return false;
 }
 
 
 /// Determines whether to create a using shadow decl for a particular
 /// decl, given the set of decls existing prior to this using lookup.
-bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
+bool Sema::CheckUsingShadowDecl(BaseUsingDecl *BUD, NamedDecl *Orig,
                                 const LookupResult &Previous,
                                 UsingShadowDecl *&PrevShadow) {
   // Diagnose finding a decl which is not from a base class of the
@@ -11655,35 +11662,36 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
   // specialization.  The UsingShadowDecl in D<T> then points directly
   // to A::foo, which will look well-formed when we instantiate.
   // The right solution is to not collapse the shadow-decl chain.
-  if (!getLangOpts().CPlusPlus11 && CurContext->isRecord()) {
-    DeclContext *OrigDC = Orig->getDeclContext();
+  if (!getLangOpts().CPlusPlus11 && CurContext->isRecord())
+    if (auto *Using = dyn_cast<UsingDecl>(BUD)) {
+      DeclContext *OrigDC = Orig->getDeclContext();
 
-    // Handle enums and anonymous structs.
-    if (isa<EnumDecl>(OrigDC)) OrigDC = OrigDC->getParent();
-    CXXRecordDecl *OrigRec = cast<CXXRecordDecl>(OrigDC);
-    while (OrigRec->isAnonymousStructOrUnion())
-      OrigRec = cast<CXXRecordDecl>(OrigRec->getDeclContext());
+      // Handle enums and anonymous structs.
+      if (isa<EnumDecl>(OrigDC))
+        OrigDC = OrigDC->getParent();
+      CXXRecordDecl *OrigRec = cast<CXXRecordDecl>(OrigDC);
+      while (OrigRec->isAnonymousStructOrUnion())
+        OrigRec = cast<CXXRecordDecl>(OrigRec->getDeclContext());
 
-    if (cast<CXXRecordDecl>(CurContext)->isProvablyNotDerivedFrom(OrigRec)) {
-      if (OrigDC == CurContext) {
-        Diag(Using->getLocation(),
-             diag::err_using_decl_nested_name_specifier_is_current_class)
-          << Using->getQualifierLoc().getSourceRange();
+      if (cast<CXXRecordDecl>(CurContext)->isProvablyNotDerivedFrom(OrigRec)) {
+        if (OrigDC == CurContext) {
+          Diag(Using->getLocation(),
+               diag::err_using_decl_nested_name_specifier_is_current_class)
+              << Using->getQualifierLoc().getSourceRange();
+          Diag(Orig->getLocation(), diag::note_using_decl_target);
+          Using->setInvalidDecl();
+          return true;
+        }
+
+        Diag(Using->getQualifierLoc().getBeginLoc(),
+             diag::err_using_decl_nested_name_specifier_is_not_base_class)
+            << Using->getQualifier() << cast<CXXRecordDecl>(CurContext)
+            << Using->getQualifierLoc().getSourceRange();
         Diag(Orig->getLocation(), diag::note_using_decl_target);
         Using->setInvalidDecl();
         return true;
       }
-
-      Diag(Using->getQualifierLoc().getBeginLoc(),
-           diag::err_using_decl_nested_name_specifier_is_not_base_class)
-        << Using->getQualifier()
-        << cast<CXXRecordDecl>(CurContext)
-        << Using->getQualifierLoc().getSourceRange();
-      Diag(Orig->getLocation(), diag::note_using_decl_target);
-      Using->setInvalidDecl();
-      return true;
     }
-  }
 
   if (Previous.empty()) return false;
 
@@ -11716,7 +11724,7 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
           !isa<UnresolvedUsingValueDecl>(Target) &&
           DiagnoseClassNameShadow(
               CurContext,
-              DeclarationNameInfo(Using->getDeclName(), Using->getLocation())))
+              DeclarationNameInfo(BUD->getDeclName(), BUD->getLocation())))
         return true;
     }
 
@@ -11737,6 +11745,20 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
   if (FoundEquivalentDecl)
     return false;
 
+  // Always emit a diagnostic for a mismatch between an unresolved
+  // using_if_exists and a resolved using declaration in either direction.
+  if (isa<UnresolvedUsingIfExistsDecl>(Target) !=
+      (isa_and_nonnull<UnresolvedUsingIfExistsDecl>(NonTag))) {
+    if (!NonTag && !Tag)
+      return false;
+    Diag(BUD->getLocation(), diag::err_using_decl_conflict);
+    Diag(Target->getLocation(), diag::note_using_decl_target);
+    Diag((NonTag ? NonTag : Tag)->getLocation(),
+         diag::note_using_decl_conflict);
+    BUD->setInvalidDecl();
+    return true;
+  }
+
   if (FunctionDecl *FD = Target->getAsFunction()) {
     NamedDecl *OldDecl = nullptr;
     switch (CheckOverload(nullptr, FD, Previous, OldDecl,
@@ -11745,7 +11767,7 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
       return false;
 
     case Ovl_NonFunction:
-      Diag(Using->getLocation(), diag::err_using_decl_conflict);
+      Diag(BUD->getLocation(), diag::err_using_decl_conflict);
       break;
 
     // We found a decl with the exact signature.
@@ -11757,13 +11779,13 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
         return true;
 
       // If we're not in a record, this is an error.
-      Diag(Using->getLocation(), diag::err_using_decl_conflict);
+      Diag(BUD->getLocation(), diag::err_using_decl_conflict);
       break;
     }
 
     Diag(Target->getLocation(), diag::note_using_decl_target);
     Diag(OldDecl->getLocation(), diag::note_using_decl_conflict);
-    Using->setInvalidDecl();
+    BUD->setInvalidDecl();
     return true;
   }
 
@@ -11773,20 +11795,20 @@ bool Sema::CheckUsingShadowDecl(UsingDecl *Using, NamedDecl *Orig,
     // No conflict between a tag and a non-tag.
     if (!Tag) return false;
 
-    Diag(Using->getLocation(), diag::err_using_decl_conflict);
+    Diag(BUD->getLocation(), diag::err_using_decl_conflict);
     Diag(Target->getLocation(), diag::note_using_decl_target);
     Diag(Tag->getLocation(), diag::note_using_decl_conflict);
-    Using->setInvalidDecl();
+    BUD->setInvalidDecl();
     return true;
   }
 
   // No conflict between a tag and a non-tag.
   if (!NonTag) return false;
 
-  Diag(Using->getLocation(), diag::err_using_decl_conflict);
+  Diag(BUD->getLocation(), diag::err_using_decl_conflict);
   Diag(Target->getLocation(), diag::note_using_decl_target);
   Diag(NonTag->getLocation(), diag::note_using_decl_conflict);
-  Using->setInvalidDecl();
+  BUD->setInvalidDecl();
   return true;
 }
 
@@ -11801,8 +11823,7 @@ static bool isVirtualDirectBase(CXXRecordDecl *Derived, CXXRecordDecl *Base) {
 }
 
 /// Builds a shadow declaration corresponding to a 'using' declaration.
-UsingShadowDecl *Sema::BuildUsingShadowDecl(Scope *S,
-                                            UsingDecl *UD,
+UsingShadowDecl *Sema::BuildUsingShadowDecl(Scope *S, BaseUsingDecl *BUD,
                                             NamedDecl *Orig,
                                             UsingShadowDecl *PrevDecl) {
   // If we resolved to another shadow declaration, just coalesce them.
@@ -11818,19 +11839,20 @@ UsingShadowDecl *Sema::BuildUsingShadowDecl(Scope *S,
 
   UsingShadowDecl *Shadow;
   if (NonTemplateTarget && isa<CXXConstructorDecl>(NonTemplateTarget)) {
+    UsingDecl *Using = cast<UsingDecl>(BUD);
     bool IsVirtualBase =
         isVirtualDirectBase(cast<CXXRecordDecl>(CurContext),
-                            UD->getQualifier()->getAsRecordDecl());
+                            Using->getQualifier()->getAsRecordDecl());
     Shadow = ConstructorUsingShadowDecl::Create(
-        Context, CurContext, UD->getLocation(), UD, Orig, IsVirtualBase);
+        Context, CurContext, Using->getLocation(), Using, Orig, IsVirtualBase);
   } else {
-    Shadow = UsingShadowDecl::Create(Context, CurContext, UD->getLocation(), UD,
-                                     Target);
+    Shadow = UsingShadowDecl::Create(Context, CurContext, BUD->getLocation(),
+                                     Target->getDeclName(), BUD, Target);
   }
-  UD->addShadowDecl(Shadow);
+  BUD->addShadowDecl(Shadow);
 
-  Shadow->setAccess(UD->getAccess());
-  if (Orig->isInvalidDecl() || UD->isInvalidDecl())
+  Shadow->setAccess(BUD->getAccess());
+  if (Orig->isInvalidDecl() || BUD->isInvalidDecl())
     Shadow->setInvalidDecl();
 
   Shadow->setPreviousDecl(PrevDecl);
@@ -11886,7 +11908,7 @@ void Sema::HideUsingShadowDecl(Scope *S, UsingShadowDecl *Shadow) {
   }
 
   // ...and the using decl.
-  Shadow->getUsingDecl()->removeShadowDecl(Shadow);
+  Shadow->getIntroducer()->removeShadowDecl(Shadow);
 
   // TODO: complain somehow if Shadow was used.  It shouldn't
   // be possible for this to happen, because...?
@@ -12001,7 +12023,8 @@ NamedDecl *Sema::BuildUsingDeclaration(
     Scope *S, AccessSpecifier AS, SourceLocation UsingLoc,
     bool HasTypenameKeyword, SourceLocation TypenameLoc, CXXScopeSpec &SS,
     DeclarationNameInfo NameInfo, SourceLocation EllipsisLoc,
-    const ParsedAttributesView &AttrList, bool IsInstantiation) {
+    const ParsedAttributesView &AttrList, bool IsInstantiation,
+    bool IsUsingIfExists) {
   assert(!SS.isInvalid() && "Invalid CXXScopeSpec.");
   SourceLocation IdentLoc = NameInfo.getLoc();
   assert(IdentLoc.isValid() && "Invalid TargetName location.");
@@ -12070,10 +12093,17 @@ NamedDecl *Sema::BuildUsingDeclaration(
                               IdentLoc))
     return nullptr;
 
+  // 'using_if_exists' doesn't make sense on an inherited constructor.
+  if (IsUsingIfExists && UsingName.getName().getNameKind() ==
+                             DeclarationName::CXXConstructorName) {
+    Diag(UsingLoc, diag::err_using_if_exists_on_ctor);
+    return nullptr;
+  }
+
   DeclContext *LookupContext = computeDeclContext(SS);
-  NamedDecl *D;
   NestedNameSpecifierLoc QualifierLoc = SS.getWithLocInContext(Context);
   if (!LookupContext || EllipsisLoc.isValid()) {
+    NamedDecl *D;
     if (HasTypenameKeyword) {
       // FIXME: not all declaration name kinds are legal here
       D = UnresolvedUsingTypenameDecl::Create(Context, CurContext,
@@ -12087,6 +12117,7 @@ NamedDecl *Sema::BuildUsingDeclaration(
     }
     D->setAccess(AS);
     CurContext->addDecl(D);
+    ProcessDeclAttributeList(S, D, AttrList);
     return D;
   }
 
@@ -12096,6 +12127,7 @@ NamedDecl *Sema::BuildUsingDeclaration(
                           UsingName, HasTypenameKeyword);
     UD->setAccess(AS);
     CurContext->addDecl(UD);
+    ProcessDeclAttributeList(S, UD, AttrList);
     UD->setInvalidDecl(Invalid);
     return UD;
   };
@@ -12123,6 +12155,11 @@ NamedDecl *Sema::BuildUsingDeclaration(
   }
 
   LookupQualifiedName(R, LookupContext);
+
+  if (R.empty() && IsUsingIfExists)
+    R.addDecl(UnresolvedUsingIfExistsDecl::Create(Context, CurContext, UsingLoc,
+                                                  UsingName.getName()),
+              AS_public);
 
   // Try to correct typos if possible. If constructor name lookup finds no
   // results, that means the named class has no explicit constructors, and we
@@ -12197,7 +12234,8 @@ NamedDecl *Sema::BuildUsingDeclaration(
 
   if (HasTypenameKeyword) {
     // If we asked for a typename and got a non-type decl, error out.
-    if (!R.getAsSingle<TypeDecl>()) {
+    if (!R.getAsSingle<TypeDecl>() &&
+        !R.getAsSingle<UnresolvedUsingIfExistsDecl>()) {
       Diag(IdentLoc, diag::err_using_typename_non_type);
       for (LookupResult::iterator I = R.begin(), E = R.end(); I != E; ++I)
         Diag((*I)->getUnderlyingDecl()->getLocation(),
@@ -14307,10 +14345,7 @@ CXXMethodDecl *Sema::DeclareImplicitMoveAssignment(CXXRecordDecl *ClassDecl) {
                                             /* Diagnose */ false);
   }
 
-  // Build an exception specification pointing back at this member.
-  FunctionProtoType::ExtProtoInfo EPI =
-      getImplicitMethodEPI(*this, MoveAssignment);
-  MoveAssignment->setType(Context.getFunctionType(RetType, ArgType, EPI));
+  setupImplicitSpecialMemberType(MoveAssignment, RetType, ArgType);
 
   // Add the parameter to the operator.
   ParmVarDecl *FromParam = ParmVarDecl::Create(Context, MoveAssignment,

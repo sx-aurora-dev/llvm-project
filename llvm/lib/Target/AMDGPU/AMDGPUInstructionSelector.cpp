@@ -1390,7 +1390,24 @@ bool AMDGPUInstructionSelector::selectDSGWSIntrinsic(MachineInstr &MI,
 
   if (HasVSrc) {
     Register VSrc = MI.getOperand(1).getReg();
-    MIB.addReg(VSrc);
+
+    if (STI.needsAlignedVGPRs()) {
+      // Add implicit aligned super-reg to force alignment on the data operand.
+      Register Undef = MRI->createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+      BuildMI(*MBB, &*MIB, DL, TII.get(AMDGPU::IMPLICIT_DEF), Undef);
+      Register NewVR =
+          MRI->createVirtualRegister(&AMDGPU::VReg_64_Align2RegClass);
+      BuildMI(*MBB, &*MIB, DL, TII.get(AMDGPU::REG_SEQUENCE), NewVR)
+          .addReg(VSrc, 0, MI.getOperand(1).getSubReg())
+          .addImm(AMDGPU::sub0)
+          .addReg(Undef)
+          .addImm(AMDGPU::sub1);
+      MIB.addReg(NewVR, 0, AMDGPU::sub0);
+      MIB.addReg(NewVR, RegState::Implicit);
+    } else {
+      MIB.addReg(VSrc);
+    }
+
     if (!RBI.constrainGenericRegister(VSrc, AMDGPU::VGPR_32RegClass, *MRI))
       return false;
   }
@@ -3677,9 +3694,9 @@ AMDGPUInstructionSelector::selectScratchSAddr(MachineOperand &Root) const {
       const DebugLoc &DL = I.getDebugLoc();
       SAddr = MRI->createVirtualRegister(&AMDGPU::SReg_32RegClass);
 
-      BuildMI(*BB, &I, DL, TII.get(AMDGPU::S_ADD_U32), SAddr)
-        .addFrameIndex(FI)
-        .addReg(RHSDef->Reg);
+      BuildMI(*BB, &I, DL, TII.get(AMDGPU::S_ADD_I32), SAddr)
+          .addFrameIndex(FI)
+          .addReg(RHSDef->Reg);
     }
   }
 

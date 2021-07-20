@@ -64,7 +64,7 @@ Instruction *PredicatedUnaryOperator::Create(
     Value *V, const Twine &Name, BasicBlock *InsertAtEnd,
     Instruction *InsertBefore) {
   assert(!(InsertAtEnd && InsertBefore));
-  auto VPID = VPIntrinsic::GetForOpcode(Opc);
+  auto VPID = VPIntrinsic::getForOpcode(Opc);
 
   // Default Code Path
   if ((!Mod || (!Mask && !VectorLen)) || VPID == Intrinsic::not_intrinsic) {
@@ -124,7 +124,7 @@ Instruction *PredicatedBinaryOperator::Create(
     Value *V1, Value *V2, const Twine &Name, BasicBlock *InsertAtEnd,
     Instruction *InsertBefore) {
   assert(!(InsertAtEnd && InsertBefore));
-  auto VPID = VPIntrinsic::GetForOpcode(Opc);
+  auto VPID = VPIntrinsic::getForOpcode(Opc);
 
   // Default Code Path
   if ((!Mod || (!Mask && !VectorLen)) || VPID == Intrinsic::not_intrinsic) {
