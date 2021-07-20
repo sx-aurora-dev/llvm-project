@@ -127,7 +127,7 @@ public:
   static bool classof(const InputFile *f) { return f->kind() == OpaqueKind; }
 };
 
-// .dylib file
+// .dylib or .tbd file
 class DylibFile : public InputFile {
 public:
   // Mach-O dylibs can re-export other dylibs as sub-libraries, meaning that the
@@ -139,26 +139,45 @@ public:
   // (through an -lfoo flag), then `umbrella` should be a nullptr.
   explicit DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
                      bool isBundleLoader = false);
-
   explicit DylibFile(const llvm::MachO::InterfaceFile &interface,
                      DylibFile *umbrella = nullptr,
                      bool isBundleLoader = false);
 
+  void parseLoadCommands(MemoryBufferRef mb);
+  void parseReexports(const llvm::MachO::InterfaceFile &interface);
+
   static bool classof(const InputFile *f) { return f->kind() == DylibKind; }
 
-  StringRef dylibName;
+  StringRef installName;
+  DylibFile *exportingFile = nullptr;
+  DylibFile *umbrella;
+  SmallVector<StringRef, 2> rpaths;
   uint32_t compatibilityVersion = 0;
   uint32_t currentVersion = 0;
   int64_t ordinal = 0; // Ordinal numbering starts from 1, so 0 is a sentinel
   RefState refState;
   bool reexport = false;
+  bool forceNeeded = false;
   bool forceWeakImport = false;
+  bool deadStrippable = false;
+  bool explicitlyLinked = false;
+
+  unsigned numReferencedSymbols = 0;
+
+  bool isReferenced() const {
+    return numReferencedSymbols > 0;
+  }
 
   // An executable can be used as a bundle loader that will load the output
   // file being linked, and that contains symbols referenced, but not
   // implemented in the bundle. When used like this, it is very similar
   // to a Dylib, so we re-used the same class to represent it.
   bool isBundleLoader;
+
+private:
+  bool handleLDSymbol(StringRef originalName);
+  void handleLDPreviousSymbol(StringRef name, StringRef originalName);
+  void handleLDInstallNameSymbol(StringRef name, StringRef originalName);
 };
 
 // .a file

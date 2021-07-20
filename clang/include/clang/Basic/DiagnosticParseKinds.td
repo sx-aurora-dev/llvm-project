@@ -21,7 +21,7 @@ let CategoryName = "Inline Assembly Issue" in {
 def err_asm_empty : Error<"__asm used with no assembly instructions">;
 def err_inline_ms_asm_parsing : Error<"%0">;
 def err_msasm_unsupported_arch : Error<
-  "Unsupported architecture '%0' for MS-style inline assembly">;
+  "unsupported architecture '%0' for MS-style inline assembly">;
 def err_msasm_unable_to_create_target : Error<
   "MS-style inline assembly is not available: %0">;
 def err_gnu_inline_asm_disabled : Error<
@@ -925,9 +925,15 @@ def err_override_control_interface : Error<
 def ext_ms_sealed_keyword : ExtWarn<
   "'sealed' keyword is a Microsoft extension">,
   InGroup<MicrosoftSealed>;
+def ext_ms_abstract_keyword : ExtWarn<
+  "'abstract' keyword is a Microsoft extension">,
+  InGroup<MicrosoftAbstract>;
 
 def err_access_specifier_interface : Error<
   "interface types cannot specify '%select{private|protected}0' access">;
+
+def err_duplicate_class_virt_specifier : Error<
+  "class already marked '%0'">;
 
 def err_duplicate_virt_specifier : Error<
   "class member already marked '%0'">;

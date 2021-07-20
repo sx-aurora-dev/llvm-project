@@ -69,7 +69,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
 
   // FIXME: support subtargets which have neon/fp-armv8 disabled.
   if (!ST.hasNEON() || !ST.hasFPARMv8()) {
-    computeTables();
+    getLegacyLegalizerInfo().computeTables();
     return;
   }
 
@@ -251,6 +251,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
       .widenScalarToNextPow2(0);
 
   getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})
+      .lowerIf(atomicOrderingAtLeastOrStrongerThan(0, AtomicOrdering::Unordered))
       .legalForTypesWithMemDesc({{s32, p0, 8, 8},
                                  {s32, p0, 16, 8},
                                  {s32, p0, 32, 8},
@@ -751,7 +752,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
       .maxScalarEltSameAsIf(always, 1, 0)
       .customFor({{s32, s32}, {s64, s64}});
 
-  computeTables();
+  getLegacyLegalizerInfo().computeTables();
   verify(*ST.getInstrInfo());
 }
 
@@ -1096,7 +1097,7 @@ bool AArch64LegalizerInfo::legalizeAtomicCmpxchg128(
     //     %out = CASP %in1, ...
     //     %OldLo = G_EXTRACT %out, 0
     //     %OldHi = G_EXTRACT %out, 64
-    auto Ordering = (*MI.memoperands_begin())->getOrdering();
+    auto Ordering = (*MI.memoperands_begin())->getMergedOrdering();
     unsigned Opcode;
     switch (Ordering) {
     case AtomicOrdering::Acquire:

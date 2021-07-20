@@ -10,9 +10,9 @@
 #define _LIBCPP___ALGORITHM_UNWRAP_ITER_H
 
 #include <__config>
-#include <__iterator/iterator_traits.h> // __is_cpp17_contiguous_iterator
-#include <__memory/pointer_traits.h> // __to_address
-#include <utility>
+#include <iterator>
+#include <__memory/pointer_traits.h>
+#include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -22,8 +22,6 @@ _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-
-// __unwrap_iter, __rewrap_iter
 
 // The job of __unwrap_iter is to lower contiguous iterators (such as
 // vector<T>::iterator) into pointers, to reduce the number of template
@@ -62,7 +60,7 @@ struct __unwrap_iter_impl<_Iter, true> {
 
 template<class _Iter, class _Impl = __unwrap_iter_impl<_Iter> >
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
-decltype(_Impl::__apply(_VSTD::declval<_Iter>()))
+decltype(_Impl::__apply(declval<_Iter>()))
 __unwrap_iter(_Iter __i) _NOEXCEPT
 {
     return _Impl::__apply(__i);

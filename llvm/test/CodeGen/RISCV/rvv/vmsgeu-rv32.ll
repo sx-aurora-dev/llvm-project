@@ -1266,7 +1266,7 @@ define <vscale x 1 x i1> @intrinsic_vmsgeu_mask_vx_nxv1i16_i16(<vscale x 1 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e16,mf4,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v9
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e16,mf4,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf8,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v9
 ; CHECK-NEXT:    ret
 entry:
@@ -1315,7 +1315,7 @@ define <vscale x 2 x i1> @intrinsic_vmsgeu_mask_vx_nxv2i16_i16(<vscale x 2 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e16,mf2,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v9
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e16,mf2,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf4,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v9
 ; CHECK-NEXT:    ret
 entry:
@@ -1364,7 +1364,7 @@ define <vscale x 4 x i1> @intrinsic_vmsgeu_mask_vx_nxv4i16_i16(<vscale x 4 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e16,m1,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v9
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e16,m1,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf2,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v9
 ; CHECK-NEXT:    ret
 entry:
@@ -1413,7 +1413,7 @@ define <vscale x 8 x i1> @intrinsic_vmsgeu_mask_vx_nxv8i16_i16(<vscale x 8 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e16,m2,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v10
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e16,m2,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,m1,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v10
 ; CHECK-NEXT:    ret
 entry:
@@ -1462,7 +1462,7 @@ define <vscale x 16 x i1> @intrinsic_vmsgeu_mask_vx_nxv16i16_i16(<vscale x 16 x 
 ; CHECK-NEXT:    vsetvli zero, a1, e16,m4,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v12
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e16,m4,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,m2,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v12
 ; CHECK-NEXT:    ret
 entry:
@@ -1511,7 +1511,7 @@ define <vscale x 1 x i1> @intrinsic_vmsgeu_mask_vx_nxv1i32_i32(<vscale x 1 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e32,mf2,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v9
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e32,mf2,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf8,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v9
 ; CHECK-NEXT:    ret
 entry:
@@ -1560,7 +1560,7 @@ define <vscale x 2 x i1> @intrinsic_vmsgeu_mask_vx_nxv2i32_i32(<vscale x 2 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e32,m1,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v9
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e32,m1,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf4,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v9
 ; CHECK-NEXT:    ret
 entry:
@@ -1609,7 +1609,7 @@ define <vscale x 4 x i1> @intrinsic_vmsgeu_mask_vx_nxv4i32_i32(<vscale x 4 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e32,m2,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v10
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e32,m2,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,mf2,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v10
 ; CHECK-NEXT:    ret
 entry:
@@ -1658,7 +1658,7 @@ define <vscale x 8 x i1> @intrinsic_vmsgeu_mask_vx_nxv8i32_i32(<vscale x 8 x i1>
 ; CHECK-NEXT:    vsetvli zero, a1, e32,m4,tu,mu
 ; CHECK-NEXT:    vmv1r.v v0, v12
 ; CHECK-NEXT:    vmsltu.vx v25, v8, a0, v0.t
-; CHECK-NEXT:    vsetvli zero, zero, e32,m4,ta,mu
+; CHECK-NEXT:    vsetvli zero, zero, e8,m1,ta,mu
 ; CHECK-NEXT:    vmxor.mm v0, v25, v12
 ; CHECK-NEXT:    ret
 entry:
@@ -2761,11 +2761,9 @@ define <vscale x 1 x i1> @intrinsic_vmsgeu_maskedoff_mask_vx_nxv1i64_i64(<vscale
 ; CHECK-NEXT:    sw a0, 8(sp)
 ; CHECK-NEXT:    vsetvli zero, a2, e64,m1,ta,mu
 ; CHECK-NEXT:    addi a0, sp, 8
-; CHECK-NEXT:    vlse64.v v26, (a0), zero
-; CHECK-NEXT:    vmv1r.v v25, v0
+; CHECK-NEXT:    vlse64.v v25, (a0), zero
 ; CHECK-NEXT:    vsetvli zero, zero, e64,m1,tu,mu
-; CHECK-NEXT:    vmsleu.vv v25, v26, v8, v0.t
-; CHECK-NEXT:    vmv1r.v v0, v25
+; CHECK-NEXT:    vmsleu.vv v0, v25, v8, v0.t
 ; CHECK-NEXT:    addi sp, sp, 16
 ; CHECK-NEXT:    ret
 entry:

@@ -1518,6 +1518,11 @@ public:
 
   bool WarnedStackExhausted = false;
 
+  /// Increment when we find a reference; decrement when we find an ignored
+  /// assignment.  Ultimately the value is 0 if every reference is an ignored
+  /// assignment.
+  llvm::DenseMap<const VarDecl *, int> RefsMinusAssignments;
+
 public:
   Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
        TranslationUnitKind TUKind = TU_Complete,
@@ -3147,6 +3152,7 @@ public:
   void ActOnStartCXXMemberDeclarations(Scope *S, Decl *TagDecl,
                                        SourceLocation FinalLoc,
                                        bool IsFinalSpelledSealed,
+                                       bool IsAbstract,
                                        SourceLocation LBraceLoc);
 
   /// ActOnTagFinishDefinition - Invoked once we have finished parsing
@@ -4869,6 +4875,10 @@ public:
   void DiagnoseUnusedNestedTypedefs(const RecordDecl *D);
   void DiagnoseUnusedDecl(const NamedDecl *ND);
 
+  /// If VD is set but not otherwise used, diagnose, for a parameter or a
+  /// variable.
+  void DiagnoseUnusedButSetDecl(const VarDecl *VD);
+
   /// Emit \p DiagID if statement located on \p StmtLoc has a suspicious null
   /// statement as a \p Body, and it is located on the same line.
   ///
@@ -5692,10 +5702,10 @@ public:
                                IdentifierInfo *Ident);
 
   void HideUsingShadowDecl(Scope *S, UsingShadowDecl *Shadow);
-  bool CheckUsingShadowDecl(UsingDecl *UD, NamedDecl *Target,
+  bool CheckUsingShadowDecl(BaseUsingDecl *BUD, NamedDecl *Target,
                             const LookupResult &PreviousDecls,
                             UsingShadowDecl *&PrevShadow);
-  UsingShadowDecl *BuildUsingShadowDecl(Scope *S, UsingDecl *UD,
+  UsingShadowDecl *BuildUsingShadowDecl(Scope *S, BaseUsingDecl *BUD,
                                         NamedDecl *Target,
                                         UsingShadowDecl *PrevDecl);
 
@@ -5710,11 +5720,14 @@ public:
                                const DeclarationNameInfo &NameInfo,
                                SourceLocation NameLoc);
 
-  NamedDecl *BuildUsingDeclaration(
-      Scope *S, AccessSpecifier AS, SourceLocation UsingLoc,
-      bool HasTypenameKeyword, SourceLocation TypenameLoc, CXXScopeSpec &SS,
-      DeclarationNameInfo NameInfo, SourceLocation EllipsisLoc,
-      const ParsedAttributesView &AttrList, bool IsInstantiation);
+  NamedDecl *BuildUsingDeclaration(Scope *S, AccessSpecifier AS,
+                                   SourceLocation UsingLoc,
+                                   bool HasTypenameKeyword,
+                                   SourceLocation TypenameLoc, CXXScopeSpec &SS,
+                                   DeclarationNameInfo NameInfo,
+                                   SourceLocation EllipsisLoc,
+                                   const ParsedAttributesView &AttrList,
+                                   bool IsInstantiation, bool IsUsingIfExists);
   NamedDecl *BuildUsingPackDecl(NamedDecl *InstantiatedFrom,
                                 ArrayRef<NamedDecl *> Expansions);
 
@@ -6386,6 +6399,9 @@ public:
 
   // Marks SS invalid if it represents an incomplete type.
   bool RequireCompleteDeclContext(CXXScopeSpec &SS, DeclContext *DC);
+  // Complete an enum decl, maybe without a scope spec.
+  bool RequireCompleteEnumDecl(EnumDecl *D, SourceLocation L,
+                               CXXScopeSpec *SS = nullptr);
 
   DeclContext *computeDeclContext(QualType T);
   DeclContext *computeDeclContext(const CXXScopeSpec &SS,
