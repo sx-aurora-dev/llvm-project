@@ -542,7 +542,7 @@ Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
 
   Module *M = BB->getParent()->getParent();
 
-  Intrinsic::ID VPID = VPIntrinsic::GetForOpcode(OC);
+  Intrinsic::ID VPID = VPIntrinsic::getForOpcode(OC);
   auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, Params);
   auto *VPCall = createCallHelper(VPFunc, Params, this, Name);
 

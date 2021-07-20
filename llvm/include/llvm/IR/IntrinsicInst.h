@@ -401,14 +401,16 @@ public:
   // whether the intrinsic has a exception behavior parameter (regardless of
   // setting).
   static bool HasExceptionMode(Intrinsic::ID VPID);
-  static Optional<int> GetMaskParamPos(Intrinsic::ID IntrinsicID);
-  static Optional<int> GetVectorLengthParamPos(Intrinsic::ID IntrinsicID);
+  static Optional<unsigned> getMaskParamPos(Intrinsic::ID IntrinsicID);
+  static Optional<unsigned> getVectorLengthParamPos(Intrinsic::ID IntrinsicID);
   // the llvm.vp.* intrinsic for this other kind of intrinsic.
-  static Intrinsic::ID GetForIntrinsic(Intrinsic::ID IntrinsicID);
-  static Intrinsic::ID GetForOpcode(unsigned OC);
+  static Intrinsic::ID getForIntrinsic(Intrinsic::ID IntrinsicID);
+
+  /// The llvm.vp.* intrinsics for this instruction Opcode
+  static Intrinsic::ID getForOpcode(unsigned OC);
 
   // Whether \p ID is a VP intrinsic ID.
-  static bool IsVPIntrinsic(Intrinsic::ID);
+  static bool isVPIntrinsic(Intrinsic::ID);
 
   static VPIntrinsic::ShortTypeVec
   EncodeTypeTokens(unsigned VPID, Type *VecRetTy,
@@ -482,7 +484,7 @@ public:
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const IntrinsicInst *I) {
-    return IsVPIntrinsic(I->getIntrinsicID());
+    return isVPIntrinsic(I->getIntrinsicID());
   }
   static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
@@ -513,11 +515,11 @@ public:
 
   // Equivalent non-predicated opcode
   Optional<unsigned> getFunctionalOpcode() const {
-    return GetFunctionalOpcodeForVP(getIntrinsicID());
+    return getFunctionalOpcodeForVP(getIntrinsicID());
   }
 
   // Equivalent non-predicated opcode
-  static Optional<unsigned> GetFunctionalOpcodeForVP(Intrinsic::ID ID);
+  static Optional<unsigned> getFunctionalOpcodeForVP(Intrinsic::ID ID);
 };
 
 
