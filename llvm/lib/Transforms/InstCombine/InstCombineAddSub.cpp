@@ -2129,30 +2129,43 @@ Instruction *InstCombinerImpl::visitSub(BinaryOperator &I) {
 /// 'fsub(-0.0, X)' form by combining into a constant operand.
 template<typename MatchContextType>
 static Instruction *foldFNegIntoConstant(Instruction &I) {
+  // This is limited with one-use because fneg is assumed better for
+  // reassociation and cheaper in codegen than fmul/fdiv.
+  // TODO: Should the m_OneUse restriction be removed?
+  Instruction *FNegOp;
+  if (!match(&I, m_FNeg(m_OneUse(m_Instruction(FNegOp)))))
+    return nullptr;
+
   Value *X;
   Constant *C;
 
   MatchContextType MC(cast<Value>(&I));
   MatchContextBuilder<MatchContextType> MCBuilder(MC);
 
-  // Fold negation into constant operand. This is limited with one-use because
-  // fneg is assumed better for analysis and cheaper in codegen than fmul/fdiv.
-  // FIXME: It's arguable whether these should be m_OneUse or not. The current
-  // belief is that the FNeg allows for better reassociation opportunities.
+  // Fold negation into constant operand.
   // -(X * C) --> X * (-C)
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
+  if (MC.try_match(FNegOp, m_FMul(m_Value(X), m_Constant(C))))
     return MCBuilder.CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
   // -(X / C) --> X / (-C)
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
+  if (MC.try_match(FNegOp, m_FDiv(m_Value(X), m_Constant(C))))
     return MCBuilder.CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
   // -(C / X) --> (-C) / X
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
-    return MCBuilder.CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
+  if (MC.try_match(FNegOp, m_FDiv(m_Constant(C), m_Value(X)))) {
+    Instruction *FDiv =
+        MCBuilder.CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
 
+    // Intersect 'nsz' and 'ninf' because those special value exceptions may not
+    // apply to the fdiv. Everything else propagates from the fneg.
+    // TODO: We could propagate nsz/ninf from fdiv alone?
+    FastMathFlags FMF = I.getFastMathFlags();
+    FastMathFlags OpFMF = FNegOp->getFastMathFlags();
+    FDiv->setHasNoSignedZeros(FMF.noSignedZeros() & OpFMF.noSignedZeros());
+    FDiv->setHasNoInfs(FMF.noInfs() & OpFMF.noInfs());
+    return FDiv;
+  }
   // With NSZ [ counter-example with -0.0: -(-0.0 + 0.0) != 0.0 + -0.0 ]:
   // -(X + C) --> -X + -C --> -C - X
-  if (I.hasNoSignedZeros() &&
-      MC.try_match(&I, m_FNeg(m_OneUse(m_FAdd(m_Value(X), m_Constant(C))))))
+  if (I.hasNoSignedZeros() && MC.try_match(FNegOp, m_FAdd(m_Value(X), m_Constant(C))))
     return MCBuilder.CreateFSubFMF(ConstantExpr::getFNeg(C), X, &I);
 
   return nullptr;
