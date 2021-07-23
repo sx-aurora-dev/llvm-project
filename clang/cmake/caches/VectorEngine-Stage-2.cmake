@@ -38,7 +38,9 @@ set(LLVM_ENABLE_ZLIB False CACHE BOOL "")
 
 # Region vectorizer
 set (LLVM_TOOL_RV_BUILD ON CACHE STRING "")
-set (LLVM_RVPLUG_LINK_INTO_TOOLS On CACHE STRING "")
+
+# FIXME: Incompatible with LLVM dylib
+set (LLVM_RVPLUG_LINK_INTO_TOOLS Off CACHE STRING "")
 
 # Configure targets and flags.
 set(VE_TARGET "ve-linux")
