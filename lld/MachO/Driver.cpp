@@ -533,10 +533,9 @@ static void replaceCommonSymbols() {
     if (common == nullptr)
       continue;
 
-    auto *isec = make<ConcatInputSection>();
+    auto *isec =
+        make<ConcatInputSection>(segment_names::data, section_names::common);
     isec->file = common->getFile();
-    isec->name = section_names::common;
-    isec->segname = segment_names::data;
     isec->align = common->align;
     // Casting to size_t will truncate large values on 32-bit architectures,
     // but it's not really worth supporting the linking of 64-bit programs on
@@ -1020,6 +1019,8 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   config->headerPad = args::getHex(args, OPT_headerpad, /*Default=*/32);
   config->headerPadMaxInstallNames =
       args.hasArg(OPT_headerpad_max_install_names);
+  config->printDylibSearch =
+      args.hasArg(OPT_print_dylib_search) || getenv("RC_TRACE_DYLIB_SEARCHING");
   config->printEachFile = args.hasArg(OPT_t);
   config->printWhyLoad = args.hasArg(OPT_why_load);
   config->outputType = getOutputType(args);
@@ -1291,9 +1292,14 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
       TimeTraceScope timeScope("Gathering input sections");
       // Gather all InputSections into one vector.
       for (const InputFile *file : inputFiles) {
-        for (const SubsectionMap &map : file->subsections)
-          for (const SubsectionEntry &subsectionEntry : map)
-            inputSections.push_back(subsectionEntry.isec);
+        for (const SubsectionMap &map : file->subsections) {
+          for (const SubsectionEntry &entry : map) {
+            if (auto concatIsec = dyn_cast<ConcatInputSection>(entry.isec))
+              if (concatIsec->isCoalescedWeak())
+                continue;
+            inputSections.push_back(entry.isec);
+          }
+        }
       }
     }
 
