@@ -118,23 +118,6 @@ void DbgVariableIntrinsic::replaceVariableLocationOp(unsigned OpIdx,
       0, MetadataAsValue::get(getContext(), DIArgList::get(getContext(), MDs)));
 }
 
-void DbgVariableIntrinsic::addVariableLocationOps(ArrayRef<Value *> NewValues,
-                                                  DIExpression *NewExpr) {
-  assert(NewExpr->hasAllLocationOps(getNumVariableLocationOps() +
-                                    NewValues.size()) &&
-         "NewExpr for debug variable intrinsic does not reference every "
-         "location operand.");
-  assert(!is_contained(NewValues, nullptr) && "New values must be non-null");
-  setArgOperand(2, MetadataAsValue::get(getContext(), NewExpr));
-  SmallVector<ValueAsMetadata *, 4> MDs;
-  for (auto *VMD : location_ops())
-    MDs.push_back(getAsMetadata(VMD));
-  for (auto *VMD : NewValues)
-    MDs.push_back(getAsMetadata(VMD));
-  setArgOperand(
-      0, MetadataAsValue::get(getContext(), DIArgList::get(getContext(), MDs)));
-}
-
 Optional<uint64_t> DbgVariableIntrinsic::getFragmentSizeInBits() const {
   if (auto Fragment = getExpression()->getFragmentInfo())
     return Fragment->SizeInBits;
@@ -614,6 +597,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_nearbyint:
 
   case Intrinsic::vp_and:
+  case Intrinsic::vp_ctpop:
   case Intrinsic::vp_or:
   case Intrinsic::vp_xor:
   case Intrinsic::vp_ashr:
@@ -629,6 +613,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
 
   case Intrinsic::vp_fneg:
   case Intrinsic::vp_fadd:
+  case Intrinsic::vp_fma:
   case Intrinsic::vp_fsub:
   case Intrinsic::vp_fmul:
   case Intrinsic::vp_fdiv:
@@ -641,6 +626,8 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
   case Intrinsic::vp_select:
+  case Intrinsic::vp_compress:
+  case Intrinsic::vp_expand:
     return VPIntrinsic::ShortTypeVec{VecRetTy};
 
   case Intrinsic::vp_reduce_and:
@@ -666,7 +653,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
 
   case Intrinsic::vp_scatter:
   case Intrinsic::vp_store:
-    return VPIntrinsic::ShortTypeVec{VecPtrTy, VectorTy};
+    return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy};
 
   case Intrinsic::vp_fpext:
   case Intrinsic::vp_fptrunc:
@@ -697,7 +684,7 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
       (VPID == Intrinsic::vp_vshift) || (VPID == Intrinsic::vp_select);
   bool IsMemoryOp =
       (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load) ||
-      (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load);
+      (VPID == Intrinsic::vp_scatter) || (VPID == Intrinsic::vp_gather);
   bool IsCastOp =
       (VPID == Intrinsic::vp_fptosi) || (VPID == Intrinsic::vp_fptoui) ||
       (VPID == Intrinsic::vp_sitofp) || (VPID == Intrinsic::vp_uitofp) ||
@@ -726,6 +713,12 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
     if (DataPosOpt.hasValue()) {
       // store-kind operation
       VecTy = Params[DataPosOpt.getValue()]->getType();
+    } else if (VPID == Intrinsic::vp_gather) {
+      // Construct data vector from vector of pointer to element.
+      auto *ElemTy =
+          cast<VectorType>(VecPtrTy)->getElementType()->getPointerElementType();
+      VecTy = VectorType::get(ElemTy,
+                                 cast<VectorType>(VecPtrTy)->getElementCount());
     } else {
       // load-kind operation
       VecTy = VecPtrTy->getPointerElementType();

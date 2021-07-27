@@ -13925,7 +13925,7 @@ static SDValue combineBVZEXTLOAD(SDNode *N, SelectionDAG &DAG) {
   if (Operand.getOpcode() != ISD::LOAD)
     return SDValue();
 
-  LoadSDNode *LD = dyn_cast<LoadSDNode>(Operand);
+  auto *LD = cast<LoadSDNode>(Operand);
   EVT MemoryType = LD->getMemoryVT();
 
   // This transformation is only valid if the we are loading either a byte,
@@ -15648,7 +15648,13 @@ PPCTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   } else if ((Constraint == "wa" || Constraint == "wd" ||
              Constraint == "wf" || Constraint == "wi") &&
              Subtarget.hasVSX()) {
-    return std::make_pair(0U, &PPC::VSRCRegClass);
+    // A VSX register for either a scalar (FP) or vector. There is no
+    // support for single precision scalars on subtargets prior to Power8.
+    if (VT.isVector())
+      return std::make_pair(0U, &PPC::VSRCRegClass);
+    if (VT == MVT::f32 && Subtarget.hasP8Vector())
+      return std::make_pair(0U, &PPC::VSSRCRegClass);
+    return std::make_pair(0U, &PPC::VSFRCRegClass);
   } else if ((Constraint == "ws" || Constraint == "ww") && Subtarget.hasVSX()) {
     if (VT == MVT::f32 && Subtarget.hasP8Vector())
       return std::make_pair(0U, &PPC::VSSRCRegClass);
@@ -16571,9 +16577,7 @@ static SDValue combineADDToADDZE(SDNode *N, SelectionDAG &DAG,
   SDVTList VTs = DAG.getVTList(MVT::i64, MVT::Glue);
   SDValue Cmp = RHS.getOperand(0);
   SDValue Z = Cmp.getOperand(0);
-  auto *Constant = dyn_cast<ConstantSDNode>(Cmp.getOperand(1));
-
-  assert(Constant && "Constant Should not be a null pointer.");
+  auto *Constant = cast<ConstantSDNode>(Cmp.getOperand(1));
   int64_t NegConstant = 0 - Constant->getSExtValue();
 
   switch(cast<CondCodeSDNode>(Cmp.getOperand(2))->get()) {
@@ -17285,8 +17289,7 @@ PPC::AddrMode PPCTargetLowering::SelectOptimalAddrMode(const SDNode *Parent,
     if (Flags & PPC::MOF_RPlusSImm16) {
       SDValue Op0 = N.getOperand(0);
       SDValue Op1 = N.getOperand(1);
-      ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Op1);
-      int16_t Imm = CN->getAPIntValue().getZExtValue();
+      int16_t Imm = cast<ConstantSDNode>(Op1)->getAPIntValue().getZExtValue();
       if (!Align || isAligned(*Align, Imm)) {
         Disp = DAG.getTargetConstant(Imm, DL, N.getValueType());
         Base = Op0;
@@ -17312,7 +17315,7 @@ PPC::AddrMode PPCTargetLowering::SelectOptimalAddrMode(const SDNode *Parent,
     // zero or load-immediate-shifted and the displacement will be
     // the low 16 bits of the address.
     else if (Flags & PPC::MOF_AddrIsSImm32) {
-      ConstantSDNode *CN = dyn_cast<ConstantSDNode>(N);
+      auto *CN = cast<ConstantSDNode>(N);
       EVT CNType = CN->getValueType(0);
       uint64_t CNImm = CN->getZExtValue();
       // If this address fits entirely in a 16-bit sext immediate field, codegen

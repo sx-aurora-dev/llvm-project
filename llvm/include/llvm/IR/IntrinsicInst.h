@@ -204,11 +204,6 @@ public:
 
   void replaceVariableLocationOp(Value *OldValue, Value *NewValue);
   void replaceVariableLocationOp(unsigned OpIdx, Value *NewValue);
-  /// Adding a new location operand will always result in this intrinsic using
-  /// an ArgList, and must always be accompanied by a new expression that uses
-  /// the new operand.
-  void addVariableLocationOps(ArrayRef<Value *> NewValues,
-                              DIExpression *NewExpr);
 
   void setVariable(DILocalVariable *NewVar) {
     setArgOperand(1, MetadataAsValue::get(NewVar->getContext(), NewVar));
@@ -391,16 +386,19 @@ class VPIntrinsic : public IntrinsicInst {
 public:
   using ShortTypeVec = SmallVector<Type *, 4>;
 
-  /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters \p Params.
-  static Function* getDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params, Type* VecRetTy = nullptr);
-
-
   // whether the intrinsic has a rounding mode parameter (regardless of
   // setting).
   static bool HasRoundingMode(Intrinsic::ID VPID);
   // whether the intrinsic has a exception behavior parameter (regardless of
   // setting).
   static bool HasExceptionMode(Intrinsic::ID VPID);
+
+  /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters
+  /// \p Params.
+  static Function *getDeclarationForParams(Module *M, Intrinsic::ID,
+                                           ArrayRef<Value *> Params,
+                                           Type *VecRetTy = nullptr);
+
   static Optional<unsigned> getMaskParamPos(Intrinsic::ID IntrinsicID);
   static Optional<unsigned> getVectorLengthParamPos(Intrinsic::ID IntrinsicID);
   // the llvm.vp.* intrinsic for this other kind of intrinsic.
