@@ -123,19 +123,6 @@ END_REGISTER_VP_SDNODE(SDOPC)
 #define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCALAROC, SCALARINTRIN, SCALARISD)
 #endif
 
-// The intrinsic VPID of llvm.vp.* functionally corresponds to the intrinsic
-// CFPID of llvm.experimental.constrained.*.
-#ifndef HANDLE_VP_TO_CONSTRAINED_INTRIN
-#define HANDLE_VP_TO_CONSTRAINED_INTRIN(CPFID)
-#endif
-
-// This VP intrinsic accepts a constraint fp bundle.
-// Rounding mode arg pos is ROUNDPOS, exception behavior arg pos is EXCEPT POS.
-// not Value is None AND Value != '0' indicates that either round or except is expected.
-#ifndef HANDLE_VP_FPCONSTRAINT
-#define HANDLE_VP_FPCONSTRAINT(HASROUND, HASEXCEPT)
-#endif
-
 // End the property scope of a VP intrinsic.
 #ifndef END_REGISTER_VP_INTRINSIC
 #define END_REGISTER_VP_INTRINSIC(VPID)
@@ -167,6 +154,17 @@ END_REGISTER_VP_SDNODE(SDOPC)
 // link this VP ID to a relaxed (fp semantics) VP OC
 #ifndef HANDLE_VP_TO_RELAXEDSD
 #define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD)
+#endif
+
+// Whether the intrinsic may have a rounding mode or exception behavior operand
+// bundle.
+// \p HASROUND   '1' if the intrinsic can have a rounding mode operand bundle,
+//               '0' otherwise.
+// \p HASEXCEPT  '1' if the intrinsic can have an exception behavior operand
+//               bundle, '0' otherwise.
+// \p INTRINID  The constrained fp intrinsic this VP intrinsic corresponds to.
+#ifndef HANDLE_VP_TO_CONSTRAINEDFP
+#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, INTRINID)
 #endif
 
 /// } Property Macros
@@ -234,51 +232,57 @@ END_REGISTER_CASES(vp_ctpop, VP_CTPOP)
 
 ///// } Integer Arithmetic
 
-///// FP Arithmetic {
+///// Floating-Point Arithmetic {
 
-#define HELPER_REGISTER_BINARY_FP_VP(IROP, SDOPC, IROPC) \
-BEGIN_REGISTER_VP(vp_##IROP, 2, 3, VP_##SDOPC, -1) \
-HANDLE_VP_IS_BINARY \
-HANDLE_VP_TO_OPC(IROPC) \
-HANDLE_VP_TO_SD(SDOPC) \
-HANDLE_VP_FPCONSTRAINT(2, 3) \
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_##IROP) \
-END_REGISTER_VP(vp_##IROP, VP_##SDOPC)
+// Specialized helper macro for floating-point binary operators
+// <operation>(%x, %y, %mask, %evl).
+#ifdef HELPER_REGISTER_BINARY_FP_VP
+#error                                                                         \
+    "The internal helper macro HELPER_REGISTER_BINARY_FP_VP is already defined!"
+#endif
+#define HELPER_REGISTER_BINARY_FP_VP(OPSUFFIX, SDOPC, OPC)                     \
+  BEGIN_REGISTER_VP(vp_##OPSUFFIX, 2, 3, SDOPC, -1)                            \
+  HANDLE_VP_IS_BINARY                                                          \
+  HANDLE_VP_TO_OPC(OPC)                                                        \
+  HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_##OPSUFFIX)        \
+  END_REGISTER_VP(vp_##OPSUFFIX, SDOPC)
 
 // llvm.vp.fadd(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_FP_VP(fadd, FADD, FAdd)
-
-// llvm.vp.fdiv(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_FP_VP(fdiv, FDIV, FDiv)
-
-// llvm.vp.fmul(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_FP_VP(fmul, FMUL, FMul)
-
-// llvm.vp.fneg(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_fneg, 1, 2, VP_FNEG, -1)
-HANDLE_VP_FPCONSTRAINT(1, None)
-HANDLE_VP_TO_OPC(FNeg)
-HANDLE_VP_TO_SD(FNEG)
-// HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fneg)
-HANDLE_VP_IS_UNARY
-END_REGISTER_VP(vp_fneg, VP_FNEG)
-
-// llvm.vp.frem(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_FP_VP(frem, FREM, FRem)
+HELPER_REGISTER_BINARY_FP_VP(fadd, VP_FADD, FAdd)
 
 // llvm.vp.fsub(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_FP_VP(fsub, FSUB, FSub)
+HELPER_REGISTER_BINARY_FP_VP(fsub, VP_FSUB, FSub)
+
+// llvm.vp.fmul(x,y,mask,vlen)
+HELPER_REGISTER_BINARY_FP_VP(fmul, VP_FMUL, FMul)
+
+// llvm.vp.fdiv(x,y,mask,vlen)
+HELPER_REGISTER_BINARY_FP_VP(fdiv, VP_FDIV, FDiv)
+
+// llvm.vp.frem(x,y,mask,vlen)
+HELPER_REGISTER_BINARY_FP_VP(frem, VP_FREM, FRem)
 
 #undef HELPER_REGISTER_BINARY_FP_VP
 
+// llvm.vp.fneg(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_fneg, 1, 2, VP_FNEG, -1)
+HANDLE_VP_TO_OPC(FNeg)
+HANDLE_VP_TO_SD(FNEG)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 0, not_intrinsic) // experimental_constrained_fneg
+HANDLE_VP_IS_UNARY
+END_REGISTER_VP(vp_fneg, VP_FNEG)
+
+
+
 // llvm.vp.fma(x,y,z,mask,vlen)
 BEGIN_REGISTER_VP(vp_fma, 3, 4, VP_FMA, -1)
-HANDLE_VP_FPCONSTRAINT(3, 4)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fma)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_fma)
 HANDLE_VP_TO_INTRIN(fma)
 HANDLE_VP_TO_SD(FMA)
 HANDLE_VP_IS_TERNARY
 END_REGISTER_CASES(vp_fma, VP_FMA)
+
+///// } Floating-Point Arithmetic
 
 ///// Cast, Extend & Round /////
 
@@ -286,8 +290,7 @@ END_REGISTER_CASES(vp_fma, VP_FMA)
 BEGIN_REGISTER_VP_INTRINSIC(vp_ceil, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FCEIL, -1, vp_fceil, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_ceil)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
 HANDLE_VP_TO_INTRIN(ceil)
 END_REGISTER_CASES(vp_ceil, VP_FCEIL)
 
@@ -296,8 +299,7 @@ END_REGISTER_CASES(vp_ceil, VP_FCEIL)
 BEGIN_REGISTER_VP_INTRINSIC(vp_trunc, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_TRUNC, -1, vp_trunc, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_trunc)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_trunc)
 HANDLE_VP_TO_INTRIN(trunc)
 END_REGISTER_CASES(vp_trunc, VP_TRUNC)
 
@@ -310,16 +312,14 @@ END_REGISTER_CASES(vp_trunc, VP_TRUNC)
 BEGIN_REGISTER_VP_INTRINSIC(vp_floor, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FFLOOR, -1, vp_ffloor, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_floor)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
 HANDLE_VP_TO_INTRIN(floor)
 END_REGISTER_CASES(vp_floor, VP_FFLOOR)
 
 // llvm.vp.fpext(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fpext, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FP_EXTEND, -1, vp_fpext, 1, 2)
-HANDLE_VP_FPCONSTRAINT(None, 1)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fpext)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_fpext)
 HANDLE_VP_TO_OPC(FPExt)
 END_REGISTER_CASES(vp_fpext, VP_FP_EXTEND)
 
@@ -327,24 +327,21 @@ END_REGISTER_CASES(vp_fpext, VP_FP_EXTEND)
 // llvm.vp.fptrunc(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fptrunc, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FP_TRUNC, -1, vp_fptrunc, 1, 2)
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fptrunc)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_fptrunc)
 HANDLE_VP_TO_OPC(FPTrunc)
 END_REGISTER_CASES(vp_fptrunc, VP_FP_TRUNC)
 
 // llvm.vp.fptoui(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fptoui, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FP_TO_UINT, -1, vp_fp_to_uint, 1, 2)
-HANDLE_VP_FPCONSTRAINT(None, 1)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fptoui)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_fptoui)
 HANDLE_VP_TO_OPC(FPToUI)
 END_REGISTER_CASES(vp_fptoui, VP_FP_TO_UINT)
 
 // llvm.vp.fptosi(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fptosi, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FP_TO_SINT, -1, vp_fp_to_sint, 1, 2)
-HANDLE_VP_FPCONSTRAINT(None, 1)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fptosi)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_fptosi)
 HANDLE_VP_TO_OPC(FPToSI)
 END_REGISTER_CASES(vp_fptosi, VP_FP_TO_SINT)
 
@@ -352,24 +349,21 @@ END_REGISTER_CASES(vp_fptosi, VP_FP_TO_SINT)
 BEGIN_REGISTER_VP_INTRINSIC(vp_uitofp, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_UINT_TO_FP, -1, vp_uint_to_fp, 1, 2)
 HANDLE_VP_TO_OPC(UIToFP)
-HANDLE_VP_FPCONSTRAINT(1, 2)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_uitofp)
 END_REGISTER_CASES(vp_uitofp, VP_UINT_TO_FP)
-// HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_uitofp,experimental_constrained_uitofp)
 
 // llvm.vp.sitofp(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_sitofp, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_SINT_TO_FP, -1, vp_sint_to_fp, 1, 2)
 HANDLE_VP_TO_OPC(SIToFP)
-HANDLE_VP_FPCONSTRAINT(1, 2)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_sitofp)
 END_REGISTER_CASES(vp_sitofp, VP_SINT_TO_FP)
-// HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_sitofp,experimental_constrained_sitofp)
 
 // llvm.vp.round(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_round, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FROUND, -1, vp_fround, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_round)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_round)
 HANDLE_VP_TO_INTRIN(round)
 END_REGISTER_CASES(vp_round, VP_FROUND)
 
@@ -377,8 +371,7 @@ END_REGISTER_CASES(vp_round, VP_FROUND)
 BEGIN_REGISTER_VP_INTRINSIC(vp_rint, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FRINT, -1, vp_frint, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_rint)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
 HANDLE_VP_TO_INTRIN(rint)
 END_REGISTER_CASES(vp_rint, VP_FRINT)
 
@@ -386,8 +379,7 @@ END_REGISTER_CASES(vp_rint, VP_FRINT)
 BEGIN_REGISTER_VP_INTRINSIC(vp_nearbyint, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FNEARBYINT, -1, vp_fnearbyint, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_nearbyint)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
 HANDLE_VP_TO_INTRIN(nearbyint)
 END_REGISTER_CASES(vp_nearbyint, VP_FNEARBYINT)
 
@@ -397,8 +389,7 @@ END_REGISTER_CASES(vp_nearbyint, VP_FNEARBYINT)
 BEGIN_REGISTER_VP_INTRINSIC(vp_sqrt, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FSQRT, -1, vp_fsqrt, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_sqrt)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_sqrt)
 HANDLE_VP_TO_INTRIN(sqrt)
 END_REGISTER_CASES(vp_sqrt, VP_FSQRT)
 
@@ -406,8 +397,7 @@ END_REGISTER_CASES(vp_sqrt, VP_FSQRT)
 BEGIN_REGISTER_VP_INTRINSIC(vp_pow, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_FPOW, -1, vp_fpow, 2, 3)
 HANDLE_VP_IS_BINARY
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_pow)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_pow)
 HANDLE_VP_TO_INTRIN(pow)
 END_REGISTER_CASES(vp_pow, VP_FPOW)
 
@@ -415,8 +405,7 @@ END_REGISTER_CASES(vp_pow, VP_FPOW)
 BEGIN_REGISTER_VP_INTRINSIC(vp_powi, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_FPOWI, -1, vp_fpowi, 2, 3)
 HANDLE_VP_IS_BINARY
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_powi)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_powi)
 HANDLE_VP_TO_INTRIN(powi)
 END_REGISTER_CASES(vp_powi, VP_FPOWI)
 
@@ -424,8 +413,7 @@ END_REGISTER_CASES(vp_powi, VP_FPOWI)
 BEGIN_REGISTER_VP_INTRINSIC(vp_maxnum, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_FMAXNUM, -1, vp_fmaxnum, 2, 3)
 HANDLE_VP_IS_BINARY
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_maxnum)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_maxnum)
 HANDLE_VP_TO_INTRIN(maxnum)
 END_REGISTER_CASES(vp_maxnum, VP_FMAXNUM)
 
@@ -433,8 +421,7 @@ END_REGISTER_CASES(vp_maxnum, VP_FMAXNUM)
 BEGIN_REGISTER_VP_INTRINSIC(vp_minnum, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_FMINNUM, -1, vp_fminnum, 2, 3)
 HANDLE_VP_IS_BINARY
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_minnum)
+HANDLE_VP_TO_CONSTRAINEDFP(0, 1, experimental_constrained_minnum)
 HANDLE_VP_TO_INTRIN(minnum)
 END_REGISTER_CASES(vp_minnum, VP_FMINNUM)
 
@@ -442,8 +429,7 @@ END_REGISTER_CASES(vp_minnum, VP_FMINNUM)
 BEGIN_REGISTER_VP_INTRINSIC(vp_sin, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FSIN, -1, vp_fsin, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_sin)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_sin)
 HANDLE_VP_TO_INTRIN(sin)
 END_REGISTER_CASES(vp_sin, VP_FSIN)
 
@@ -451,8 +437,7 @@ END_REGISTER_CASES(vp_sin, VP_FSIN)
 BEGIN_REGISTER_VP_INTRINSIC(vp_cos, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FCOS, -1, vp_fcos, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_cos)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_cos)
 HANDLE_VP_TO_INTRIN(cos)
 END_REGISTER_CASES(vp_cos, VP_FCOS)
 
@@ -460,8 +445,7 @@ END_REGISTER_CASES(vp_cos, VP_FCOS)
 BEGIN_REGISTER_VP_INTRINSIC(vp_log, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FLOG, -1, vp_flog, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_log)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_log)
 HANDLE_VP_TO_INTRIN(log)
 END_REGISTER_CASES(vp_log, VP_FLOG)
 
@@ -469,8 +453,7 @@ END_REGISTER_CASES(vp_log, VP_FLOG)
 BEGIN_REGISTER_VP_INTRINSIC(vp_log10, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FLOG10, -1, vp_flog10, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_log10)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_log10)
 HANDLE_VP_TO_INTRIN(log10)
 END_REGISTER_CASES(vp_log10, VP_FLOG10)
 
@@ -478,8 +461,7 @@ END_REGISTER_CASES(vp_log10, VP_FLOG10)
 BEGIN_REGISTER_VP_INTRINSIC(vp_log2, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FLOG2, -1, vp_flog2, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_log2)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_log2)
 HANDLE_VP_TO_INTRIN(log2)
 END_REGISTER_CASES(vp_log2, VP_FLOG2)
 
@@ -487,8 +469,7 @@ END_REGISTER_CASES(vp_log2, VP_FLOG2)
 BEGIN_REGISTER_VP_INTRINSIC(vp_exp, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FEXP, -1, vp_fexp, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_exp)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_exp)
 HANDLE_VP_TO_INTRIN(exp)
 END_REGISTER_CASES(vp_exp, VP_FEXP)
 
@@ -496,8 +477,7 @@ END_REGISTER_CASES(vp_exp, VP_FEXP)
 BEGIN_REGISTER_VP_INTRINSIC(vp_exp2, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FEXP2, -1, vp_fexp2, 1, 2)
 HANDLE_VP_IS_UNARY
-HANDLE_VP_FPCONSTRAINT(1, 2)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_exp2)
+HANDLE_VP_TO_CONSTRAINEDFP(1, 1, experimental_constrained_exp2)
 HANDLE_VP_TO_INTRIN(exp2)
 END_REGISTER_CASES(vp_exp2, VP_FEXP2)
 
@@ -702,16 +682,15 @@ END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
 #undef END_REGISTER_VP
 #undef END_REGISTER_VP_INTRINSIC
 #undef END_REGISTER_VP_SDNODE
-#undef HANDLE_VP_FPCONSTRAINT
 #undef HANDLE_VP_IS_BINARY
 #undef HANDLE_VP_IS_MEMOP
 #undef HANDLE_VP_IS_TERNARY
 #undef HANDLE_VP_IS_UNARY
 #undef HANDLE_VP_IS_XCMP
 #undef HANDLE_VP_REDUCTION
-#undef HANDLE_VP_TO_CONSTRAINED_INTRIN
+#undef HANDLE_VP_TO_CONSTRAINEDFP
 #undef HANDLE_VP_TO_INTRIN
 #undef HANDLE_VP_TO_OPC
-#undef HANDLE_VP_TO_SD
 #undef HANDLE_VP_TO_RELAXEDSD
+#undef HANDLE_VP_TO_SD
 #undef HANDLE_VP_TO_SDNODE

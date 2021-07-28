@@ -628,6 +628,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_select:
   case Intrinsic::vp_compress:
   case Intrinsic::vp_expand:
+    assert(VecRetTy);
     return VPIntrinsic::ShortTypeVec{VecRetTy};
 
   case Intrinsic::vp_reduce_and:
@@ -649,6 +650,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
 
   case Intrinsic::vp_gather:
   case Intrinsic::vp_load:
+    assert(VecRetTy);
     return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
 
   case Intrinsic::vp_scatter:
@@ -661,6 +663,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_fptosi:
   case Intrinsic::vp_sitofp:
   case Intrinsic::vp_uitofp:
+    assert(VecRetTy);
     return VPIntrinsic::ShortTypeVec{VecRetTy, VectorTy};
 
   case Intrinsic::vp_icmp:
@@ -839,7 +842,7 @@ VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_FPCONSTRAINT(HASROUND, HASEXCEPT) HasExcept = (bool) HASEXCEPT;
+#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasExcept = (bool) HASEXCEPT;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -854,7 +857,7 @@ bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_FPCONSTRAINT(HASROUND, HASEXCEPT) HasRound = (bool) HASROUND;
+#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasRound = (bool) HASROUND;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -863,15 +866,22 @@ bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
 }
 
 Intrinsic::ID VPIntrinsic::getForIntrinsic(Intrinsic::ID IntrinsicID) {
-  switch (IntrinsicID) {
-  default:
-    return Intrinsic::not_intrinsic;
-
-#define HANDLE_VP_TO_CONSTRAINED_INTRIN(CFPID) return Intrinsic::CFPID;
-#define HANDLE_VP_TO_INTRIN(INTRINID) case Intrinsic::INTRINID:
-#define END_REGISTER_VP_INTRINSIC(VPID) return Intrinsic::VPID;
+  static std::map<unsigned, unsigned> IntrinToVP;
+  if (IntrinToVP.empty()) {
+    unsigned CurrentVPID;
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) CurrentVPID = Intrinsic::VPID;
+#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
+  if (Intrinsic::CFPID != Intrinsic::not_intrinsic)                            \
+    IntrinToVP[(unsigned)Intrinsic::CFPID] = CurrentVPID;
+#define HANDLE_VP_TO_INTRIN(INTRINID)                                          \
+  IntrinToVP[(unsigned)Intrinsic::INTRINID] = CurrentVPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
+
+  auto It = IntrinToVP.find((unsigned)IntrinsicID);
+  if (It == IntrinToVP.end())
+    return Intrinsic::not_intrinsic;
+  return (Intrinsic::ID)It->second;
 }
 
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {
