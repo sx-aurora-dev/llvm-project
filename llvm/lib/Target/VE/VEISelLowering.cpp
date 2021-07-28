@@ -83,8 +83,6 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
-static const MVT AllPackedVTs[] = {MVT::v512i32, MVT::v512f32};
-
 static const MVT WholeVectorVTs[] =
     { MVT::v512i32, MVT::v512f32,
       MVT::v256i32, MVT::v256f32, MVT::v256i64, MVT::v256f64,
@@ -1999,98 +1997,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   return DefinedValues < 3;
 #endif
 }
-
-static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
-  if (!isa<BuildVectorSDNode>(N))
-    return false;
-  const auto *BVN = cast<BuildVectorSDNode>(N);
-
-  // Find first non-undef insertion.
-  unsigned Idx;
-  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      break;
-  }
-  // Catch the (hypothetical) all-undef case.
-  if (Idx == BVN->getNumOperands())
-    return false;
-  // Remember insertion.
-  UniqueIdx = Idx++;
-  // Verify that all other insertions are undef.
-  for (; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      return false;
-  }
-  return true;
-}
-
-static SDValue getSplatValue(SDNode *N) {
-  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
-    return BuildVec->getSplatValue();
-  }
-  return SDValue();
-}
-
-// SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
-//                                             SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_BUILD_VECTOR(Op, DAG);
-//   SDLoc DL(Op);
-//   unsigned NumEls = Op.getValueType().getVectorNumElements();
-//   MVT ElemVT = Op.getSimpleValueType().getVectorElementType();
-// 
-//   // If there is just one element, expand to INSERT_VECTOR_ELT.
-//   unsigned UniqueIdx;
-//   if (getUniqueInsertion(Op.getNode(), UniqueIdx)) {
-//     SDValue AccuV = DAG.getUNDEF(Op.getValueType());
-//     auto ElemV = Op->getOperand(UniqueIdx);
-//     SDValue IdxV = DAG.getConstant(UniqueIdx, DL, MVT::i64);
-//     return DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getValueType(), AccuV,
-//                        ElemV, IdxV);
-//   }
-// 
-//   // Else emit a broadcast.
-//   if (SDValue ScalarV = getSplatValue(Op.getNode())) {
-//     // lower to VEC_BROADCAST
-//     MVT LegalResVT = MVT::getVectorVT(ElemVT, 256);
-// 
-//     auto AVL = DAG.getConstant(NumEls, DL, MVT::i32);
-//     return DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalResVT, Op.getOperand(0),
-//                        AVL);
-//   }
-// 
-//   // Expand
-//   return SDValue();
-// }
-
-// SDValue VETargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
-//                                               SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-//   if (Subtarget->intrinsic())
-//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMGATHER(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MLOAD(Op, DAG);
-//   return SDValue();
-// }
 
 /// } Custom Lower
 
