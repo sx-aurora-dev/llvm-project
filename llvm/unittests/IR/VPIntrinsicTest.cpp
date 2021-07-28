@@ -32,7 +32,7 @@ protected:
   LLVMContext C;
   SMDiagnostic Err;
 
-  std::unique_ptr<Module> CreateVPDeclarationModule() {
+  std::unique_ptr<Module> createVPDeclarationModule() {
     std::stringstream Str;
     Str <<
 " declare <8 x i32> @llvm.vp.ctpop.v8i32(<8 x i32>, <8 x i1>, i32) "
@@ -135,7 +135,7 @@ TEST_F(VPIntrinsicTest, VPIntrinsicsDefScopes) {
 /// Check that every VP intrinsic in the test module is recognized as a VP
 /// intrinsic.
 TEST_F(VPIntrinsicTest, VPModuleComplete) {
-  std::unique_ptr<Module> M = CreateVPDeclarationModule();
+  std::unique_ptr<Module> M = createVPDeclarationModule();
   assert(M);
 
   // Check that all @llvm.vp.* functions in the module are recognized vp
@@ -197,25 +197,24 @@ TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
   auto *F = M->getFunction("test_static_vlen");
   assert(F);
 
-  const int NumExpected = 12;
   const bool Expected[] = {false, true,  false, false, false, true,
                            false, false, true,  false, true,  false};
-  int i = 0;
+  const auto *ExpectedIt = std::begin(Expected);
   for (auto &I : F->getEntryBlock()) {
     VPIntrinsic *VPI = dyn_cast<VPIntrinsic>(&I);
     if (!VPI)
       continue;
 
-    ASSERT_LT(i, NumExpected);
-    ASSERT_EQ(Expected[i], VPI->canIgnoreVectorLengthParam());
-    ++i;
+    ASSERT_NE(ExpectedIt, std::end(Expected));
+    ASSERT_EQ(*ExpectedIt, VPI->canIgnoreVectorLengthParam());
+    ++ExpectedIt;
   }
 }
 
 /// Check that the argument returned by
 /// VPIntrinsic::get<X>ParamPos(Intrinsic::ID) has the expected type.
 TEST_F(VPIntrinsicTest, GetParamPos) {
-  std::unique_ptr<Module> M = CreateVPDeclarationModule();
+  std::unique_ptr<Module> M = createVPDeclarationModule();
   assert(M);
 
   for (Function &F : *M) {
@@ -277,7 +276,7 @@ TEST_F(VPIntrinsicTest, OpcodeRoundTrip) {
 /// Check that going from VP intrinsic to Opcode and back results in the same
 /// intrinsic id.
 TEST_F(VPIntrinsicTest, IntrinsicIDRoundTrip) {
-  std::unique_ptr<Module> M = CreateVPDeclarationModule();
+  std::unique_ptr<Module> M = createVPDeclarationModule();
   assert(M);
 
   unsigned FullTripCounts = 0;
@@ -299,7 +298,7 @@ TEST_F(VPIntrinsicTest, IntrinsicIDRoundTrip) {
 
 /// Check that VPIntrinsic::getDeclarationForParams works.
 TEST_F(VPIntrinsicTest, VPIntrinsicDeclarationForParams) {
-  std::unique_ptr<Module> M = CreateVPDeclarationModule();
+  std::unique_ptr<Module> M = createVPDeclarationModule();
   assert(M);
 
   auto OutM = std::make_unique<Module>("", M->getContext());
@@ -323,8 +322,10 @@ TEST_F(VPIntrinsicTest, VPIntrinsicDeclarationForParams) {
 
     // Check that 'old decl' == 'new decl'.
     ASSERT_EQ(F.getIntrinsicID(), NewDecl->getIntrinsicID());
-    auto ItNewParams = NewDecl->getFunctionType()->param_begin();
-    auto EndItNewParams = NewDecl->getFunctionType()->param_end();
+    FunctionType::param_iterator ItNewParams =
+        NewDecl->getFunctionType()->param_begin();
+    FunctionType::param_iterator EndItNewParams =
+        NewDecl->getFunctionType()->param_end();
     for (auto *ParamTy : FuncTy->params()) {
       ASSERT_NE(ItNewParams, EndItNewParams);
       ASSERT_EQ(*ItNewParams, ParamTy);

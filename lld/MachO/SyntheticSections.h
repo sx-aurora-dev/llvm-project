@@ -136,19 +136,12 @@ private:
 
 class GotSection final : public NonLazyPointerSectionBase {
 public:
-  GotSection()
-      : NonLazyPointerSectionBase(segment_names::dataConst,
-                                  section_names::got) {
-    // TODO: section_64::reserved1 should be an index into the indirect symbol
-    // table, which we do not currently emit
-  }
+  GotSection();
 };
 
 class TlvPointerSection final : public NonLazyPointerSectionBase {
 public:
-  TlvPointerSection()
-      : NonLazyPointerSectionBase(segment_names::data,
-                                  section_names::threadPtrs) {}
+  TlvPointerSection();
 };
 
 struct Location {
@@ -369,6 +362,21 @@ public:
 private:
   TrieBuilder trieBuilder;
   size_t size = 0;
+};
+
+// Stores 'data in code' entries that describe the locations of
+// data regions inside code sections.
+class DataInCodeSection final : public LinkEditSection {
+public:
+  DataInCodeSection();
+  void finalizeContents() override;
+  uint64_t getRawSize() const override {
+    return sizeof(llvm::MachO::data_in_code_entry) * entries.size();
+  }
+  void writeTo(uint8_t *buf) const override;
+
+private:
+  std::vector<llvm::MachO::data_in_code_entry> entries;
 };
 
 // Stores ULEB128 delta encoded addresses of functions.
