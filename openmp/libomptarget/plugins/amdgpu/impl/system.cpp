@@ -241,41 +241,6 @@ static hsa_status_t get_agent_info(hsa_agent_t agent, void *data) {
   return err;
 }
 
-hsa_status_t get_fine_grained_region(hsa_region_t region, void *data) {
-  hsa_region_segment_t segment;
-  hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &segment);
-  if (segment != HSA_REGION_SEGMENT_GLOBAL) {
-    return HSA_STATUS_SUCCESS;
-  }
-  hsa_region_global_flag_t flags;
-  hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
-  if (flags & HSA_REGION_GLOBAL_FLAG_FINE_GRAINED) {
-    hsa_region_t *ret = reinterpret_cast<hsa_region_t *>(data);
-    *ret = region;
-    return HSA_STATUS_INFO_BREAK;
-  }
-  return HSA_STATUS_SUCCESS;
-}
-
-/* Determines if a memory region can be used for kernarg allocations.  */
-static hsa_status_t get_kernarg_memory_region(hsa_region_t region, void *data) {
-  hsa_region_segment_t segment;
-  hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &segment);
-  if (HSA_REGION_SEGMENT_GLOBAL != segment) {
-    return HSA_STATUS_SUCCESS;
-  }
-
-  hsa_region_global_flag_t flags;
-  hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
-  if (flags & HSA_REGION_GLOBAL_FLAG_KERNARG) {
-    hsa_region_t *ret = reinterpret_cast<hsa_region_t *>(data);
-    *ret = region;
-    return HSA_STATUS_INFO_BREAK;
-  }
-
-  return HSA_STATUS_SUCCESS;
-}
-
 static hsa_status_t init_compute_and_memory() {
   hsa_status_t err;
 
@@ -393,38 +358,6 @@ static hsa_status_t init_compute_and_memory() {
     DEBUG_PRINT("\nFine Memories : %d", fine_memories_size);
     DEBUG_PRINT("\tCoarse Memories : %d\n", coarse_memories_size);
     proc_index++;
-  }
-  proc_index = 0;
-  hsa_region_t atl_cpu_kernarg_region;
-  atl_cpu_kernarg_region.handle = (uint64_t)-1;
-  if (cpu_procs.size() > 0) {
-    err = hsa_agent_iterate_regions(
-        cpu_procs[0].agent(), get_fine_grained_region, &atl_cpu_kernarg_region);
-    if (err == HSA_STATUS_INFO_BREAK) {
-      err = HSA_STATUS_SUCCESS;
-    }
-    err = (atl_cpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
-                                                          : HSA_STATUS_SUCCESS;
-    if (err != HSA_STATUS_SUCCESS) {
-      printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__,
-             "Finding a CPU kernarg memory region handle",
-             get_error_string(err));
-      return err;
-    }
-  }
-  hsa_region_t atl_gpu_kernarg_region;
-  /* Find a memory region that supports kernel arguments.  */
-  atl_gpu_kernarg_region.handle = (uint64_t)-1;
-  if (gpu_procs.size() > 0) {
-    hsa_agent_iterate_regions(gpu_procs[0].agent(), get_kernarg_memory_region,
-                              &atl_gpu_kernarg_region);
-    err = (atl_gpu_kernarg_region.handle == (uint64_t)-1) ? HSA_STATUS_ERROR
-                                                          : HSA_STATUS_SUCCESS;
-    if (err != HSA_STATUS_SUCCESS) {
-      printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__,
-             "Finding a kernarg memory region", get_error_string(err));
-      return err;
-    }
   }
   if (num_procs > 0)
     return HSA_STATUS_SUCCESS;
@@ -703,7 +636,7 @@ int populate_kernelArgMD(msgpack::byte_range args_element,
 } // namespace
 
 static hsa_status_t get_code_object_custom_metadata(
-    void *binary, size_t binSize, int gpu,
+    void *binary, size_t binSize,
     std::map<std::string, atl_kernel_info_t> &KernelInfoTable) {
   // parse code object with different keys from v2
   // also, the kernel name is not the same as the symbol name -- so a
@@ -878,7 +811,7 @@ static hsa_status_t get_code_object_custom_metadata(
 }
 
 static hsa_status_t
-populate_InfoTables(hsa_executable_symbol_t symbol, int gpu,
+populate_InfoTables(hsa_executable_symbol_t symbol,
                     std::map<std::string, atl_kernel_info_t> &KernelInfoTable,
                     std::map<std::string, atl_symbol_info_t> &SymbolInfoTable) {
   hsa_symbol_kind_t type;
@@ -1020,16 +953,11 @@ populate_InfoTables(hsa_executable_symbol_t symbol, int gpu,
 hsa_status_t RegisterModuleFromMemory(
     std::map<std::string, atl_kernel_info_t> &KernelInfoTable,
     std::map<std::string, atl_symbol_info_t> &SymbolInfoTable,
-    void *module_bytes, size_t module_size, int gpu,
+    void *module_bytes, size_t module_size, hsa_agent_t agent,
     hsa_status_t (*on_deserialized_data)(void *data, size_t size,
                                          void *cb_state),
     void *cb_state, std::vector<hsa_executable_t> &HSAExecutables) {
   hsa_status_t err;
-  assert(gpu >= 0);
-
-  DEBUG_PRINT("Trying to load module to GPU-%d\n", gpu);
-  ATLGPUProcessor &proc = get_processor<ATLGPUProcessor>(gpu);
-  hsa_agent_t agent = proc.agent();
   hsa_executable_t executable = {0};
   hsa_profile_t agent_profile;
 
@@ -1058,7 +986,7 @@ hsa_status_t RegisterModuleFromMemory(
       // Some metadata info is not available through ROCr API, so use custom
       // code object metadata parsing to collect such metadata info
 
-      err = get_code_object_custom_metadata(module_bytes, module_size, gpu,
+      err = get_code_object_custom_metadata(module_bytes, module_size,
                                             KernelInfoTable);
       if (err != HSA_STATUS_SUCCESS) {
         DEBUG_PRINT("[%s:%d] %s failed: %s\n", __FILE__, __LINE__,
@@ -1116,8 +1044,7 @@ hsa_status_t RegisterModuleFromMemory(
     err = hsa::executable_iterate_symbols(
         executable,
         [&](hsa_executable_t, hsa_executable_symbol_t symbol) -> hsa_status_t {
-          return populate_InfoTables(symbol, gpu, KernelInfoTable,
-                                     SymbolInfoTable);
+          return populate_InfoTables(symbol, KernelInfoTable, SymbolInfoTable);
         });
     if (err != HSA_STATUS_SUCCESS) {
       printf("[%s:%d] %s failed: %s\n", __FILE__, __LINE__,

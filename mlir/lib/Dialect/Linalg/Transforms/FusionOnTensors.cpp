@@ -1402,9 +1402,10 @@ void mlir::linalg::populateElementwiseOpsFusionPatterns(
                                             options.controlFoldingReshapesFn);
   AffineApplyOp::getCanonicalizationPatterns(patterns, context);
   GenericOp::getCanonicalizationPatterns(patterns, context);
-  IndexedGenericOp::getCanonicalizationPatterns(patterns, context);
   TensorExpandShapeOp::getCanonicalizationPatterns(patterns, context);
   TensorCollapseShapeOp::getCanonicalizationPatterns(patterns, context);
+  context->getLoadedDialect<LinalgDialect>()->getCanonicalizationPatterns(
+      patterns);
 }
 
 void mlir::linalg::populatePushReshapeOpsPatterns(RewritePatternSet &patterns) {

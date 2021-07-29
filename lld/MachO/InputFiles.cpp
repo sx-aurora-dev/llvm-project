@@ -178,13 +178,12 @@ static bool checkCompatibility(const InputFile *input) {
     return false;
   }
 
-  if (it->minimum <= config->platformInfo.minimum)
-    return true;
+  if (it->minimum > config->platformInfo.minimum)
+    warn(toString(input) + " has version " + it->minimum.getAsString() +
+         ", which is newer than target minimum of " +
+         config->platformInfo.minimum.getAsString());
 
-  error(toString(input) + " has version " + it->minimum.getAsString() +
-        ", which is newer than target minimum of " +
-        config->platformInfo.minimum.getAsString());
-  return false;
+  return true;
 }
 
 // Open a given file path and return it as a memory-mapped file.
@@ -254,9 +253,12 @@ void ObjFile::parseSections(ArrayRef<Section> sections) {
     ArrayRef<uint8_t> data = {isZeroFill(sec.flags) ? nullptr
                                                     : buf + sec.offset,
                               static_cast<size_t>(sec.size)};
-    if (sec.align >= 32)
+    if (sec.align >= 32) {
       error("alignment " + std::to_string(sec.align) + " of section " + name +
             " is too large");
+      subsections.push_back({});
+      continue;
+    }
     uint32_t align = 1 << sec.align;
     uint32_t flags = sec.flags;
 
@@ -469,18 +471,16 @@ static macho::Symbol *createDefined(const NList &sym, StringRef name,
   //                 either reported (for non-weak symbols) or merged
   //                 (for weak symbols), but they do not go in the export
   //                 table of the output.
-  // N_PEXT: Does not occur in input files in practice,
-  //         a private extern must be external.
+  // N_PEXT: llvm-mc does not emit these, but `ld -r` (wherein ld64 emits
+  //         object files) may produce them. LLD does not yet support -r.
+  //         These are translation-unit scoped, identical to the `0` case.
   // 0: Translation-unit scoped. These are not in the symbol table during
   //    link, and not in the export table of the output either.
-
   bool isWeakDefCanBeHidden =
       (sym.n_desc & (N_WEAK_DEF | N_WEAK_REF)) == (N_WEAK_DEF | N_WEAK_REF);
 
-  if (sym.n_type & (N_EXT | N_PEXT)) {
-    assert((sym.n_type & N_EXT) && "invalid input");
+  if (sym.n_type & N_EXT) {
     bool isPrivateExtern = sym.n_type & N_PEXT;
-
     // lld's behavior for merging symbols is slightly different from ld64:
     // ld64 picks the winning symbol based on several criteria (see
     // pickBetweenRegularAtoms() in ld64's SymbolTable.cpp), while lld
@@ -531,8 +531,7 @@ static macho::Symbol *createDefined(const NList &sym, StringRef name,
 template <class NList>
 static macho::Symbol *createAbsolute(const NList &sym, InputFile *file,
                                      StringRef name) {
-  if (sym.n_type & (N_EXT | N_PEXT)) {
-    assert((sym.n_type & N_EXT) && "invalid input");
+  if (sym.n_type & N_EXT) {
     return symtab->addDefined(name, file, nullptr, sym.n_value, /*size=*/0,
                               /*isWeakDef=*/false, sym.n_type & N_PEXT,
                               sym.n_desc & N_ARM_THUMB_DEF,
@@ -619,7 +618,7 @@ void ObjFile::parseSymbols(ArrayRef<typename LP::section> sectionHeaders,
       InputSection *isec = subsecEntry.isec;
 
       uint64_t subsecAddr = sectionAddr + subsecEntry.offset;
-      uint64_t symbolOffset = sym.n_value - subsecAddr;
+      size_t symbolOffset = sym.n_value - subsecAddr;
       uint64_t symbolSize =
           j + 1 < symbolIndices.size()
               ? nList[symbolIndices[j + 1]].n_value - sym.n_value
@@ -640,10 +639,16 @@ void ObjFile::parseSymbols(ArrayRef<typename LP::section> sectionHeaders,
       auto *concatIsec = cast<ConcatInputSection>(isec);
 
       auto *nextIsec = make<ConcatInputSection>(*concatIsec);
-      nextIsec->data = isec->data.slice(symbolOffset);
       nextIsec->numRefs = 0;
       nextIsec->wasCoalesced = false;
-      isec->data = isec->data.slice(0, symbolOffset);
+      if (isZeroFill(isec->flags)) {
+        // Zero-fill sections have NULL data.data() non-zero data.size()
+        nextIsec->data = {nullptr, isec->data.size() - symbolOffset};
+        isec->data = {nullptr, symbolOffset};
+      } else {
+        nextIsec->data = isec->data.slice(symbolOffset);
+        isec->data = isec->data.slice(0, symbolOffset);
+      }
 
       // By construction, the symbol will be at offset zero in the new
       // subsection.
@@ -700,11 +705,10 @@ template <class LP> void ObjFile::parse() {
   if (!checkCompatibility(this))
     return;
 
-  if (const load_command *cmd = findCommand(hdr, LC_LINKER_OPTION)) {
-    auto *c = reinterpret_cast<const linker_option_command *>(cmd);
-    StringRef data{reinterpret_cast<const char *>(c + 1),
-                   c->cmdsize - sizeof(linker_option_command)};
-    parseLCLinkerOption(this, c->count, data);
+  for (auto *cmd : findCommands<linker_option_command>(hdr, LC_LINKER_OPTION)) {
+    StringRef data{reinterpret_cast<const char *>(cmd + 1),
+                   cmd->cmdsize - sizeof(linker_option_command)};
+    parseLCLinkerOption(this, cmd->count, data);
   }
 
   ArrayRef<Section> sectionHeaders;
@@ -732,6 +736,8 @@ template <class LP> void ObjFile::parse() {
       parseRelocations(sectionHeaders, sectionHeaders[i], subsections[i]);
 
   parseDebugInfo();
+  if (config->emitDataInCodeInfo)
+    parseDataInCode();
 }
 
 void ObjFile::parseDebugInfo() {
@@ -755,6 +761,21 @@ void ObjFile::parseDebugInfo() {
   // PR48637.
   auto it = units.begin();
   compileUnit = it->get();
+}
+
+void ObjFile::parseDataInCode() {
+  const auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
+  const load_command *cmd = findCommand(buf, LC_DATA_IN_CODE);
+  if (!cmd)
+    return;
+  const auto *c = reinterpret_cast<const linkedit_data_command *>(cmd);
+  dataInCodeEntries = {
+      reinterpret_cast<const data_in_code_entry *>(buf + c->dataoff),
+      c->datasize / sizeof(data_in_code_entry)};
+  assert(is_sorted(dataInCodeEntries, [](const data_in_code_entry &lhs,
+                                         const data_in_code_entry &rhs) {
+    return lhs.offset < rhs.offset;
+  }));
 }
 
 // The path can point to either a dylib or a .tbd file.

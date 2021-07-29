@@ -218,7 +218,6 @@ NonLazyPointerSectionBase::NonLazyPointerSectionBase(const char *segname,
                                                      const char *name)
     : SyntheticSection(segname, name) {
   align = target->wordSize;
-  flags = S_NON_LAZY_SYMBOL_POINTERS;
 }
 
 void macho::addNonLazyBindingEntries(const Symbol *sym,
@@ -252,6 +251,17 @@ void NonLazyPointerSectionBase::writeTo(uint8_t *buf) const {
   for (size_t i = 0, n = entries.size(); i < n; ++i)
     if (auto *defined = dyn_cast<Defined>(entries[i]))
       write64le(&buf[i * target->wordSize], defined->getVA());
+}
+
+GotSection::GotSection()
+    : NonLazyPointerSectionBase(segment_names::dataConst, section_names::got) {
+  flags = S_NON_LAZY_SYMBOL_POINTERS;
+}
+
+TlvPointerSection::TlvPointerSection()
+    : NonLazyPointerSectionBase(segment_names::data,
+                                section_names::threadPtrs) {
+  flags = S_THREAD_LOCAL_VARIABLE_POINTERS;
 }
 
 BindingSection::BindingSection()
@@ -574,6 +584,69 @@ void ExportSection::finalizeContents() {
 
 void ExportSection::writeTo(uint8_t *buf) const { trieBuilder.writeTo(buf); }
 
+DataInCodeSection::DataInCodeSection()
+    : LinkEditSection(segment_names::linkEdit, section_names::dataInCode) {}
+
+template <class LP>
+static std::vector<MachO::data_in_code_entry> collectDataInCodeEntries() {
+  using SegmentCommand = typename LP::segment_command;
+  using Section = typename LP::section;
+
+  std::vector<MachO::data_in_code_entry> dataInCodeEntries;
+  for (const InputFile *inputFile : inputFiles) {
+    if (!isa<ObjFile>(inputFile))
+      continue;
+    const ObjFile *objFile = cast<ObjFile>(inputFile);
+    const auto *c = reinterpret_cast<const SegmentCommand *>(
+        findCommand(objFile->mb.getBufferStart(), LP::segmentLCType));
+    if (!c)
+      continue;
+    ArrayRef<Section> sections{reinterpret_cast<const Section *>(c + 1),
+                               c->nsects};
+
+    ArrayRef<MachO::data_in_code_entry> entries = objFile->dataInCodeEntries;
+    if (entries.empty())
+      continue;
+    // For each code subsection find 'data in code' entries residing in it.
+    // Compute the new offset values as
+    // <offset within subsection> + <subsection address> - <__TEXT address>.
+    for (size_t i = 0, n = sections.size(); i < n; ++i) {
+      const SubsectionMap &subsecMap = objFile->subsections[i];
+      for (const SubsectionEntry &subsecEntry : subsecMap) {
+        const InputSection *isec = subsecEntry.isec;
+        if (!isCodeSection(isec))
+          continue;
+        if (cast<ConcatInputSection>(isec)->shouldOmitFromOutput())
+          continue;
+        const uint64_t beginAddr = sections[i].addr + subsecEntry.offset;
+        auto it = llvm::lower_bound(
+            entries, beginAddr,
+            [](const MachO::data_in_code_entry &entry, uint64_t addr) {
+              return entry.offset < addr;
+            });
+        const uint64_t endAddr = beginAddr + isec->getFileSize();
+        for (const auto end = entries.end();
+             it != end && it->offset + it->length <= endAddr; ++it)
+          dataInCodeEntries.push_back(
+              {static_cast<uint32_t>(isec->getVA(it->offset - beginAddr) -
+                                     in.header->addr),
+               it->length, it->kind});
+      }
+    }
+  }
+  return dataInCodeEntries;
+}
+
+void DataInCodeSection::finalizeContents() {
+  entries = target->wordSize == 8 ? collectDataInCodeEntries<LP64>()
+                                  : collectDataInCodeEntries<ILP32>();
+}
+
+void DataInCodeSection::writeTo(uint8_t *buf) const {
+  if (!entries.empty())
+    memcpy(buf, entries.data(), getRawSize());
+}
+
 FunctionStartsSection::FunctionStartsSection()
     : LinkEditSection(segment_names::linkEdit, section_names::functionStarts) {}
 
@@ -584,6 +657,9 @@ void FunctionStartsSection::finalizeContents() {
     if (const auto *defined = dyn_cast<Defined>(sym)) {
       if (!defined->isec || !isCodeSection(defined->isec) || !defined->isLive())
         continue;
+      if (const auto *concatIsec = dyn_cast<ConcatInputSection>(defined->isec))
+        if (concatIsec->shouldOmitFromOutput())
+          continue;
       // TODO: Add support for thumbs, in that case
       // the lowest bit of nextAddr needs to be set to 1.
       addrs.push_back(defined->getVA());

@@ -33,8 +33,10 @@ def Linalg_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::linalg";
   let dependentDialects = [
-    "AffineDialect", "StandardOpsDialect", "tensor::TensorDialect"
+    "AffineDialect", "memref::MemRefDialect", "StandardOpsDialect",
+    "tensor::TensorDialect"
   ];
+  let hasCanonicalizer = 1;
   let hasOperationAttrVerify = 1;
   let extraClassDeclaration = [{
     /// Attribute name used to to memoize indexing maps for named ops.
