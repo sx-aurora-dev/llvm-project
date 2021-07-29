@@ -136,11 +136,10 @@ PIPE_OPERATOR(AAUndefinedBehavior)
 PIPE_OPERATOR(AAPotentialValues)
 PIPE_OPERATOR(AANoUndef)
 PIPE_OPERATOR(AACallEdges)
+PIPE_OPERATOR(AAFunctionReachability)
 
 #undef PIPE_OPERATOR
 } // namespace llvm
-
-namespace {
 
 /// Get pointer operand of memory accessing instruction. If \p I is
 /// not a memory accessing instruction, return nullptr. If \p AllowVolatile,
@@ -4513,6 +4512,32 @@ struct AANoCaptureCallSiteReturned final : AANoCaptureImpl {
 };
 
 /// ------------------ Value Simplify Attribute ----------------------------
+
+bool ValueSimplifyStateType::unionAssumed(Optional<Value *> Other) {
+  // FIXME: Add a typecast support.
+  if (!Other.hasValue())
+    return true;
+
+  if (!Other.getValue())
+    return false;
+
+  Value &QueryingValueSimplifiedUnwrapped = *Other.getValue();
+
+  if (SimplifiedAssociatedValue.hasValue() &&
+      !isa<UndefValue>(SimplifiedAssociatedValue.getValue()) &&
+      !isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
+    return SimplifiedAssociatedValue == Other;
+  if (SimplifiedAssociatedValue.hasValue() &&
+      isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
+    return true;
+
+  LLVM_DEBUG(dbgs() << "[ValueSimplify] is assumed to be "
+                    << QueryingValueSimplifiedUnwrapped << "\n");
+
+  SimplifiedAssociatedValue = Other;
+  return true;
+}
+
 struct AAValueSimplifyImpl : AAValueSimplify {
   AAValueSimplifyImpl(const IRPosition &IRP, Attributor &A)
       : AAValueSimplify(IRP, A) {}
@@ -4530,8 +4555,8 @@ struct AAValueSimplifyImpl : AAValueSimplify {
       if (SimplifiedAssociatedValue)
         errs() << "SAV: " << **SimplifiedAssociatedValue << " ";
     });
-    return getAssumed() ? (getKnown() ? "simplified" : "maybe-simple")
-                        : "not-simple";
+    return isValidState() ? (isAtFixpoint() ? "simplified" : "maybe-simple")
+                          : "not-simple";
   }
 
   /// See AbstractAttribute::trackStatistics()
@@ -4539,45 +4564,19 @@ struct AAValueSimplifyImpl : AAValueSimplify {
 
   /// See AAValueSimplify::getAssumedSimplifiedValue()
   Optional<Value *> getAssumedSimplifiedValue(Attributor &A) const override {
-    if (!getAssumed())
+    if (!isValidState())
       return const_cast<Value *>(&getAssociatedValue());
     return SimplifiedAssociatedValue;
   }
 
   /// Helper function for querying AAValueSimplify and updating candicate.
   /// \param IRP The value position we are trying to unify with SimplifiedValue
-  /// \param AccumulatedSimplifiedValue Current simplification result.
-  static bool checkAndUpdate(Attributor &A, const AbstractAttribute &QueryingAA,
-                             const IRPosition &IRP,
-                             Optional<Value *> &AccumulatedSimplifiedValue) {
-    // FIXME: Add a typecast support.
+  bool checkAndUpdate(Attributor &A, const AbstractAttribute &QueryingAA,
+                      const IRPosition &IRP) {
     bool UsedAssumedInformation = false;
     Optional<Value *> QueryingValueSimplified =
         A.getAssumedSimplified(IRP, QueryingAA, UsedAssumedInformation);
-
-    if (!QueryingValueSimplified.hasValue())
-      return true;
-
-    if (!QueryingValueSimplified.getValue())
-      return false;
-
-    Value &QueryingValueSimplifiedUnwrapped =
-        *QueryingValueSimplified.getValue();
-
-    if (AccumulatedSimplifiedValue.hasValue() &&
-        !isa<UndefValue>(AccumulatedSimplifiedValue.getValue()) &&
-        !isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
-      return AccumulatedSimplifiedValue == QueryingValueSimplified;
-    if (AccumulatedSimplifiedValue.hasValue() &&
-        isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
-      return true;
-
-    LLVM_DEBUG(dbgs() << "[ValueSimplify] " << IRP.getAssociatedValue()
-                      << " is assumed to be "
-                      << QueryingValueSimplifiedUnwrapped << "\n");
-
-    AccumulatedSimplifiedValue = QueryingValueSimplified;
-    return true;
+    return unionAssumed(QueryingValueSimplified);
   }
 
   /// Returns a candidate is found or not
@@ -4646,13 +4645,6 @@ struct AAValueSimplifyImpl : AAValueSimplify {
     indicateOptimisticFixpoint();
     return ChangeStatus::CHANGED;
   }
-
-protected:
-  // An assumed simplified value. Initially, it is set to Optional::None, which
-  // means that the value is not clear under current assumption. If in the
-  // pessimistic state, getAssumedSimplifiedValue doesn't return this value but
-  // returns orignal associated value.
-  Optional<Value *> SimplifiedAssociatedValue;
 };
 
 struct AAValueSimplifyArgument final : AAValueSimplifyImpl {
@@ -4712,7 +4704,7 @@ struct AAValueSimplifyArgument final : AAValueSimplifyImpl {
         if (auto *C = dyn_cast<Constant>(&ArgOp))
           if (C->isThreadDependent())
             return false;
-      return checkAndUpdate(A, *this, ACSArgPos, SimplifiedAssociatedValue);
+      return checkAndUpdate(A, *this, ACSArgPos);
     };
 
     // Generate a answer specific to a call site context.
@@ -4750,8 +4742,7 @@ struct AAValueSimplifyReturned : AAValueSimplifyImpl {
 
     auto PredForReturned = [&](Value &V) {
       return checkAndUpdate(A, *this,
-                            IRPosition::value(V, getCallBaseContext()),
-                            SimplifiedAssociatedValue);
+                            IRPosition::value(V, getCallBaseContext()));
     };
 
     if (!A.checkForAllReturnedValues(PredForReturned, *this))
@@ -4907,8 +4898,7 @@ struct AAValueSimplifyFloating : AAValueSimplifyImpl {
         return false;
       }
       return checkAndUpdate(A, *this,
-                            IRPosition::value(V, getCallBaseContext()),
-                            SimplifiedAssociatedValue);
+                            IRPosition::value(V, getCallBaseContext()));
     };
 
     bool Dummy = false;
@@ -5047,6 +5037,17 @@ struct AAHeapToStackImpl : public AAHeapToStack {
 
       LLVM_DEBUG(dbgs() << "H2S: Removing malloc call: " << *MallocCall
                         << "\n");
+
+      auto Remark = [&](OptimizationRemark OR) {
+        LibFunc IsAllocShared;
+        if (auto *CB = dyn_cast<CallBase>(MallocCall)) {
+          TLI->getLibFunc(*CB, IsAllocShared);
+          if (IsAllocShared == LibFunc___kmpc_alloc_shared)
+            return OR << "Moving globalized variable to the stack.";
+        }
+        return OR << "Moving memory allocation from the heap to the stack.";
+      };
+      A.emitRemark<OptimizationRemark>(MallocCall, "HeapToStack", Remark);
 
       Align Alignment;
       Value *Size;
@@ -5194,6 +5195,24 @@ ChangeStatus AAHeapToStackImpl::updateImpl(Attributor &A) {
 
         if (!NoCaptureAA.isAssumedNoCapture() ||
             !ArgNoFreeAA.isAssumedNoFree()) {
+
+          // Emit a missed remark if this is missed OpenMP globalization.
+          auto Remark = [&](OptimizationRemarkMissed ORM) {
+            return ORM << "Could not move globalized variable to the stack. "
+                       << "Variable is potentially "
+                       << (!NoCaptureAA.isAssumedNoCapture() ? "captured. "
+                                                             : "freed. ")
+                       << "Mark as noescape to override.";
+          };
+
+          LibFunc IsAllocShared;
+          if (auto *AllocShared = dyn_cast<CallBase>(&I)) {
+            TLI->getLibFunc(*AllocShared, IsAllocShared);
+            if (IsAllocShared == LibFunc___kmpc_alloc_shared)
+              A.emitRemark<OptimizationRemarkMissed>(
+                  AllocShared, "HeapToStackFailed", Remark);
+          }
+
           LLVM_DEBUG(dbgs() << "[H2S] Bad user: " << *UserI << "\n");
           ValidUsesOnly = false;
         }
@@ -6438,8 +6457,6 @@ void AAMemoryBehaviorFloating::analyzeUseIn(Attributor &A, const Use *U,
   if (UserI->mayWriteToMemory())
     removeAssumedBits(NO_WRITES);
 }
-
-} // namespace
 
 /// -------------------- Memory Locations Attributes ---------------------------
 /// Includes read-none, argmemonly, inaccessiblememonly,
@@ -7794,23 +7811,46 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return indicatePessimisticFixpoint();
 
-    // TODO: Use assumed simplified condition value
-    auto &LHSAA = A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*LHS),
-                                                DepClassTy::REQUIRED);
-    if (!LHSAA.isValidState())
-      return indicatePessimisticFixpoint();
+    bool UsedAssumedInformation = false;
+    Optional<Constant *> C = A.getAssumedConstant(*SI->getCondition(), *this,
+                                                  UsedAssumedInformation);
 
-    auto &RHSAA = A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*RHS),
-                                                DepClassTy::REQUIRED);
-    if (!RHSAA.isValidState())
-      return indicatePessimisticFixpoint();
+    // Check if we only need one operand.
+    bool OnlyLeft = false, OnlyRight = false;
+    if (C.hasValue() && *C && (*C)->isOneValue())
+      OnlyLeft = true;
+    else if (C.hasValue() && *C && (*C)->isZeroValue())
+      OnlyRight = true;
 
-    if (LHSAA.undefIsContained() && RHSAA.undefIsContained())
+    const AAPotentialValues *LHSAA = nullptr, *RHSAA = nullptr;
+    if (!OnlyRight) {
+      LHSAA = &A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*LHS),
+                                             DepClassTy::REQUIRED);
+      if (!LHSAA->isValidState())
+        return indicatePessimisticFixpoint();
+    }
+    if (!OnlyLeft) {
+      RHSAA = &A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*RHS),
+                                             DepClassTy::REQUIRED);
+      if (!RHSAA->isValidState())
+        return indicatePessimisticFixpoint();
+    }
+
+    if (!LHSAA || !RHSAA) {
+      // select (true/false), lhs, rhs
+      auto *OpAA = LHSAA ? LHSAA : RHSAA;
+
+      if (OpAA->undefIsContained())
+        unionAssumedWithUndef();
+      else
+        unionAssumed(*OpAA);
+
+    } else if (LHSAA->undefIsContained() && RHSAA->undefIsContained()) {
       // select i1 *, undef , undef => undef
       unionAssumedWithUndef();
-    else {
-      unionAssumed(LHSAA);
-      unionAssumed(RHSAA);
+    } else {
+      unionAssumed(*LHSAA);
+      unionAssumed(*RHSAA);
     }
     return AssumedBefore == getAssumed() ? ChangeStatus::UNCHANGED
                                          : ChangeStatus::CHANGED;
@@ -8248,6 +8288,118 @@ struct AACallEdgesFunction : public AACallEdges {
   bool HasUnknownCallee = false;
 };
 
+struct AAFunctionReachabilityFunction : public AAFunctionReachability {
+  AAFunctionReachabilityFunction(const IRPosition &IRP, Attributor &A)
+      : AAFunctionReachability(IRP, A) {}
+
+  bool canReach(Attributor &A, Function *Fn) const override {
+    // Assume that we can reach any function if we can reach a call with
+    // unknown callee.
+    if (CanReachUnknownCallee)
+      return true;
+
+    if (ReachableQueries.count(Fn))
+      return true;
+
+    if (UnreachableQueries.count(Fn))
+      return false;
+
+    const AACallEdges &AAEdges =
+        A.getAAFor<AACallEdges>(*this, getIRPosition(), DepClassTy::REQUIRED);
+
+    const SetVector<Function *> &Edges = AAEdges.getOptimisticEdges();
+    bool Result = checkIfReachable(A, Edges, Fn);
+
+    // Attributor returns attributes as const, so this function has to be
+    // const for users of this attribute to use it without having to do
+    // a const_cast.
+    // This is a hack for us to be able to cache queries.
+    auto *NonConstThis = const_cast<AAFunctionReachabilityFunction *>(this);
+
+    if (Result)
+      NonConstThis->ReachableQueries.insert(Fn);
+    else
+      NonConstThis->UnreachableQueries.insert(Fn);
+
+    return Result;
+  }
+
+  /// See AbstractAttribute::updateImpl(...).
+  ChangeStatus updateImpl(Attributor &A) override {
+    if (CanReachUnknownCallee)
+      return ChangeStatus::UNCHANGED;
+
+    const AACallEdges &AAEdges =
+        A.getAAFor<AACallEdges>(*this, getIRPosition(), DepClassTy::REQUIRED);
+    const SetVector<Function *> &Edges = AAEdges.getOptimisticEdges();
+    ChangeStatus Change = ChangeStatus::UNCHANGED;
+
+    if (AAEdges.hasUnknownCallee()) {
+      bool OldCanReachUnknown = CanReachUnknownCallee;
+      CanReachUnknownCallee = true;
+      return OldCanReachUnknown ? ChangeStatus::UNCHANGED
+                                : ChangeStatus::CHANGED;
+    }
+
+    // Check if any of the unreachable functions become reachable.
+    for (auto Current = UnreachableQueries.begin();
+         Current != UnreachableQueries.end();) {
+      if (!checkIfReachable(A, Edges, *Current)) {
+        Current++;
+        continue;
+      }
+      ReachableQueries.insert(*Current);
+      UnreachableQueries.erase(*Current++);
+      Change = ChangeStatus::CHANGED;
+    }
+
+    return Change;
+  }
+
+  const std::string getAsStr() const override {
+    size_t QueryCount = ReachableQueries.size() + UnreachableQueries.size();
+
+    return "FunctionReachability [" + std::to_string(ReachableQueries.size()) +
+           "," + std::to_string(QueryCount) + "]";
+  }
+
+  void trackStatistics() const override {}
+
+private:
+  bool canReachUnknownCallee() const override { return CanReachUnknownCallee; }
+
+  bool checkIfReachable(Attributor &A, const SetVector<Function *> &Edges,
+                        Function *Fn) const {
+    if (Edges.count(Fn))
+      return true;
+
+    for (Function *Edge : Edges) {
+      // We don't need a dependency if the result is reachable.
+      const AAFunctionReachability &EdgeReachability =
+          A.getAAFor<AAFunctionReachability>(*this, IRPosition::function(*Edge),
+                                             DepClassTy::NONE);
+
+      if (EdgeReachability.canReach(A, Fn))
+        return true;
+    }
+    for (Function *Fn : Edges)
+      A.getAAFor<AAFunctionReachability>(*this, IRPosition::function(*Fn),
+                                         DepClassTy::REQUIRED);
+
+    return false;
+  }
+
+  /// Set of functions that we know for sure is reachable.
+  SmallPtrSet<Function *, 8> ReachableQueries;
+
+  /// Set of functions that are unreachable, but might become reachable.
+  SmallPtrSet<Function *, 8> UnreachableQueries;
+
+  /// If we can reach a function with a call to a unknown function we assume
+  /// that we can reach any function.
+  bool CanReachUnknownCallee = false;
+};
+
 } // namespace
 
 AACallGraphNode *AACallEdgeIterator::operator*() const {
@@ -8255,9 +8407,7 @@ AACallGraphNode *AACallEdgeIterator::operator*() const {
       &A.getOrCreateAAFor<AACallEdges>(IRPosition::function(**I))));
 }
 
-void AttributorCallGraph::print() {
-  llvm::WriteGraph(outs(), this);
-}
+void AttributorCallGraph::print() { llvm::WriteGraph(outs(), this); }
 
 const char AAReturnedValues::ID = 0;
 const char AANoUnwind::ID = 0;
@@ -8283,6 +8433,7 @@ const char AAValueConstantRange::ID = 0;
 const char AAPotentialValues::ID = 0;
 const char AANoUndef::ID = 0;
 const char AACallEdges::ID = 0;
+const char AAFunctionReachability::ID = 0;
 
 // Macro magic to create the static generator function for attributes that
 // follow the naming scheme.
@@ -8403,6 +8554,7 @@ CREATE_FUNCTION_ONLY_ABSTRACT_ATTRIBUTE_FOR_POSITION(AAHeapToStack)
 CREATE_FUNCTION_ONLY_ABSTRACT_ATTRIBUTE_FOR_POSITION(AAReachability)
 CREATE_FUNCTION_ONLY_ABSTRACT_ATTRIBUTE_FOR_POSITION(AAUndefinedBehavior)
 CREATE_FUNCTION_ONLY_ABSTRACT_ATTRIBUTE_FOR_POSITION(AACallEdges)
+CREATE_FUNCTION_ONLY_ABSTRACT_ATTRIBUTE_FOR_POSITION(AAFunctionReachability)
 
 CREATE_NON_RET_ABSTRACT_ATTRIBUTE_FOR_POSITION(AAMemoryBehavior)
 

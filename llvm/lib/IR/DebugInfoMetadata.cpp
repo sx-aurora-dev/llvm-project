@@ -1053,6 +1053,7 @@ DILabel *DILabel::getImpl(LLVMContext &Context, Metadata *Scope,
 DIExpression *DIExpression::getImpl(LLVMContext &Context,
                                     ArrayRef<uint64_t> Elements,
                                     StorageType Storage, bool ShouldCreate) {
+  assert(Storage != Distinct && "DIExpression cannot be distinct");
   DEFINE_GETIMPL_LOOKUP(DIExpression, (Elements));
   DEFINE_GETIMPL_STORE_NO_OPS(DIExpression, (Elements));
 }
@@ -1249,6 +1250,17 @@ bool DIExpression::extractIfOffset(int64_t &Offset) const {
   }
 
   return false;
+}
+
+bool DIExpression::hasAllLocationOps(unsigned N) const {
+  SmallDenseSet<uint64_t, 4> SeenOps;
+  for (auto ExprOp : expr_ops())
+    if (ExprOp.getOp() == dwarf::DW_OP_LLVM_arg)
+      SeenOps.insert(ExprOp.getArg(0));
+  for (uint64_t Idx = 0; Idx < N; ++Idx)
+    if (!is_contained(SeenOps, Idx))
+      return false;
+  return true;
 }
 
 const DIExpression *DIExpression::extractAddressClass(const DIExpression *Expr,
@@ -1465,6 +1477,16 @@ Optional<DIExpression *> DIExpression::createFragmentExpression(
   return DIExpression::get(Expr->getContext(), Ops);
 }
 
+uint64_t DIExpression::getNumLocationOperands() const {
+  uint64_t Result = 0;
+  for (auto ExprOp : expr_ops())
+    if (ExprOp.getOp() == dwarf::DW_OP_LLVM_arg)
+      Result = std::max(Result, ExprOp.getArg(0) + 1);
+  assert(hasAllLocationOps(Result) &&
+         "Expression is missing one or more location operands.");
+  return Result;
+}
+
 llvm::Optional<DIExpression::SignedOrUnsignedConstant>
 DIExpression::isConstant() const {
 
@@ -1562,6 +1584,7 @@ DIMacroFile *DIMacroFile::getImpl(LLVMContext &Context, unsigned MIType,
 DIArgList *DIArgList::getImpl(LLVMContext &Context,
                               ArrayRef<ValueAsMetadata *> Args,
                               StorageType Storage, bool ShouldCreate) {
+  assert(Storage != Distinct && "DIArgList cannot be distinct");
   DEFINE_GETIMPL_LOOKUP(DIArgList, (Args));
   DEFINE_GETIMPL_STORE_NO_OPS(DIArgList, (Args));
 }

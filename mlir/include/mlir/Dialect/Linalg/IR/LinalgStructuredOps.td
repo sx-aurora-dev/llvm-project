@@ -28,13 +28,6 @@ class LinalgStructuredBase_Op<string mnemonic, list<OpTrait> props>
   : Op<Linalg_Dialect, mnemonic, !listconcat(props, [
        LinalgStructuredInterface, InferShapedTypeOpInterface])> {
   code structuredOpsBaseDecls = [{
-    // Return the number of induction variables in the basic block. This should
-    // always be 0 for index-free linalg ops. For IndexedGeneric, this must be
-    // equal to numLoops.
-    unsigned getNumPayloadInductionVariables() {
-      return 0;
-    }
-
     // Return whether the op accesses the iteration indices.
     bool hasIndexSemantics() {
       Operation *op = this->getOperation();
@@ -160,10 +153,8 @@ def CopyOp : LinalgStructured_Op<"copy", [CopyOpInterface]> {
     Value getSource() { return input();}
     Value getTarget() { return output(); }
 
-    static void regionBuilder(
-      ImplicitLocOpBuilder &b, Block &block, ValueRange captures);
-    static std::function<
-      void(ImplicitLocOpBuilder &b, Block &block, ValueRange captures)>
+    static void regionBuilder(ImplicitLocOpBuilder &b, Block &block);
+    static std::function<void(ImplicitLocOpBuilder &b, Block &block)>
     getRegionBuilder() {
       return &regionBuilder;
     }
@@ -182,14 +173,14 @@ def CopyOp : LinalgStructured_Op<"copy", [CopyOpInterface]> {
 }
 
 def FillOp : LinalgStructured_Op<"fill", []> {
-  let arguments = (ins AnyShaped:$output,
-                   AnyTypeOf<[AnyComplex, AnyFloat, AnySignlessInteger,
-                              AnyVector]>:$value);
+  let arguments = (ins
+    AnyTypeOf<[AnyComplex, AnyFloat, AnySignlessInteger, AnyVector]>:$value,
+    AnyShaped:$output);
   let results = (outs Optional<AnyRankedTensor>:$result);
   let regions = (region AnyRegion:$region);
   let extraClassDeclaration = structuredOpsDecls # [{
-    ValueRange inputs() { return {}; }
-    ValueRange outputs() { return getOperands().take_front(); }
+    ValueRange inputs() { return getOperands().take_front(); }
+    ValueRange outputs() { return getOperands().take_back(); }
 
     // Rank-polymorphic.
     //   filling_value -> O(ivs) with parallel iterators.
@@ -203,27 +194,26 @@ def FillOp : LinalgStructured_Op<"fill", []> {
       MLIRContext *context = getContext();
       // filling_value -> O(ivs)
       return Builder(getContext()).getAffineMapArrayAttr({
+          AffineMap::get(getNumParallelLoops(), 0, {}, getContext()),
           extractOrIdentityMap(llvm::None, getNumParallelLoops(), context)});
     }
 
-    static void regionBuilder(
-      ImplicitLocOpBuilder &b, Block &block, ValueRange captures);
-    static std::function<
-      void(ImplicitLocOpBuilder &b, Block &block, ValueRange captures)>
+    static void regionBuilder(ImplicitLocOpBuilder &b, Block &block);
+    static std::function<void(ImplicitLocOpBuilder &b, Block &block)>
     getRegionBuilder() {
       return &regionBuilder;
     }
-    static unsigned getNumRegionArgs() { return 1; }
+    static unsigned getNumRegionArgs() { return 2; }
   }];
 
   let assemblyFormat = [{
-    `(` $output `,` $value `)` attr-dict `:`
-        type($output) `,` type($value) (`->` type($result)^)?
-      custom<FillOpRegion>($region, ref(type($output)), ref($value))
+    `(` $value `,` $output `)` attr-dict `:`
+        type($value) `,` type($output) (`->` type($result)^)?
+      custom<FillOpRegion>($region, ref(type($value)), ref(type($output)))
   }];
 
   let builders = [
-    OpBuilder<(ins "Value":$output, "Value":$value)>
+    OpBuilder<(ins "Value":$value, "Value":$output)>
   ];
 
   let verifier = [{ return ::verify(*this); }];
@@ -297,8 +287,7 @@ class PoolingBase_Op<string mnemonic, list<OpTrait> props>
       return padding().getValue().getValue<int64_t>({i, 1});
     }
 
-    static std::function<
-      void(ImplicitLocOpBuilder &b, Block &block, ValueRange captures)>
+    static std::function<void(ImplicitLocOpBuilder &b, Block &block)>
     getRegionBuilder() {
       return nullptr;
     }
@@ -539,8 +528,7 @@ class GenericOpBase<string mnemonic> : LinalgStructuredBase_Op<mnemonic, [
         library_call()->str() : "op_has_no_registered_library_name";
     }
 
-    static std::function<
-      void(ImplicitLocOpBuilder &b, Block &block, ValueRange captures)>
+    static std::function<void(ImplicitLocOpBuilder &b, Block &block)>
     getRegionBuilder() {
       return nullptr;
     }

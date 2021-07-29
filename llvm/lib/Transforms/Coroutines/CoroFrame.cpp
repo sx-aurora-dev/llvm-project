@@ -937,7 +937,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
   unsigned LineNum = PromiseDIVariable->getLine();
 
   DICompositeType *FrameDITy = DBuilder.createStructType(
-      PromiseDIScope, "__coro_frame_ty", DFile, LineNum, Shape.FrameSize * 8,
+      DIS, "__coro_frame_ty", DFile, LineNum, Shape.FrameSize * 8,
       Shape.FrameAlign.value() * 8, llvm::DINode::FlagArtificial, nullptr,
       llvm::DINodeArray());
   StructType *FrameTy = Shape.FrameTy;
@@ -1031,8 +1031,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
       Name = NameCache[Index].str();
       DITy = TyCache[Index];
     } else {
-      DITy = solveDIType(DBuilder, Ty, Layout, PromiseDIScope, LineNum,
-                         DITypeCache);
+      DITy = solveDIType(DBuilder, Ty, Layout, FrameDITy, LineNum, DITypeCache);
       assert(DITy && "SolveDIType shouldn't return nullptr.\n");
       Name = DITy->getName().str();
       Name += "_" + std::to_string(UnknownTypeNum);
@@ -1040,8 +1039,8 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
     }
 
     Elements.push_back(DBuilder.createMemberType(
-        PromiseDIScope, Name, DFile, LineNum, SizeInBits, AlignInBits,
-        OffsetInBits, llvm::DINode::FlagArtificial, DITy));
+        FrameDITy, Name, DFile, LineNum, SizeInBits, AlignInBits, OffsetInBits,
+        llvm::DINode::FlagArtificial, DITy));
   }
 
   DBuilder.replaceArrays(FrameDITy, DBuilder.getOrCreateArray(Elements));
@@ -1947,11 +1946,16 @@ static void rewriteMaterializableInstructions(IRBuilder<> &IRB,
     for (Instruction *U : E.second) {
       // If we have not seen this block, materialize the value.
       if (CurrentBlock != U->getParent()) {
-        CurrentBlock = U->getParent();
+
+        bool IsInCoroSuspendBlock = isa<AnyCoroSuspendInst>(U);
+        CurrentBlock = IsInCoroSuspendBlock
+                           ? U->getParent()->getSinglePredecessor()
+                           : U->getParent();
         CurrentMaterialization = cast<Instruction>(Def)->clone();
         CurrentMaterialization->setName(Def->getName());
         CurrentMaterialization->insertBefore(
-            &*CurrentBlock->getFirstInsertionPt());
+            IsInCoroSuspendBlock ? CurrentBlock->getTerminator()
+                                 : &*CurrentBlock->getFirstInsertionPt());
       }
       if (auto *PN = dyn_cast<PHINode>(U)) {
         assert(PN->getNumIncomingValues() == 1 &&
@@ -2488,10 +2492,15 @@ void coro::salvageDebugInfo(
     } else if (auto *StInst = dyn_cast<StoreInst>(Storage)) {
       Storage = StInst->getOperand(0);
     } else if (auto *GEPInst = dyn_cast<GetElementPtrInst>(Storage)) {
-      Expr = llvm::salvageDebugInfoImpl(*GEPInst, Expr,
-                                        /*WithStackValue=*/false, 0);
-      if (!Expr)
-        return;
+      SmallVector<Value *> AdditionalValues;
+      DIExpression *SalvagedExpr = llvm::salvageDebugInfoImpl(
+          *GEPInst, Expr,
+          /*WithStackValue=*/false, 0, AdditionalValues);
+      // Debug declares cannot currently handle additional location
+      // operands.
+      if (!SalvagedExpr || !AdditionalValues.empty())
+        break;
+      Expr = SalvagedExpr;
       Storage = GEPInst->getOperand(0);
     } else if (auto *BCInst = dyn_cast<llvm::BitCastInst>(Storage))
       Storage = BCInst->getOperand(0);
