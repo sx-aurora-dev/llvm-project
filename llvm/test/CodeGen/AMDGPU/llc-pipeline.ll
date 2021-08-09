@@ -7,7 +7,7 @@
 ; RUN: llc -O1 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -check-prefix=GCN-O1 %s
 ; RUN: llc -O1 -mtriple=amdgcn--amdhsa -disable-verify -amdgpu-scalar-ir-passes -amdgpu-sdwa-peephole \
-; RUN:   -amdgpu-load-store-vectorizer -debug-pass=Structure < %s 2>&1 \
+; RUN:   -amdgpu-load-store-vectorizer -amdgpu-enable-pre-ra-optimizations -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -check-prefix=GCN-O1-OPTS %s
 ; RUN: llc -O2 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | grep -v 'Verify generated machine code' | FileCheck -check-prefix=GCN-O2 %s
@@ -42,7 +42,6 @@
 ; GCN-O0-NEXT:       Inliner for always_inline functions
 ; GCN-O0-NEXT:     A No-Op Barrier Pass
 ; GCN-O0-NEXT:     Lower OpenCL enqueued blocks
-; GCN-O0-NEXT:     Replace within non-kernel function use of LDS with pointer
 ; GCN-O0-NEXT:     Lower uses of LDS variables from non-kernel functions
 ; GCN-O0-NEXT:     FunctionPass Manager
 ; GCN-O0-NEXT:       Dominator Tree Construction
@@ -193,7 +192,6 @@
 ; GCN-O1-NEXT:       Inliner for always_inline functions
 ; GCN-O1-NEXT:     A No-Op Barrier Pass
 ; GCN-O1-NEXT:     Lower OpenCL enqueued blocks
-; GCN-O1-NEXT:     Replace within non-kernel function use of LDS with pointer
 ; GCN-O1-NEXT:     Lower uses of LDS variables from non-kernel functions
 ; GCN-O1-NEXT:     FunctionPass Manager
 ; GCN-O1-NEXT:       Infer address spaces
@@ -442,7 +440,6 @@
 ; GCN-O1-OPTS-NEXT:       Inliner for always_inline functions
 ; GCN-O1-OPTS-NEXT:     A No-Op Barrier Pass
 ; GCN-O1-OPTS-NEXT:     Lower OpenCL enqueued blocks
-; GCN-O1-OPTS-NEXT:     Replace within non-kernel function use of LDS with pointer
 ; GCN-O1-OPTS-NEXT:     Lower uses of LDS variables from non-kernel functions
 ; GCN-O1-OPTS-NEXT:     FunctionPass Manager
 ; GCN-O1-OPTS-NEXT:       Infer address spaces
@@ -622,6 +619,7 @@
 ; GCN-O1-OPTS-NEXT:         Machine Natural Loop Construction
 ; GCN-O1-OPTS-NEXT:         Simple Register Coalescing
 ; GCN-O1-OPTS-NEXT:         Rename Disconnected Subregister Components
+; GCN-O1-OPTS-NEXT:         AMDGPU Pre-RA optimizations
 ; GCN-O1-OPTS-NEXT:         Machine Instruction Scheduler
 ; GCN-O1-OPTS-NEXT:         MachinePostDominator Tree Construction
 ; GCN-O1-OPTS-NEXT:         SI Whole Quad Mode
@@ -723,7 +721,6 @@
 ; GCN-O2-NEXT:       Inliner for always_inline functions
 ; GCN-O2-NEXT:     A No-Op Barrier Pass
 ; GCN-O2-NEXT:     Lower OpenCL enqueued blocks
-; GCN-O2-NEXT:     Replace within non-kernel function use of LDS with pointer
 ; GCN-O2-NEXT:     Lower uses of LDS variables from non-kernel functions
 ; GCN-O2-NEXT:     FunctionPass Manager
 ; GCN-O2-NEXT:       Infer address spaces
@@ -903,6 +900,7 @@
 ; GCN-O2-NEXT:         Machine Natural Loop Construction
 ; GCN-O2-NEXT:         Simple Register Coalescing
 ; GCN-O2-NEXT:         Rename Disconnected Subregister Components
+; GCN-O2-NEXT:         AMDGPU Pre-RA optimizations
 ; GCN-O2-NEXT:         Machine Instruction Scheduler
 ; GCN-O2-NEXT:         MachinePostDominator Tree Construction
 ; GCN-O2-NEXT:         SI Whole Quad Mode
@@ -1005,7 +1003,6 @@
 ; GCN-O3-NEXT:       Inliner for always_inline functions
 ; GCN-O3-NEXT:     A No-Op Barrier Pass
 ; GCN-O3-NEXT:     Lower OpenCL enqueued blocks
-; GCN-O3-NEXT:     Replace within non-kernel function use of LDS with pointer
 ; GCN-O3-NEXT:     Lower uses of LDS variables from non-kernel functions
 ; GCN-O3-NEXT:     FunctionPass Manager
 ; GCN-O3-NEXT:       Infer address spaces
@@ -1198,6 +1195,7 @@
 ; GCN-O3-NEXT:         Machine Natural Loop Construction
 ; GCN-O3-NEXT:         Simple Register Coalescing
 ; GCN-O3-NEXT:         Rename Disconnected Subregister Components
+; GCN-O3-NEXT:         AMDGPU Pre-RA optimizations
 ; GCN-O3-NEXT:         Machine Instruction Scheduler
 ; GCN-O3-NEXT:         MachinePostDominator Tree Construction
 ; GCN-O3-NEXT:         SI Whole Quad Mode

@@ -1,0 +1,280 @@
+; RUN: llc < %s -mtriple=ve -mattr=+vpu,+packed | FileCheck %s
+
+;;; Test vector register through function calls.
+;;;
+;;; Note:
+;;;   We test v1f32 to v8f32, and v1f64 to v8f64.
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <1 x double> @vfaddd1(<1 x double> %0, <1 x double> %1) {
+; CHECK-LABEL: vfaddd1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    fadd.d %s0, %s1, %s0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <1 x double> %1, %0
+  ret <1 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <1 x float> @vfadds1(<1 x float> %0, <1 x float> %1) {
+; CHECK-LABEL: vfadds1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    fadd.s %s0, %s1, %s0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <1 x float> %1, %0
+  ret <1 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <2 x double> @vfaddd2(<2 x double> %0, <2 x double> %1) {
+; CHECK-LABEL: vfaddd2:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <2 x double> %1, %0
+  ret <2 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <2 x float> @vfadds2(<2 x float> %0, <2 x float> %1) {
+; CHECK-LABEL: vfadds2:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <2 x float> %1, %0
+  ret <2 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <3 x double> @vfaddd3(<3 x double> %0, <3 x double> %1) {
+; CHECK-LABEL: vfaddd3:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v1(0), %s3
+; CHECK-NEXT:    lsv %v1(1), %s4
+; CHECK-NEXT:    lsv %v1(2), %s5
+; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <3 x double> %1, %0
+  ret <3 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <3 x float> @vfadds3(<3 x float> %0, <3 x float> %1) {
+; CHECK-LABEL: vfadds3:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v1(0), %s3
+; CHECK-NEXT:    lsv %v1(1), %s4
+; CHECK-NEXT:    lsv %v1(2), %s5
+; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <3 x float> %1, %0
+  ret <3 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <4 x double> @vfaddd4(<4 x double> %0, <4 x double> %1) {
+; CHECK-LABEL: vfaddd4:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <4 x double> %1, %0
+  ret <4 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <4 x float> @vfadds4(<4 x float> %0, <4 x float> %1) {
+; CHECK-LABEL: vfadds4:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <4 x float> %1, %0
+  ret <4 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <5 x double> @vfaddd5(<5 x double> %0, <5 x double> %1) {
+; CHECK-LABEL: vfaddd5:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 5, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <5 x double> %1, %0
+  ret <5 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <5 x float> @vfadds5(<5 x float> %0, <5 x float> %1) {
+; CHECK-LABEL: vfadds5:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v0(3), %s3
+; CHECK-NEXT:    lsv %v0(4), %s4
+; CHECK-NEXT:    lsv %v1(0), %s5
+; CHECK-NEXT:    ldu %s0, 244(, %s11)
+; CHECK-NEXT:    ldu %s1, 252(, %s11)
+; CHECK-NEXT:    lsv %v1(1), %s6
+; CHECK-NEXT:    lsv %v1(2), %s7
+; CHECK-NEXT:    lsv %v1(3), %s0
+; CHECK-NEXT:    lsv %v1(4), %s1
+; CHECK-NEXT:    or %s0, 5, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    lvs %s3, %v0(3)
+; CHECK-NEXT:    lvs %s4, %v0(4)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <5 x float> %1, %0
+  ret <5 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <6 x double> @vfaddd6(<6 x double> %0, <6 x double> %1) {
+; CHECK-LABEL: vfaddd6:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 6, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <6 x double> %1, %0
+  ret <6 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <6 x float> @vfadds6(<6 x float> %0, <6 x float> %1) {
+; CHECK-LABEL: vfadds6:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v0(3), %s3
+; CHECK-NEXT:    lsv %v0(4), %s4
+; CHECK-NEXT:    lsv %v0(5), %s5
+; CHECK-NEXT:    lsv %v1(0), %s6
+; CHECK-NEXT:    lsv %v1(1), %s7
+; CHECK-NEXT:    ldu %s0, 244(, %s11)
+; CHECK-NEXT:    ldu %s1, 252(, %s11)
+; CHECK-NEXT:    ldu %s2, 260(, %s11)
+; CHECK-NEXT:    ldu %s3, 268(, %s11)
+; CHECK-NEXT:    lsv %v1(2), %s0
+; CHECK-NEXT:    lsv %v1(3), %s1
+; CHECK-NEXT:    lsv %v1(4), %s2
+; CHECK-NEXT:    lsv %v1(5), %s3
+; CHECK-NEXT:    or %s0, 6, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    lvs %s3, %v0(3)
+; CHECK-NEXT:    lvs %s4, %v0(4)
+; CHECK-NEXT:    lvs %s5, %v0(5)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <6 x float> %1, %0
+  ret <6 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <7 x double> @vfaddd7(<7 x double> %0, <7 x double> %1) {
+; CHECK-LABEL: vfaddd7:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 7, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <7 x double> %1, %0
+  ret <7 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <7 x float> @vfadds7(<7 x float> %0, <7 x float> %1) {
+; CHECK-LABEL: vfadds7:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v0(3), %s3
+; CHECK-NEXT:    lsv %v0(4), %s4
+; CHECK-NEXT:    lsv %v0(5), %s5
+; CHECK-NEXT:    ldu %s0, 244(, %s11)
+; CHECK-NEXT:    ldu %s1, 252(, %s11)
+; CHECK-NEXT:    lsv %v0(6), %s6
+; CHECK-NEXT:    lsv %v1(0), %s7
+; CHECK-NEXT:    lsv %v1(1), %s0
+; CHECK-NEXT:    lsv %v1(2), %s1
+; CHECK-NEXT:    ldu %s0, 260(, %s11)
+; CHECK-NEXT:    ldu %s1, 268(, %s11)
+; CHECK-NEXT:    ldu %s2, 276(, %s11)
+; CHECK-NEXT:    ldu %s3, 284(, %s11)
+; CHECK-NEXT:    lsv %v1(3), %s0
+; CHECK-NEXT:    lsv %v1(4), %s1
+; CHECK-NEXT:    lsv %v1(5), %s2
+; CHECK-NEXT:    lsv %v1(6), %s3
+; CHECK-NEXT:    or %s0, 7, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    lvs %s3, %v0(3)
+; CHECK-NEXT:    lvs %s4, %v0(4)
+; CHECK-NEXT:    lvs %s5, %v0(5)
+; CHECK-NEXT:    lvs %s6, %v0(6)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <7 x float> %1, %0
+  ret <7 x float> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <8 x double> @vfaddd8(<8 x double> %0, <8 x double> %1) {
+; CHECK-LABEL: vfaddd8:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <8 x double> %1, %0
+  ret <8 x double> %3
+}
+
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <8 x float> @vfadds8(<8 x float> %0, <8 x float> %1) {
+; CHECK-LABEL: vfadds8:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = fadd fast <8 x float> %1, %0
+  ret <8 x float> %3
+}
+
+!2 = !{!"clang version 13.0.0 (git@kaz7.github.com:sx-aurora-dev/llvm-project.git 03f601d9c971b381f909c9da25ecbee9e71aabbe)"}

@@ -19,6 +19,7 @@
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/Twine.h"
@@ -455,6 +456,11 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombinerImpl &IC) {
     return IC.replaceInstUsesWith(II, ConstantInt::getNullValue(II.getType()));
   }
 
+  // If the operand is a select with constant arm(s), try to hoist ctlz/cttz.
+  if (auto *Sel = dyn_cast<SelectInst>(Op0))
+    if (Instruction *R = IC.FoldOpIntoSelect(II, Sel))
+      return R;
+
   if (IsTZ) {
     // cttz(-x) -> cttz(x)
     if (match(Op0, m_Neg(m_Value(X))))
@@ -573,6 +579,11 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
     Value *NarrowPop = IC.Builder.CreateUnaryIntrinsic(Intrinsic::ctpop, X);
     return CastInst::Create(Instruction::ZExt, NarrowPop, Ty);
   }
+
+  // If the operand is a select with constant arm(s), try to hoist ctpop.
+  if (auto *Sel = dyn_cast<SelectInst>(Op0))
+    if (Instruction *R = IC.FoldOpIntoSelect(II, Sel))
+      return R;
 
   KnownBits Known(BitWidth);
   IC.computeKnownBits(Op0, Known, 0, &II);
@@ -954,8 +965,17 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
 
     break;
   }
-  case Intrinsic::umax:
   case Intrinsic::umin: {
+    Value *I0 = II->getArgOperand(0), *I1 = II->getArgOperand(1);
+    // umin(x, 1) == zext(x != 0)
+    if (match(I1, m_One())) {
+      Value *Zero = Constant::getNullValue(I0->getType());
+      Value *Cmp = Builder.CreateICmpNE(I0, Zero);
+      return CastInst::Create(Instruction::ZExt, Cmp, II->getType());
+    }
+    LLVM_FALLTHROUGH;
+  }
+  case Intrinsic::umax: {
     Value *I0 = II->getArgOperand(0), *I1 = II->getArgOperand(1);
     Value *X, *Y;
     if (match(I0, m_ZExt(m_Value(X))) && match(I1, m_ZExt(m_Value(Y))) &&
@@ -1040,6 +1060,11 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     if (Instruction *Sel = foldClampRangeOfTwo(II, Builder))
       return Sel;
 
+    if (match(I1, m_ImmConstant()))
+      if (auto *Sel = dyn_cast<SelectInst>(I0))
+        if (Instruction *R = FoldOpIntoSelect(*II, Sel))
+          return R;
+
     break;
   }
   case Intrinsic::bswap: {
@@ -1094,11 +1119,6 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
   case Intrinsic::ctpop:
     if (auto *I = foldCtpop(*II, *this))
       return I;
-
-    // If the operand is a select with constant arm(s), try to hoist ctpop.
-    if (auto *Sel = dyn_cast<SelectInst>(II->getArgOperand(0)))
-      if (Instruction *R = FoldOpIntoSelect(*II, Sel))
-        return R;
     break;
 
   case Intrinsic::fshl:
@@ -1371,20 +1391,26 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       }
     }
 
-    Value *ExtSrc0;
-    Value *ExtSrc1;
-
-    // minnum (fpext x), (fpext y) -> minnum x, y
-    // maxnum (fpext x), (fpext y) -> maxnum x, y
-    if (match(II->getArgOperand(0), m_OneUse(m_FPExt(m_Value(ExtSrc0)))) &&
-        match(II->getArgOperand(1), m_OneUse(m_FPExt(m_Value(ExtSrc1)))) &&
-        ExtSrc0->getType() == ExtSrc1->getType()) {
-      Function *F = Intrinsic::getDeclaration(
-          II->getModule(), II->getIntrinsicID(), {ExtSrc0->getType()});
-      CallInst *NewCall = Builder.CreateCall(F, { ExtSrc0, ExtSrc1 });
-      NewCall->copyFastMathFlags(II);
-      NewCall->takeName(II);
+    // m((fpext X), (fpext Y)) -> fpext (m(X, Y))
+    if (match(Arg0, m_OneUse(m_FPExt(m_Value(X)))) &&
+        match(Arg1, m_OneUse(m_FPExt(m_Value(Y)))) &&
+        X->getType() == Y->getType()) {
+      Value *NewCall =
+          Builder.CreateBinaryIntrinsic(IID, X, Y, II, II->getName());
       return new FPExtInst(NewCall, II->getType());
+    }
+
+    // max X, -X --> fabs X
+    // min X, -X --> -(fabs X)
+    // TODO: Remove one-use limitation? That is obviously better for max.
+    //       It would be an extra instruction for min (fnabs), but that is
+    //       still likely better for analysis and codegen.
+    if ((match(Arg0, m_OneUse(m_FNeg(m_Value(X)))) && Arg1 == X) ||
+        (match(Arg1, m_OneUse(m_FNeg(m_Value(X)))) && Arg0 == X)) {
+      Value *R = Builder.CreateUnaryIntrinsic(Intrinsic::fabs, X, II);
+      if (IID == Intrinsic::minimum || IID == Intrinsic::minnum)
+        R = Builder.CreateFNegFMF(R, II);
+      return replaceInstUsesWith(*II, R);
     }
 
     break;
@@ -1887,13 +1913,6 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       unsigned SubVecNumElts = SubVecTy->getNumElements();
       unsigned IdxN = cast<ConstantInt>(Idx)->getZExtValue();
 
-      // The result of this call is undefined if IdxN is not a constant multiple
-      // of the SubVec's minimum vector length OR the insertion overruns Vec.
-      if (IdxN % SubVecNumElts != 0 || IdxN + SubVecNumElts > VecNumElts) {
-        replaceInstUsesWith(CI, UndefValue::get(CI.getType()));
-        return eraseInstFromFunction(CI);
-      }
-
       // An insert that entirely overwrites Vec with SubVec is a nop.
       if (VecNumElts == SubVecNumElts) {
         replaceInstUsesWith(CI, SubVec);
@@ -1941,14 +1960,6 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       unsigned VecNumElts = VecTy->getNumElements();
       unsigned IdxN = cast<ConstantInt>(Idx)->getZExtValue();
 
-      // The result of this call is undefined if IdxN is not a constant multiple
-      // of the result type's minimum vector length OR the extraction overruns
-      // Vec.
-      if (IdxN % DstNumElts != 0 || IdxN + DstNumElts > VecNumElts) {
-        replaceInstUsesWith(CI, UndefValue::get(CI.getType()));
-        return eraseInstFromFunction(CI);
-      }
-
       // Extracting the entirety of Vec is a nop.
       if (VecNumElts == DstNumElts) {
         replaceInstUsesWith(CI, Vec);
@@ -1991,6 +2002,46 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
         replaceInstUsesWith(CI, Res);
         return eraseInstFromFunction(CI);
       }
+    LLVM_FALLTHROUGH;
+  }
+  case Intrinsic::vector_reduce_add:
+  case Intrinsic::vector_reduce_mul:
+  case Intrinsic::vector_reduce_xor:
+  case Intrinsic::vector_reduce_umax:
+  case Intrinsic::vector_reduce_umin:
+  case Intrinsic::vector_reduce_smax:
+  case Intrinsic::vector_reduce_smin:
+  case Intrinsic::vector_reduce_fmax:
+  case Intrinsic::vector_reduce_fmin:
+  case Intrinsic::vector_reduce_fadd:
+  case Intrinsic::vector_reduce_fmul: {
+    bool CanBeReassociated = (IID != Intrinsic::vector_reduce_fadd &&
+                              IID != Intrinsic::vector_reduce_fmul) ||
+                             II->hasAllowReassoc();
+    const unsigned ArgIdx = (IID == Intrinsic::vector_reduce_fadd ||
+                             IID == Intrinsic::vector_reduce_fmul)
+                                ? 1
+                                : 0;
+    Value *Arg = II->getArgOperand(ArgIdx);
+    Value *V;
+    ArrayRef<int> Mask;
+    if (!isa<FixedVectorType>(Arg->getType()) || !CanBeReassociated ||
+        !match(Arg, m_Shuffle(m_Value(V), m_Undef(), m_Mask(Mask))) ||
+        !cast<ShuffleVectorInst>(Arg)->isSingleSource())
+      break;
+    int Sz = Mask.size();
+    SmallBitVector UsedIndices(Sz);
+    for (int Idx : Mask) {
+      if (Idx == UndefMaskElem || UsedIndices.test(Idx))
+        break;
+      UsedIndices.set(Idx);
+    }
+    // Can remove shuffle iff just shuffled elements, no repeats, undefs, or
+    // other changes.
+    if (UsedIndices.all()) {
+      replaceUse(II->getOperandUse(ArgIdx), V);
+      return nullptr;
+    }
     break;
   }
   default: {
@@ -2044,20 +2095,27 @@ static bool isSafeToEliminateVarargsCast(const CallBase &Call,
       isa<GCResultInst>(Call))
     return false;
 
+  // Opaque pointers are compatible with any byval types.
+  PointerType *SrcTy = cast<PointerType>(CI->getOperand(0)->getType());
+  if (SrcTy->isOpaque())
+    return true;
+
   // The size of ByVal or InAlloca arguments is derived from the type, so we
   // can't change to a type with a different size.  If the size were
   // passed explicitly we could avoid this check.
   if (!Call.isPassPointeeByValueArgument(ix))
     return true;
 
-  Type* SrcTy =
-            cast<PointerType>(CI->getOperand(0)->getType())->getElementType();
-  Type *DstTy = Call.isByValArgument(ix)
-                    ? Call.getParamByValType(ix)
-                    : cast<PointerType>(CI->getType())->getElementType();
-  if (!SrcTy->isSized() || !DstTy->isSized())
+  // The transform currently only handles type replacement for byval, not other
+  // type-carrying attributes.
+  if (!Call.isByValArgument(ix))
     return false;
-  if (DL.getTypeAllocSize(SrcTy) != DL.getTypeAllocSize(DstTy))
+
+  Type *SrcElemTy = SrcTy->getElementType();
+  Type *DstElemTy = Call.getParamByValType(ix);
+  if (!SrcElemTy->isSized() || !DstElemTy->isSized())
+    return false;
+  if (DL.getTypeAllocSize(SrcElemTy) != DL.getTypeAllocSize(DstElemTy))
     return false;
   return true;
 }
@@ -2323,8 +2381,8 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
   if (IntrinsicInst *II = findInitTrampoline(Callee))
     return transformCallThroughTrampoline(Call, *II);
 
-  PointerType *PTy = cast<PointerType>(Callee->getType());
-  FunctionType *FTy = cast<FunctionType>(PTy->getElementType());
+  // TODO: Drop this transform once opaque pointer transition is done.
+  FunctionType *FTy = Call.getFunctionType();
   if (FTy->isVarArg()) {
     int ix = FTy->getNumParams();
     // See if we can optimize any arguments passed through the varargs area of
@@ -2335,13 +2393,14 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
       if (CI && isSafeToEliminateVarargsCast(Call, DL, CI, ix)) {
         replaceUse(*I, CI->getOperand(0));
 
-        // Update the byval type to match the argument type.
-        if (Call.isByValArgument(ix)) {
+        // Update the byval type to match the pointer type.
+        // Not necessary for opaque pointers.
+        PointerType *NewTy = cast<PointerType>(CI->getOperand(0)->getType());
+        if (!NewTy->isOpaque() && Call.isByValArgument(ix)) {
           Call.removeParamAttr(ix, Attribute::ByVal);
           Call.addParamAttr(
               ix, Attribute::getWithByValType(
-                      Call.getContext(),
-                      CI->getOperand(0)->getType()->getPointerElementType()));
+                      Call.getContext(), NewTy->getElementType()));
         }
         Changed = true;
       }

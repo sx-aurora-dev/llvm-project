@@ -115,68 +115,70 @@ namespace llvm {
 
       v1i64          =  64,   //   1 x i64
       v2i64          =  65,   //   2 x i64
-      v4i64          =  66,   //   4 x i64
-      v8i64          =  67,   //   8 x i64
-      v16i64         =  68,   //  16 x i64
-      v32i64         =  69,   //  32 x i64
-      v64i64         =  70,   //  64 x i64
-      v128i64        =  71,   // 128 x i64
-      v256i64        =  72,   // 256 x i64
-      v512i64        =  73,   // 512 x i64
+      v3i64          =  66,   //   3 x i64
+      v4i64          =  67,   //   4 x i64
+      v8i64          =  68,   //   8 x i64
+      v16i64         =  69,   //  16 x i64
+      v32i64         =  70,   //  32 x i64
+      v64i64         =  71,   //  64 x i64
+      v128i64        =  72,   // 128 x i64
+      v256i64        =  73,   // 256 x i64
+      v512i64        =  74,   // 512 x i64
 
-      v1i128         =  74,   //  1 x i128
+      v1i128         =  75,   //  1 x i128
 
       FIRST_INTEGER_FIXEDLEN_VECTOR_VALUETYPE = v1i1,
       LAST_INTEGER_FIXEDLEN_VECTOR_VALUETYPE = v1i128,
 
-      v1f16          =  75,   //    1 x f16
-      v2f16          =  76,   //    2 x f16
-      v3f16          =  77,   //    3 x f16
-      v4f16          =  78,   //    4 x f16
-      v8f16          =  79,   //    8 x f16
-      v16f16         =  80,   //   16 x f16
-      v32f16         =  81,   //   32 x f16
-      v64f16         =  82,   //   64 x f16
-      v128f16        =  83,   //  128 x f16
-      v256f16        =  84,   //  256 x f16
-      v512f16        =  85,   //  256 x f16
+      v1f16          =  76,   //    1 x f16
+      v2f16          =  77,   //    2 x f16
+      v3f16          =  78,   //    3 x f16
+      v4f16          =  79,   //    4 x f16
+      v8f16          =  80,   //    8 x f16
+      v16f16         =  81,   //   16 x f16
+      v32f16         =  82,   //   32 x f16
+      v64f16         =  83,   //   64 x f16
+      v128f16        =  84,   //  128 x f16
+      v256f16        =  85,   //  256 x f16
+      v512f16        =  86,   //  256 x f16
 
-      v2bf16         =  86,   //    2 x bf16
-      v3bf16         =  87,   //    3 x bf16
-      v4bf16         =  88,   //    4 x bf16
-      v8bf16         =  89,   //    8 x bf16
-      v16bf16        =  90,   //   16 x bf16
-      v32bf16        =  91,   //   32 x bf16
-      v64bf16        =  92,   //   64 x bf16
-      v128bf16       =  93,   //  128 x bf16
+      v2bf16         =  87,   //    2 x bf16
+      v3bf16         =  88,   //    3 x bf16
+      v4bf16         =  89,   //    4 x bf16
+      v8bf16         =  90,   //    8 x bf16
+      v16bf16        =  91,   //   16 x bf16
+      v32bf16        =  92,   //   32 x bf16
+      v64bf16        =  93,   //   64 x bf16
+      v128bf16       =  94,   //  128 x bf16
 
-      v1f32          =  94,   //    1 x f32
-      v2f32          =  95,   //    2 x f32
-      v3f32          =  96,   //    3 x f32
-      v4f32          =  97,   //    4 x f32
-      v5f32          =  98,   //    5 x f32
-      v6f32          =  99,   //    6 x f32
-      v7f32          = 100,   //    7 x f32
-      v8f32          = 101,   //    8 x f32
-      v16f32         = 102,   //   16 x f32
-      v32f32         = 103,   //   32 x f32
-      v64f32         = 104,   //   64 x f32
-      v128f32        = 105,   //  128 x f32
-      v256f32        = 106,   //  256 x f32
-      v512f32        = 107,   //  512 x f32
-      v1024f32       = 108,   // 1024 x f32
-      v2048f32       = 109,   // 2048 x f32
+      v1f32          =  95,   //    1 x f32
+      v2f32          =  96,   //    2 x f32
+      v3f32          =  97,   //    3 x f32
+      v4f32          =  98,   //    4 x f32
+      v5f32          =  99,   //    5 x f32
+      v6f32          = 100,   //    6 x f32
+      v7f32          = 101,   //    7 x f32
+      v8f32          = 102,   //    8 x f32
+      v16f32         = 103,   //   16 x f32
+      v32f32         = 104,   //   32 x f32
+      v64f32         = 105,   //   64 x f32
+      v128f32        = 106,   //  128 x f32
+      v256f32        = 107,   //  256 x f32
+      v512f32        = 108,   //  512 x f32
+      v1024f32       = 109,   // 1024 x f32
+      v2048f32       = 110,   // 2048 x f32
 
-      v1f64          = 110,   //    1 x f64
-      v2f64          = 111,   //    2 x f64
-      v4f64          = 112,   //    4 x f64
-      v8f64          = 113,   //    8 x f64
-      v16f64         = 114,   //   16 x f64
-      v32f64         = 115,   //   32 x f64
-      v64f64         = 116,   //   64 x f64
-      v128f64        = 117,   //  128 x f64
-      v256f64        = 118,   //  256 x f64
-      v512f64        = 119,   //  512 x f64
+      v1f64          = 111,   //    1 x f64
+      v2f64          = 112,   //    2 x f64
+      v3f64          = 113,   //    3 x f64
+      v4f64          = 114,   //    4 x f64
+      v8f64          = 115,   //    8 x f64
+      v16f64         = 116,   //   16 x f64
+      v32f64         = 117,   //   32 x f64
+      v64f64         = 118,   //   64 x f64
+      v128f64        = 119,   //  128 x f64
+      v256f64        = 120,   //  256 x f64
+      v512f64        = 121,   //  512 x f64
 
       FIRST_FP_FIXEDLEN_VECTOR_VALUETYPE = v1f16,
       LAST_FP_FIXEDLEN_VECTOR_VALUETYPE = v512f64,
@@ -184,68 +186,68 @@ namespace llvm {
       FIRST_FIXEDLEN_VECTOR_VALUETYPE = v1i1,
       LAST_FIXEDLEN_VECTOR_VALUETYPE = v512f64,
 
-      nxv1i1         = 120,   // n x  1 x i1
-      nxv2i1         = 121,   // n x  2 x i1
-      nxv4i1         = 122,   // n x  4 x i1
-      nxv8i1         = 123,   // n x  8 x i1
-      nxv16i1        = 124,   // n x 16 x i1
-      nxv32i1        = 125,   // n x 32 x i1
-      nxv64i1        = 126,   // n x 64 x i1
+      nxv1i1         = 122,   // n x  1 x i1
+      nxv2i1         = 123,   // n x  2 x i1
+      nxv4i1         = 124,   // n x  4 x i1
+      nxv8i1         = 125,   // n x  8 x i1
+      nxv16i1        = 126,   // n x 16 x i1
+      nxv32i1        = 127,   // n x 32 x i1
+      nxv64i1        = 128,   // n x 64 x i1
 
-      nxv1i8         = 127,   // n x  1 x i8
-      nxv2i8         = 128,   // n x  2 x i8
-      nxv4i8         = 129,   // n x  4 x i8
-      nxv8i8         = 130,   // n x  8 x i8
-      nxv16i8        = 131,   // n x 16 x i8
-      nxv32i8        = 132,   // n x 32 x i8
-      nxv64i8        = 133,   // n x 64 x i8
+      nxv1i8         = 129,   // n x  1 x i8
+      nxv2i8         = 130,   // n x  2 x i8
+      nxv4i8         = 131,   // n x  4 x i8
+      nxv8i8         = 132,   // n x  8 x i8
+      nxv16i8        = 133,   // n x 16 x i8
+      nxv32i8        = 134,   // n x 32 x i8
+      nxv64i8        = 135,   // n x 64 x i8
 
-      nxv1i16        = 134,  // n x  1 x i16
-      nxv2i16        = 135,  // n x  2 x i16
-      nxv4i16        = 136,  // n x  4 x i16
-      nxv8i16        = 137,  // n x  8 x i16
-      nxv16i16       = 138,  // n x 16 x i16
-      nxv32i16       = 139,  // n x 32 x i16
+      nxv1i16        = 136,  // n x  1 x i16
+      nxv2i16        = 137,  // n x  2 x i16
+      nxv4i16        = 138,  // n x  4 x i16
+      nxv8i16        = 139,  // n x  8 x i16
+      nxv16i16       = 140,  // n x 16 x i16
+      nxv32i16       = 141,  // n x 32 x i16
 
-      nxv1i32        = 140,  // n x  1 x i32
-      nxv2i32        = 141,  // n x  2 x i32
-      nxv4i32        = 142,  // n x  4 x i32
-      nxv8i32        = 143,  // n x  8 x i32
-      nxv16i32       = 144,  // n x 16 x i32
-      nxv32i32       = 145,  // n x 32 x i32
+      nxv1i32        = 142,  // n x  1 x i32
+      nxv2i32        = 143,  // n x  2 x i32
+      nxv4i32        = 144,  // n x  4 x i32
+      nxv8i32        = 145,  // n x  8 x i32
+      nxv16i32       = 146,  // n x 16 x i32
+      nxv32i32       = 147,  // n x 32 x i32
 
-      nxv1i64        = 146,  // n x  1 x i64
-      nxv2i64        = 147,  // n x  2 x i64
-      nxv4i64        = 148,  // n x  4 x i64
-      nxv8i64        = 149,  // n x  8 x i64
-      nxv16i64       = 150,  // n x 16 x i64
-      nxv32i64       = 151,  // n x 32 x i64
+      nxv1i64        = 148,  // n x  1 x i64
+      nxv2i64        = 149,  // n x  2 x i64
+      nxv4i64        = 150,  // n x  4 x i64
+      nxv8i64        = 151,  // n x  8 x i64
+      nxv16i64       = 152,  // n x 16 x i64
+      nxv32i64       = 153,  // n x 32 x i64
 
       FIRST_INTEGER_SCALABLE_VECTOR_VALUETYPE = nxv1i1,
       LAST_INTEGER_SCALABLE_VECTOR_VALUETYPE = nxv32i64,
 
-      nxv1f16        = 152,  // n x  1 x f16
-      nxv2f16        = 153,  // n x  2 x f16
-      nxv4f16        = 154,  // n x  4 x f16
-      nxv8f16        = 155,  // n x  8 x f16
-      nxv16f16       = 156,  // n x 16 x f16
-      nxv32f16       = 157,  // n x 32 x f16
+      nxv1f16        = 154,  // n x  1 x f16
+      nxv2f16        = 155,  // n x  2 x f16
+      nxv4f16        = 156,  // n x  4 x f16
+      nxv8f16        = 157,  // n x  8 x f16
+      nxv16f16       = 158,  // n x 16 x f16
+      nxv32f16       = 159,  // n x 32 x f16
 
-      nxv1bf16       = 158,  // n x  1 x bf16
-      nxv2bf16       = 159,  // n x  2 x bf16
-      nxv4bf16       = 160,  // n x  4 x bf16
-      nxv8bf16       = 161,  // n x  8 x bf16
+      nxv1bf16       = 160,  // n x  1 x bf16
+      nxv2bf16       = 161,  // n x  2 x bf16
+      nxv4bf16       = 162,  // n x  4 x bf16
+      nxv8bf16       = 163,  // n x  8 x bf16
 
-      nxv1f32        = 162,  // n x  1 x f32
-      nxv2f32        = 163,  // n x  2 x f32
-      nxv4f32        = 164,  // n x  4 x f32
-      nxv8f32        = 165,  // n x  8 x f32
-      nxv16f32       = 166,  // n x 16 x f32
+      nxv1f32        = 164,  // n x  1 x f32
+      nxv2f32        = 165,  // n x  2 x f32
+      nxv4f32        = 166,  // n x  4 x f32
+      nxv8f32        = 167,  // n x  8 x f32
+      nxv16f32       = 168,  // n x 16 x f32
 
-      nxv1f64        = 167,  // n x  1 x f64
-      nxv2f64        = 168,  // n x  2 x f64
-      nxv4f64        = 169,  // n x  4 x f64
-      nxv8f64        = 170,  // n x  8 x f64
+      nxv1f64        = 169,  // n x  1 x f64
+      nxv2f64        = 170,  // n x  2 x f64
+      nxv4f64        = 171,  // n x  4 x f64
+      nxv8f64        = 172,  // n x  8 x f64
 
       FIRST_FP_SCALABLE_VECTOR_VALUETYPE = nxv1f16,
       LAST_FP_SCALABLE_VECTOR_VALUETYPE = nxv8f64,
@@ -256,19 +258,19 @@ namespace llvm {
       FIRST_VECTOR_VALUETYPE = v1i1,
       LAST_VECTOR_VALUETYPE  = nxv8f64,
 
-      x86mmx         = 171,    // This is an X86 MMX value
+      x86mmx         = 173,    // This is an X86 MMX value
 
-      Glue           = 172,    // This glues nodes together during pre-RA sched
+      Glue           = 174,    // This glues nodes together during pre-RA sched
 
-      isVoid         = 173,    // This has no value
+      isVoid         = 175,    // This has no value
 
-      Untyped        = 174,    // This value takes a register, but has
+      Untyped        = 176,    // This value takes a register, but has
                                // unspecified type.  The register class
                                // will be determined by the opcode.
 
-      funcref        = 175,    // WebAssembly's funcref type
-      externref      = 176,    // WebAssembly's externref type
-      x86amx         = 177,    // This is an X86 AMX value
+      funcref        = 177,    // WebAssembly's funcref type
+      externref      = 178,    // WebAssembly's externref type
+      x86amx         = 179,    // This is an X86 AMX value
 
       FIRST_VALUETYPE =  1,    // This is always the beginning of the list.
       LAST_VALUETYPE = x86amx, // This always remains at the end of the list.
@@ -613,6 +615,7 @@ namespace llvm {
       case nxv32i32: return i32;
       case v1i64:
       case v2i64:
+      case v3i64:
       case v4i64:
       case v8i64:
       case v16i64:
@@ -680,6 +683,7 @@ namespace llvm {
       case nxv16f32: return f32;
       case v1f64:
       case v2f64:
+      case v3f64:
       case v4f64:
       case v8f64:
       case v16f64:
@@ -817,9 +821,11 @@ namespace llvm {
       case nxv4f64: return 4;
       case v3i16:
       case v3i32:
+      case v3i64:
       case v3f16:
       case v3bf16:
-      case v3f32: return 3;
+      case v3f32:
+      case v3f64: return 3;
       case v2i1:
       case v2i8:
       case v2i16:
@@ -983,7 +989,9 @@ namespace llvm {
       case v5i32:
       case v5f32: return TypeSize::Fixed(160);
       case v6i32:
-      case v6f32: return TypeSize::Fixed(192);
+      case v3i64:
+      case v6f32:
+      case v3f64: return TypeSize::Fixed(192);
       case v7i32:
       case v7f32: return TypeSize::Fixed(224);
       case v256i1:
@@ -1253,6 +1261,7 @@ namespace llvm {
       case MVT::i64:
         if (NumElements == 1)  return MVT::v1i64;
         if (NumElements == 2)  return MVT::v2i64;
+        if (NumElements == 3)  return MVT::v3i64;
         if (NumElements == 4)  return MVT::v4i64;
         if (NumElements == 8)  return MVT::v8i64;
         if (NumElements == 16) return MVT::v16i64;
@@ -1309,6 +1318,7 @@ namespace llvm {
       case MVT::f64:
         if (NumElements == 1)  return MVT::v1f64;
         if (NumElements == 2)  return MVT::v2f64;
+        if (NumElements == 3)  return MVT::v3f64;
         if (NumElements == 4)  return MVT::v4f64;
         if (NumElements == 8)  return MVT::v8f64;
         if (NumElements == 16) return MVT::v16f64;
