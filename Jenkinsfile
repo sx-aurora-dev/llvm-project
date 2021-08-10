@@ -6,6 +6,9 @@ pipeline {
         TOP = pwd()
         CMAKE = "cmake"
         PYTHON = "python3"
+        // Need to use either gcc-10 or clang to compile recent llvm
+        CC = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang"
+        CXX = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang++"
         REPO_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*\$::'").trim()
@@ -38,7 +41,8 @@ pipeline {
                 dir('llvm-dev') {
                     sh """
                         make clean
-                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                        CC="${CC}" CXX="${CXX}" make \
+                            SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
                             THREADS= cmake build
                     """
                 }
