@@ -1,4 +1,4 @@
-//===-- InstrinsicInst.cpp - Intrinsic Instruction Wrappers ---------------===//
+//===-- IntrinsicInst.cpp - Intrinsic Instruction Wrappers ---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -340,6 +340,22 @@ VPIntrinsic::getVectorLengthParamPos(Intrinsic::ID IntrinsicID) {
   }
 }
 
+/// \return the alignment of the pointer used by this load/store/gather or
+/// scatter.
+MaybeAlign VPIntrinsic::getPointerAlignment() const {
+  Optional<unsigned> PtrParamOpt = getMemoryPointerParamPos(getIntrinsicID());
+  assert(PtrParamOpt.hasValue() && "no pointer argument!");
+  return getParamAlign(PtrParamOpt.getValue());
+}
+
+/// \return The data (payload) operand of this store or scatter.
+Value *VPIntrinsic::getMemoryDataParam() const {
+  auto DataParamOpt = getMemoryDataParamPos(getIntrinsicID());
+  if (!DataParamOpt.hasValue())
+    return nullptr;
+  return getArgOperand(DataParamOpt.getValue());
+}
+
 bool VPIntrinsic::isVPIntrinsic(Intrinsic::ID ID) {
   switch (ID) {
   default:
@@ -477,14 +493,15 @@ Optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
 
 /// \return The vector to reduce if this is a reduction operation.
 Value *VPIntrinsic::getReductionVectorParam() const {
-  auto PosOpt = GetReductionVectorParamPos(getIntrinsicID());
+  auto PosOpt = getReductionVectorParamPos(getIntrinsicID());
   if (!PosOpt.hasValue())
     return nullptr;
   return getArgOperand(PosOpt.getValue());
 }
 
-Optional<int> VPIntrinsic::GetReductionVectorParamPos(Intrinsic::ID VPID) {
-  Optional<int> ParamPos = None;
+Optional<unsigned>
+VPIntrinsic::getReductionVectorParamPos(Intrinsic::ID VPID) {
+  Optional<unsigned> ParamPos = None;
 
   switch (VPID) {
   default:
@@ -500,14 +517,14 @@ Optional<int> VPIntrinsic::GetReductionVectorParamPos(Intrinsic::ID VPID) {
 
 /// \return The accumulator initial value if this is a reduction operation.
 Value *VPIntrinsic::getReductionAccuParam() const {
-  auto PosOpt = GetReductionAccuParamPos(getIntrinsicID());
+  auto PosOpt = getReductionAccuParamPos(getIntrinsicID());
   if (!PosOpt.hasValue())
     return nullptr;
   return getArgOperand(PosOpt.getValue());
 }
 
-Optional<int> VPIntrinsic::GetReductionAccuParamPos(Intrinsic::ID VPID) {
-  Optional<int> ParamPos = None;
+Optional<unsigned> VPIntrinsic::getReductionAccuParamPos(Intrinsic::ID VPID) {
+  Optional<unsigned> ParamPos = None;
   switch (VPID) {
   default:
     return None;
@@ -520,24 +537,16 @@ Optional<int> VPIntrinsic::GetReductionAccuParamPos(Intrinsic::ID VPID) {
   return ParamPos;
 }
 
-/// \return the alignment of the pointer used by this load/store/gather or
-/// scatter.
-MaybeAlign VPIntrinsic::getPointerAlignment() const {
-  Optional<int> PtrParamOpt = GetMemoryPointerParamPos(getIntrinsicID());
-  assert(PtrParamOpt.hasValue() && "no pointer argument!");
-  return this->getParamAlign(PtrParamOpt.getValue());
-}
-
 /// \return The pointer operand of this load,store, gather or scatter.
 Value *VPIntrinsic::getMemoryPointerParam() const {
-  auto PtrParamOpt = GetMemoryPointerParamPos(getIntrinsicID());
+  auto PtrParamOpt = getMemoryPointerParamPos(getIntrinsicID());
   if (!PtrParamOpt.hasValue())
     return nullptr;
   return getArgOperand(PtrParamOpt.getValue());
 }
 
-Optional<int> VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::ID VPID) {
-  Optional<int> ParamPos;
+Optional<unsigned> VPIntrinsic::getMemoryPointerParamPos(Intrinsic::ID VPID) {
+  Optional<unsigned> ParamPos;
   switch (VPID) {
   default:
     return None;
@@ -551,19 +560,12 @@ Optional<int> VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::ID VPID) {
   return ParamPos;
 }
 
-/// \return The data (payload) operand of this store or scatter.
-Value *VPIntrinsic::getMemoryDataParam() const {
-  auto DataParamOpt = GetMemoryDataParamPos(getIntrinsicID());
-  if (!DataParamOpt.hasValue())
-    return nullptr;
-  return getArgOperand(DataParamOpt.getValue());
-}
-
-Optional<int> VPIntrinsic::GetMemoryDataParamPos(Intrinsic::ID VPID) {
-  Optional<int> ParamPos;
+Optional<unsigned> VPIntrinsic::getMemoryDataParamPos(Intrinsic::ID VPID) {
+  Optional<unsigned> ParamPos;
   switch (VPID) {
   default:
     return None;
+
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_IS_MEMOP(POINTERPOS, DATAPOS) ParamPos = DATAPOS;
 #define END_REGISTER_VP_INTRINSIC(...) break;
@@ -720,14 +722,14 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
     VecTy = cast<VectorType>(FirstOp.getType());
 
   } else if (IsReduceOp) {
-    auto VectorPosOpt = GetReductionVectorParamPos(VPID);
+    auto VectorPosOpt = getReductionVectorParamPos(VPID);
     Value *VectorParam = Params[VectorPosOpt.getValue()];
 
     VecTy = VectorParam->getType();
 
   } else if (IsMemoryOp) {
-    auto DataPosOpt = VPIntrinsic::GetMemoryDataParamPos(VPID);
-    auto PtrPosOpt = VPIntrinsic::GetMemoryPointerParamPos(VPID);
+    auto DataPosOpt = VPIntrinsic::getMemoryDataParamPos(VPID);
+    auto PtrPosOpt = VPIntrinsic::getMemoryPointerParamPos(VPID);
     VecPtrTy = Params[PtrPosOpt.getValue()]->getType();
 
     if (DataPosOpt.hasValue()) {
