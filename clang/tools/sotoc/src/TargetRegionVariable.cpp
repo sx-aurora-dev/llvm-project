@@ -84,7 +84,7 @@ int TargetRegionVariable::pointerDepth() const {
 // }
 
 bool TargetRegionVariable::passedByPointer() const {
-  if (isArray()||isPointer()) {
+  if (isArray() || pointerDepth()) {
     // Arrays are always passed by pointer
     return true;
   }
