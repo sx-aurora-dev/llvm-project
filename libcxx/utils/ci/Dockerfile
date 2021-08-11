@@ -47,9 +47,9 @@ RUN bash /tmp/llvm.sh $(($LLVM_LATEST_VERSION - 1)) # previous release
 RUN bash /tmp/llvm.sh $LLVM_LATEST_VERSION          # latest release
 RUN bash /tmp/llvm.sh $(($LLVM_LATEST_VERSION + 1)) # current ToT
 
-# Make the latest Clang the "default" compiler on the system
-RUN ln -fs /usr/bin/clang++-$LLVM_LATEST_VERSION /usr/bin/c++ && [ -e $(readlink /usr/bin/c++) ]
-RUN ln -fs /usr/bin/clang-$LLVM_LATEST_VERSION /usr/bin/cc && [ -e $(readlink /usr/bin/cc) ]
+# Make the ToT Clang the "default" compiler on the system
+RUN ln -fs /usr/bin/clang++-$(($LLVM_LATEST_VERSION + 1)) /usr/bin/c++ && [ -e $(readlink /usr/bin/c++) ]
+RUN ln -fs /usr/bin/clang-$(($LLVM_LATEST_VERSION + 1)) /usr/bin/cc && [ -e $(readlink /usr/bin/cc) ]
 
 # Temporarily keep the clang++ and clang++-tot symlinks around for backwards compatibility with builders
 RUN ln -s /usr/bin/clang++-$LLVM_LATEST_VERSION /usr/bin/clang++ && [ -e $(readlink /usr/bin/clang++) ]
@@ -87,6 +87,7 @@ WORKDIR /home/libcxx-builder
 # for the Buildkite agent to be installed in a path where we can find it.
 RUN bash -c "$(curl -sL https://raw.githubusercontent.com/buildkite/agent/master/install.sh)"
 ENV PATH="${PATH}:/home/libcxx-builder/.buildkite-agent/bin"
+RUN echo "tags=\"queue=libcxx-builders,arch=$(uname -m),os=linux\"" >> "/home/libcxx-builder/.buildkite-agent/buildkite-agent.cfg"
 
 # By default, start the Buildkite agent (this requires a token).
-CMD buildkite-agent start --tags "queue=libcxx-builders"
+CMD buildkite-agent start
