@@ -175,6 +175,7 @@ public:
   Instruction *visitExtractValueInst(ExtractValueInst &EV);
   Instruction *visitLandingPadInst(LandingPadInst &LI);
   Instruction *visitVAEndInst(VAEndInst &I);
+  Value *pushFreezeToPreventPoisonFromPropagating(FreezeInst &FI);
   Instruction *visitFreeze(FreezeInst &I);
 
   // Entry point to VPIntrinsic
