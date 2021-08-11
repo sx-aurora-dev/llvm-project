@@ -3059,6 +3059,18 @@ cc_binary(
     ],
 )
 
+gentbl(
+    name = "NmOptsTableGen",
+    strip_include_prefix = "tools/llvm-nm",
+    tbl_outs = [(
+        "-gen-opt-parser-defs",
+        "tools/llvm-nm/Opts.inc",
+    )],
+    tblgen = ":llvm-tblgen",
+    td_file = "tools/llvm-nm/Opts.td",
+    td_srcs = ["include/llvm/Option/OptParser.td"],
+)
+
 cc_binary(
     name = "llvm-nm",
     srcs = glob([
@@ -3074,7 +3086,9 @@ cc_binary(
         ":BitReader",
         ":Core",
         ":Demangle",
+        ":NmOptsTableGen",
         ":Object",
+        ":Option",
         ":Support",
     ],
 )
@@ -3451,6 +3465,18 @@ cc_binary(
     ],
 )
 
+gentbl(
+    name = "StringsOptsTableGen",
+    strip_include_prefix = "tools/llvm-strings",
+    tbl_outs = [(
+        "-gen-opt-parser-defs",
+        "tools/llvm-strings/Opts.inc",
+    )],
+    tblgen = ":llvm-tblgen",
+    td_file = "tools/llvm-strings/Opts.td",
+    td_srcs = ["include/llvm/Option/OptParser.td"],
+)
+
 cc_binary(
     name = "llvm-strings",
     srcs = glob([
@@ -3461,6 +3487,8 @@ cc_binary(
     stamp = 0,
     deps = [
         ":Object",
+        ":Option",
+        ":StringsOptsTableGen",
         ":Support",
     ],
 )
