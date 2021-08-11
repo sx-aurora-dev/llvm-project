@@ -65,7 +65,7 @@ public:
   TargetRegionVariableShape(const clang::VariableArrayType *Array,
                             unsigned int DimIndex)
       : VariableDimensionIndex(DimIndex), Kind(ShapeKind::VariableArray){};
-  /// Cosntruct a shape for a constant array dimension.
+  /// Construct a shape for a constant array dimension.
   TargetRegionVariableShape(const clang::ConstantArrayType *Array)
       : Kind(ShapeKind::ConstantArray) {
     ConstantDimensionExpr = Array->getSize().toString(10, false);
@@ -189,7 +189,8 @@ public:
   clang::VarDecl *getDecl() const { return Decl; };
   /// Wether this variable is an array (at the top level) or not
   bool isArray() const;
-  bool isPointer() const;
+  int pointerDepth() const;
+  // bool isPointer() const;
   /// Returns true if this variable is passed by pointer.
   /// This is the case for shared and first-private variables scalars and for
   /// arrays.

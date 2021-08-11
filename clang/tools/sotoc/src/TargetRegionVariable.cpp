@@ -66,12 +66,22 @@ bool TargetRegionVariable::isArray() const {
   return false;
 }
 
-bool TargetRegionVariable::isPointer() const {
-  if (!Shapes.empty() && Shapes[0].isPointer()) {
-    return true;
+// get depth of point nest
+int TargetRegionVariable::pointerDepth() const {
+  int i = 0;
+  if (!Shapes.empty()) {
+    for (i; Shapes[i].isPointer(); ++i)
+      ;
   }
-  return false;
+  return i;
 }
+
+// bool TargetRegionVariable::isPointer() const {
+//  if (!Shapes.empty() && Shapes[0].isPointer()) {
+//    return true;
+//  }
+//  return false;
+// }
 
 bool TargetRegionVariable::passedByPointer() const {
   if (isArray()||isPointer()) {
