@@ -419,43 +419,19 @@ public:
   EncodeTypeTokens(unsigned VPID, Type *VecRetTy,
                    Type *VecPtrTy, VectorType &VectorTy);
 
-  /// \return the mask parameter or nullptr.
+  /// \return The mask parameter or nullptr.
   Value *getMaskParam() const;
   /// This asserts if the underlying intrinsic has no mask parameter.
   void setMaskParam(Value *);
 
-  /// \return the vector length parameter or nullptr.
+  /// \return The vector length parameter or nullptr.
   Value *getVectorLengthParam() const;
   /// This asserts if the underlying intrinsic has no vector length
   /// parameter.
   void setVectorLengthParam(Value *);
 
-  /// \return whether the vector length param can be ignored.
+  /// \return Whether the vector length param can be ignored.
   bool canIgnoreVectorLengthParam() const;
-
-  /// \return the alignment of the pointer used by this load/store/gather or scatter.
-  MaybeAlign getPointerAlignment() const;
-  // MaybeAlign setPointerAlignment(Align NewAlign); // TODO
-
-  /// \return The pointer operand of this load,store, gather or scatter.
-  Value *getMemoryPointerParam() const;
-  static Optional<int> GetMemoryPointerParamPos(Intrinsic::ID);
-
-  /// \return The data (payload) operand of this store or scatter.
-  Value *getMemoryDataParam() const;
-  static Optional<int> GetMemoryDataParamPos(Intrinsic::ID);
-
-  /// \return The vector to reduce if this is a reduction operation.
-  Value *getReductionVectorParam() const;
-  static Optional<int> GetReductionVectorParamPos(Intrinsic::ID VPID);
-
-  /// \return The initial value of this is a reduction operation.
-  Value *getReductionAccuParam() const;
-  static Optional<int> GetReductionAccuParamPos(Intrinsic::ID VPID);
-
-  /// \return the static element count (vector number of elements) the vector
-  /// length parameter applies to.
-  ElementCount getStaticVectorLength() const;
 
   bool isUnaryOp() const;
   static bool IsUnaryVPOp(Intrinsic::ID);
@@ -484,6 +460,27 @@ public:
   // llvm.vp.reduction.*
   bool isReductionOp() const;
   static bool IsVPReduction(Intrinsic::ID VPIntrin);
+  Value *getReductionAccuParam() const;
+  Value *getReductionVectorParam() const;
+  static Optional<unsigned> getReductionVectorParamPos(Intrinsic::ID);
+  static Optional<unsigned> getReductionAccuParamPos(Intrinsic::ID);
+
+  /// \return The static element count (vector number of elements) the vector
+  /// length parameter applies to.
+  ElementCount getStaticVectorLength() const;
+
+  /// \return The alignment of the pointer used by this load/store/gather or
+  /// scatter.
+  MaybeAlign getPointerAlignment() const;
+  // MaybeAlign setPointerAlignment(Align NewAlign); // TODO
+
+  /// \return The pointer operand of this load,store, gather or scatter.
+  Value *getMemoryPointerParam() const;
+  static Optional<unsigned> getMemoryPointerParamPos(Intrinsic::ID);
+
+  /// \return The data (payload) operand of this store or scatter.
+  Value *getMemoryDataParam() const;
+  static Optional<unsigned> getMemoryDataParamPos(Intrinsic::ID);
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const IntrinsicInst *I) {

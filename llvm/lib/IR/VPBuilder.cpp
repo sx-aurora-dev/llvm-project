@@ -143,7 +143,7 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
-        VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_store).getValue();
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_store).getValue();
     StoreCall.addParamAttr(
         PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }
@@ -163,7 +163,7 @@ Value &VPBuilder::CreateContiguousLoad(Value &ElemPointer,
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
-        VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_load).getValue();
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_load).getValue();
     LoadCall.addParamAttr(
         PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }

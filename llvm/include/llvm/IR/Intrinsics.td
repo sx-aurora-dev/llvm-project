@@ -1387,33 +1387,32 @@ def int_experimental_stepvector : DefaultAttrsIntrinsic<[llvm_anyvector_ty],
                                                         [], [IntrNoMem]>;
 
 //===---------------- Vector Predication Intrinsics --------------===//
-
 // Memory Intrinsics
-def int_vp_store : Intrinsic<[],
+def int_vp_store : DefaultAttrsIntrinsic<[],
                              [ llvm_anyvector_ty,
                                LLVMAnyPointerType<LLVMMatchType<0>>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ NoCapture<ArgIndex<1>>, IntrNoSync, IntrArgMemOnly, IntrWillReturn, Mask<3>, VectorLength<4> ]>;
+                             [ NoCapture<ArgIndex<1>>, IntrNoSync, IntrWriteMem, IntrArgMemOnly, IntrWillReturn ]>;
 
-def int_vp_load  : Intrinsic<[ llvm_anyvector_ty],
+def int_vp_load  : DefaultAttrsIntrinsic<[ llvm_anyvector_ty],
                              [ LLVMAnyPointerType<LLVMMatchType<0>>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ NoCapture<ArgIndex<0>>, IntrNoSync, IntrReadMem, IntrWillReturn, IntrArgMemOnly, Mask<2>, VectorLength<3> ]>;
+                             [ NoCapture<ArgIndex<0>>, IntrNoSync, IntrReadMem, IntrWillReturn, IntrArgMemOnly ]>;
 
-def int_vp_gather: Intrinsic<[ llvm_anyvector_ty],
+def int_vp_gather: DefaultAttrsIntrinsic<[ llvm_anyvector_ty],
                              [ LLVMVectorOfAnyPointersToElt<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ IntrReadMem, IntrNoSync, IntrWillReturn, IntrArgMemOnly, Mask<2>, VectorLength<3> ]>;
+                             [ IntrReadMem, IntrNoSync, IntrWillReturn, IntrArgMemOnly ]>;
 
-def int_vp_scatter: Intrinsic<[],
+def int_vp_scatter: DefaultAttrsIntrinsic<[],
                               [ llvm_anyvector_ty,
                                 LLVMVectorOfAnyPointersToElt<0>,
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty],
-                              [ IntrArgMemOnly, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4> ]>;
+                              [ IntrArgMemOnly, IntrNoSync, IntrWillReturn ]>; // TODO allow IntrNoCapture for vectors of pointers
 // TODO allow IntrNoCapture for vectors of pointers
 
 // Reductions

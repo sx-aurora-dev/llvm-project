@@ -553,63 +553,16 @@ Optional<unsigned> ISD::getVPExplicitVectorLengthIdx(unsigned Opcode) {
 
 Optional<unsigned>
 ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
-#if 1
+  // FIXME: Return strict opcodes in case of fp exceptions.
   switch (OpCode) {
   default:
-    return OpCode;
+    return None;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
 #define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
 #define END_REGISTER_VP_SDNODE( ...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
-#else
-  switch (OpCode) {
-    default: return OpCode;
-
-    case VP_SELECT: return ISD::VSELECT;
-    case VP_ADD:    return ISD::ADD;
-    case VP_SUB:    return ISD::SUB;
-    case VP_MUL:    return ISD::MUL;
-    case VP_SDIV:   return ISD::SDIV;
-    case VP_SREM:   return ISD::SREM;
-    case VP_UDIV:   return ISD::UDIV;
-    case VP_UREM:   return ISD::UREM;
-
-    case VP_AND:    return ISD::AND;
-    case VP_OR:     return ISD::OR;
-    case VP_XOR:    return ISD::XOR;
-    case VP_SHL:    return ISD::SHL;
-    case VP_SRA:    return ISD::SRA;
-    case VP_SRL:    return ISD::SRL;
-
-    case VP_FNEG:   return ISD::FNEG;
-    case VP_FADD:   return hasFPExcept ? ISD::STRICT_FADD : ISD::FADD;
-    case VP_FSUB:   return hasFPExcept ? ISD::STRICT_FSUB : ISD::FSUB;
-    case VP_FMUL:   return hasFPExcept ? ISD::STRICT_FMUL : ISD::FMUL;
-    case VP_FDIV:   return hasFPExcept ? ISD::STRICT_FDIV : ISD::FDIV;
-    case VP_FREM:   return hasFPExcept ? ISD::STRICT_FREM : ISD::FREM;
-
-    case VP_REDUCE_AND:   return VECREDUCE_AND;
-    case VP_REDUCE_OR:    return VECREDUCE_OR;
-    case VP_REDUCE_XOR:   return VECREDUCE_XOR;
-    case VP_REDUCE_ADD:   return VECREDUCE_ADD;
-    case VP_REDUCE_FADD:  return VECREDUCE_FADD;
-    case VP_REDUCE_FMUL:  return VECREDUCE_FMUL;
-    case VP_REDUCE_FMAX:  return VECREDUCE_FMAX;
-    case VP_REDUCE_FMIN:  return VECREDUCE_FMIN;
-    case VP_REDUCE_UMAX:  return VECREDUCE_UMAX;
-    case VP_REDUCE_UMIN:  return VECREDUCE_UMIN;
-    case VP_REDUCE_SMAX:  return VECREDUCE_SMAX;
-    case VP_REDUCE_SMIN:  return VECREDUCE_SMIN;
-
-    case VP_STORE:        return ISD::MSTORE;
-    case VP_LOAD:         return ISD::MLOAD;
-    case VP_GATHER:       return ISD::MGATHER;
-    case VP_SCATTER:      return ISD::MSCATTER;
-
-    case VP_FMA:    return hasFPExcept ? ISD::STRICT_FMA : ISD::FMA;
-  }
-#endif
+  return None;
 }
 
 unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
