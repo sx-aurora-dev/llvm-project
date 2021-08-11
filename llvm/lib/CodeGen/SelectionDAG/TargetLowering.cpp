@@ -119,15 +119,18 @@ void TargetLoweringBase::ArgListEntry::setAttributes(const CallBase *Call,
   IsSwiftAsync = Call->paramHasAttr(ArgIdx, Attribute::SwiftAsync);
   IsSwiftError = Call->paramHasAttr(ArgIdx, Attribute::SwiftError);
   Alignment = Call->getParamStackAlign(ArgIdx);
-  ByValType = nullptr;
+  IndirectType = nullptr;
+  assert(IsByVal + IsPreallocated + IsInAlloca <= 1 &&
+         "multiple ABI attributes?");
   if (IsByVal) {
-    ByValType = Call->getParamByValType(ArgIdx);
+    IndirectType = Call->getParamByValType(ArgIdx);
     if (!Alignment)
       Alignment = Call->getParamAlign(ArgIdx);
   }
-  PreallocatedType = nullptr;
   if (IsPreallocated)
-    PreallocatedType = Call->getParamPreallocatedType(ArgIdx);
+    IndirectType = Call->getParamPreallocatedType(ArgIdx);
+  if (IsInAlloca)
+    IndirectType = Call->getParamInAllocaType(ArgIdx);
 }
 
 /// Generate a libcall taking the given operands as arguments and returning a
@@ -7896,11 +7899,13 @@ SDValue TargetLowering::getVectorSubVecPointer(SelectionDAG &DAG,
   assert(EltSize * 8 == EltVT.getFixedSizeInBits() &&
          "Converting bits to bytes lost precision");
 
-  assert(SubVecVT.isFixedLengthVector() &&
-         SubVecVT.getVectorElementType() == EltVT &&
-         "Sub-vector must be a fixed vector with matching element type");
-  Index = clampDynamicVectorIndex(DAG, Index, VecVT, dl,
-                                  SubVecVT.getVectorNumElements());
+  // Scalable vectors don't need clamping as these are checked at compile time
+  if (SubVecVT.isFixedLengthVector()) {
+    assert(SubVecVT.getVectorElementType() == EltVT &&
+           "Sub-vector must be a fixed vector with matching element type");
+    Index = clampDynamicVectorIndex(DAG, Index, VecVT, dl,
+                                    SubVecVT.getVectorNumElements());
+  }
 
   EVT IdxVT = Index.getValueType();
 
