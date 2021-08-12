@@ -19,6 +19,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef __ve__
+// VE doesn't support madvise.  VE doesn't support paging, therefore VE's
+// madvise syscall returns success always.  VEOS doesn't define MADV_DONTNEED,
+// so defines it here.
+#define MADV_DONTNEED 4
+#endif
 #endif
 
 #ifdef COMPILER_RT_HAS_UNAME
