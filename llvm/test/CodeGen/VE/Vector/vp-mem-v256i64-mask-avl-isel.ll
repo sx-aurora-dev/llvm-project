@@ -99,12 +99,12 @@ define fastcc void @test_vp_memory_f64(<256 x double>* %VecPtr, <256 x double*> 
 }
 
 ; memory - i64
-declare void @llvm.vp.store.v256i64.p0v256i64(<256 x i64>, <256 x i64>*, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.load.v256i64.p0v256i64(<256 x i64>*, <256 x i1> mask, i32 vlen)
-declare void @llvm.vp.scatter.v256i64.v256p0i64(<256 x i64>, <256 x i64*>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.gather.v256i64.v256p0i64(<256 x i64*>, <256 x i1> mask, i32 vlen)
+declare void @llvm.vp.store.v256i64.p0v256i64(<256 x i64>, <256 x i64>*, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.load.v256i64.p0v256i64(<256 x i64>*, <256 x i1>, i32)
+declare void @llvm.vp.scatter.v256i64.v256p0i64(<256 x i64>, <256 x i64*>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.gather.v256i64.v256p0i64(<256 x i64*>, <256 x i1>, i32)
 ; memory - f64
-declare void @llvm.vp.store.v256f64.p0v256f64(<256 x double>, <256 x double>*, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.load.v256f64.p0v256f64(<256 x double>*, <256 x i1> mask, i32 vlen)
-declare void @llvm.vp.scatter.v256f64.v256p0f64(<256 x double>, <256 x double*>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.gather.v256f64.v256p0f64(<256 x double*>, <256 x i1> mask, i32 vlen)
+declare void @llvm.vp.store.v256f64.p0v256f64(<256 x double>, <256 x double>*, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.load.v256f64.p0v256f64(<256 x double>*, <256 x i1>, i32)
+declare void @llvm.vp.scatter.v256f64.v256p0f64(<256 x double>, <256 x double*>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.gather.v256f64.v256p0f64(<256 x double*>, <256 x i1>, i32)

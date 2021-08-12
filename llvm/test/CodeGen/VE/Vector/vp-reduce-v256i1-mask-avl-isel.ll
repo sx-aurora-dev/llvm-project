@@ -58,6 +58,6 @@ define fastcc i1 @test_reduce_xor(<256 x i1> %v, <256 x i1> %m, i32 %n) {
   ret i1 %r
 }
 
-declare i1 @llvm.vp.reduce.and.v256i1(<256 x i1>, <256 x i1> mask, i32 vlen)
-declare i1 @llvm.vp.reduce.xor.v256i1(<256 x i1>, <256 x i1> mask, i32 vlen)
-declare i1 @llvm.vp.reduce.or.v256i1(<256 x i1>, <256 x i1> mask, i32 vlen)
+declare i1 @llvm.vp.reduce.and.v256i1(<256 x i1>, <256 x i1>, i32)
+declare i1 @llvm.vp.reduce.xor.v256i1(<256 x i1>, <256 x i1>, i32)
+declare i1 @llvm.vp.reduce.or.v256i1(<256 x i1>, <256 x i1>, i32)

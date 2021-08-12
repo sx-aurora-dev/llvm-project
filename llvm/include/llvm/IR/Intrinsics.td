@@ -118,25 +118,6 @@ class ReadNone<AttrIndex idx> : IntrinsicProperty {
   int ArgNo = idx.Value;
 }
 
-// VectorLength - The specified argument is the Dynamic Vector Length of the
-// operation.
-class VectorLength<int argNo> : IntrinsicProperty {
-  int ArgNo = argNo;
-}
-
-// Mask - The specified argument contains the per-lane mask of this
-// intrinsic. Inputs on masked-out lanes must not affect the result of this
-// intrinsic (except for the Passthru argument).
-class Mask<int argNo> : IntrinsicProperty {
-  int ArgNo = argNo;
-}
-// Passthru - The specified argument contains the per-lane return value
-// for this vector intrinsic where the mask is false.
-// (requires the Mask attribute in the same function)
-class Passthru<int argNo> : IntrinsicProperty {
-  int ArgNo = argNo;
-}
-
 def IntrNoReturn : IntrinsicProperty;
 
 // IntrNoSync - Threads executing the intrinsic will not synchronize using
@@ -1416,7 +1397,7 @@ def int_vp_scatter: DefaultAttrsIntrinsic<[],
 // TODO allow IntrNoCapture for vectors of pointers
 
 // Reductions
-let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3>] in {
+let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_reduce_add  : Intrinsic<[LLVMVectorElementType<0>],
                                      [llvm_anyvector_ty,
                                       LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
@@ -1463,7 +1444,7 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLeng
                                       llvm_i32_ty]>;
 }
 
-let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4>] in {
+let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_reduce_fadd : Intrinsic<[LLVMVectorElementType<0>],
                                      [LLVMVectorElementType<0>,
                                       llvm_anyvector_ty,
@@ -1565,7 +1546,7 @@ def int_vp_icmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<2>> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, ImmArg<ArgIndex<2>> ]>;
 
 def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                             [ llvm_anyvector_ty,
@@ -1573,7 +1554,7 @@ def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<2>> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, ImmArg<ArgIndex<2>> ]>;
 
 
 
@@ -1583,19 +1564,19 @@ def int_vp_vshift: Intrinsic<[ llvm_anyvector_ty ],
                                llvm_i32_ty,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4> ]>;
+                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 def int_vp_expand: Intrinsic<[ llvm_anyvector_ty ],
                              [ LLVMMatchType<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ]>;
+                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 def int_vp_compress: Intrinsic<[ llvm_anyvector_ty ],
                                [ LLVMMatchType<0>,
                                  LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                  llvm_i32_ty],
-                               [ IntrNoMem, IntrNoSync, IntrWillReturn, VectorLength<3> ]>;
+                               [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 // Select
 def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
@@ -1604,11 +1585,11 @@ def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty,
                                 llvm_i32_ty],
-                              [ IntrNoMem, IntrNoSync, IntrWillReturn, Passthru<2>, Mask<3>, VectorLength<5> ]>;
+                              [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 
 // VP fp rounding and truncation
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn] in {
 
   def int_vp_fptosi : Intrinsic<[ llvm_anyint_ty ],
                                 [ llvm_anyfloat_ty,
@@ -1640,7 +1621,7 @@ let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLen
 }
 
 // VP single argument constrained intrinsics.
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn] in {
   // These intrinsics are sensitive to the rounding mode so we need constrained
   // versions of each of them.  When strict rounding and exception control are
   // not required the non-constrained versions of these intrinsics should be
@@ -1705,7 +1686,7 @@ let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLen
 
 
 // VP two argument constrained intrinsics.
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_powi : Intrinsic<[ llvm_anyfloat_ty ],
                               [ LLVMMatchType<0>,
                                 llvm_i32_ty,
@@ -1720,7 +1701,7 @@ let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLen
 
 // Floating-point arithmetic.
 let IntrProperties =
-    [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4>] in {
+    [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_fadd : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                              [ LLVMMatchType<0>,
                                LLVMMatchType<0>,
@@ -1765,7 +1746,7 @@ def int_vp_fneg : Intrinsic<[ llvm_anyvector_ty ],
                             [ LLVMMatchType<0>,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty],
-                            [ IntrNoMem, IntrWillReturn, Mask<2>, VectorLength<3> ]>;
+                            [ IntrNoMem, IntrWillReturn]>;
 
 def int_vp_fma : Intrinsic<[ llvm_anyvector_ty ],
                            [ LLVMMatchType<0>,
@@ -1773,7 +1754,7 @@ def int_vp_fma : Intrinsic<[ llvm_anyvector_ty ],
                              LLVMMatchType<0>,
                              LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                              llvm_i32_ty ],
-                           [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4> ]>;
+                           [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 
 

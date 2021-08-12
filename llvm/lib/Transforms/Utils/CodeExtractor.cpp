@@ -907,7 +907,6 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::InaccessibleMemOnly:
       case Attribute::InaccessibleMemOrArgMemOnly:
       case Attribute::JumpTable:
-      case Attribute::Mask:
       case Attribute::Naked:
       case Attribute::Nest:
       case Attribute::NoAlias:
@@ -919,7 +918,6 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::NoUndef:
       case Attribute::None:
       case Attribute::NonNull:
-      case Attribute::Passthru:
       case Attribute::Preallocated:
       case Attribute::ReadNone:
       case Attribute::ReadOnly:
@@ -933,7 +931,6 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::SwiftSelf:
       case Attribute::SwiftAsync:
       case Attribute::WillReturn:
-      case Attribute::VectorLength:
       case Attribute::WriteOnly:
       case Attribute::ZExt:
       case Attribute::ImmArg:
