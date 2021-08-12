@@ -107,13 +107,13 @@ define fastcc void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, 
 ; }
 
 ; fp arithmetic
-declare <256 x double> @llvm.vp.fadd.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.fsub.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.fmul.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.fdiv.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.fma.v256f64(<256 x double>, <256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
+declare <256 x double> @llvm.vp.fadd.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.fsub.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.fmul.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.fdiv.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.fma.v256f64(<256 x double>, <256 x double>, <256 x double>, <256 x i1>, i32)
 ; TODO
-; declare <256 x double> @llvm.vp.frem.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-; declare <256 x double> @llvm.vp.fneg.v256f64(<256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.minnum.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
-declare <256 x double> @llvm.vp.maxnum.v256f64(<256 x double>, <256 x double>, <256 x i1> mask, i32 vlen)
+; declare <256 x double> @llvm.vp.frem.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+; declare <256 x double> @llvm.vp.fneg.v256f64(<256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.minnum.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
+declare <256 x double> @llvm.vp.maxnum.v256f64(<256 x double>, <256 x double>, <256 x i1>, i32)
