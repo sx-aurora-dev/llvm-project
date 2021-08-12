@@ -1935,15 +1935,12 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
     }
   }
 
-  bool SawMask = false;
   bool SawNest = false;
-  bool SawPassthru = false;
   bool SawReturned = false;
   bool SawSRet = false;
   bool SawSwiftSelf = false;
   bool SawSwiftAsync = false;
   bool SawSwiftError = false;
-  bool SawVectorLength = false;
 
   // Verify return value attributes.
   AttributeSet RetAttrs = Attrs.getRetAttributes();
@@ -2021,32 +2018,11 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
       SawSwiftError = true;
     }
 
-    if (ArgAttrs.hasAttribute(Attribute::VectorLength)) {
-      Assert(!SawVectorLength, "Cannot have multiple 'vlen' parameters!",
-             V);
-      SawVectorLength = true;
-    }
-
-    if (ArgAttrs.hasAttribute(Attribute::Passthru)) {
-      Assert(!SawPassthru, "Cannot have multiple 'passthru' parameters!",
-             V);
-      SawPassthru = true;
-    }
-
-    if (ArgAttrs.hasAttribute(Attribute::Mask)) {
-      Assert(!SawMask, "Cannot have multiple 'mask' parameters!",
-             V);
-      SawMask = true;
-    }
-
     if (ArgAttrs.hasAttribute(Attribute::InAlloca)) {
       Assert(i == FT->getNumParams() - 1,
              "inalloca isn't on the last parameter!", V);
     }
   }
-
-  Assert(!SawPassthru || SawMask,
-      "Cannot have 'passthru' parameter without 'mask' parameter!", V);
 
   if (!Attrs.hasAttributes(AttributeList::FunctionIndex))
     return;
