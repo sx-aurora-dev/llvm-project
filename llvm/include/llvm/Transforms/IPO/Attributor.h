@@ -138,6 +138,12 @@ class Function;
 
 /// Abstract Attribute helper functions.
 namespace AA {
+
+/// Return true if \p V is dynamically unique, that is, there are no two
+/// "instances" of \p V at runtime with different values.
+bool isDynamicallyUnique(Attributor &A, const AbstractAttribute &QueryingAA,
+                         const Value &V);
+
 /// Return true if \p V is a valid value in \p Scope, that is a constant or an
 /// instruction/argument of \p Scope.
 bool isValidInScope(const Value &V, const Function *Scope);
@@ -164,6 +170,35 @@ Value *getWithType(Value &V, Type &Ty);
 Optional<Value *>
 combineOptionalValuesInAAValueLatice(const Optional<Value *> &A,
                                      const Optional<Value *> &B, Type *Ty);
+
+/// Return the initial value of \p Obj with type \p Ty if that is a constant.
+Constant *getInitialValueForObj(Value &Obj, Type &Ty);
+
+/// Collect all potential underlying objects of \p Ptr at position \p CtxI in
+/// \p Objects. Assumed information is used and dependences onto \p QueryingAA
+/// are added appropriately.
+///
+/// \returns True if \p Objects contains all assumed underlying objects, and
+///          false if something went wrong and the objects could not be
+///          determined.
+bool getAssumedUnderlyingObjects(Attributor &A, const Value &Ptr,
+                                 SmallVectorImpl<Value *> &Objects,
+                                 const AbstractAttribute &QueryingAA,
+                                 const Instruction *CtxI);
+
+/// Collect all potential values of the one stored by \p SI into
+/// \p PotentialCopies. That is, the only copies that were made via the
+/// store are assumed to be known and all in \p PotentialCopies. Dependences
+/// onto \p QueryingAA are properly tracked, \p UsedAssumedInformation will
+/// inform the caller if assumed information was used.
+///
+/// \returns True if the assumed potential copies are all in \p PotentialCopies,
+///          false if something went wrong and the copies could not be
+///          determined.
+bool getPotentialCopiesOfStoredValue(
+    Attributor &A, StoreInst &SI, SmallSetVector<Value *, 4> &PotentialCopies,
+    const AbstractAttribute &QueryingAA, bool &UsedAssumedInformation);
+
 } // namespace AA
 
 /// The value passed to the line option that defines the maximal initialization
@@ -177,7 +212,9 @@ enum class ChangeStatus {
 };
 
 ChangeStatus operator|(ChangeStatus l, ChangeStatus r);
+ChangeStatus &operator|=(ChangeStatus &l, ChangeStatus r);
 ChangeStatus operator&(ChangeStatus l, ChangeStatus r);
+ChangeStatus &operator&=(ChangeStatus &l, ChangeStatus r);
 
 enum class DepClassTy {
   REQUIRED, ///< The target cannot be valid if the source is not.
@@ -979,9 +1016,11 @@ struct InformationCache {
     if (Iter != PotentiallyReachableMap.end())
       return Iter->second;
     const Function &F = *From.getFunction();
-    bool Result = isPotentiallyReachable(
-        &From, &To, nullptr, AG.getAnalysis<DominatorTreeAnalysis>(F),
-        AG.getAnalysis<LoopAnalysis>(F));
+    bool Result = true;
+    if (From.getFunction() == To.getFunction())
+      Result = isPotentiallyReachable(&From, &To, nullptr,
+                                      AG.getAnalysis<DominatorTreeAnalysis>(F),
+                                      AG.getAnalysis<LoopAnalysis>(F));
     PotentiallyReachableMap.insert(std::make_pair(KeyPair, Result));
     return Result;
   }
@@ -1468,17 +1507,28 @@ struct Attributor {
   /// triggers deletion of trivially dead istructions.
   void deleteAfterManifest(BasicBlock &BB) { ToBeDeletedBlocks.insert(&BB); }
 
+  // Record that \p BB is added during the manifest of an AA. Added basic blocks
+  // are preserved in the IR.
+  void registerManifestAddedBasicBlock(BasicBlock &BB) {
+    ManifestAddedBlocks.insert(&BB);
+  }
+
   /// Record that \p F is deleted after information was manifested.
   void deleteAfterManifest(Function &F) {
     if (DeleteFns)
       ToBeDeletedFunctions.insert(&F);
   }
 
-  /// If \p V is assumed to be a constant, return it, if it is unclear yet,
+  /// If \p IRP is assumed to be a constant, return it, if it is unclear yet,
   /// return None, otherwise return `nullptr`.
-  Optional<Constant *> getAssumedConstant(const Value &V,
+  Optional<Constant *> getAssumedConstant(const IRPosition &IRP,
                                           const AbstractAttribute &AA,
                                           bool &UsedAssumedInformation);
+  Optional<Constant *> getAssumedConstant(const Value &V,
+                                          const AbstractAttribute &AA,
+                                          bool &UsedAssumedInformation) {
+    return getAssumedConstant(IRPosition::value(V), AA, UsedAssumedInformation);
+  }
 
   /// If \p V is assumed simplified, return it, if it is unclear yet,
   /// return None, otherwise return `nullptr`.
@@ -1494,6 +1544,13 @@ struct Attributor {
                                 UsedAssumedInformation);
   }
 
+  /// If \p V is assumed simplified, return it, if it is unclear yet,
+  /// return None, otherwise return `nullptr`. Same as the public version
+  /// except that it can be used without recording dependences on any \p AA.
+  Optional<Value *> getAssumedSimplified(const IRPosition &V,
+                                         const AbstractAttribute *AA,
+                                         bool &UsedAssumedInformation);
+
   /// Register \p CB as a simplification callback.
   /// `Attributor::getAssumedSimplified` will use these callbacks before
   /// we it will ask `AAValueSimplify`. It is important to ensure this
@@ -1506,17 +1563,15 @@ struct Attributor {
     SimplificationCallbacks[IRP].emplace_back(CB);
   }
 
+  /// Return true if there is a simplification callback for \p IRP.
+  bool hasSimplificationCallback(const IRPosition &IRP) {
+    return SimplificationCallbacks.count(IRP);
+  }
+
 private:
   /// The vector with all simplification callbacks registered by outside AAs.
   DenseMap<IRPosition, SmallVector<SimplifictionCallbackTy, 1>>
       SimplificationCallbacks;
-
-  /// If \p V is assumed simplified, return it, if it is unclear yet,
-  /// return None, otherwise return `nullptr`. Same as the public version
-  /// except that it can be used without recording dependences on any \p AA.
-  Optional<Value *> getAssumedSimplified(const IRPosition &V,
-                                         const AbstractAttribute *AA,
-                                         bool &UsedAssumedInformation);
 
 public:
   /// Translate \p V from the callee context into the call site context.
@@ -1557,12 +1612,20 @@ public:
                      bool CheckBBLivenessOnly = false,
                      DepClassTy DepClass = DepClassTy::OPTIONAL);
 
+  /// Return true if \p BB is assumed dead.
+  ///
+  /// If \p LivenessAA is not provided it is queried.
+  bool isAssumedDead(const BasicBlock &BB, const AbstractAttribute *QueryingAA,
+                     const AAIsDead *FnLivenessAA,
+                     DepClassTy DepClass = DepClassTy::OPTIONAL);
+
   /// Check \p Pred on all (transitive) uses of \p V.
   ///
   /// This method will evaluate \p Pred on all (transitive) uses of the
   /// associated value and return true if \p Pred holds every time.
   bool checkForAllUses(function_ref<bool(const Use &, bool &)> Pred,
                        const AbstractAttribute &QueryingAA, const Value &V,
+                       bool CheckBBLivenessOnly = false,
                        DepClassTy LivenessDepClass = DepClassTy::OPTIONAL);
 
   /// Emit a remark generically.
@@ -1585,7 +1648,13 @@ public:
     Function *F = I->getFunction();
     auto &ORE = OREGetter.getValue()(F);
 
-    ORE.emit([&]() { return RemarkCB(RemarkKind(PassName, RemarkName, I)); });
+    if (RemarkName.startswith("OMP"))
+      ORE.emit([&]() {
+        return RemarkCB(RemarkKind(PassName, RemarkName, I))
+               << " [" << RemarkName << "]";
+      });
+    else
+      ORE.emit([&]() { return RemarkCB(RemarkKind(PassName, RemarkName, I)); });
   }
 
   /// Emit a remark on a function.
@@ -1597,7 +1666,13 @@ public:
 
     auto &ORE = OREGetter.getValue()(F);
 
-    ORE.emit([&]() { return RemarkCB(RemarkKind(PassName, RemarkName, F)); });
+    if (RemarkName.startswith("OMP"))
+      ORE.emit([&]() {
+        return RemarkCB(RemarkKind(PassName, RemarkName, F))
+               << " [" << RemarkName << "]";
+      });
+    else
+      ORE.emit([&]() { return RemarkCB(RemarkKind(PassName, RemarkName, F)); });
   }
 
   /// Helper struct used in the communication between an abstract attribute (AA)
@@ -1947,6 +2022,7 @@ private:
   ///{
   SmallPtrSet<Function *, 8> ToBeDeletedFunctions;
   SmallPtrSet<BasicBlock *, 8> ToBeDeletedBlocks;
+  SmallPtrSet<BasicBlock *, 8> ManifestAddedBlocks;
   SmallDenseSet<WeakVH, 8> ToBeDeletedInsts;
   ///}
 
@@ -2420,7 +2496,8 @@ struct IntegerRangeState : public AbstractState {
 /// IRAttribute::manifest is defined in the Attributor.cpp.
 struct IRAttributeManifest {
   static ChangeStatus manifestAttrs(Attributor &A, const IRPosition &IRP,
-                                    const ArrayRef<Attribute> &DeducedAttrs);
+                                    const ArrayRef<Attribute> &DeducedAttrs,
+                                    bool ForceReplace = false);
 };
 
 /// Helper to tie a abstract state implementation to an abstract attribute.
@@ -2645,6 +2722,17 @@ struct AttributorCGSCCPass : public PassInfoMixin<AttributorCGSCCPass> {
 
 Pass *createAttributorLegacyPass();
 Pass *createAttributorCGSCCLegacyPass();
+
+/// Helper function to clamp a state \p S of type \p StateType with the
+/// information in \p R and indicate/return if \p S did change (as-in update is
+/// required to be run again).
+template <typename StateType>
+ChangeStatus clampStateAndIndicateChange(StateType &S, const StateType &R) {
+  auto Assumed = S.getAssumed();
+  S ^= R;
+  return Assumed == S.getAssumed() ? ChangeStatus::UNCHANGED
+                                   : ChangeStatus::CHANGED;
+}
 
 /// ----------------------------------------------------------------------------
 ///                       Abstract Attribute Classes
@@ -3023,9 +3111,19 @@ struct AANoReturn
 };
 
 /// An abstract interface for liveness abstract attribute.
-struct AAIsDead : public StateWrapper<BooleanState, AbstractAttribute> {
-  using Base = StateWrapper<BooleanState, AbstractAttribute>;
+struct AAIsDead
+    : public StateWrapper<BitIntegerState<uint8_t, 3, 0>, AbstractAttribute> {
+  using Base = StateWrapper<BitIntegerState<uint8_t, 3, 0>, AbstractAttribute>;
   AAIsDead(const IRPosition &IRP, Attributor &A) : Base(IRP) {}
+
+  /// State encoding bits. A set bit in the state means the property holds.
+  enum {
+    HAS_NO_EFFECT = 1 << 0,
+    IS_REMOVABLE = 1 << 1,
+
+    IS_DEAD = HAS_NO_EFFECT | IS_REMOVABLE,
+  };
+  static_assert(IS_DEAD == getBestState(), "Unexpected BEST_STATE value");
 
 protected:
   /// The query functions are protected such that other attributes need to go
@@ -3505,7 +3603,11 @@ struct AAHeapToStack : public StateWrapper<BooleanState, AbstractAttribute> {
   AAHeapToStack(const IRPosition &IRP, Attributor &A) : Base(IRP) {}
 
   /// Returns true if HeapToStack conversion is assumed to be possible.
-  virtual bool isAssumedHeapToStack(CallBase &CB) const = 0;
+  virtual bool isAssumedHeapToStack(const CallBase &CB) const = 0;
+
+  /// Returns true if HeapToStack conversion is assumed and the CB is a
+  /// callsite to a free operation to be removed.
+  virtual bool isAssumedHeapToStackRemovedFree(CallBase &CB) const = 0;
 
   /// Create an abstract attribute view for the position \p IRP.
   static AAHeapToStack &createForPosition(const IRPosition &IRP, Attributor &A);
@@ -4186,8 +4288,11 @@ struct AACallEdges : public StateWrapper<BooleanState, AbstractAttribute>,
   /// Get the optimistic edges.
   virtual const SetVector<Function *> &getOptimisticEdges() const = 0;
 
-  /// Is there in this function call with a unknown Callee.
+  /// Is there any call with a unknown callee.
   virtual bool hasUnknownCallee() const = 0;
+
+  /// Is there any call with a unknown callee, excluding any inline asm.
+  virtual bool hasNonAsmUnknownCallee() const = 0;
 
   /// Iterator for exploring the call graph.
   AACallEdgeIterator optimisticEdgesBegin() const override {
@@ -4352,6 +4457,137 @@ private:
   /// Can this function reach a call with unknown calee.
   virtual bool canReachUnknownCallee() const = 0;
 };
+
+/// An abstract interface for struct information.
+struct AAPointerInfo : public AbstractAttribute {
+  AAPointerInfo(const IRPosition &IRP) : AbstractAttribute(IRP) {}
+
+  enum AccessKind {
+    AK_READ = 1 << 0,
+    AK_WRITE = 1 << 1,
+    AK_READ_WRITE = AK_READ | AK_WRITE,
+  };
+
+  /// An access description.
+  struct Access {
+    Access(Instruction *I, Optional<Value *> Content, AccessKind Kind, Type *Ty)
+        : LocalI(I), RemoteI(I), Content(Content), Kind(Kind), Ty(Ty) {}
+    Access(Instruction *LocalI, Instruction *RemoteI, Optional<Value *> Content,
+           AccessKind Kind, Type *Ty)
+        : LocalI(LocalI), RemoteI(RemoteI), Content(Content), Kind(Kind),
+          Ty(Ty) {}
+    Access(const Access &Other)
+        : LocalI(Other.LocalI), RemoteI(Other.RemoteI), Content(Other.Content),
+          Kind(Other.Kind), Ty(Other.Ty) {}
+    Access(const Access &&Other)
+        : LocalI(Other.LocalI), RemoteI(Other.RemoteI), Content(Other.Content),
+          Kind(Other.Kind), Ty(Other.Ty) {}
+
+    Access &operator=(const Access &Other) {
+      LocalI = Other.LocalI;
+      RemoteI = Other.RemoteI;
+      Content = Other.Content;
+      Kind = Other.Kind;
+      Ty = Other.Ty;
+      return *this;
+    }
+    bool operator==(const Access &R) const {
+      return LocalI == R.LocalI && RemoteI == R.RemoteI &&
+             Content == R.Content && Kind == R.Kind;
+    }
+    bool operator!=(const Access &R) const { return !(*this == R); }
+
+    Access &operator&=(const Access &R) {
+      assert(RemoteI == R.RemoteI && "Expected same instruction!");
+      Content =
+          AA::combineOptionalValuesInAAValueLatice(Content, R.Content, Ty);
+      Kind = AccessKind(Kind | R.Kind);
+      return *this;
+    }
+
+    /// Return the access kind.
+    AccessKind getKind() const { return Kind; }
+
+    /// Return true if this is a read access.
+    bool isRead() const { return Kind & AK_READ; }
+
+    /// Return true if this is a write access.
+    bool isWrite() const { return Kind & AK_WRITE; }
+
+    /// Return the instruction that causes the access with respect to the local
+    /// scope of the associated attribute.
+    Instruction *getLocalInst() const { return LocalI; }
+
+    /// Return the actual instruction that causes the access.
+    Instruction *getRemoteInst() const { return RemoteI; }
+
+    /// Return true if the value written is not known yet.
+    bool isWrittenValueYetUndetermined() const { return !Content.hasValue(); }
+
+    /// Return true if the value written cannot be determined at all.
+    bool isWrittenValueUnknown() const {
+      return Content.hasValue() && !*Content;
+    }
+
+    /// Return the type associated with the access, if known.
+    Type *getType() const { return Ty; }
+
+    /// Return the value writen, if any. As long as
+    /// isWrittenValueYetUndetermined return true this function shall not be
+    /// called.
+    Value *getWrittenValue() const { return *Content; }
+
+    /// Return the written value which can be `llvm::null` if it is not yet
+    /// determined.
+    Optional<Value *> getContent() const { return Content; }
+
+  private:
+    /// The instruction responsible for the access with respect to the local
+    /// scope of the associated attribute.
+    Instruction *LocalI;
+
+    /// The instruction responsible for the access.
+    Instruction *RemoteI;
+
+    /// The value written, if any. `llvm::none` means "not known yet", `nullptr`
+    /// cannot be determined.
+    Optional<Value *> Content;
+
+    /// The access kind, e.g., READ, as bitset (could be more than one).
+    AccessKind Kind;
+
+    /// The type of the content, thus the type read/written, can be null if not
+    /// available.
+    Type *Ty;
+  };
+
+  /// Create an abstract attribute view for the position \p IRP.
+  static AAPointerInfo &createForPosition(const IRPosition &IRP, Attributor &A);
+
+  /// See AbstractAttribute::getName()
+  const std::string getName() const override { return "AAPointerInfo"; }
+
+  /// See AbstractAttribute::getIdAddr()
+  const char *getIdAddr() const override { return &ID; }
+
+  /// Call \p CB on all accesses that might interfere with \p LI and return true
+  /// if all such accesses were known and the callback returned true for all of
+  /// them, false otherwise.
+  virtual bool forallInterferingAccesses(
+      LoadInst &LI, function_ref<bool(const Access &, bool)> CB) const = 0;
+  virtual bool forallInterferingAccesses(
+      StoreInst &SI, function_ref<bool(const Access &, bool)> CB) const = 0;
+
+  /// This function should return true if the type of the \p AA is AAPointerInfo
+  static bool classof(const AbstractAttribute *AA) {
+    return (AA->getIdAddr() == &ID);
+  }
+
+  /// Unique ID (due to the unique address)
+  static const char ID;
+};
+
+raw_ostream &operator<<(raw_ostream &, const AAPointerInfo::Access &);
 
 /// Run options, used by the pass manager.
 enum AttributorRunOption {

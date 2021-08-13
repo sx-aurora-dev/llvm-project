@@ -2650,25 +2650,6 @@ Instruction *InstCombinerImpl::foldICmpAddConstant(ICmpInst &Cmp,
   Value *X = Add->getOperand(0);
   Type *Ty = Add->getType();
   const CmpInst::Predicate Pred = Cmp.getPredicate();
-  const APInt SMax = APInt::getSignedMaxValue(Ty->getScalarSizeInBits());
-  const APInt SMin = APInt::getSignedMinValue(Ty->getScalarSizeInBits());
-
-  // Fold compare with offset to opposite sign compare if it eliminates offset:
-  // (X + C2) >u C --> X <s -C2 (if C == C2 + SMAX)
-  if (Pred == CmpInst::ICMP_UGT && C == *C2 + SMax)
-    return new ICmpInst(ICmpInst::ICMP_SLT, X, ConstantInt::get(Ty, -(*C2)));
-
-  // (X + C2) <u C --> X >s ~C2 (if C == C2 + SMIN)
-  if (Pred == CmpInst::ICMP_ULT && C == *C2 + SMin)
-    return new ICmpInst(ICmpInst::ICMP_SGT, X, ConstantInt::get(Ty, ~(*C2)));
-
-  // (X + C2) >s C --> X <u (SMAX - C) (if C == C2 - 1)
-  if (Pred == CmpInst::ICMP_SGT && C == *C2 - 1)
-    return new ICmpInst(ICmpInst::ICMP_ULT, X, ConstantInt::get(Ty, SMax - C));
-
-  // (X + C2) <s C --> X >u (C ^ SMAX) (if C == C2)
-  if (Pred == CmpInst::ICMP_SLT && C == *C2)
-    return new ICmpInst(ICmpInst::ICMP_UGT, X, ConstantInt::get(Ty, C ^ SMax));
 
   // If the add does not wrap, we can always adjust the compare by subtracting
   // the constants. Equality comparisons are handled elsewhere. SGE/SLE/UGE/ULE
@@ -2702,6 +2683,28 @@ Instruction *InstCombinerImpl::foldICmpAddConstant(ICmpInst &Cmp,
     if (Upper.isMinValue())
       return new ICmpInst(ICmpInst::ICMP_UGE, X, ConstantInt::get(Ty, Lower));
   }
+
+  // This set of folds is intentionally placed after folds that use no-wrapping
+  // flags because those folds are likely better for later analysis/codegen.
+  const APInt SMax = APInt::getSignedMaxValue(Ty->getScalarSizeInBits());
+  const APInt SMin = APInt::getSignedMinValue(Ty->getScalarSizeInBits());
+
+  // Fold compare with offset to opposite sign compare if it eliminates offset:
+  // (X + C2) >u C --> X <s -C2 (if C == C2 + SMAX)
+  if (Pred == CmpInst::ICMP_UGT && C == *C2 + SMax)
+    return new ICmpInst(ICmpInst::ICMP_SLT, X, ConstantInt::get(Ty, -(*C2)));
+
+  // (X + C2) <u C --> X >s ~C2 (if C == C2 + SMIN)
+  if (Pred == CmpInst::ICMP_ULT && C == *C2 + SMin)
+    return new ICmpInst(ICmpInst::ICMP_SGT, X, ConstantInt::get(Ty, ~(*C2)));
+
+  // (X + C2) >s C --> X <u (SMAX - C) (if C == C2 - 1)
+  if (Pred == CmpInst::ICMP_SGT && C == *C2 - 1)
+    return new ICmpInst(ICmpInst::ICMP_ULT, X, ConstantInt::get(Ty, SMax - C));
+
+  // (X + C2) <s C --> X >u (C ^ SMAX) (if C == C2)
+  if (Pred == CmpInst::ICMP_SLT && C == *C2)
+    return new ICmpInst(ICmpInst::ICMP_UGT, X, ConstantInt::get(Ty, C ^ SMax));
 
   if (!Add->hasOneUse())
     return nullptr;
@@ -4568,6 +4571,16 @@ static Instruction *foldICmpWithZextOrSext(ICmpInst &ICmp,
 
 /// Handle icmp (cast x), (cast or constant).
 Instruction *InstCombinerImpl::foldICmpWithCastOp(ICmpInst &ICmp) {
+  // If any operand of ICmp is a inttoptr roundtrip cast then remove it as
+  // icmp compares only pointer's value.
+  // icmp (inttoptr (ptrtoint p1)), p2 --> icmp p1, p2.
+  Value *SimplifiedOp0 = simplifyIntToPtrRoundTripCast(ICmp.getOperand(0));
+  Value *SimplifiedOp1 = simplifyIntToPtrRoundTripCast(ICmp.getOperand(1));
+  if (SimplifiedOp0 || SimplifiedOp1)
+    return new ICmpInst(ICmp.getPredicate(),
+                        SimplifiedOp0 ? SimplifiedOp0 : ICmp.getOperand(0),
+                        SimplifiedOp1 ? SimplifiedOp1 : ICmp.getOperand(1));
+
   auto *CastOp0 = dyn_cast<CastInst>(ICmp.getOperand(0));
   if (!CastOp0)
     return nullptr;
