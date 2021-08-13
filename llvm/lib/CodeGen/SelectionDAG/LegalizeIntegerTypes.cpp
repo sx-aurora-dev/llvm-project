@@ -2277,6 +2277,10 @@ void DAGTypeLegalizer::ExpandIntegerResult(SDNode *N, unsigned ResNo) {
   case ISD::FSHR:
     ExpandIntRes_FunnelShift(N, Lo, Hi);
     break;
+
+  case ISD::VSCALE:
+    ExpandIntRes_VSCALE(N, Lo, Hi);
+    break;
   }
 
   // If Lo/Hi is null, the sub-method took care of registering results etc.
@@ -4228,6 +4232,21 @@ void DAGTypeLegalizer::ExpandIntRes_FunnelShift(SDNode *N,
   SplitInteger(Res, Lo, Hi);
 }
 
+void DAGTypeLegalizer::ExpandIntRes_VSCALE(SDNode *N, SDValue &Lo,
+                                           SDValue &Hi) {
+  EVT VT = N->getValueType(0);
+  EVT HalfVT =
+      EVT::getIntegerVT(*DAG.getContext(), N->getValueSizeInBits(0) / 2);
+  SDLoc dl(N);
+
+  // We assume VSCALE(1) fits into a legal integer.
+  APInt One(HalfVT.getSizeInBits(), 1);
+  SDValue VScaleBase = DAG.getVScale(dl, HalfVT, One);
+  VScaleBase = DAG.getNode(ISD::ZERO_EXTEND, dl, VT, VScaleBase);
+  SDValue Res = DAG.getNode(ISD::MUL, dl, VT, VScaleBase, N->getOperand(0));
+  SplitInteger(Res, Lo, Hi);
+}
+
 //===----------------------------------------------------------------------===//
 //  Integer Operand Expansion
 //===----------------------------------------------------------------------===//
@@ -4897,11 +4916,9 @@ SDValue DAGTypeLegalizer::PromoteIntRes_STEP_VECTOR(SDNode *N) {
   EVT OutVT = N->getValueType(0);
   EVT NOutVT = TLI.getTypeToTransformTo(*DAG.getContext(), OutVT);
   assert(NOutVT.isVector() && "Type must be promoted to a vector type");
-  EVT NOutElemVT = TLI.getTypeToTransformTo(*DAG.getContext(),
-                                            NOutVT.getVectorElementType());
   APInt StepVal = cast<ConstantSDNode>(N->getOperand(0))->getAPIntValue();
-  SDValue Step = DAG.getConstant(StepVal.getSExtValue(), dl, NOutElemVT);
-  return DAG.getStepVector(dl, NOutVT, Step);
+  return DAG.getStepVector(dl, NOutVT,
+                           StepVal.sext(NOutVT.getScalarSizeInBits()));
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_CONCAT_VECTORS(SDNode *N) {

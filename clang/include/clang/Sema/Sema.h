@@ -37,6 +37,7 @@
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/BitmaskEnum.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/Basic/DarwinSDKInfo.h"
 #include "clang/Basic/ExpressionTraits.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/OpenCLOptions.h"
@@ -1525,6 +1526,8 @@ public:
   /// assignment.
   llvm::DenseMap<const VarDecl *, int> RefsMinusAssignments;
 
+  Optional<std::unique_ptr<DarwinSDKInfo>> CachedDarwinSDKInfo;
+
 public:
   Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
        TranslationUnitKind TUKind = TU_Complete,
@@ -1553,6 +1556,8 @@ public:
   ASTConsumer &getASTConsumer() const { return Consumer; }
   ASTMutationListener *getASTMutationListener() const;
   ExternalSemaSource* getExternalSource() const { return ExternalSource; }
+  DarwinSDKInfo *getDarwinSDKInfoForAvailabilityChecking(SourceLocation Loc,
+                                                         StringRef Platform);
 
   ///Registers an external source. If an external source already exists,
   /// creates a multiplex external source and appends to it.
@@ -4780,20 +4785,24 @@ public:
     bool isMoveEligible() const { return S != None; };
     bool isCopyElidable() const { return S == MoveEligibleAndCopyElidable; }
   };
-  NamedReturnInfo getNamedReturnInfo(Expr *&E, bool ForceCXX2b = false);
+  enum class SimplerImplicitMoveMode { ForceOff, Normal, ForceOn };
+  NamedReturnInfo getNamedReturnInfo(
+      Expr *&E, SimplerImplicitMoveMode Mode = SimplerImplicitMoveMode::Normal);
   NamedReturnInfo getNamedReturnInfo(const VarDecl *VD);
   const VarDecl *getCopyElisionCandidate(NamedReturnInfo &Info,
                                          QualType ReturnType);
 
-  ExprResult PerformMoveOrCopyInitialization(const InitializedEntity &Entity,
-                                             const NamedReturnInfo &NRInfo,
-                                             Expr *Value);
+  ExprResult
+  PerformMoveOrCopyInitialization(const InitializedEntity &Entity,
+                                  const NamedReturnInfo &NRInfo, Expr *Value,
+                                  bool SupressSimplerImplicitMoves = false);
 
   StmtResult ActOnReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp,
                              Scope *CurScope);
   StmtResult BuildReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp);
   StmtResult ActOnCapScopeReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp,
-                                     NamedReturnInfo &NRInfo);
+                                     NamedReturnInfo &NRInfo,
+                                     bool SupressSimplerImplicitMoves);
 
   StmtResult ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
                              bool IsVolatile, unsigned NumOutputs,
@@ -6089,6 +6098,12 @@ public:
   // Checks that reinterpret casts don't have undefined behavior.
   void CheckCompatibleReinterpretCast(QualType SrcType, QualType DestType,
                                       bool IsDereference, SourceRange Range);
+
+  // Checks that the vector type should be initialized from a scalar
+  // by splatting the value rather than populating a single element.
+  // This is the case for AltiVecVector types as well as with
+  // AltiVecPixel and AltiVecBool when -faltivec-src-compat=xl is specified.
+  bool ShouldSplatAltivecScalarInCast(const VectorType *VecTy);
 
   /// ActOnCXXNamedCast - Parse
   /// {dynamic,static,reinterpret,const,addrspace}_cast's.
@@ -12574,6 +12589,7 @@ private:
   bool SemaBuiltinComplex(CallExpr *TheCall);
   bool SemaBuiltinVSX(CallExpr *TheCall);
   bool SemaBuiltinOSLogFormat(CallExpr *TheCall);
+  bool SemaValueIsRunOfOnes(CallExpr *TheCall, unsigned ArgNum);
 
 public:
   // Used by C++ template instantiation.

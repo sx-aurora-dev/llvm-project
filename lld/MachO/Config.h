@@ -13,7 +13,9 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/BinaryFormat/MachO.h"
+#include "llvm/Support/CachePruning.h"
 #include "llvm/Support/GlobPattern.h"
 #include "llvm/Support/VersionTuple.h"
 #include "llvm/TextAPI/Architecture.h"
@@ -123,6 +125,7 @@ struct Configuration {
   uint32_t dylibCompatibilityVersion = 0;
   uint32_t dylibCurrentVersion = 0;
   uint32_t timeTraceGranularity = 500;
+  unsigned optimize;
   std::string progName;
 
   // For `clang -arch arm64 -arch x86_64`, clang will:
@@ -139,6 +142,8 @@ struct Configuration {
   llvm::StringRef thinLTOJobs;
   llvm::StringRef umbrella;
   uint32_t ltoo = 2;
+  llvm::CachePruningPolicy thinLTOCachePolicy;
+  llvm::StringRef thinLTOCacheDir;
   bool deadStripDylibs = false;
   bool demangle = false;
   bool deadStrip = false;
@@ -154,6 +159,7 @@ struct Configuration {
   std::vector<llvm::StringRef> runtimePaths;
   std::vector<std::string> astPaths;
   std::vector<Symbol *> explicitUndefineds;
+  llvm::StringSet<> explicitDynamicLookups;
   // There are typically few custom sectionAlignments or segmentProtections,
   // so use a vector instead of a map.
   std::vector<SectionAlign> sectionAlignments;

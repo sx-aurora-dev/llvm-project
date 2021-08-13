@@ -9,11 +9,25 @@
 #include "Features.h"
 #include "clang/Basic/Version.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Host.h"
 
 namespace clang {
 namespace clangd {
 
 std::string versionString() { return clang::getClangToolFullVersion("clangd"); }
+
+std::string platformString() {
+  static std::string PlatformString = []() {
+    std::string Host = llvm::sys::getProcessTriple();
+    std::string Target = llvm::sys::getDefaultTargetTriple();
+    if (Host != Target) {
+      Host += "; target=";
+      Host += Target;
+    }
+    return Host;
+  }();
+  return PlatformString;
+}
 
 std::string featureString() {
   return
@@ -47,6 +61,10 @@ std::string featureString() {
 #endif
 #if CLANGD_BUILD_XPC
       "+xpc"
+#endif
+
+#if !CLANGD_TIDY_CHECKS
+      "-tidy"
 #endif
       ;
 }

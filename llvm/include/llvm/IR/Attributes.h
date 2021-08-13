@@ -90,6 +90,10 @@ public:
     return Kind >= FirstTypeAttr && Kind <= LastTypeAttr;
   }
 
+  static bool canUseAsFnAttr(AttrKind Kind);
+  static bool canUseAsParamAttr(AttrKind Kind);
+  static bool canUseAsRetAttr(AttrKind Kind);
+
 private:
   AttributeImpl *pImpl = nullptr;
 
@@ -342,6 +346,7 @@ public:
   Type *getByRefType() const;
   Type *getPreallocatedType() const;
   Type *getInAllocaType() const;
+  Type *getElementType() const;
   std::pair<unsigned, Optional<unsigned>> getAllocSizeArgs() const;
   std::pair<unsigned, unsigned> getVScaleRangeArgs() const;
   std::string getAsString(bool InAttrGrp = false) const;
@@ -541,12 +546,6 @@ public:
     return removeAttributes(C, ArgNo + FirstArgIndex, AttrsToRemove);
   }
 
-  /// Remove noundef attribute and other attributes that imply undefined
-  /// behavior if a `undef` or `poison` value is passed from this attribute
-  /// list. Returns a new list because attribute lists are immutable.
-  LLVM_NODISCARD AttributeList
-  removeParamUndefImplyingAttributes(LLVMContext &C, unsigned ArgNo) const;
-
   /// Remove all attributes at the specified arg index from this
   /// attribute list. Returns a new list because attribute lists are immutable.
   LLVM_NODISCARD AttributeList removeParamAttributes(LLVMContext &C,
@@ -710,6 +709,9 @@ public:
   /// Return the inalloca type for the specified function parameter.
   Type *getParamInAllocaType(unsigned ArgNo) const;
 
+  /// Return the elementtype type for the specified function parameter.
+  Type *getParamElementType(unsigned ArgNo) const;
+
   /// Get the stack alignment.
   MaybeAlign getStackAlignment(unsigned Index) const;
 
@@ -838,9 +840,8 @@ public:
   AttrBuilder &addAttribute(Attribute::AttrKind Val) {
     assert((unsigned)Val < Attribute::EndAttrKinds &&
            "Attribute out of range!");
-    // TODO: This should really assert isEnumAttrKind().
-    assert(!Attribute::isIntAttrKind(Val) &&
-           "Adding integer attribute without adding a value!");
+    assert(Attribute::isEnumAttrKind(Val) &&
+           "Adding integer/type attribute without an argument!");
     Attrs[Val] = true;
     return *this;
   }
@@ -1030,6 +1031,13 @@ namespace AttributeFuncs {
 
 /// Which attributes cannot be applied to a type.
 AttrBuilder typeIncompatible(Type *Ty);
+
+/// Get param/return attributes which imply immediate undefined behavior if an
+/// invalid value is passed. For example, this includes noundef (where undef
+/// implies UB), but not nonnull (where null implies poison). It also does not
+/// include attributes like nocapture, which constrain the function
+/// implementation rather than the passed value.
+AttrBuilder getUBImplyingAttributes();
 
 /// \returns Return true if the two functions have compatible target-independent
 /// attributes for inlining purposes.

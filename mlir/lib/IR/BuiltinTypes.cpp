@@ -264,7 +264,7 @@ LogicalResult OpaqueType::verify(function_ref<InFlightDiagnostic()> emitError,
            << "` type created with unregistered dialect. If this is "
               "intended, please call allowUnregisteredDialects() on the "
               "MLIRContext, or use -allow-unregistered-dialect with "
-              "mlir-opt";
+              "the MLIR opt tool used";
   }
 
   return success();
@@ -515,6 +515,8 @@ void RankedTensorType::walkImmediateSubElements(
     function_ref<void(Attribute)> walkAttrsFn,
     function_ref<void(Type)> walkTypesFn) const {
   walkTypesFn(getElementType());
+  if (Attribute encoding = getEncoding())
+    walkAttrsFn(encoding);
 }
 
 //===----------------------------------------------------------------------===//
