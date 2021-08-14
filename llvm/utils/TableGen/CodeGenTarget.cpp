@@ -909,15 +909,6 @@ void CodeGenIntrinsic::setProperty(Record *R) {
     unsigned ArgNo = R->getValueAsInt("ArgNo");
     uint64_t Align = R->getValueAsInt("Align");
     ArgumentAttributes.emplace_back(ArgNo, Alignment, Align);
-  } else if (R->isSubClassOf("VectorLength")) {
-    unsigned ArgNo = R->getValueAsInt("ArgNo");
-    ArgumentAttributes.emplace_back(ArgNo, VectorLength, 0);
-  } else if (R->isSubClassOf("Mask")) {
-    unsigned ArgNo = R->getValueAsInt("ArgNo");
-    ArgumentAttributes.emplace_back(ArgNo, Mask, 0);
-  } else if (R->isSubClassOf("Passthru")) {
-    unsigned ArgNo = R->getValueAsInt("ArgNo");
-    ArgumentAttributes.emplace_back(ArgNo, Passthru, 0);
   } else
     llvm_unreachable("Unknown property!");
 }

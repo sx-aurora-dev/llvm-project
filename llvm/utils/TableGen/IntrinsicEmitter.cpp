@@ -695,15 +695,6 @@ void IntrinsicEmitter::EmitAttributes(const CodeGenIntrinsicTable &Ints,
           case CodeGenIntrinsic::Returned:
             OS << LS << "Attribute::Returned";
             break;
-          case CodeGenIntrinsic::VectorLength:
-            OS << LS << "Attribute::VectorLength";
-            break;
-          case CodeGenIntrinsic::Mask:
-            OS << LS << "Attribute::Mask";
-            break;
-          case CodeGenIntrinsic::Passthru:
-            OS << LS << "Attribute::Passthru";
-            break;
           case CodeGenIntrinsic::ReadOnly:
             OS << LS << "Attribute::ReadOnly";
             break;
