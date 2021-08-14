@@ -4081,6 +4081,22 @@ static Value *simplifySelectWithICmpCond(Value *CondVal, Value *TrueVal,
     std::swap(TrueVal, FalseVal);
   }
 
+  // Check for integer min/max with a limit constant:
+  // X > MIN_INT ? X : MIN_INT --> X
+  // X < MAX_INT ? X : MAX_INT --> X
+  if (TrueVal->getType()->isIntOrIntVectorTy()) {
+    Value *X, *Y;
+    SelectPatternFlavor SPF =
+        matchDecomposedSelectPattern(cast<ICmpInst>(CondVal), TrueVal, FalseVal,
+                                     X, Y).Flavor;
+    if (SelectPatternResult::isMinOrMax(SPF) && Pred == getMinMaxPred(SPF)) {
+      APInt LimitC = getMinMaxLimit(getInverseMinMaxFlavor(SPF),
+                                    X->getType()->getScalarSizeInBits());
+      if (match(Y, m_SpecificInt(LimitC)))
+        return X;
+    }
+  }
+
   if (Pred == ICmpInst::ICMP_EQ && match(CmpRHS, m_Zero())) {
     Value *X;
     const APInt *Y;
@@ -5477,6 +5493,9 @@ static Value *simplifyUnaryIntrinsic(Function *F, Value *Op0,
     if (match(Op0,
               m_Intrinsic<Intrinsic::experimental_vector_reverse>(m_Value(X))))
       return X;
+    // experimental.vector.reverse(splat(X)) -> splat(X)
+    if (isSplatValue(Op0))
+      return Op0;
     break;
   default:
     break;
@@ -5792,13 +5811,32 @@ static Value *simplifyBinaryIntrinsic(Function *F, Value *Op0, Value *Op1,
 
 static Value *simplifyIntrinsic(CallBase *Call, const SimplifyQuery &Q) {
 
-  // Intrinsics with no operands have some kind of side effect. Don't simplify.
   unsigned NumOperands = Call->getNumArgOperands();
-  if (!NumOperands)
-    return nullptr;
-
   Function *F = cast<Function>(Call->getCalledFunction());
   Intrinsic::ID IID = F->getIntrinsicID();
+
+  // Most of the intrinsics with no operands have some kind of side effect.
+  // Don't simplify.
+  if (!NumOperands) {
+    switch (IID) {
+    case Intrinsic::vscale: {
+      // Call may not be inserted into the IR yet at point of calling simplify.
+      if (!Call->getParent() || !Call->getParent()->getParent())
+        return nullptr;
+      auto Attr = Call->getFunction()->getFnAttribute(Attribute::VScaleRange);
+      if (!Attr.isValid())
+        return nullptr;
+      unsigned VScaleMin, VScaleMax;
+      std::tie(VScaleMin, VScaleMax) = Attr.getVScaleRangeArgs();
+      if (VScaleMin == VScaleMax && VScaleMax != 0)
+        return ConstantInt::get(F->getReturnType(), VScaleMin);
+      return nullptr;
+    }
+    default:
+      return nullptr;
+    }
+  }
+
   if (NumOperands == 1)
     return simplifyUnaryIntrinsic(F, Call->getArgOperand(0), Q);
 

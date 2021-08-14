@@ -140,7 +140,7 @@ bool LLParser::validateEndOfModule(bool UpgradeDebugInfo) {
 
     if (Function *Fn = dyn_cast<Function>(V)) {
       AttributeList AS = Fn->getAttributes();
-      AttrBuilder FnAttrs(AS.getFnAttributes());
+      AttrBuilder FnAttrs(AS.getFnAttrs());
       AS = AS.removeAttributes(Context, AttributeList::FunctionIndex);
 
       FnAttrs.merge(B);
@@ -157,7 +157,7 @@ bool LLParser::validateEndOfModule(bool UpgradeDebugInfo) {
       Fn->setAttributes(AS);
     } else if (CallInst *CI = dyn_cast<CallInst>(V)) {
       AttributeList AS = CI->getAttributes();
-      AttrBuilder FnAttrs(AS.getFnAttributes());
+      AttrBuilder FnAttrs(AS.getFnAttrs());
       AS = AS.removeAttributes(Context, AttributeList::FunctionIndex);
       FnAttrs.merge(B);
       AS = AS.addAttributes(Context, AttributeList::FunctionIndex,
@@ -165,7 +165,7 @@ bool LLParser::validateEndOfModule(bool UpgradeDebugInfo) {
       CI->setAttributes(AS);
     } else if (InvokeInst *II = dyn_cast<InvokeInst>(V)) {
       AttributeList AS = II->getAttributes();
-      AttrBuilder FnAttrs(AS.getFnAttributes());
+      AttrBuilder FnAttrs(AS.getFnAttrs());
       AS = AS.removeAttributes(Context, AttributeList::FunctionIndex);
       FnAttrs.merge(B);
       AS = AS.addAttributes(Context, AttributeList::FunctionIndex,
@@ -173,7 +173,7 @@ bool LLParser::validateEndOfModule(bool UpgradeDebugInfo) {
       II->setAttributes(AS);
     } else if (CallBrInst *CBI = dyn_cast<CallBrInst>(V)) {
       AttributeList AS = CBI->getAttributes();
-      AttrBuilder FnAttrs(AS.getFnAttributes());
+      AttrBuilder FnAttrs(AS.getFnAttrs());
       AS = AS.removeAttributes(Context, AttributeList::FunctionIndex);
       FnAttrs.merge(B);
       AS = AS.addAttributes(Context, AttributeList::FunctionIndex,
@@ -5578,7 +5578,7 @@ bool LLParser::parseFunctionHeader(Function *&Fn, bool IsDefine) {
       AttributeList::get(Context, AttributeSet::get(Context, FuncAttrs),
                          AttributeSet::get(Context, RetAttrs), Attrs);
 
-  if (PAL.hasAttribute(1, Attribute::StructRet) && !RetType->isVoidTy())
+  if (PAL.hasParamAttr(0, Attribute::StructRet) && !RetType->isVoidTy())
     return error(RetTypeLoc, "functions with 'sret' argument must return void");
 
   FunctionType *FT = FunctionType::get(RetType, ParamTypeList, IsVarArg);

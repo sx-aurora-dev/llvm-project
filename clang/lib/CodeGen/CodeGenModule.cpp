@@ -186,7 +186,7 @@ CodeGenModule::CodeGenModule(ASTContext &C, const HeaderSearchOptions &HSO,
       !getModule().getSourceFileName().empty()) {
     std::string Path = getModule().getSourceFileName();
     // Check if a path substitution is needed from the MacroPrefixMap.
-    for (const auto &Entry : PPO.MacroPrefixMap)
+    for (const auto &Entry : LangOpts.MacroPrefixMap)
       if (Path.rfind(Entry.first, 0) != std::string::npos) {
         Path = Entry.second + Path.substr(Entry.first.size());
         break;
@@ -3613,7 +3613,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
   assert(F->getName() == MangledName && "name was uniqued!");
   if (D)
     SetFunctionAttributes(GD, F, IsIncompleteFunction, IsThunk);
-  if (ExtraAttrs.hasAttributes(llvm::AttributeList::FunctionIndex)) {
+  if (ExtraAttrs.hasFnAttrs()) {
     llvm::AttrBuilder B(ExtraAttrs, llvm::AttributeList::FunctionIndex);
     F->addAttributes(llvm::AttributeList::FunctionIndex, B);
   }
@@ -4438,7 +4438,9 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
   if (GV && LangOpts.CUDA) {
     if (LangOpts.CUDAIsDevice) {
       if (Linkage != llvm::GlobalValue::InternalLinkage &&
-          (D->hasAttr<CUDADeviceAttr>() || D->hasAttr<CUDAConstantAttr>()))
+          (D->hasAttr<CUDADeviceAttr>() || D->hasAttr<CUDAConstantAttr>() ||
+           D->getType()->isCUDADeviceBuiltinSurfaceType() ||
+           D->getType()->isCUDADeviceBuiltinTextureType()))
         GV->setExternallyInitialized(true);
     } else {
       getCUDARuntime().internalizeDeviceSideVar(D, Linkage);
@@ -4747,7 +4749,7 @@ static void replaceUsesOfNonProtoConstant(llvm::Constant *old,
       }
 
       // Add any parameter attributes.
-      newArgAttrs.push_back(oldAttrs.getParamAttributes(argNo));
+      newArgAttrs.push_back(oldAttrs.getParamAttrs(argNo));
       argNo++;
     }
     if (dontTransform)
@@ -4775,9 +4777,9 @@ static void replaceUsesOfNonProtoConstant(llvm::Constant *old,
 
     if (!newCall->getType()->isVoidTy())
       newCall->takeName(callSite);
-    newCall->setAttributes(llvm::AttributeList::get(
-        newFn->getContext(), oldAttrs.getFnAttributes(),
-        oldAttrs.getRetAttributes(), newArgAttrs));
+    newCall->setAttributes(
+        llvm::AttributeList::get(newFn->getContext(), oldAttrs.getFnAttrs(),
+                                 oldAttrs.getRetAttrs(), newArgAttrs));
     newCall->setCallingConv(callSite->getCallingConv());
 
     // Finally, remove the old call, replacing any uses with the new one.

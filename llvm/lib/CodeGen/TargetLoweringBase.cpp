@@ -52,6 +52,7 @@
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Utils/SizeOpts.h"
 #include <algorithm>
 #include <cassert>
@@ -760,6 +761,7 @@ void TargetLoweringBase::initActions() {
 
     // These operations default to expand.
     setOperationAction(ISD::FGETSIGN, VT, Expand);
+    setOperationAction(ISD::ISNAN, VT, Expand);
     setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
     setOperationAction(ISD::FMINNUM, VT, Expand);
     setOperationAction(ISD::FMAXNUM, VT, Expand);
@@ -1556,7 +1558,7 @@ unsigned TargetLoweringBase::getVectorTypeBreakdown(LLVMContext &Context,
 
   // Scalable vectors cannot be scalarized, so handle the legalisation of the
   // types like done elsewhere in SelectionDAG.
-  if (VT.isScalableVector() && !isPowerOf2_32(EltCnt.getKnownMinValue())) {
+  if (EltCnt.isScalable()) {
     LegalizeKind LK;
     EVT PartVT = VT;
     do {
@@ -1565,16 +1567,14 @@ unsigned TargetLoweringBase::getVectorTypeBreakdown(LLVMContext &Context,
       PartVT = LK.second;
     } while (LK.first != TypeLegal);
 
-    NumIntermediates = VT.getVectorElementCount().getKnownMinValue() /
-                       PartVT.getVectorElementCount().getKnownMinValue();
+    if (!PartVT.isVector()) {
+      report_fatal_error(
+          "Don't know how to legalize this scalable vector type");
+    }
 
-    // FIXME: This code needs to be extended to handle more complex vector
-    // breakdowns, like nxv7i64 -> nxv8i64 -> 4 x nxv2i64. Currently the only
-    // supported cases are vectors that are broken down into equal parts
-    // such as nxv6i64 -> 3 x nxv2i64.
-    assert((PartVT.getVectorElementCount() * NumIntermediates) ==
-               VT.getVectorElementCount() &&
-           "Expected an integer multiple of PartVT");
+    NumIntermediates =
+        divideCeil(VT.getVectorElementCount().getKnownMinValue(),
+                   PartVT.getVectorElementCount().getKnownMinValue());
     IntermediateVT = PartVT;
     RegisterVT = getRegisterType(Context, IntermediateVT);
     return NumIntermediates;
@@ -1657,9 +1657,9 @@ void llvm::GetReturnInfo(CallingConv::ID CC, Type *ReturnType,
     EVT VT = ValueVTs[j];
     ISD::NodeType ExtendKind = ISD::ANY_EXTEND;
 
-    if (attr.hasAttribute(AttributeList::ReturnIndex, Attribute::SExt))
+    if (attr.hasRetAttr(Attribute::SExt))
       ExtendKind = ISD::SIGN_EXTEND;
-    else if (attr.hasAttribute(AttributeList::ReturnIndex, Attribute::ZExt))
+    else if (attr.hasRetAttr(Attribute::ZExt))
       ExtendKind = ISD::ZERO_EXTEND;
 
     // FIXME: C calling convention requires the return type to be promoted to
@@ -1679,13 +1679,13 @@ void llvm::GetReturnInfo(CallingConv::ID CC, Type *ReturnType,
 
     // 'inreg' on function refers to return value
     ISD::ArgFlagsTy Flags = ISD::ArgFlagsTy();
-    if (attr.hasAttribute(AttributeList::ReturnIndex, Attribute::InReg))
+    if (attr.hasRetAttr(Attribute::InReg))
       Flags.setInReg();
 
     // Propagate extension type if any
-    if (attr.hasAttribute(AttributeList::ReturnIndex, Attribute::SExt))
+    if (attr.hasRetAttr(Attribute::SExt))
       Flags.setSExt();
-    else if (attr.hasAttribute(AttributeList::ReturnIndex, Attribute::ZExt))
+    else if (attr.hasRetAttr(Attribute::ZExt))
       Flags.setZExt();
 
     for (unsigned i = 0; i < NumParts; ++i)
@@ -2018,6 +2018,12 @@ void TargetLoweringBase::setMaximumJumpTableSize(unsigned Val) {
 
 bool TargetLoweringBase::isJumpTableRelative() const {
   return getTargetMachine().isPositionIndependent();
+}
+
+Align TargetLoweringBase::getPrefLoopAlignment(MachineLoop *ML) const {
+  if (TM.Options.LoopAlignment)
+    return Align(TM.Options.LoopAlignment);
+  return PrefLoopAlignment;
 }
 
 //===----------------------------------------------------------------------===//

@@ -503,9 +503,10 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   // -cl-strict-aliasing needs to emit diagnostic in the case where CL > 1.0.
   // This option should be deprecated for CL > 1.0 because
   // this option was added for compatibility with OpenCL 1.0.
-  if (Args.getLastArg(OPT_cl_strict_aliasing) && LangOpts.OpenCLVersion > 100)
+  if (Args.getLastArg(OPT_cl_strict_aliasing) &&
+      (LangOpts.OpenCLCPlusPlus || LangOpts.OpenCLVersion > 100))
     Diags.Report(diag::warn_option_invalid_ocl_version)
-        << LangOpts.getOpenCLVersionTuple().getAsString()
+        << LangOpts.getOpenCLVersionString()
         << Args.getLastArg(OPT_cl_strict_aliasing)->getAsString(Args);
 
   if (Arg *A = Args.getLastArg(OPT_fdefault_calling_conv_EQ)) {
@@ -3091,7 +3092,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
       LangStd = LangStandard::lang_opencl12;
       break;
     case Language::OpenCLCXX:
-      LangStd = LangStandard::lang_openclcpp;
+      LangStd = LangStandard::lang_openclcpp10;
       break;
     case Language::CUDA:
       LangStd = LangStandard::lang_cuda;
@@ -3150,8 +3151,6 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   Opts.HexFloats = Std.hasHexFloats();
   Opts.ImplicitInt = Std.hasImplicitInt();
 
-  Opts.CPlusPlusModules = Opts.CPlusPlus20;
-
   // Set OpenCL Version.
   Opts.OpenCL = Std.isOpenCL();
   if (LangStd == LangStandard::lang_opencl10)
@@ -3164,7 +3163,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.OpenCLVersion = 200;
   else if (LangStd == LangStandard::lang_opencl30)
     Opts.OpenCLVersion = 300;
-  else if (LangStd == LangStandard::lang_openclcpp)
+  else if (LangStd == LangStandard::lang_openclcpp10)
     Opts.OpenCLCPlusPlusVersion = 100;
 
   // OpenCL has some additional defaults.
@@ -3173,7 +3172,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.ZVector = 0;
     Opts.setDefaultFPContractMode(LangOptions::FPM_On);
     Opts.OpenCLCPlusPlus = Opts.CPlusPlus;
-    Opts.OpenCLPipe = Opts.OpenCLCPlusPlus || Opts.OpenCLVersion == 200;
+    Opts.OpenCLPipes = Opts.OpenCLCPlusPlus || Opts.OpenCLVersion == 200;
     Opts.OpenCLGenericAddressSpace =
         Opts.OpenCLCPlusPlus || Opts.OpenCLVersion == 200;
 
@@ -3314,7 +3313,7 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
   case LangStandard::lang_opencl12:
   case LangStandard::lang_opencl20:
   case LangStandard::lang_opencl30:
-  case LangStandard::lang_openclcpp:
+  case LangStandard::lang_openclcpp10:
     StdOpt = OPT_cl_std_EQ;
     break;
   default:
@@ -3528,6 +3527,9 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Args, OPT_fexperimental_relative_cxx_abi_vtables, SA);
   else
     GenerateArg(Args, OPT_fno_experimental_relative_cxx_abi_vtables, SA);
+
+  for (const auto &MP : Opts.MacroPrefixMap)
+    GenerateArg(Args, OPT_fmacro_prefix_map_EQ, MP.first + "=" + MP.second, SA);
 }
 
 bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
@@ -3608,7 +3610,8 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
         .Cases("cl1.2", "CL1.2", LangStandard::lang_opencl12)
         .Cases("cl2.0", "CL2.0", LangStandard::lang_opencl20)
         .Cases("cl3.0", "CL3.0", LangStandard::lang_opencl30)
-        .Cases("clc++", "CLC++", LangStandard::lang_openclcpp)
+        .Cases("clc++", "CLC++", LangStandard::lang_openclcpp10)
+        .Cases("clc++1.0", "CLC++1.0", LangStandard::lang_openclcpp10)
         .Default(LangStandard::lang_unspecified);
 
     if (OpenCLLangStd == LangStandard::lang_unspecified) {
@@ -4038,6 +4041,12 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
                    options::OPT_fno_experimental_relative_cxx_abi_vtables,
                    TargetCXXABI::usesRelativeVTables(T));
 
+  for (const auto &A : Args.getAllArgValues(OPT_fmacro_prefix_map_EQ)) {
+    auto Split = StringRef(A).split('=');
+    Opts.MacroPrefixMap.insert(
+        {std::string(Split.first), std::string(Split.second)});
+  }
+
   return Diags.getNumErrors() == NumErrorsBefore;
 }
 
@@ -4110,9 +4119,6 @@ static void GeneratePreprocessorArgs(PreprocessorOptions &Opts,
   for (const auto &D : Opts.DeserializedPCHDeclsToErrorOn)
     GenerateArg(Args, OPT_error_on_deserialized_pch_decl, D, SA);
 
-  for (const auto &MP : Opts.MacroPrefixMap)
-    GenerateArg(Args, OPT_fmacro_prefix_map_EQ, MP.first + "=" + MP.second, SA);
-
   if (Opts.PrecompiledPreambleBytes != std::make_pair(0u, false))
     GenerateArg(Args, OPT_preamble_bytes_EQ,
                 Twine(Opts.PrecompiledPreambleBytes.first) + "," +
@@ -4181,12 +4187,6 @@ static bool ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
   for (const auto *A : Args.filtered(OPT_error_on_deserialized_pch_decl))
     Opts.DeserializedPCHDeclsToErrorOn.insert(A->getValue());
 
-  for (const auto &A : Args.getAllArgValues(OPT_fmacro_prefix_map_EQ)) {
-    auto Split = StringRef(A).split('=');
-    Opts.MacroPrefixMap.insert(
-        {std::string(Split.first), std::string(Split.second)});
-  }
-
   if (const Arg *A = Args.getLastArg(OPT_preamble_bytes_EQ)) {
     StringRef Value(A->getValue());
     size_t Comma = Value.find(',');
@@ -4243,8 +4243,13 @@ static bool ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
   // Always avoid lexing editor placeholders when we're just running the
   // preprocessor as we never want to emit the
   // "editor placeholder in source file" error in PP only mode.
-  if (isStrictlyPreprocessorAction(Action))
+  // Certain predefined macros which depend upon semantic processing,
+  // for example __FLT_EVAL_METHOD__, are not expanded in PP mode, they
+  // appear in the preprocessed output as an unexpanded macro name.
+  if (isStrictlyPreprocessorAction(Action)) {
     Opts.LexEditorPlaceholders = false;
+    Opts.LexExpandSpecialBuiltins = false;
+  }
 
   return Diags.getNumErrors() == NumErrorsBefore;
 }
