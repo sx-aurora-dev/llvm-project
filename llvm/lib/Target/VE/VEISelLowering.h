@@ -475,7 +475,7 @@ public:
   bool mergeStoresAfterLegalization(EVT) const override { return true; }
 
   bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-                        const SelectionDAG &DAG) const override;
+                        const MachineFunction &MF) const override;
 
   MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
                                     unsigned BROpcode) const;

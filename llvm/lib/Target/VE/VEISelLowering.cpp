@@ -704,10 +704,10 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
 }
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-                                        const SelectionDAG &DAG) const {
+                                        const MachineFunction &MF) const {
   // Do not merge to float value size (128 bytes) if no implicit
   // float attribute is set.
-  bool NoFloat = DAG.getMachineFunction().getFunction().hasFnAttribute(
+  bool NoFloat = MF.getFunction().hasFnAttribute(
       Attribute::NoImplicitFloat);
 
   if (NoFloat) {
