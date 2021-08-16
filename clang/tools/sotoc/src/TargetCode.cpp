@@ -143,6 +143,48 @@ void TargetCode::generateArgument(const TargetRegionVariable &Arg,
   Out << LHS.str() << Arg.name() << RHS.str();
 }
 
+void TargetCode::generateVariableType(TargetRegionVariable &Var,
+                                      llvm::raw_ostream &Out) {
+  std::string LHSStore;
+  std::string RHSStore;
+  llvm::raw_string_ostream LHS(LHSStore);
+  llvm::raw_string_ostream RHS(RHSStore);
+
+  for (auto &Shape : Var.shapes().rbegin()) {
+    switch (Shape.getKind()) {
+    case TargetRegionVariableShape::ShapeKind::Pointer:
+      LHS << "*";
+      break;
+    case TargetRegionVariableShape::ShapeKind::Paren:
+      LHS << "(";
+      RHS << ")";
+    case TargetRegionVariableShape::ShapeKind::ConstantArray:
+      RHS << "[" << Shape.getConstantDimensionExpr() << "]";
+    case TargetRegionVariableShape::ShapeKind::VariableArray:
+      RHS << "[" << "__sotoc_vla_dim" << Shape.getVariableDimensionIndex() << "_"
+                << Var.name() << "]";
+    default:
+      printf("ERROR!!!\nIf you see this, something is wrong\nType:\t%d\n", Shape.getKind());
+      break;
+    }
+  }
+
+  if (Var.containsArray()) {
+    // Move the bounds if we have a slice
+    auto LowerBound = Var.arrayLowerBound();
+    if (LowerBound.hasValue()) {
+      Out << "  " << Var.name() << " = " << Var.name() << " - ";
+      LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
+      Out << ";\n";
+    }
+  }
+
+  //
+  reverse(RHSStore.begin(), RHSStore.end());
+
+  Out << "  " << Var.baseTypeName() << " " << LHSStore << Var.name() << RHSStore
+      << " = " << "__sotoc_var_" << Var.name() << ";\n";
+}
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
                                           llvm::raw_ostream &Out) {
   bool first = true;
@@ -162,7 +204,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       }
     }
     // Because arrays are passed by reference and (for our purposes) their type
-    // is 'void', the rest of their handling ist the same as for scalars.
+    // is 'void', the rest of their handling is the same as for scalars.
     if (Var.isArray()) {
       Out << "void ";
     } else {
@@ -213,56 +255,58 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   for (auto &Var : TCR->capturedVars()) {
     // Ignore everything not passed by reference here
     if (Var.passedByPointer()) {
-      // Handle multi-dimensional arrays
-      if (Var.isArray()) {
-        // Declare the arrays as a pointer. This way we can assign it a pointer
-        // However, this also means we have to ignore the first array
-        // dimension.
-        Out << "  " << Var.baseTypeName() << " (*" << Var.name() << ")";
+      generateVariableType(Var, Out);
+      // // Handle multi-dimensional arrays
+      // if (Var.isArray()) {
+      //   // Declare the arrays as a pointer. This way we can assign it a pointer
+      //   // However, this also means we have to ignore the first array
+      //   // dimension.
+      //   Out << "  " << Var.baseTypeName() << " (*" << Var.name() << ")";
 
-        // For every array dimension other then the first: declare them by
-        // adding the array brackets ('[', ']') to the declaration. Also add
-        // the size of this dimension if we have it.
-        bool first = true;
-        for (auto &Shape : Var.shapes()) {
-          // We need to discard the first element
-          if (first) {
-            first = false;
-            continue;
-          }
-          Out << "[";
-          if (Shape.isConstantArray()) {
-            Out << Shape.getConstantDimensionExpr();
-          } else if (Shape.isVariableArray()) {
-            Out << "__sotoc_vla_dim" << Shape.getVariableDimensionIndex() << "_"
-                << Var.name();
-          }
-          Out << "]";
-        }
-        // After we have declare the array, we also need to assign it.
-        // We may also have to adjust the array bounds if we only get a slice
-        // of the array (in the first dimesion. All other dimensions should
-        // not require adjustment as their slicing is ignored)
-        Out << " =  __sotoc_var_" << Var.name() << ";\n";
-        // Move the bounds if we have a slice
-        auto LowerBound = Var.arrayLowerBound();
-        if (LowerBound.hasValue()) {
-          Out << "  " << Var.name() << " = " << Var.name() << " - ";
-          LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
-          Out << ";\n";
-        }
-      } else if (int depth = Var.pointerDepth()) { // If Var is pointer
-        Out << Var.baseTypeName();
-        for (int j = 0; j < depth; ++j){
-          Out << "*";
-        }
-        Out << " " << Var.name() << " = " << "__sotoc_var_"
-            << Var.name() << ";\n";
-      } else {
-        // Handle all other types passed by reference
-        Out << Var.baseTypeName() << " " << Var.name() << " = "
-            << "*__sotoc_var_" << Var.name() << ";\n";
-      }
+      //   // For every array dimension other than the first: declare them by
+      //   // adding the array brackets ('[', ']') to the declaration. Also add
+      //   // the size of this dimension if we have it.
+      //   bool first = true;
+      //   for (auto &Shape : Var.shapes()) {
+      //     // We need to discard the first element
+      //     if (first) {
+      //       first = false;
+      //       continue;
+      //     }
+      //     Out << "[";
+      //     if (Shape.isConstantArray()) {
+      //       Out << Shape.getConstantDimensionExpr();
+      //     } else if (Shape.isVariableArray()) {
+      //       Out << "__sotoc_vla_dim" << Shape.getVariableDimensionIndex() << "_"
+      //           << Var.name();
+      //     }
+      //     Out << "]";
+      //   }
+      //   // After we have declare the array, we also need to assign it.
+      //   // We may also have to adjust the array bounds if we only get a slice
+      //   // of the array (in the first dimesion. All other dimensions should
+      //   // not require adjustment as their slicing is ignored)
+      //   Out << " =  __sotoc_var_" << Var.name() << ";\n";
+      //   // Move the bounds if we have a slice
+      //   auto LowerBound = Var.arrayLowerBound();
+      //   if (LowerBound.hasValue()) {
+      //     Out << "  " << Var.name() << " = " << Var.name() << " - ";
+      //     LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
+      //     Out << ";\n";
+      //   }
+      // } else if (int depth = Var.pointerDepth()) { // If Var is pointer
+      //   Out << Var.baseTypeName();
+      //   for (int j = 0; j < depth; ++j){
+      //     Out << "*";
+      //   }
+      //   Out << " " << Var.name() << " = " << "__sotoc_var_"
+      //       << Var.name() << ";\n";
+      // } else {
+      //   // Handle all other types passed by reference
+      //   Out << Var.baseTypeName() << " " << Var.name() << " = "
+      //       << "*__sotoc_var_" << Var.name() << ";\n";
+      // }
+
       // After recieving floats as unsigned long long we want to change them
       // back to floats but without conversion as they already are formated
       // according to 32 bit floating point spec.

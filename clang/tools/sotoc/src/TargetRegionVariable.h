@@ -28,7 +28,7 @@ class CapturedStmt;
 /// is saved as shapes for that variable.
 class TargetRegionVariableShape {
 public:
-  enum ShapeKind { Pointer, ConstantArray, VariableArray };
+  enum ShapeKind { Pointer, Paren, ConstantArray, VariableArray };
 
 private:
   unsigned int VariableDimensionIndex;
@@ -61,6 +61,9 @@ public:
   }
   /// Construct a pointer shape by default.
   TargetRegionVariableShape() : Kind(ShapeKind::Pointer){};
+  /// Construct a parentheses shape
+  TargetRegionVariableShape(const clang::ParenType *Paren)
+      : Kind(ShapeKind::Paren){};
   /// Construct a shape for a variable array dimension.
   TargetRegionVariableShape(const clang::VariableArrayType *Array,
                             unsigned int DimIndex)
@@ -188,6 +191,7 @@ public:
   /// The Decl node of the variable.
   clang::VarDecl *getDecl() const { return Decl; };
   /// Wether this variable is an array (at the top level) or not
+  bool containsArray() const;
   bool isArray() const;
   int pointerDepth() const;
   // bool isPointer() const;

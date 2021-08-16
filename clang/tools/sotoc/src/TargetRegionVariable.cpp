@@ -50,13 +50,24 @@ void TargetRegionVariable::determineShapes(const clang::QualType T) {
     Shapes.push_back(TargetRegionVariableShape());
     return determineShapes(PT->getPointeeType());
   } else if (auto *PT = llvm::dyn_cast<clang::ParenType>(T.getTypePtr())) {
-    // Clang uses ParenType as sugar when there are parenthesis in the type
-    // declaration (I hate my life). Ignore that.
+    // Clang uses ParenType as when there are parenthesis in the type declaration.
+    Shapes.push_back(TargetRegionVariableShape(PT));
     return determineShapes(PT->getInnerType());
   } else {
     // We have found the base type (without array dimensions or pointer specifiers).
     BaseTypeName = T.getAsString();
   }
+}
+
+bool TargetRegionVariable::containsArray() const {
+  if (!Shapes.empty()) {
+    for (auto &Shape : Var.shapes()) {
+      if (Shape.isArray()) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool TargetRegionVariable::isArray() const {
@@ -66,7 +77,7 @@ bool TargetRegionVariable::isArray() const {
   return false;
 }
 
-// get depth of point nest
+// get depth of pointer nest
 int TargetRegionVariable::pointerDepth() const {
   int i = 0;
   if (!Shapes.empty()) {
