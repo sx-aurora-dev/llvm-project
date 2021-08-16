@@ -195,6 +195,41 @@ public:
     return ISD::ANY_EXTEND;
   }
 
+  /// Custom CC Mapping {
+  using RegisterCountPair = std::pair<MVT, unsigned>;
+  // Map all vector EVTs to vector or vector mask registers.
+  MVT getRegisterTypeForCallingConv(LLVMContext &Context, CallingConv::ID CC,
+                                    EVT VT) const override {
+    auto Opt = getRegistersForCallingConv(Context, CC, VT);
+    if (!Opt.hasValue())
+      return TargetLowering::getRegisterTypeForCallingConv(Context, CC, VT);
+    return Opt->first;
+  }
+
+  unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                         CallingConv::ID CC,
+                                         EVT VT) const override {
+    auto Opt = getRegistersForCallingConv(Context, CC, VT);
+    if (!Opt.hasValue())
+      return TargetLowering::getNumRegistersForCallingConv(Context, CC, VT);
+    return Opt->second;
+  }
+
+  Optional<RegisterCountPair> getRegistersForCallingConv(LLVMContext &Context,
+                                                         CallingConv::ID CC,
+                                                         EVT VT) const;
+
+  unsigned getVectorTypeBreakdownForCallingConv(LLVMContext &Context,
+                                                CallingConv::ID CC, EVT VT,
+                                                EVT &IntermediateVT,
+                                                unsigned &NumIntermediates,
+                                                MVT &RegisterVT) const override;
+  /// } Custom CC Mapping
+
+  /// Custom Lower {
+
+  Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
+                                                 EVT VT) const override;
   const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                                           const MachineBasicBlock *MBB,
                                           unsigned uid,

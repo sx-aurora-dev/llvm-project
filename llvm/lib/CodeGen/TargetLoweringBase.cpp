@@ -956,6 +956,11 @@ void TargetLoweringBase::setJumpIsExpensive(bool isExpensive) {
 
 TargetLoweringBase::LegalizeKind
 TargetLoweringBase::getTypeConversion(LLVMContext &Context, EVT VT) const {
+  // Fully customized legalization.
+  Optional<LegalizeKind> CustomLK = getCustomTypeConversion(Context, VT);
+  if (CustomLK)
+    return *CustomLK;
+
   // If this is a simple type, use the ComputeRegisterProp mechanism.
   if (VT.isSimple()) {
     MVT SVT = VT.getSimpleVT();

@@ -422,6 +422,27 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, const SDLoc &DL,
         return Val;
     }
 
+    // Vector/Vector bitcast.
+    if (ValueVT.getSizeInBits() == PartEVT.getSizeInBits())
+      return DAG.getNode(ISD::BITCAST, DL, ValueVT, Val);
+
+    if (ValueVT.isScalableVector()) {
+      assert(PartEVT.getVectorElementCount() ==
+             ValueVT.getVectorElementCount());
+      // Promote or truncate.
+      return DAG.getAnyExtOrTrunc(Val, DL, ValueVT);
+    }
+
+    // Shorten and promote.
+    assert(PartEVT.getVectorNumElements() >= ValueVT.getVectorNumElements());
+    if (PartEVT.getVectorNumElements() > ValueVT.getVectorNumElements()) {
+      EVT ClippedVT =
+          EVT::getVectorVT(*DAG.getContext(), PartEVT.getVectorElementType(),
+                           ValueVT.getVectorNumElements());
+      Val = DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, ClippedVT, Val,
+                        DAG.getVectorIdxConstant(0, DL));
+    }
+
     // Promoted vector extract
     return DAG.getAnyExtOrTrunc(Val, DL, ValueVT);
   }
@@ -611,6 +632,7 @@ static void getCopyToParts(SelectionDAG &DAG, const SDLoc &DL, SDValue Val,
 
 static SDValue widenVectorToPartType(SelectionDAG &DAG, SDValue Val,
                                      const SDLoc &DL, EVT PartVT) {
+
   if (!PartVT.isVector())
     return SDValue();
 
@@ -618,19 +640,34 @@ static SDValue widenVectorToPartType(SelectionDAG &DAG, SDValue Val,
   ElementCount PartNumElts = PartVT.getVectorElementCount();
   ElementCount ValueNumElts = ValueVT.getVectorElementCount();
 
+  // Widening a scalable vector to another scalable vector is done by inserting
+  // the vector into a larger undef one.
+  if (PartVT.isFixedLengthVector() &&
+      (PartNumElts.getFixedValue() > ValueNumElts.getFixedValue())) {
+    // Promote first?
+    if (PartVT.getVectorElementType() != ValueVT.getVectorElementType()) {
+      if (PartVT.getVectorElementType().getScalarSizeInBits() <
+          ValueVT.getVectorElementType().getScalarSizeInBits()) {
+        return SDValue();
+      }
+
+      // Promote, then extract.
+      EVT PromotedVT =
+          EVT::getVectorVT(*DAG.getContext(), PartVT.getVectorElementType(),
+                           ValueVT.getVectorNumElements());
+      Val = DAG.getAnyExtOrTrunc(Val, DL, PromotedVT);
+    }
+  } else if (PartNumElts.isScalable())
+    return DAG.getNode(ISD::INSERT_SUBVECTOR, DL, PartVT, DAG.getUNDEF(PartVT),
+                       Val, DAG.getVectorIdxConstant(0, DL));
   // We only support widening vectors with equivalent element types and
   // fixed/scalable properties. If a target needs to widen a fixed-length type
   // to a scalable one, it should be possible to use INSERT_SUBVECTOR below.
-  if (ElementCount::isKnownLE(PartNumElts, ValueNumElts) ||
+  else if (ElementCount::isKnownLE(PartNumElts, ValueNumElts) ||
       PartNumElts.isScalable() != ValueNumElts.isScalable() ||
       PartVT.getVectorElementType() != ValueVT.getVectorElementType())
     return SDValue();
 
-  // Widening a scalable vector to another scalable vector is done by inserting
-  // the vector into a larger undef one.
-  if (PartNumElts.isScalable())
-    return DAG.getNode(ISD::INSERT_SUBVECTOR, DL, PartVT, DAG.getUNDEF(PartVT),
-                       Val, DAG.getVectorIdxConstant(0, DL));
 
   EVT ElementVT = PartVT.getVectorElementType();
   // Vector widening case, e.g. <2 x float> -> <4 x float>.  Shuffle in
