@@ -2636,6 +2636,9 @@ void BoUpSLP::buildTree(ArrayRef<Value *> Roots,
         if (!UserInst)
           continue;
 
+        if (isDeleted(UserInst))
+          continue;
+
         // Skip in-tree scalars that become vectors
         if (TreeEntry *UseEntry = getTreeEntry(U)) {
           Value *UseScalar = UseEntry->Scalars[0];
@@ -5047,11 +5050,9 @@ Value *BoUpSLP::vectorizeTree(ArrayRef<Value *> VL) {
                                   }).base());
     VF = std::max<unsigned>(VF, PowerOf2Ceil(NumValues));
     int UniqueVals = 0;
-    bool HasUndefs = false;
     for (Value *V : VL.drop_back(VL.size() - VF)) {
       if (isa<UndefValue>(V)) {
         ReuseShuffleIndicies.emplace_back(UndefMaskElem);
-        HasUndefs = true;
         continue;
       }
       if (isConstant(V)) {
@@ -5066,15 +5067,10 @@ Value *BoUpSLP::vectorizeTree(ArrayRef<Value *> VL) {
         ++UniqueVals;
       }
     }
-    if (HasUndefs && UniqueVals == 1 && UniqueValues.size() == 1) {
+    if (UniqueVals == 1 && UniqueValues.size() == 1) {
       // Emit pure splat vector.
-      // FIXME: why it is not identified as an identity.
-      unsigned NumUndefs = count(ReuseShuffleIndicies, UndefMaskElem);
-      if (NumUndefs == ReuseShuffleIndicies.size() - 1)
-        ReuseShuffleIndicies.append(VF - ReuseShuffleIndicies.size(),
-                                    UndefMaskElem);
-      else
-        ReuseShuffleIndicies.assign(VF, 0);
+      ReuseShuffleIndicies.append(VF - ReuseShuffleIndicies.size(),
+                                  UndefMaskElem);
     } else if (UniqueValues.size() >= VF - 1 || UniqueValues.size() <= 1) {
       ReuseShuffleIndicies.clear();
       UniqueValues.clear();
@@ -5255,7 +5251,9 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {
       if (!IsIdentity || NumElts != NumScalars)
         V = Builder.CreateShuffleVector(V, Mask);
 
-      if (NumElts != NumScalars) {
+      if ((!IsIdentity || Offset != 0 ||
+           !isa<UndefValue>(FirstInsert->getOperand(0))) &&
+          NumElts != NumScalars) {
         SmallVector<int> InsertMask(NumElts);
         std::iota(InsertMask.begin(), InsertMask.end(), 0);
         for (unsigned I = 0; I < NumElts; I++) {
@@ -5823,7 +5821,9 @@ BoUpSLP::vectorizeTree(ExtraValueToDebugLocsMap &ExternallyUsedValues) {
           LLVM_DEBUG(dbgs() << "SLP: \tvalidating user:" << *U << ".\n");
 
           // It is legal to delete users in the ignorelist.
-          assert((getTreeEntry(U) || is_contained(UserIgnoreList, U)) &&
+          assert((getTreeEntry(U) || is_contained(UserIgnoreList, U) ||
+                  (isa_and_nonnull<Instruction>(U) &&
+                   isDeleted(cast<Instruction>(U)))) &&
                  "Deleting out-of-tree value");
         }
       }
@@ -5902,7 +5902,8 @@ void BoUpSLP::optimizeGatherSequence() {
       Instruction *In = &*it++;
       if (isDeleted(In))
         continue;
-      if (!isa<InsertElementInst>(In) && !isa<ExtractElementInst>(In))
+      if (!isa<InsertElementInst>(In) && !isa<ExtractElementInst>(In) &&
+          !isa<ShuffleVectorInst>(In))
         continue;
 
       // Check if we can replace this instruction with any of the

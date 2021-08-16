@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/GlobalISel/GISelKnownBits.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -465,11 +466,15 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
   if (!Subtarget->hasBCNT(64))
     setOperationAction(ISD::CTPOP, MVT::i64, Expand);
 
-  if (Subtarget->hasFFBH())
+  if (Subtarget->hasFFBH()) {
+    setOperationAction(ISD::CTLZ, MVT::i32, Custom);
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, MVT::i32, Custom);
+  }
 
-  if (Subtarget->hasFFBL())
+  if (Subtarget->hasFFBL()) {
+    setOperationAction(ISD::CTTZ, MVT::i32, Custom);
     setOperationAction(ISD::CTTZ_ZERO_UNDEF, MVT::i32, Custom);
+  }
 
   // We only really have 32-bit BFE instructions (and 16-bit on VI).
   //
@@ -1061,7 +1066,7 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
           AMDGPU::lookupRsrcIntrinsic(IntrID)) {
     AttributeList Attr = Intrinsic::getAttributes(CI.getContext(),
                                                   (Intrinsic::ID)IntrID);
-    if (Attr.hasFnAttribute(Attribute::ReadNone))
+    if (Attr.hasFnAttr(Attribute::ReadNone))
       return false;
 
     SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
@@ -1076,7 +1081,7 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     }
 
     Info.flags = MachineMemOperand::MODereferenceable;
-    if (Attr.hasFnAttribute(Attribute::ReadOnly)) {
+    if (Attr.hasFnAttr(Attribute::ReadOnly)) {
       unsigned DMaskLanes = 4;
 
       if (RsrcIntr->IsImage) {
@@ -1100,7 +1105,7 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
       // FIXME: What does alignment mean for an image?
       Info.opc = ISD::INTRINSIC_W_CHAIN;
       Info.flags |= MachineMemOperand::MOLoad;
-    } else if (Attr.hasFnAttribute(Attribute::WriteOnly)) {
+    } else if (Attr.hasFnAttr(Attribute::WriteOnly)) {
       Info.opc = ISD::INTRINSIC_VOID;
 
       Type *DataTy = CI.getArgOperand(0)->getType();
@@ -1423,7 +1428,7 @@ bool SITargetLowering::isLegalAddressingMode(const DataLayout &DL,
 }
 
 bool SITargetLowering::canMergeStoresTo(unsigned AS, EVT MemVT,
-                                        const SelectionDAG &DAG) const {
+                                        const MachineFunction &MF) const {
   if (AS == AMDGPUAS::GLOBAL_ADDRESS || AS == AMDGPUAS::FLAT_ADDRESS) {
     return (MemVT.getSizeInBits() <= 4 * 32);
   } else if (AS == AMDGPUAS::PRIVATE_ADDRESS) {
@@ -4261,6 +4266,13 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
     MI.eraseFromParent();
     return BB;
   }
+  case AMDGPU::V_ADDC_U32_e32:
+  case AMDGPU::V_SUBB_U32_e32:
+  case AMDGPU::V_SUBBREV_U32_e32:
+    // These instructions have an implicit use of vcc which counts towards the
+    // constant bus limit.
+    TII->legalizeOperands(MI);
+    return BB;
   case AMDGPU::DS_GWS_INIT:
   case AMDGPU::DS_GWS_SEMA_BR:
   case AMDGPU::DS_GWS_BARRIER:
@@ -7341,7 +7353,6 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                    Op->getVTList(), Ops, VT, M->getMemOperand());
   }
   case Intrinsic::amdgcn_image_bvh_intersect_ray: {
-    SDLoc DL(Op);
     MemSDNode *M = cast<MemSDNode>(Op);
     SDValue NodePtr = M->getOperand(2);
     SDValue RayExtent = M->getOperand(3);
@@ -7360,12 +7371,21 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       return SDValue();
     }
 
-    bool IsA16 = RayDir.getValueType().getVectorElementType() == MVT::f16;
-    bool Is64 = NodePtr.getValueType() == MVT::i64;
-    unsigned Opcode = IsA16 ? Is64 ? AMDGPU::IMAGE_BVH64_INTERSECT_RAY_a16_nsa
-                                   : AMDGPU::IMAGE_BVH_INTERSECT_RAY_a16_nsa
-                            : Is64 ? AMDGPU::IMAGE_BVH64_INTERSECT_RAY_nsa
-                                   : AMDGPU::IMAGE_BVH_INTERSECT_RAY_nsa;
+    const bool IsA16 = RayDir.getValueType().getVectorElementType() == MVT::f16;
+    const bool Is64 = NodePtr.getValueType() == MVT::i64;
+    const unsigned NumVAddrs = IsA16 ? (Is64 ? 9 : 8) : (Is64 ? 12 : 11);
+    const bool UseNSA =
+        Subtarget->hasNSAEncoding() && NumVAddrs <= Subtarget->getNSAMaxSize();
+    const unsigned Opcodes[2][2][2] = {
+        {{AMDGPU::IMAGE_BVH_INTERSECT_RAY_sa,
+          AMDGPU::IMAGE_BVH64_INTERSECT_RAY_sa},
+         {AMDGPU::IMAGE_BVH_INTERSECT_RAY_a16_sa,
+          AMDGPU::IMAGE_BVH64_INTERSECT_RAY_a16_sa}},
+        {{AMDGPU::IMAGE_BVH_INTERSECT_RAY_nsa,
+          AMDGPU::IMAGE_BVH64_INTERSECT_RAY_nsa},
+         {AMDGPU::IMAGE_BVH_INTERSECT_RAY_a16_nsa,
+          AMDGPU::IMAGE_BVH64_INTERSECT_RAY_a16_nsa}}};
+    const unsigned Opcode = Opcodes[UseNSA][IsA16][Is64];
 
     SmallVector<SDValue, 16> Ops;
 
@@ -7405,6 +7425,20 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     packLanes(RayOrigin, true);
     packLanes(RayDir, true);
     packLanes(RayInvDir, false);
+
+    if (!UseNSA) {
+      // Build a single vector containing all the operands so far prepared.
+      if (NumVAddrs > 8) {
+        SDValue Undef = DAG.getUNDEF(MVT::i32);
+        Ops.append(16 - Ops.size(), Undef);
+      }
+      assert(Ops.size() == 8 || Ops.size() == 16);
+      SDValue MergedOps = DAG.getBuildVector(
+          Ops.size() == 16 ? MVT::v16i32 : MVT::v8i32, DL, Ops);
+      Ops.clear();
+      Ops.push_back(MergedOps);
+    }
+
     Ops.push_back(TDescr);
     if (IsA16)
       Ops.push_back(DAG.getTargetConstant(1, DL, MVT::i1));

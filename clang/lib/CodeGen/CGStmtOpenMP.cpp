@@ -450,7 +450,8 @@ static llvm::Function *emitOutlinedFunctionPrologue(
         Ctx, Ctx.getTranslationUnitDecl(), FO.S->getBeginLoc(),
         SourceLocation(), DeclarationName(), FunctionTy,
         Ctx.getTrivialTypeSourceInfo(FunctionTy), SC_Static,
-        /*isInlineSpecified=*/false, /*hasWrittenPrototype=*/false);
+        /*UsesFPIntrin=*/false, /*isInlineSpecified=*/false,
+        /*hasWrittenPrototype=*/false);
   }
   for (const FieldDecl *FD : RD->fields()) {
     QualType ArgType = FD->getType();
@@ -3620,7 +3621,8 @@ void CodeGenFunction::EmitOMPForDirective(const OMPForDirective &S) {
           CGM.getOpenMPRuntime().getOMPBuilder();
       llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
           AllocaInsertPt->getParent(), AllocaInsertPt->getIterator());
-      OMPBuilder.createWorkshareLoop(Builder, CLI, AllocaIP, NeedsBarrier);
+      OMPBuilder.applyWorkshareLoop(Builder.getCurrentDebugLocation(), CLI,
+                                    AllocaIP, NeedsBarrier);
       return;
     }
 

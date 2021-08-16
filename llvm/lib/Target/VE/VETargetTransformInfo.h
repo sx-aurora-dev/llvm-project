@@ -376,7 +376,8 @@ public:
   }
 
   void getUnrollingPreferences(Loop *L, ScalarEvolution &,
-                               TargetTransformInfo::UnrollingPreferences &UP);
+                               TargetTransformInfo::UnrollingPreferences &UP,
+                               OptimizationRemarkEmitter *ORE);
 
   bool shouldBuildRelLookupTables() const {
     // NEC nld doesn't support relative lookup tables.  It shows following
