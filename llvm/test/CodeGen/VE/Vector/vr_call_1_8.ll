@@ -194,4 +194,22 @@ define fastcc <8 x float> @vfadds8(<8 x float> %0, <8 x float> %1) {
   ret <8 x float> %3
 }
 
+; Function Attrs: nofree norecurse nosync nounwind readnone willreturn mustprogress
+define fastcc <7 x i17> @vi17adds7(<7 x i17> %0, <7 x i17> %1) {
+; CHECK-LABEL: vi17adds7:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, 131071
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
+; CHECK-NEXT:    or %s0, 7, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = add nsw nuw <7 x i17> %1, %0
+  ret <7 x i17> %3
+}
+
+
 !2 = !{!"clang version 13.0.0 (git@kaz7.github.com:sx-aurora-dev/llvm-project.git 03f601d9c971b381f909c9da25ecbee9e71aabbe)"}
