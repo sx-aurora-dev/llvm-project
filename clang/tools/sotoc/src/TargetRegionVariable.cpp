@@ -59,9 +59,14 @@ void TargetRegionVariable::determineShapes(const clang::QualType T) {
   }
 }
 
+/**
+ * \brief Check if the shape of a TargetRegionVariable contains an array.
+ *
+ * \return true if an array is contained, false otherwise
+ */
 bool TargetRegionVariable::containsArray() const {
   if (!Shapes.empty()) {
-    for (auto &Shape : Var.shapes()) {
+    for (auto Shape : Shapes) {
       if (Shape.isArray()) {
         return true;
       }
@@ -70,32 +75,24 @@ bool TargetRegionVariable::containsArray() const {
   return false;
 }
 
-bool TargetRegionVariable::isArray() const {
-  if (!Shapes.empty() && Shapes[0].isArray()) {
-    return true;
+/**
+ * \brief Check if the shape of a TargetRegionVariable contains an pointer.
+ *
+ * \return true if a pointer is contained, false otherwise
+ */
+bool TargetRegionVariable::containsPointer() const {
+  if (!Shapes.empty()) {
+    for (auto Shape : Shapes) {
+      if (Shape.isPointer()) {
+        return true;
+      }
+    }
   }
   return false;
 }
 
-// get depth of pointer nest
-int TargetRegionVariable::pointerDepth() const {
-  int i = 0;
-  if (!Shapes.empty()) {
-    for (i; Shapes[i].isPointer(); ++i)
-      ;
-  }
-  return i;
-}
-
-// bool TargetRegionVariable::isPointer() const {
-//  if (!Shapes.empty() && Shapes[0].isPointer()) {
-//    return true;
-//  }
-//  return false;
-// }
-
 bool TargetRegionVariable::passedByPointer() const {
-  if (isArray() || pointerDepth()) {
+  if (containsArray() || containsPointer()) {
     // Arrays are always passed by pointer
     return true;
   }

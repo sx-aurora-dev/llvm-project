@@ -65,7 +65,8 @@ public:
   void addHeader(const std::string &Header) { SystemHeaders.insert(Header); }
 
 private:
-  void generateVariableType(TargetRegionVariable &Var, llvm::raw_ostream &Out);
+  void generateVariableDecl(const TargetRegionVariable &Var,
+                            llvm::raw_ostream &Out);
   /// Generates a function prologue for a target region.
   /// This prologue consists of a function declaration and code to copy local
   /// variables into scope.

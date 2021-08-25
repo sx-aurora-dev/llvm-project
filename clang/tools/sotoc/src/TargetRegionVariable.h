@@ -190,11 +190,10 @@ public:
   };
   /// The Decl node of the variable.
   clang::VarDecl *getDecl() const { return Decl; };
-  /// Wether this variable is an array (at the top level) or not
+  /// Whether this variable's type contains an array or not
   bool containsArray() const;
-  bool isArray() const;
-  int pointerDepth() const;
-  // bool isPointer() const;
+  /// Whether this variable's type contains a pointer or not
+  bool containsPointer() const;
   /// Returns true if this variable is passed by pointer.
   /// This is the case for shared and first-private variables scalars and for
   /// arrays.
