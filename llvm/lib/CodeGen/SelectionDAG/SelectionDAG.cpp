@@ -560,7 +560,7 @@ ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
     return None;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
 #define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
-#define END_REGISTER_VP_SDNODE( ...) break;
+#define END_REGISTER_VP_SDNODE(VPOPC) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return None;

@@ -1406,67 +1406,6 @@ def int_vp_scatter: DefaultAttrsIntrinsic<[],
                               [ IntrArgMemOnly, IntrNoSync, IntrWillReturn ]>; // TODO allow IntrNoCapture for vectors of pointers
 // TODO allow IntrNoCapture for vectors of pointers
 
-// Reductions
-let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
-  def int_vp_reduce_add  : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_mul  : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_and  : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_or  : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_xor  : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_smax  : Intrinsic<[LLVMVectorElementType<0>],
-                                      [llvm_anyvector_ty,
-                                       LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                       llvm_i32_ty]>;
-  def int_vp_reduce_smin  : Intrinsic<[LLVMVectorElementType<0>],
-                                      [llvm_anyvector_ty,
-                                       LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                       llvm_i32_ty]>;
-  def int_vp_reduce_umax  : Intrinsic<[LLVMVectorElementType<0>],
-                                      [llvm_anyvector_ty,
-                                       LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                       llvm_i32_ty]>;
-  def int_vp_reduce_umin  : Intrinsic<[LLVMVectorElementType<0>],
-                                      [llvm_anyvector_ty,
-                                       LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                       llvm_i32_ty]>;
-  def int_vp_reduce_fmax : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                       llvm_i32_ty]>;
-  def int_vp_reduce_fmin : Intrinsic<[LLVMVectorElementType<0>],
-                                     [llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-}
-
-let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
-  def int_vp_reduce_fadd : Intrinsic<[LLVMVectorElementType<0>],
-                                     [LLVMVectorElementType<0>,
-                                      llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-  def int_vp_reduce_fmul : Intrinsic<[LLVMVectorElementType<0>],
-                                     [LLVMVectorElementType<0>,
-                                      llvm_anyvector_ty,
-                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                      llvm_i32_ty]>;
-}
-
 // Speculatable Binary operators
 let IntrProperties = [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_add : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
@@ -1767,6 +1706,74 @@ def int_vp_fma : Intrinsic<[ llvm_anyvector_ty ],
                            [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 
+// Reductions
+let IntrProperties = [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn] in {
+  def int_vp_reduce_fadd : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_fmul : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_add  : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_mul : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_and : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_or : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_xor : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_smax : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_smin : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_umax : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_umin : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_fmax : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+  def int_vp_reduce_fmin : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
+                                    [LLVMVectorElementType<0>,
+                                     llvm_anyvector_ty,
+                                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                     llvm_i32_ty]>;
+}
 
 def int_get_active_lane_mask:
   DefaultAttrsIntrinsic<[llvm_anyvector_ty],

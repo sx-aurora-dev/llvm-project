@@ -32,9 +32,8 @@ void PredicatedOperator::copyIRFlags(const Value *V, bool IncludeWrapFlags) {
 bool
 PredicatedInstruction::isVectorReduction() const {
   auto VPI = dyn_cast<VPIntrinsic>(this);
-  if (VPI) {
-    return VPI->isReductionOp();
-  }
+  if (VPI)
+    return isa<VPReductionIntrinsic>(VPI);
   auto II = dyn_cast<IntrinsicInst>(this);
   if (!II) return false;
 

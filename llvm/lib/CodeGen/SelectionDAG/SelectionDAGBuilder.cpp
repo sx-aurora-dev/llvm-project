@@ -7627,7 +7627,7 @@ static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
   switch (VPOC) {
 #define BEGIN_REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
 #define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD) RelaxedOC = ISD::RELAXEDSD;
-#define END_REGISTER_VP_SDNODE(...) break;
+#define END_REGISTER_VP_SDNODE(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return RelaxedOC;
@@ -7638,13 +7638,20 @@ static unsigned getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
   switch (VPIntrin.getIntrinsicID()) {
 #define BEGIN_REGISTER_VP_INTRINSIC(INTRIN, ...) case Intrinsic::INTRIN:
 #define BEGIN_REGISTER_VP_SDNODE(VPSDID, ...) ResOPC = ISD::VPSDID;
-#define END_REGISTER_VP_INTRINSIC(...) break;
+#define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
 
   if (!ResOPC.hasValue())
     llvm_unreachable(
         "Inconsistency: no SDNode available for this VPIntrinsic!");
+
+  if (*ResOPC == ISD::VP_REDUCE_SEQ_FADD ||
+      *ResOPC == ISD::VP_REDUCE_SEQ_FMUL) {
+    if (VPIntrin.getFastMathFlags().allowReassoc())
+      return *ResOPC == ISD::VP_REDUCE_SEQ_FADD ? ISD::VP_REDUCE_FADD
+                                                : ISD::VP_REDUCE_FMUL;
+  }
 
   return ResOPC.getValue();
 }
@@ -7656,9 +7663,10 @@ static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
     break;
 
 #define BEGIN_REGISTER_VP_SDNODE(NODEID, ...) case ISD::NODEID:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCAIROC, SCAIRINTRIN, SCASDNODE) \
-    ScalarOC = ISD::SCASDNODE;
-#define END_REGISTER_VP_SDNODE(...) break;
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCAIROC, SCAIRINTRIN,          \
+                            SCASDNODE)                                         \
+  ScalarOC = ISD::SCASDNODE;
+#define END_REGISTER_VP_SDNODE(NODEID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return ScalarOC;
@@ -7724,7 +7732,7 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
 
-  if (VPIntrin.isReductionOp()) {
+  if (isa<VPReductionIntrinsic>(VPIntrin)) {
     visitReduceVP(VPIntrin);
     return;
   }
