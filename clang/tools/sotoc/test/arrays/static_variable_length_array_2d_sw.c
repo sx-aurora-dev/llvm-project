@@ -2,11 +2,12 @@
 // RUN: %run-on-host | %filecheck %s
 
 #include <stdio.h>
+
 int main(){
   int j;
   int size=512;
   float A[2][size];
- 
+
   #pragma omp target map(tofrom:A[:2][:size])
   {
     int i;
