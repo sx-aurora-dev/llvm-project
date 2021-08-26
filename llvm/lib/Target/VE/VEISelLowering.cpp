@@ -3777,3 +3777,201 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return lowerVAARG(Op, DAG);
   }
 }
+
+static bool isPackableElemVT(EVT VT) {
+  if (VT.isVector())
+    return false;
+  return VT.getScalarSizeInBits() <= 32;
+}
+
+static bool isVectorRegisterVT(EVT VT) {
+  if (!VT.isVector() || VT.isScalableVector())
+    return false;
+  unsigned NumElems = VT.getVectorNumElements();
+  EVT ElemVT = VT.getVectorElementType();
+
+  // Not a legal element count.
+  if ((NumElems != 256) && (NumElems != 512))
+    return false;
+
+  // Legal as both regular and packed vectors.
+  if (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32)
+    return true;
+
+  // Only legal in regular mode.
+  return NumElems == 256;
+}
+
+static TargetLoweringBase::LegalizeKind
+getPromoteElementConversion(LLVMContext &Context, EVT ElemVT,
+                            unsigned NumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  LegalizeTypeAction LTA;
+  MVT PromotedElemVT;
+  if (ElemVT.isFloatingPoint()) {
+    PromotedElemVT = MVT::f32;
+    LTA = LegalizeTypeAction::TypePromoteFloat;
+  } else {
+    assert(ElemVT.isInteger());
+    PromotedElemVT = MVT::i32;
+    LTA = LegalizeTypeAction::TypePromoteInteger;
+  }
+  return LegalizeKind(LTA, EVT::getVectorVT(Context, PromotedElemVT, NumElems));
+}
+
+static TargetLoweringBase::LegalizeKind
+getWidenVectorConversion(LLVMContext &Context, EVT ElemVT,
+                         unsigned LegalNumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  return LegalizeKind(LegalizeTypeAction::TypeWidenVector,
+                      EVT::getVectorVT(Context, ElemVT, LegalNumElems));
+}
+
+static TargetLoweringBase::LegalizeKind
+getSplitVectorConversion(LLVMContext &Context, EVT ElemVT, unsigned NumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  return LegalizeKind(LegalizeTypeAction::TypeSplitVector,
+                      EVT::getVectorVT(Context, ElemVT, (NumElems + 1) / 2));
+}
+
+Optional<TargetLoweringBase::LegalizeKind>
+VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
+  // Do not interfere with SPU legalization.
+  if (!VT.isVector() || !Subtarget->enableVPU() ||
+      VT.getVectorNumElements() == 1)
+    return None;
+
+  EVT ElemVT = VT.getVectorElementType();
+  unsigned NumElems = VT.getVectorNumElements();
+  auto ElemBits = ElemVT.getScalarSizeInBits();
+
+  // Only use packed mode when surpassing the regular (256 elements) vector
+  // size.
+  const bool RequiresPackedRegister =
+      isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256);
+
+  // Already a legal type.
+  if (isVectorRegisterVT(VT) &&
+      (!RequiresPackedRegister || Subtarget->hasPackedMode()))
+    return None;
+
+  // Promote small elements to i/f32.
+  if (1 < ElemBits && ElemBits < 32)
+    return getPromoteElementConversion(Context, ElemVT, NumElems);
+
+  // Excessive element size.
+  if (ElemBits > 64)
+    return None; // Defer to builtin expansion for oversized vectors.
+
+  // Only use packed mode when surpassing the regular (256 elements) vector
+  // size.
+  const bool UsePackedRegister =
+      Subtarget->hasPackedMode() && RequiresPackedRegister;
+
+  // Widen to register width.
+  const unsigned RegisterNumElems = UsePackedRegister ? 512 : 256;
+  if (NumElems < RegisterNumElems)
+    return getWidenVectorConversion(Context, ElemVT, RegisterNumElems);
+
+  // Split to register width.
+  // TODO: Teach isel to split non-power-of-two vectors.
+  if (NumElems > RegisterNumElems && (NumElems % 2 == 0))
+    return getSplitVectorConversion(Context, ElemVT, NumElems);
+
+  // Type is either legal or not custom converted.
+  return None;
+}
+
+Optional<VETargetLowering::RegisterCountPair>
+VETargetLowering::getRegistersForCallingConv(LLVMContext &Context,
+                                             CallingConv::ID CC, EVT VT) const {
+  using RegisterCount = VETargetLowering::RegisterCountPair;
+  if (CC != CallingConv::Fast)
+    return None;
+  if (!VT.isVector() || VT.isScalableVector())
+    return None;
+
+  MVT RegisterVT;
+  EVT IntermediateVT;
+  unsigned NumIntermediates;
+  unsigned NumRegs = getVectorTypeBreakdownForCallingConv(
+      Context, CC, VT, IntermediateVT, NumIntermediates, RegisterVT);
+  return RegisterCount{RegisterVT, NumRegs};
+}
+
+unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
+    LLVMContext &Context, CallingConv::ID CC, EVT VT, EVT &IntermediateVT,
+    unsigned &NumIntermediates, MVT &RegisterVT) const {
+  auto DefaultImpl = [&]() {
+    return TargetLoweringBase::getVectorTypeBreakdownForCallingConv(
+        Context, CC, VT, IntermediateVT, NumIntermediates, RegisterVT);
+  };
+
+  auto ElemVT = VT.getVectorElementType();
+  unsigned NumElems = VT.isScalableVector() ? 0 : VT.getVectorNumElements();
+  const bool RequiresPackedRegister =
+      !VT.isScalableVector() &&
+      (isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256));
+
+  if (CC != CallingConv::Fast || VT.isScalableVector() ||
+      (isVectorRegisterVT(VT) &&
+       !(Subtarget->hasPackedMode() && RequiresPackedRegister)))
+    return DefaultImpl();
+
+  // fastcc - map everything to vregs.
+  auto LK = getCustomTypeConversion(Context, VT);
+  // Non-custom converted type - back to builtin logic.
+  if (!LK.hasValue())
+    return DefaultImpl();
+
+  // Compute the fixed point of the custom type conversion rules.
+  // We want to have the same vector layout inside functions as well as across
+  // function boundaries.
+
+  // IntermediateVT : used to copy the parts.
+  IntermediateVT = VT;
+  NumIntermediates = 1;
+
+  EVT NextVT;
+  do {
+    NextVT = LK->second;
+    auto LTA = LK->first;
+
+    switch (LTA) {
+    default:
+      return DefaultImpl();
+
+    case LegalizeTypeAction::TypePromoteFloat:
+    case LegalizeTypeAction::TypePromoteInteger:
+      // Promote elements across call boundaries.
+      IntermediateVT = NextVT;
+      break;
+
+    case LegalizeTypeAction::TypeWidenVector:
+      // Retain all information about the original vector length.
+      // That is, keep the IntermediateVT at the original vector length if
+      // possible
+      break;
+
+    case LegalizeTypeAction::TypeSplitVector:
+      // The last split results in the intermediate VT used for copying vectors
+      // at calls.
+      IntermediateVT = NextVT;
+      NumIntermediates *= 2;
+      break;
+    }
+
+    LK = getCustomTypeConversion(Context, NextVT);
+  } while (LK.hasValue());
+
+  RegisterVT = NextVT.getSimpleVT();
+
+  // Must converge in a valid RegisterVT.
+  return NumIntermediates;
+}

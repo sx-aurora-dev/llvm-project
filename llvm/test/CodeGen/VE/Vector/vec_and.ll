@@ -123,7 +123,16 @@ define fastcc <256 x i16> @and_vv_v256i16(<256 x i16> %x, <256 x i16> %y) {
 ; Function Attrs: nounwind
 define fastcc <128 x i16> @and_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK-LABEL: and_vv_v128i16:
-; CHECK-NOT:       vand
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, 65535
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
+; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v0, %v0, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
   %z = and <128 x i16> %x, %y
   ret <128 x i16> %z
 }

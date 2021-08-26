@@ -1050,6 +1050,14 @@ public:
     return Legal;
   }
 
+  // Use this to bypass the builtin legalization decisions for EVTs. The builtin
+  // scheme may lead to undesirable results (eg power-of-two-padding or
+  // scalarization) for EVT-typed nodes (eg v7f16).
+  virtual Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
+                                                         EVT VT) const {
+    return None;
+  }
+
   /// Return how this operation should be treated: either it is legal, needs to
   /// be promoted to a larger size, needs to be expanded to some other code
   /// sequence, or the target has a custom expander for it.
