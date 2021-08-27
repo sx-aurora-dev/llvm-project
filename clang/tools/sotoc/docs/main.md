@@ -1,4 +1,4 @@
-sotoc - Source Transformation for OpenMP Code (suggestions for a better name are greatly appreciated) {#mainpage}
+sotoc - Source Transformation for OpenMP Code {#mainpage}
 =====================================================================================================
 
 `sotoc` is written as a Clang tool and makes use of the Clang tooling
