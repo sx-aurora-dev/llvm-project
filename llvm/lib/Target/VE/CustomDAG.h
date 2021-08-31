@@ -69,6 +69,9 @@ bool isVVPUnaryOp(unsigned Opcode);
 bool isVVPConversionOp(unsigned VVPOC);
 bool isVVPReductionOp(unsigned VVPOC);
 
+// Whether the VVP reduction opcode has a start param.
+bool hasVVPReductionStartParam(unsigned VVPROPC);
+
 // Return the representative vector type of this operation.
 Optional<EVT> getIdiomaticType(SDNode *Op);
 
@@ -102,7 +105,7 @@ bool isAllTrueMask(SDValue Op);
 
 unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask);
 
-Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
+PosOpt getVVPReductionStartParamPos(unsigned ISD);
 
 Optional<unsigned> getReductionStartParamPos(unsigned ISD);
 
@@ -419,7 +422,8 @@ struct CustomDAG {
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
                               SDValue B, SDValue Mask, SDValue AVL,
                               SDNodeFlags Flags = SDNodeFlags()) const;
-  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
+  // Note: StartV can be SDValue()
+  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue StartV, SDValue VectorV,
                                  SDValue Mask, SDValue AVL,
                                  SDNodeFlags Flags = SDNodeFlags()) const;
   SDValue getLegalConvOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
@@ -430,9 +434,17 @@ struct CustomDAG {
                         SDNodeFlags Flags = SDNodeFlags()) const {
     if (isVVPConversionOp(VVPOpcode))
       return getLegalConvOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2], Flags);
-    if (isVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
-      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
-                                    Flags);
+    if (isVVPReductionOp(VVPOpcode)) {
+      // FIXME: Uses implicit structure knowlegdge of reductions with start
+      // being (Start, Vector, Mask, AVL) == 4 operands.
+      bool HasStartV = (Ops.size() == 4);
+      if (HasStartV)
+        return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
+                                      Ops[3], Flags);
+      else
+        return getLegalReductionOpVVP(VVPOpcode, ResVT, SDValue(), Ops[0],
+                                      Ops[1], Ops[2], Flags);
+    }
     if (isVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3], Flags);

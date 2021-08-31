@@ -87,6 +87,8 @@ VETargetMachine::VETargetMachine(const Target &T, const Triple &TT,
                         getEffectiveCodeModel(CM, CodeModel::Small), OL),
       TLOF(createTLOF()),
       Subtarget(TT, std::string(CPU), std::string(FS), *this) {
+  // FIXME: Issue FastISel in packed mode. Disabling it for now.
+  setFastISel(false);
   initAsmInfo();
 }
 
