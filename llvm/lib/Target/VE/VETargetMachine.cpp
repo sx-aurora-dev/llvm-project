@@ -124,6 +124,8 @@ void VEPassConfig::addIRPasses() {
 }
 
 bool VEPassConfig::addInstSelector() {
+  getVETargetMachine().setFastISel(false);
+  getVETargetMachine().setGlobalISel(false);
   addPass(createVEISelDag(getVETargetMachine()));
   return false;
 }
