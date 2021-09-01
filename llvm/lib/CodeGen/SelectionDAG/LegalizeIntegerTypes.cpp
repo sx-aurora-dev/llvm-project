@@ -144,7 +144,7 @@ void DAGTypeLegalizer::PromoteIntegerResult(SDNode *N, unsigned ResNo) {
   case ISD::VP_REDUCE_AND:
   case ISD::VP_REDUCE_XOR:
   case ISD::VP_REDUCE_OR:
-                         Res = PromoteIntRes_VP_REDUCE_nostart(N); break;
+                         Res = PromoteIntRes_VP_REDUCE(N); break;
 
   case ISD::ISNAN:       Res = PromoteIntRes_ISNAN(N); break;
 
@@ -4893,15 +4893,17 @@ SDValue DAGTypeLegalizer::PromoteIntRes_SCALAR_TO_VECTOR(SDNode *N) {
   return DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, NOutVT, Op);
 }
 
-SDValue DAGTypeLegalizer::PromoteIntRes_VP_REDUCE_nostart(SDNode *N) {
+SDValue DAGTypeLegalizer::PromoteIntRes_VP_REDUCE(SDNode *N) {
   SDLoc dl(N);
 
-  SDValue VecVal = N->getOperand(0);
-  SDValue MaskVal = N->getOperand(1);
-  SDValue LenVal = N->getOperand(2);
+  SDValue StartVal = N->getOperand(0);
+  SDValue VecVal = N->getOperand(1);
+  SDValue MaskVal = N->getOperand(2);
+  SDValue LenVal = N->getOperand(3);
   
   EVT VecVT = VecVal.getValueType();
 
+  assert(!StartVal.getValueType().isVector() && "Input must be a vector");
   assert(VecVal.getValueType().isVector() && "Input must be a vector");
   assert(MaskVal.getValueType().isVector() && "Mask must be a vector");
   assert(!LenVal.getValueType().isVector() && "Vector length must be a scalar");
@@ -4913,9 +4915,15 @@ SDValue DAGTypeLegalizer::PromoteIntRes_VP_REDUCE_nostart(SDNode *N) {
   // EVT NVecVT = EVT::getVectorVT(*DAG.getContext(), NOutVT, VecVT.getVectorNumElements(), VecVT.isScalableVector());
 
   // extend operand along with result type
-  SDValue ExtVecVal = (NVecVT == VecVT) ? VecVal : DAG.getNode(ISD::ANY_EXTEND, dl, NVecVT, VecVal);
+  SDValue ExtVecVal = (NVecVT == VecVT)
+                          ? VecVal
+                          : DAG.getNode(ISD::ANY_EXTEND, dl, NVecVT, VecVal);
+  SDValue ExtStartVal =
+      (NVecVT == VecVT) ? StartVal
+                        : DAG.getNode(ISD::ANY_EXTEND, dl,
+                                      NVecVT.getVectorElementType(), StartVal);
 
-  return DAG.getNode(N->getOpcode(), dl, NOutVT, {ExtVecVal, MaskVal, LenVal});
+  return DAG.getNode(N->getOpcode(), dl, NOutVT, {ExtStartVal, ExtVecVal, MaskVal, LenVal});
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_SPLAT_VECTOR(SDNode *N) {

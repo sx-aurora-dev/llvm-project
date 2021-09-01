@@ -7692,26 +7692,13 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
 
   Optional<unsigned> ReduceOCOpt = getISDForVPIntrinsic(VPIntrin);
   unsigned ReduceOC = ReduceOCOpt.getValue();
-  Optional<unsigned> ScalarOCOpt = getScalarISDForVPReduce(ReduceOC);
   SDValue ResV;
 
   // The reduction op without order constraints (fp only - integer is already unordered)
   Optional<unsigned> RelaxedOC = getRelaxedVPSD(ReduceOC);
   assert((!RelaxedOC || FMFSource) && "Expecting relaxable reductions to be fp ops");
 
-  if (RelaxedOC && FMFSource->hasAllowReassoc()) {
-    // fp reduction with reassoc flags -> use the relaxed opcode and scalarize the start value.
-    LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc FP\n";);
-    // Re-associatable reduction with an explicit start parameter for the strict
-    // case
-    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
-    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    auto ReducedV = DAG.getNode(RelaxedOC.getValue(), DL, ResVT,
-                                {VectorV, MaskV, EVLV}, OpFlags);
-    ResV = DAG.getNode(ScalarOCOpt.getValue(), DL, ResVT, ScalarV, ReducedV,
-                       OpFlags);
-
-  } else if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
+  if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
     // fp reduction w/o reassoc -> translate to a strigt opcode
     LLVM_DEBUG(dbgs() << "visitReduceVP: ordered FP\n";);
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
@@ -7719,11 +7706,13 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
     ResV = DAG.getNode(ReduceOC, DL, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
 
   } else {
+
     LLVM_DEBUG(dbgs() << "visitReduceVP: unordered\n";);
 
     // Re-associatable without strict case and no initial arg (eg ADD reduction)
-    SDValue VectorV = getValue(VPIntrin.getArgOperand(0));
-    ResV = DAG.getNode(ReduceOC, DL, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
+    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
+    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
+    ResV = DAG.getNode(ReduceOC, DL, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
   }
 
   setValue(&VPIntrin, ResV);
