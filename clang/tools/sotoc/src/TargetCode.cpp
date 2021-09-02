@@ -228,8 +228,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   for (auto &Var : TCR->capturedVars()) {
     if (!first) {
       Out << ", ";
+    } else {
+      first = false;
     }
-    first = false;
 
     if (Var.containsArray()) {
       for (auto &d : Var.variableArrayShapes()) {
@@ -237,9 +238,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
             << d.getVariableDimensionIndex() << "_" << Var.name() << ", ";
       }
     }
-    // Because arrays are passed by reference and (for our purposes) their type
-    // is 'void', the rest of their handling is the same as for scalars.
-    if (Var.containsArray()) {
+    // Because arrays (and nested pointers) are passed by reference and
+    // (for our purposes) their type is 'void', the rest of their handling
+    // is the same as for scalars.
+    if (Var.containsArray() || Var.containsPointer()) {
       Out << "void ";
     } else {
       // In cases where we get a first-private float, we want to recieve the
