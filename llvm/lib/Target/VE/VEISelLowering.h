@@ -388,6 +388,8 @@ public:
   /// } Packed Op Splitting
 
   /// VVP Lowering {
+  SDValue lowerReduction_VPToVVP(SDValue Op, SelectionDAG &DAG,
+                       VVPExpansionMode Mode) const;
   SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                        VVPExpansionMode Mode) const;
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,

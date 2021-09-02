@@ -552,15 +552,15 @@ Optional<unsigned> ISD::getVPExplicitVectorLengthIdx(unsigned Opcode) {
   }
 }
 
-Optional<unsigned>
-ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
+Optional<unsigned> ISD::GetFunctionOpCodeForVP(unsigned OpCode,
+                                               bool hasFPExcept) {
   // FIXME: Return strict opcodes in case of fp exceptions.
   switch (OpCode) {
   default:
     return None;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
 #define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
-#define END_REGISTER_VP_SDNODE( ...) break;
+#define END_REGISTER_VP_SDNODE(VPOPC) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return None;
@@ -575,6 +575,45 @@ unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
 #define END_REGISTER_VP_SDNODE(VPOPC) return ISD::VPOPC;
 #include "llvm/IR/VPIntrinsics.def"
   }
+}
+
+bool ISD::isVPReductionOp(unsigned VPISD) {
+  switch (VPISD) {
+  default:
+    break;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
+#define HANDLE_VP_REDUCTION(ACCUPOS, ...) return true;
+#define END_REGISTER_VP_SDNODE(VPOPC) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return false;
+}
+
+Optional<unsigned> ISD::getVPReductionStartParamPos(unsigned VPISD) {
+  switch (VPISD) {
+  default:
+    break;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
+#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) return STARTPOS;
+#define END_REGISTER_VP_SDNODE(VPOPC) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+
+Optional<unsigned> ISD::getVPReductionVectorParamPos(unsigned VPISD) {
+  switch (VPISD) {
+  default:
+    break;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
+#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) return VECTORPOS;
+#define END_REGISTER_VP_SDNODE(VPOPC) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
 }
 
 //===----------------------------------------------------------------------===//

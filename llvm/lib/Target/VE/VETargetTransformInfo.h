@@ -318,7 +318,7 @@ public:
       return false;
 
     // Bail on yet-unimplemented reductions
-    if (VPI->isReductionOp()) {
+    if (isa<VPReductionIntrinsic>(VPI)) {
       auto FPRed = dyn_cast<FPMathOperator>(VPI);
       bool Unordered = FPRed ? VPI->getFastMathFlags().allowReassoc() : true;
       return isSupportedReduction(VPI->getIntrinsicID(), Unordered);

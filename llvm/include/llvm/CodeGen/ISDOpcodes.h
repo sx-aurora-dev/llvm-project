@@ -1268,15 +1268,6 @@ static const int FIRST_TARGET_MEMORY_OPCODE = BUILTIN_OP_END + 500;
 /// For example ISD::AND for ISD::VECREDUCE_AND.
 NodeType getVecReduceBaseOpcode(unsigned VecReduceOpcode);
 
-/// Whether this is a vector-predicated Opcode.
-bool isVPOpcode(unsigned Opcode);
-
-/// The operand position of the vector mask.
-Optional<unsigned> getVPMaskIdx(unsigned Opcode);
-
-/// The operand position of the explicit vector length parameter.
-Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
-
 //===--------------------------------------------------------------------===//
 /// MemIndexedMode enum - This enum defines the load / store indexed
 /// addressing modes.
@@ -1435,6 +1426,10 @@ Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
 
 /// Translate this non-VP Opcode to its corresponding VP Opcode
 unsigned GetVPForFunctionOpCode(unsigned OpCode);
+
+bool isVPReductionOp(unsigned VPISD);
+Optional<unsigned> getVPReductionStartParamPos(unsigned VPISD);
+Optional<unsigned> getVPReductionVectorParamPos(unsigned VPISD);
 
 /// } Vector Predication
 

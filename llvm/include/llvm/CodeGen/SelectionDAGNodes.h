@@ -714,8 +714,8 @@ public:
       return false;
 
 #define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define HANDLE_VP_REDUCTION(...) IsReduction = true;
-#define END_REGISTER_VP_SDNODE(...) break;
+#define HANDLE_VP_REDUCTION(STARTPOS, ...) IsReduction = true;
+#define END_REGISTER_VP_SDNODE(VPISD) break;
 #include "llvm/IR/VPIntrinsics.def"
     }
 

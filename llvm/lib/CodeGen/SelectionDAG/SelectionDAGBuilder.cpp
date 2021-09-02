@@ -7627,7 +7627,7 @@ static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
   switch (VPOC) {
 #define BEGIN_REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
 #define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD) RelaxedOC = ISD::RELAXEDSD;
-#define END_REGISTER_VP_SDNODE(...) break;
+#define END_REGISTER_VP_SDNODE(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return RelaxedOC;
@@ -7638,13 +7638,20 @@ static unsigned getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
   switch (VPIntrin.getIntrinsicID()) {
 #define BEGIN_REGISTER_VP_INTRINSIC(INTRIN, ...) case Intrinsic::INTRIN:
 #define BEGIN_REGISTER_VP_SDNODE(VPSDID, ...) ResOPC = ISD::VPSDID;
-#define END_REGISTER_VP_INTRINSIC(...) break;
+#define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
 
   if (!ResOPC.hasValue())
     llvm_unreachable(
         "Inconsistency: no SDNode available for this VPIntrinsic!");
+
+  if (*ResOPC == ISD::VP_REDUCE_SEQ_FADD ||
+      *ResOPC == ISD::VP_REDUCE_SEQ_FMUL) {
+    if (VPIntrin.getFastMathFlags().allowReassoc())
+      return *ResOPC == ISD::VP_REDUCE_SEQ_FADD ? ISD::VP_REDUCE_FADD
+                                                : ISD::VP_REDUCE_FMUL;
+  }
 
   return ResOPC.getValue();
 }
@@ -7656,9 +7663,10 @@ static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
     break;
 
 #define BEGIN_REGISTER_VP_SDNODE(NODEID, ...) case ISD::NODEID:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCAIROC, SCAIRINTRIN, SCASDNODE) \
-    ScalarOC = ISD::SCASDNODE;
-#define END_REGISTER_VP_SDNODE(...) break;
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCAIROC, SCAIRINTRIN,          \
+                            SCASDNODE)                                         \
+  ScalarOC = ISD::SCASDNODE;
+#define END_REGISTER_VP_SDNODE(NODEID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return ScalarOC;
@@ -7684,26 +7692,13 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
 
   Optional<unsigned> ReduceOCOpt = getISDForVPIntrinsic(VPIntrin);
   unsigned ReduceOC = ReduceOCOpt.getValue();
-  Optional<unsigned> ScalarOCOpt = getScalarISDForVPReduce(ReduceOC);
   SDValue ResV;
 
   // The reduction op without order constraints (fp only - integer is already unordered)
   Optional<unsigned> RelaxedOC = getRelaxedVPSD(ReduceOC);
   assert((!RelaxedOC || FMFSource) && "Expecting relaxable reductions to be fp ops");
 
-  if (RelaxedOC && FMFSource->hasAllowReassoc()) {
-    // fp reduction with reassoc flags -> use the relaxed opcode and scalarize the start value.
-    LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc FP\n";);
-    // Re-associatable reduction with an explicit start parameter for the strict
-    // case
-    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
-    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    auto ReducedV = DAG.getNode(RelaxedOC.getValue(), DL, ResVT,
-                                {VectorV, MaskV, EVLV}, OpFlags);
-    ResV = DAG.getNode(ScalarOCOpt.getValue(), DL, ResVT, ScalarV, ReducedV,
-                       OpFlags);
-
-  } else if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
+  if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
     // fp reduction w/o reassoc -> translate to a strigt opcode
     LLVM_DEBUG(dbgs() << "visitReduceVP: ordered FP\n";);
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
@@ -7711,11 +7706,13 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
     ResV = DAG.getNode(ReduceOC, DL, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
 
   } else {
+
     LLVM_DEBUG(dbgs() << "visitReduceVP: unordered\n";);
 
     // Re-associatable without strict case and no initial arg (eg ADD reduction)
-    SDValue VectorV = getValue(VPIntrin.getArgOperand(0));
-    ResV = DAG.getNode(ReduceOC, DL, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
+    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
+    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
+    ResV = DAG.getNode(ReduceOC, DL, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
   }
 
   setValue(&VPIntrin, ResV);
@@ -7724,7 +7721,7 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
 
-  if (VPIntrin.isReductionOp()) {
+  if (isa<VPReductionIntrinsic>(VPIntrin)) {
     visitReduceVP(VPIntrin);
     return;
   }

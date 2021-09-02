@@ -358,8 +358,8 @@ private:
   SDValue PromoteIntRes_Rotate(SDNode *N);
   SDValue PromoteIntRes_FunnelShift(SDNode *N);
 
-  // vp reduction without start value
-  SDValue PromoteIntRes_VP_REDUCE_nostart(SDNode *N);
+  // vp reduction.
+  SDValue PromoteIntRes_VP_REDUCE(SDNode *N);
 
   // Integer Operand Promotion.
   bool PromoteIntegerOperand(SDNode *N, unsigned OpNo);
