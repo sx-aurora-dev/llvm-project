@@ -12,7 +12,7 @@ int main(){
   #pragma omp target map(tofrom: imp_dim_array[0:size1][0:size2])
   {
     for (int i = 0; i < size1; ++i) {
-      for (int j = 0 ; j< size2; ++j) {
+      for (int j = 0 ; j < size2; ++j) {
         imp_dim_array[i][j] = i - j;
       }
     }
