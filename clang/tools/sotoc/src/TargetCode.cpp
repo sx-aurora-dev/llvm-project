@@ -63,6 +63,7 @@ bool TargetCode::addCodeFragmentFront(
 }
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
+
   bool stdlib = false;
   bool unistd = false;
 
@@ -346,7 +347,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
     if (Var.passedByPointer() &&
         !Var.containsPointer() && !Var.containsArray()) {
       Out << "\n  *__sotoc_var_" << Var.name() << " = " << Var.name() << ";";
-    } else if (Var.containsPointer()){ // <- TODO: is this completely correct?
+    } else if (Var.containsPointer()){
       Out << "\n  __sotoc_var_" << Var.name() << " = " << Var.name() << ";";
     }
   }
