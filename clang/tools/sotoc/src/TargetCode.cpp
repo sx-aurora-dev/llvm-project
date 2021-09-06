@@ -27,6 +27,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "Debug.h"
@@ -62,6 +63,10 @@ bool TargetCode::addCodeFragmentFront(
 }
 
 void TargetCode::generateCode(llvm::raw_ostream &Out) {
+
+  bool stdlib = false;
+  bool unistd = false;
+
   for (auto &i : SystemHeaders) {
     std::string Header(i);
     size_t include_pos = Header.rfind("nclude/");
@@ -69,13 +74,30 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
       Header.erase(0, include_pos + strlen("nclude/"));
     }
     Out << "#include <" << Header << ">\n";
+    if (Header.compare("unistd.h") == 0) {
+      unistd = true;
+    } else if (Header.compare("stdlib.h") == 0) {
+      stdlib = true;
+    }
   }
 
-  // Override omp_is_initial_device() with macro, becuse this
+  if (!stdlib && std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY")
+                               .getValueOr("0")
+                               .c_str())) {
+    Out << "#include <stdlib.h>\n";
+  }
+  if (!unistd && std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY")
+                               .getValueOr("0")
+                               .c_str())) {
+    Out << "#include <unistd.h>\n";
+  }
+
+  // Override omp_is_initial_device() with macro, because this
   //   Out << "static inline int omp_is_initial_device(void) {return 0;}\n";
   // fails with the clang compiler. This still might cause problems, if
   // someone tries to include the omp.h header after the prolouge.
   Out << "#define omp_is_initial_device() 0\n";
+  Out << "#define omp_get_thread_limit() omp_get_num_threads()\n";
 
   for (auto i = CodeFragments.begin(), e = CodeFragments.end(); i != e; ++i) {
 
@@ -98,6 +120,7 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
     Out << "\n";
   }
   Out << "#undef omp_is_initial_device\n";
+  Out << "#undef omp_get_thread_limit\n";
 }
 
 void TargetCode::generateArgument(const TargetRegionVariable &Arg,
@@ -121,6 +144,82 @@ void TargetCode::generateArgument(const TargetRegionVariable &Arg,
   Out << LHS.str() << Arg.name() << RHS.str();
 }
 
+/**
+ * \brief Generate the variable declaration of a transferred variable.
+ *
+ * Generate the variable declaration (including setting the variable to the
+ * proper value) of a transferred variable and print it to the specified output
+ * stream.
+ * \param Var The variable for which to print the declaration
+ * \param Out The output stream to which to write the variable declaration
+ */
+void TargetCode::generateVariableDecl(const TargetRegionVariable &Var,
+                                      llvm::raw_ostream &Out) {
+  std::string lValueStore = std::string(Var.name());;
+  std::string rValueStore = std::string();
+
+  for (auto Shape : Var.shapes()) {
+    switch (Shape.getKind()) {
+    case TargetRegionVariableShape::ShapeKind::Pointer:
+      lValueStore = "*" + lValueStore;
+      rValueStore = "*" + rValueStore;
+      break;
+    case TargetRegionVariableShape::ShapeKind::Paren:
+      if (rValueStore.empty()) {
+        break;
+      }
+      lValueStore = "(" + lValueStore + ")";
+      rValueStore = "(" + rValueStore + ")";
+      break;
+    case TargetRegionVariableShape::ShapeKind::ConstantArray:
+      if (rValueStore.empty()) {
+        // make first dimension of array implicit in cast
+        lValueStore = "(* " + lValueStore + ")";
+        rValueStore = "(*)";
+        break;
+      }
+      lValueStore = lValueStore +
+                    "[" + Shape.getConstantDimensionExpr().str() + "]";
+      rValueStore = rValueStore +
+                    "[" + Shape.getConstantDimensionExpr().str() + "]";
+      break;
+    case TargetRegionVariableShape::ShapeKind::VariableArray:
+    if (rValueStore.empty()) {
+        // make first dimension of array implicit
+        lValueStore = "(* " + lValueStore + ")";
+        rValueStore = "(*)";
+        break;
+      }
+      lValueStore = lValueStore + "[" + "__sotoc_vla_dim" +
+                    std::to_string(Shape.getVariableDimensionIndex()) + "_" +
+                    Var.name().str() + "]";
+      rValueStore = rValueStore + "[" + "__sotoc_vla_dim" +
+                    std::to_string(Shape.getVariableDimensionIndex()) + "_" +
+                    Var.name().str() + "]";
+      break;
+    }
+  }
+
+  // Finish the l-value (by adding the base type)
+  lValueStore = Var.baseTypeName().str() + " " + lValueStore;
+
+  // Finish the r-value (modify value and then add transferred variable name)
+  if (rValueStore.empty()) {
+    // Scalar being passed by pointer; dereference transferred value
+    rValueStore = "*";
+  } else {
+    // Currently rValueStore contains a type usefull for an explicit cast of the
+    // transferred variable, which would be completed as follows:
+    //rValueStore = "(" + Var.baseTypeName().str() + rValueStore + ") ";
+    // We currently do not need this cast, so we simply empty rValueStore
+    rValueStore = "";
+  }
+  rValueStore = rValueStore + "__sotoc_var_" + Var.name().str();
+
+  // Output the finished declaration to the output stream
+  Out << "  " << lValueStore << " = " << rValueStore << ";\n";
+}
+
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
                                           llvm::raw_ostream &Out) {
   bool first = true;
@@ -130,18 +229,20 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   for (auto &Var : TCR->capturedVars()) {
     if (!first) {
       Out << ", ";
+    } else {
+      first = false;
     }
-    first = false;
 
-    if (Var.isArray()) {
+    if (Var.containsArray()) {
       for (auto &d : Var.variableArrayShapes()) {
         Out << "unsigned long long __sotoc_vla_dim"
             << d.getVariableDimensionIndex() << "_" << Var.name() << ", ";
       }
     }
-    // Because arrays are passed by reference and (for our purposes) their type
-    // is 'void', the rest of their handling ist the same as for scalars.
-    if (Var.isArray()) {
+    // Because arrays (and nested pointers) are passed by reference and
+    // (for our purposes) their type is 'void', the rest of their handling
+    // is the same as for scalars.
+    if (Var.containsArray() || Var.containsPointer()) {
       Out << "void ";
     } else {
       // In cases where we get a first-private float, we want to recieve the
@@ -164,7 +265,8 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
 
   unsigned int clauseParam = 0;
   for (auto C : TCR->getOMPClauses()) {
-    if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) &&
+    if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads ||
+         C->getClauseKind() == clang::OpenMPClauseKind::OMPC_thread_limit) &&
         !C->isImplicit()) {
       if (!first) {
         Out << ", ";
@@ -178,41 +280,25 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
 
   Out << ")\n{\n";
 
+  // Target Delay
+  if (std::atoi(llvm::sys::Process::GetEnv("NEC_TARGET_DELAY")
+                    .getValueOr("0")
+                    .c_str())) {
+    Out << "sleep(atoi((getenv(\"NEC_TARGET_DELAY\") != NULL) ? "
+           "getenv(\"NEC_TARGET_DELAY\") : \"0\"));\n";
+  }
+
   // bring captured scalars into scope
   for (auto &Var : TCR->capturedVars()) {
     // Ignore everything not passed by reference here
     if (Var.passedByPointer()) {
-      // Handle multi-dimensional arrays
-      if (Var.isArray()) {
-        // Declare the arrays as a pointer. This way we can assign it a pointer
-        // However, this also means we have to ignore the first array
-        // dimension.
-        Out << "  " << Var.baseTypeName() << " (*" << Var.name() << ")";
+      generateVariableDecl(Var, Out);
 
-        // For every array dimension other then the first: declare them by
-        // adding the array brackets ('[', ']') to the declaration. Also add
-        // the size of this dimension if we have it.
-        bool first = true;
-        for (auto &Shape : Var.shapes()) {
-          // We need to discard the first element
-          if (first) {
-            first = false;
-            continue;
-          }
-          Out << "[";
-          if (Shape.isConstantArray()) {
-            Out << Shape.getConstantDimensionExpr();
-          } else if (Shape.isVariableArray()) {
-            Out << "__sotoc_vla_dim" << Shape.getVariableDimensionIndex() << "_"
-                << Var.name();
-          }
-          Out << "]";
-        }
-        // After we have declare the array, we also need to assign it.
-        // We may also have to adjust the array bounds if we only get a slice
-        // of the array (in the first dimesion. All other dimensions should
-        // not require adjustment as their slicing is ignored)
-        Out << " =  __sotoc_var_" << Var.name() << ";\n";
+      // We may also have to adjust the array bounds if we only get a slice
+      // of the array; Move the bounds if we have a slice here
+      // (Only necessary in the first dimesion. All other dimensions should
+      // not require adjustment as their slicing is ignored)
+      if (Var.containsArray()) {
         // Move the bounds if we have a slice
         auto LowerBound = Var.arrayLowerBound();
         if (LowerBound.hasValue()) {
@@ -220,19 +306,12 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
           LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
           Out << ";\n";
         }
-      } else if (Var.isPointer()){
-        Out << Var.baseTypeName() << "* " << Var.name() << " = "
-            << "__sotoc_var_" << Var.name() << ";\n";
-      } else {
-        // Handle all other types passed by reference
-        Out << Var.baseTypeName() << " " << Var.name() << " = "
-            << "*__sotoc_var_" << Var.name() << ";\n";
       }
+
       // After recieving floats as unsigned long long we want to change them
       // back to floats but without conversion as they already are formated
       // according to 32 bit floating point spec.
-    } else if (!Var.isArray() && !Var.passedByPointer() &&
-               Var.baseTypeName() == "float") {
+    } else if (!Var.passedByPointer() && Var.baseTypeName() == "float") {
       Out << "float " << Var.name() << " = *(float*)&(__sotoc_conv_var_"
           << Var.name() << ");\n";
     }
@@ -265,9 +344,10 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
   Out << "\n";
   // copy values from scalars from scoped vars back into pointers
   for (auto &Var : TCR->capturedVars()) {
-    if (Var.passedByPointer() && !Var.isArray() && !Var.isPointer()) {
+    if (Var.passedByPointer() &&
+        !Var.containsPointer() && !Var.containsArray()) {
       Out << "\n  *__sotoc_var_" << Var.name() << " = " << Var.name() << ";";
-    } else if (Var.isPointer()){
+    } else if (Var.containsPointer()){
       Out << "\n  __sotoc_var_" << Var.name() << " = " << Var.name() << ";";
     }
   }

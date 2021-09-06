@@ -11,6 +11,7 @@ set(SOTOC_TEST_COMPILER ${CMAKE_BINARY_DIR}/bin/clang CACHE STRING
 
 # We assume libomp is available in the lib dir
 set(SOTOC_LIBOMP_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
+set(SOTOC_LIBOMPT_LIBRARY_DIR ${CMAKE_BINARY_DIR}/projects/openmp/libomptarget)
 set(SOTOC_OMP_HEADER_DIR ${CMAKE_BINARY_DIR}/projects/openmp/runtime/src)
 
 

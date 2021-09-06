@@ -50,8 +50,8 @@ void TargetRegionVariable::determineShapes(const clang::QualType T) {
     Shapes.push_back(TargetRegionVariableShape());
     return determineShapes(PT->getPointeeType());
   } else if (auto *PT = llvm::dyn_cast<clang::ParenType>(T.getTypePtr())) {
-    // Clang uses ParenType as sugar when there are parenthesis in the type
-    // declaration (I hate my life). Ignore that.
+    // Clang uses ParenType as when there are parenthesis in the type declaration.
+    Shapes.push_back(TargetRegionVariableShape(PT));
     return determineShapes(PT->getInnerType());
   } else {
     // We have found the base type (without array dimensions or pointer specifiers).
@@ -59,22 +59,40 @@ void TargetRegionVariable::determineShapes(const clang::QualType T) {
   }
 }
 
-bool TargetRegionVariable::isArray() const {
-  if (!Shapes.empty() && Shapes[0].isArray()) {
-    return true;
+/**
+ * \brief Check if the shape of a TargetRegionVariable contains an array.
+ *
+ * \return true if an array is contained, false otherwise
+ */
+bool TargetRegionVariable::containsArray() const {
+  if (!Shapes.empty()) {
+    for (auto Shape : Shapes) {
+      if (Shape.isArray()) {
+        return true;
+      }
+    }
   }
   return false;
 }
 
-bool TargetRegionVariable::isPointer() const {
-  if (!Shapes.empty() && Shapes[0].isPointer()) {
-    return true;
+/**
+ * \brief Check if the shape of a TargetRegionVariable contains an pointer.
+ *
+ * \return true if a pointer is contained, false otherwise
+ */
+bool TargetRegionVariable::containsPointer() const {
+  if (!Shapes.empty()) {
+    for (auto Shape : Shapes) {
+      if (Shape.isPointer()) {
+        return true;
+      }
+    }
   }
   return false;
 }
 
 bool TargetRegionVariable::passedByPointer() const {
-  if (isArray()||isPointer()) {
+  if (containsArray() || containsPointer()) {
     // Arrays are always passed by pointer
     return true;
   }
