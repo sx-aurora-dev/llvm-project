@@ -614,9 +614,7 @@ addMemRefAccessConstraints(const AffineValueMap &srcAccessMap,
   unsigned srcNumLocalIds = srcLocalVarCst.getNumLocalIds();
   unsigned dstNumLocalIds = destLocalVarCst.getNumLocalIds();
   unsigned numLocalIdsToAdd = srcNumLocalIds + dstNumLocalIds;
-  for (unsigned i = 0; i < numLocalIdsToAdd; i++) {
-    dependenceDomain->addLocalId(dependenceDomain->getNumLocalIds());
-  }
+  dependenceDomain->appendLocalId(numLocalIdsToAdd);
 
   unsigned numDims = dependenceDomain->getNumDimIds();
   unsigned numSymbols = dependenceDomain->getNumSymbolIds();
@@ -664,8 +662,9 @@ addMemRefAccessConstraints(const AffineValueMap &srcAccessMap,
       assert(isValidSymbol(symbol));
       // Check if the symbol is a constant.
       if (auto cOp = symbol.getDefiningOp<ConstantIndexOp>())
-        dependenceDomain->setIdToConstant(valuePosMap.getSymPos(symbol),
-                                          cOp.getValue());
+        dependenceDomain->addBound(FlatAffineConstraints::EQ,
+                                   valuePosMap.getSymPos(symbol),
+                                   cOp.getValue());
     }
   };
 
@@ -858,9 +857,7 @@ static void computeDirectionVector(
   unsigned numIdsToEliminate = dependenceDomain->getNumIds();
   // Add new variables to 'dependenceDomain' to represent the direction
   // constraints for each shared loop.
-  for (unsigned j = 0; j < numCommonLoops; ++j) {
-    dependenceDomain->addDimId(j);
-  }
+  dependenceDomain->insertDimId(/*pos=*/0, /*num=*/numCommonLoops);
 
   // Add equality constraints for each common loop, setting newly introduced
   // variable at column 'j' to the 'dst' IV minus the 'src IV.
@@ -885,10 +882,12 @@ static void computeDirectionVector(
   dependenceComponents->resize(numCommonLoops);
   for (unsigned j = 0; j < numCommonLoops; ++j) {
     (*dependenceComponents)[j].op = commonLoops[j].getOperation();
-    auto lbConst = dependenceDomain->getConstantLowerBound(j);
+    auto lbConst =
+        dependenceDomain->getConstantBound(FlatAffineConstraints::LB, j);
     (*dependenceComponents)[j].lb =
         lbConst.getValueOr(std::numeric_limits<int64_t>::min());
-    auto ubConst = dependenceDomain->getConstantUpperBound(j);
+    auto ubConst =
+        dependenceDomain->getConstantBound(FlatAffineConstraints::UB, j);
     (*dependenceComponents)[j].ub =
         ubConst.getValueOr(std::numeric_limits<int64_t>::max());
   }

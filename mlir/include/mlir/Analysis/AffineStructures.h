@@ -194,14 +194,23 @@ public:
     return inequalities.getRow(idx);
   }
 
-  /// Adds a lower or an upper bound for the identifier at the specified
-  /// position with constraints being drawn from the specified bound map. If
-  /// `eq` is true, add a single equality equal to the bound map's first result
-  /// expr.
+  /// The type of bound: equal, lower bound or upper bound.
+  enum BoundType { EQ, LB, UB };
+
+  /// Adds a bound for the identifier at the specified position with constraints
+  /// being drawn from the specified bound map. In case of an EQ bound, the
+  /// bound map is expected to have exactly one result. In case of a LB/UB, the
+  /// bound map may have more than one result, for each of which an inequality
+  /// is added.
   /// Note: The dimensions/symbols of this FlatAffineConstraints must match the
   /// dimensions/symbols of the affine map.
-  LogicalResult addLowerOrUpperBound(unsigned pos, AffineMap boundMap, bool eq,
-                                     bool lower = true);
+  LogicalResult addBound(BoundType type, unsigned pos, AffineMap boundMap);
+
+  /// Adds a constant bound for the specified identifier.
+  void addBound(BoundType type, unsigned pos, int64_t value);
+
+  /// Adds a constant bound for the specified expression.
+  void addBound(BoundType type, ArrayRef<int64_t> expr, int64_t value);
 
   /// Returns the constraint system as an integer set. Returns a null integer
   /// set if the system has no constraints, or if an integer set couldn't be
@@ -224,11 +233,6 @@ public:
   /// Adds an equality from the coefficients specified in `eq`.
   void addEquality(ArrayRef<int64_t> eq);
 
-  /// Adds a constant lower bound constraint for the specified identifier.
-  void addConstantLowerBound(unsigned pos, int64_t lb);
-  /// Adds a constant upper bound constraint for the specified identifier.
-  void addConstantUpperBound(unsigned pos, int64_t ub);
-
   /// Adds a new local identifier as the floordiv of an affine function of other
   /// identifiers, the coefficients of which are provided in `dividend` and with
   /// respect to a positive constant `divisor`. Two constraints are added to the
@@ -236,24 +240,26 @@ public:
   /// q = dividend floordiv c    <=>   c*q <= dividend <= c*q + c - 1.
   void addLocalFloorDiv(ArrayRef<int64_t> dividend, int64_t divisor);
 
-  /// Adds a constant lower bound constraint for the specified expression.
-  void addConstantLowerBound(ArrayRef<int64_t> expr, int64_t lb);
-  /// Adds a constant upper bound constraint for the specified expression.
-  void addConstantUpperBound(ArrayRef<int64_t> expr, int64_t ub);
-
-  /// Sets the identifier at the specified position to a constant.
-  void setIdToConstant(unsigned pos, int64_t val);
-
   /// Swap the posA^th identifier with the posB^th identifier.
   virtual void swapId(unsigned posA, unsigned posB);
 
-  /// Add identifiers of the specified kind - specified positions are relative
-  /// to the kind of identifier. The coefficient column corresponding to the
-  /// added identifier is initialized to zero.
-  void addDimId(unsigned pos);
-  void addSymbolId(unsigned pos);
-  void addLocalId(unsigned pos);
-  virtual unsigned addId(IdKind kind, unsigned pos);
+  /// Insert `num` identifiers of the specified kind at position `pos`.
+  /// Positions are relative to the kind of identifier. The coefficient columns
+  /// corresponding to the added identifiers are initialized to zero. Return the
+  /// absolute column position (i.e., not relative to the kind of identifier)
+  /// of the first added identifier.
+  unsigned insertDimId(unsigned pos, unsigned num = 1);
+  unsigned insertSymbolId(unsigned pos, unsigned num = 1);
+  unsigned insertLocalId(unsigned pos, unsigned num = 1);
+  virtual unsigned insertId(IdKind kind, unsigned pos, unsigned num = 1);
+
+  /// Append `num` identifiers of the specified kind after the last identifier.
+  /// of that kind. Return the position of the first appended column. The
+  /// coefficient columns corresponding to the added identifiers are initialized
+  /// to zero.
+  unsigned appendDimId(unsigned num = 1);
+  unsigned appendSymbolId(unsigned num = 1);
+  unsigned appendLocalId(unsigned num = 1);
 
   /// Composes an affine map whose dimensions and symbols match one to one with
   /// the dimensions and symbols of this FlatAffineConstraints. The results of
@@ -349,13 +355,10 @@ public:
       SmallVectorImpl<int64_t> *ub = nullptr, unsigned *minLbPos = nullptr,
       unsigned *minUbPos = nullptr) const;
 
-  /// Returns the constant lower bound for the pos^th identifier if there is
-  /// one; None otherwise.
-  Optional<int64_t> getConstantLowerBound(unsigned pos) const;
-
-  /// Returns the constant upper bound for the pos^th identifier if there is
-  /// one; None otherwise.
-  Optional<int64_t> getConstantUpperBound(unsigned pos) const;
+  /// Returns the constant bound for the pos^th identifier if there is one;
+  /// None otherwise.
+  // TODO: Support EQ bounds.
+  Optional<int64_t> getConstantBound(BoundType type, unsigned pos) const;
 
   /// Gets the lower and upper bound of the `offset` + `pos`th identifier
   /// treating [0, offset) U [offset + num, symStartPos) as dimensions and
@@ -611,14 +614,18 @@ public:
   /// the columns in the current one regarding numbers and values.
   void addAffineIfOpDomain(AffineIfOp ifOp);
 
-  /// Adds a lower or an upper bound for the identifier at the specified
-  /// position with constraints being drawn from the specified bound map and
-  /// operands. If `eq` is true, add a single equality equal to the bound map's
-  /// first result expr.
-  LogicalResult addLowerOrUpperBound(unsigned pos, AffineMap boundMap,
-                                     ValueRange operands, bool eq,
-                                     bool lower = true);
-  using FlatAffineConstraints::addLowerOrUpperBound;
+  /// Adds a bound for the identifier at the specified position with constraints
+  /// being drawn from the specified bound map and operands. In case of an
+  /// EQ bound, the  bound map is expected to have exactly one result. In case
+  /// of a LB/UB, the bound map may have more than one result, for each of which
+  /// an inequality is added.
+  LogicalResult addBound(BoundType type, unsigned pos, AffineMap boundMap,
+                         ValueRange operands);
+
+  /// Adds a constant bound for the identifier associated with the given Value.
+  void addBound(BoundType type, Value val, int64_t value);
+
+  using FlatAffineConstraints::addBound;
 
   /// Returns the bound for the identifier at `pos` from the inequality at
   /// `ineqPos` as a 1-d affine value map (affine map + operands). The returned
@@ -640,11 +647,6 @@ public:
                                ArrayRef<AffineMap> ubMaps,
                                ArrayRef<Value> operands);
 
-  /// Sets the identifier corresponding to the specified Value `value` to a
-  /// constant. Asserts if the `value` is not found.
-  void setIdToConstant(Value value, int64_t val);
-  using FlatAffineConstraints::setIdToConstant;
-
   /// Looks up the position of the identifier with the specified Value. Returns
   /// true if found (false otherwise). `pos` is set to the (column) position of
   /// the identifier.
@@ -657,16 +659,31 @@ public:
   /// Swap the posA^th identifier with the posB^th identifier.
   void swapId(unsigned posA, unsigned posB) override;
 
-  /// Add identifiers of the specified kind - specified positions are relative
-  /// to the kind of identifier. The coefficient column corresponding to the
-  /// added identifier is initialized to zero. `val` is the Value corresponding
-  /// to the identifier that can optionally be provided.
-  void addDimId(unsigned pos, Value val);
-  using FlatAffineConstraints::addDimId;
-  void addSymbolId(unsigned pos, Value val);
-  using FlatAffineConstraints::addSymbolId;
-  unsigned addId(IdKind kind, unsigned pos) override;
-  unsigned addId(IdKind kind, unsigned pos, Value val);
+  /// Insert identifiers of the specified kind at position `pos`. Positions are
+  /// relative to the kind of identifier. The coefficient columns corresponding
+  /// to the added identifiers are initialized to zero. `vals` are the Values
+  /// corresponding to the identifiers. Return the absolute column position
+  /// (i.e., not relative to the kind of identifier) of the first added
+  /// identifier.
+  ///
+  /// Note: Empty Values are allowed in `vals`.
+  unsigned insertDimId(unsigned pos, ValueRange vals);
+  using FlatAffineConstraints::insertDimId;
+  unsigned insertSymbolId(unsigned pos, ValueRange vals);
+  using FlatAffineConstraints::insertSymbolId;
+  unsigned insertId(IdKind kind, unsigned pos, unsigned num = 1) override;
+  unsigned insertId(IdKind kind, unsigned pos, ValueRange vals);
+
+  /// Append identifiers of the specified kind after the last identifier of that
+  /// kind. The coefficient columns corresponding to the added identifiers are
+  /// initialized to zero. `vals` are the Values corresponding to the
+  /// identifiers. Return the position of the first added column.
+  ///
+  /// Note: Empty Values are allowed in `vals`.
+  unsigned appendDimId(ValueRange vals);
+  using FlatAffineConstraints::appendDimId;
+  unsigned appendSymbolId(ValueRange vals);
+  using FlatAffineConstraints::appendSymbolId;
 
   /// Add the specified values as a dim or symbol id depending on its nature, if
   /// it already doesn't exist in the system. `val` has to be either a terminal
@@ -727,9 +744,9 @@ public:
   /// by any of `other`'s identifiers that didn't appear in `this`. Local
   /// identifiers of each system are by design separate/local and are placed
   /// one after other (`this`'s followed by `other`'s).
-  //  Eg: Input: `this`  has (%i %j) [%M %N]
-  //             `other` has (%k, %j) [%P, %N, %M]
-  //      Output: both `this`, `other` have (%i, %j, %k) [%M, %N, %P]
+  //  E.g.: Input: `this`  has (%i, %j) [%M, %N]
+  //               `other` has (%k, %j) [%P, %N, %M]
+  //        Output: both `this`, `other` have (%i, %j, %k) [%M, %N, %P]
   //
   void mergeAndAlignIdsWithOther(unsigned offset,
                                  FlatAffineValueConstraints *other);
@@ -772,6 +789,18 @@ public:
 
   inline ArrayRef<Optional<Value>> getMaybeValues() const {
     return {values.data(), values.size()};
+  }
+
+  inline ArrayRef<Optional<Value>> getMaybeDimValues() const {
+    return {values.data(), getNumDimIds()};
+  }
+
+  inline ArrayRef<Optional<Value>> getMaybeSymbolValues() const {
+    return {values.data() + getNumDimIds(), getNumSymbolIds()};
+  }
+
+  inline ArrayRef<Optional<Value>> getMaybeDimAndSymbolValues() const {
+    return {values.data(), getNumDimIds() + getNumSymbolIds()};
   }
 
   /// Sets the Value associated with the pos^th identifier.

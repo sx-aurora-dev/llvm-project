@@ -1043,6 +1043,8 @@ bool Attributor::checkForAllUses(function_ref<bool(const Use &, bool &)> Pred,
 
     if (auto *SI = dyn_cast<StoreInst>(U->getUser())) {
       if (&SI->getOperandUse(0) == U) {
+        if (!Visited.insert(U).second)
+          continue;
         SmallSetVector<Value *, 4> PotentialCopies;
         if (AA::getPotentialCopiesOfStoredValue(*this, *SI, PotentialCopies,
                                                 QueryingAA,
@@ -1922,7 +1924,7 @@ void Attributor::createShallowWrapper(Function &F) {
 
   CallInst *CI = CallInst::Create(&F, Args, "", EntryBB);
   CI->setTailCall(true);
-  CI->addAttribute(AttributeList::FunctionIndex, Attribute::NoInline);
+  CI->addFnAttr(Attribute::NoInline);
   ReturnInst::Create(Ctx, CI->getType()->isVoidTy() ? nullptr : CI, EntryBB);
 
   NumFnShallowWrappersCreated++;
