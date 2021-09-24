@@ -240,6 +240,8 @@
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
 
+#include "rv/registerPasses.h"
+
 using namespace llvm;
 
 extern cl::opt<unsigned> MaxDevirtIterations;
@@ -469,6 +471,7 @@ PassBuilder::PassBuilder(bool DebugLogging, TargetMachine *TM,
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #include "PassRegistry.def"
   }
+  rv::addConfiguredRVPasses(*this);
 }
 
 void PassBuilder::invokePeepholeEPCallbacks(

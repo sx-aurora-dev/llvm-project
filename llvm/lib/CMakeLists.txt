@@ -35,6 +35,8 @@ add_subdirectory(Passes)
 add_subdirectory(TextAPI)
 add_subdirectory(ToolDrivers)
 add_subdirectory(XRay)
+add_subdirectory(rv)
+
 if (LLVM_INCLUDE_TESTS)
   add_subdirectory(Testing)
 endif()
