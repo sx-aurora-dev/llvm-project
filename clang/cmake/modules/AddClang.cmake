@@ -170,7 +170,7 @@ macro(add_clang_tool name)
 
     install(TARGETS ${name}
       ${export_to_clangtargets}
-      RUNTIME DESTINATION bin
+      RUNTIME DESTINATION ${LLVM_TOOLS_INSTALL_DIR}
       COMPONENT ${name})
 
     if(NOT LLVM_ENABLE_IDE)
