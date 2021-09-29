@@ -5205,18 +5205,29 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
   WeakTrackingVH SunkAddrVH = SunkAddrs[Addr];
 
   Value * SunkAddr = SunkAddrVH.pointsToAliveValue() ? SunkAddrVH : nullptr;
+  Type *IntPtrTy = DL->getIntPtrType(Addr->getType());
   if (SunkAddr) {
     LLVM_DEBUG(dbgs() << "CGP: Reusing nonlocal addrmode: " << AddrMode
                       << " for " << *MemoryInst << "\n");
-    if (SunkAddr->getType() != Addr->getType())
-      SunkAddr = Builder.CreatePointerCast(SunkAddr, Addr->getType());
+    if (SunkAddr->getType() != Addr->getType()) {
+      // Even though we only considered no-op addrspacecasts,
+      // semantically-meaningful conversions may still be present due to
+      // ptrtoint/inttoptr sequences.
+      if (SunkAddr->getType()->getPointerAddressSpace() !=
+              Addr->getType()->getPointerAddressSpace() &&
+          !DL->isNonIntegralPointerType(Addr->getType())) {
+        SunkAddr = Builder.CreatePtrToInt(SunkAddr, IntPtrTy, "sunkaddr");
+        SunkAddr =
+            Builder.CreateIntToPtr(SunkAddr, Addr->getType(), "sunkaddr");
+      } else
+        SunkAddr = Builder.CreatePointerCast(SunkAddr, Addr->getType());
+    }
   } else if (AddrSinkUsingGEPs || (!AddrSinkUsingGEPs.getNumOccurrences() &&
                                    SubtargetInfo->addrSinkUsingGEPs())) {
     // By default, we use the GEP-based method when AA is used later. This
     // prevents new inttoptr/ptrtoint pairs from degrading AA capabilities.
     LLVM_DEBUG(dbgs() << "CGP: SINKING nonlocal addrmode: " << AddrMode
                       << " for " << *MemoryInst << "\n");
-    Type *IntPtrTy = DL->getIntPtrType(Addr->getType());
     Value *ResultPtr = nullptr, *ResultIndex = nullptr;
 
     // First, find the pointer.
@@ -5345,8 +5356,19 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
                 : Builder.CreateGEP(I8Ty, ResultPtr, ResultIndex, "sunkaddr");
       }
 
-      if (SunkAddr->getType() != Addr->getType())
-        SunkAddr = Builder.CreatePointerCast(SunkAddr, Addr->getType());
+      if (SunkAddr->getType() != Addr->getType()) {
+        // Even though we only considered no-op addrspacecasts,
+        // semantically-meaningful conversions may still be present due to
+        // ptrtoint/inttoptr sequences.
+        if (SunkAddr->getType()->getPointerAddressSpace() !=
+                Addr->getType()->getPointerAddressSpace() &&
+            !DL->isNonIntegralPointerType(Addr->getType())) {
+          SunkAddr = Builder.CreatePtrToInt(SunkAddr, IntPtrTy, "sunkaddr");
+          SunkAddr =
+              Builder.CreateIntToPtr(SunkAddr, Addr->getType(), "sunkaddr");
+        } else
+          SunkAddr = Builder.CreatePointerCast(SunkAddr, Addr->getType());
+      }
     }
   } else {
     // We'd require a ptrtoint/inttoptr down the line, which we can't do for
