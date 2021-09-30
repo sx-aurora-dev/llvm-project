@@ -1,0 +1,3 @@
+[submodule "llvm/lib/rv"]
+	path = llvm/lib/rv
+	url = https://github.com/sx-aurora-dev/rv.git
