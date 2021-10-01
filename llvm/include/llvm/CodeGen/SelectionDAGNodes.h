@@ -511,6 +511,7 @@ BEGIN_TWO_BYTE_PACK()
 
   class LSBaseSDNodeBitfields {
     friend class LSBaseSDNode;
+    friend class VPLoadStoreSDNode;
     friend class MaskedLoadStoreSDNode;
     friend class MaskedGatherScatterSDNode;
     friend class VPGatherScatterSDNode;
@@ -520,7 +521,9 @@ BEGIN_TWO_BYTE_PACK()
     // This storage is shared between disparate class hierarchies to hold an
     // enumeration specific to the class hierarchy in use.
     //   LSBaseSDNode => enum ISD::MemIndexedMode
+    //   VPLoadStoreBaseSDNode => enum ISD::MemIndexedMode
     //   MaskedLoadStoreBaseSDNode => enum ISD::MemIndexedMode
+    //   VPGatherScatterSDNode => enum ISD::MemIndexType
     //   MaskedGatherScatterSDNode => enum ISD::MemIndexType
     uint16_t AddressingMode : 3;
   };
@@ -528,9 +531,11 @@ BEGIN_TWO_BYTE_PACK()
 
   class LoadSDNodeBitfields {
     friend class LoadSDNode;
+    friend class VPLoadSDNode;
     friend class MaskedLoadSDNode;
     friend class VPLoadSDNode;
     friend class MaskedGatherSDNode;
+    friend class VPGatherSDNode;
 
     uint16_t : NumLSBaseSDNodeBits;
 
@@ -540,9 +545,11 @@ BEGIN_TWO_BYTE_PACK()
 
   class StoreSDNodeBitfields {
     friend class StoreSDNode;
+    friend class VPStoreSDNode;
     friend class MaskedStoreSDNode;
     friend class VPStoreSDNode;
     friend class MaskedScatterSDNode;
+    friend class VPScatterSDNode;
 
     uint16_t : NumLSBaseSDNodeBits;
 
@@ -1407,13 +1414,14 @@ public:
   const SDValue &getBasePtr() const {
     switch (getOpcode()) {
     case ISD::STORE:
-    case ISD::MSTORE:
     case ISD::VP_STORE:
+    case ISD::MSTORE:
     case ISD::VP_SCATTER:
       return getOperand(2);
     case ISD::MGATHER:
     case ISD::MSCATTER:
       return getOperand(3);
+    case ISD::VP_GATHER:
     default:
       return getOperand(1);
     }
@@ -2384,21 +2392,41 @@ public:
   friend class SelectionDAG;
 
   VPLoadStoreSDNode(ISD::NodeType NodeTy, unsigned Order, const DebugLoc &dl,
-                    SDVTList VTs, EVT MemVT, MachineMemOperand *MMO)
-      : MemSDNode(NodeTy, Order, dl, VTs, MemVT, MMO) {}
+                    SDVTList VTs, ISD::MemIndexedMode AM, EVT MemVT,
+                    MachineMemOperand *MMO)
+      : MemSDNode(NodeTy, Order, dl, VTs, MemVT, MMO) {
+    LSBaseSDNodeBits.AddressingMode = AM;
+    assert(getAddressingMode() == AM && "Value truncated");
+  }
 
-  // VPLoadSDNode (Chain, ptr, mask, VLen)
-  // VPStoreSDNode (Chain, data, ptr, mask, VLen)
-  // Mask is a vector of i1 elements, Vlen is i32
+  // VPLoadSDNode (Chain, Ptr, Offset, Mask, EVL)
+  // VPStoreSDNode (Chain, Data, Ptr, Offset, Mask, EVL)
+  // Mask is a vector of i1 elements;
+  // the type of EVL is TLI.getVPExplicitVectorLengthTy().
+  const SDValue &getOffset() const {
+    return getOperand(getOpcode() == ISD::MLOAD ? 2 : 3);
+  }
   const SDValue &getBasePtr() const {
     return getOperand(getOpcode() == ISD::VP_LOAD ? 1 : 2);
   }
   const SDValue &getMask() const {
-    return getOperand(getOpcode() == ISD::VP_LOAD ? 2 : 3);
-  }
-  const SDValue &getVectorLength() const {
     return getOperand(getOpcode() == ISD::VP_LOAD ? 3 : 4);
   }
+  const SDValue &getVectorLength() const {
+    return getOperand(getOpcode() == ISD::VP_LOAD ? 4 : 5);
+  }
+
+  /// Return the addressing mode for this load or store:
+  /// unindexed, pre-inc, pre-dec, post-inc, or post-dec.
+  ISD::MemIndexedMode getAddressingMode() const {
+    return static_cast<ISD::MemIndexedMode>(LSBaseSDNodeBits.AddressingMode);
+  }
+
+  /// Return true if this is a pre/post inc/dec load/store.
+  bool isIndexed() const { return getAddressingMode() != ISD::UNINDEXED; }
+
+  /// Return true if this is NOT a pre/post inc/dec load/store.
+  bool isUnindexed() const { return getAddressingMode() == ISD::UNINDEXED; }
 
   static bool classof(const SDNode *N) {
     return N->getOpcode() == ISD::VP_LOAD || N->getOpcode() == ISD::VP_STORE;
@@ -2411,10 +2439,11 @@ public:
   friend class SelectionDAG;
 
   VPLoadSDNode(unsigned Order, const DebugLoc &dl, SDVTList VTs,
-               ISD::LoadExtType ETy, EVT MemVT, MachineMemOperand *MMO)
-      : VPLoadStoreSDNode(ISD::VP_LOAD, Order, dl, VTs, MemVT, MMO) {
+               ISD::MemIndexedMode AM, ISD::LoadExtType ETy, bool isExpanding,
+               EVT MemVT, MachineMemOperand *MMO)
+      : VPLoadStoreSDNode(ISD::VP_LOAD, Order, dl, VTs, AM, MemVT, MMO) {
     LoadSDNodeBits.ExtTy = ETy;
-    LoadSDNodeBits.IsExpanding = false;
+    LoadSDNodeBits.IsExpanding = isExpanding;
   }
 
   ISD::LoadExtType getExtensionType() const {
@@ -2422,8 +2451,9 @@ public:
   }
 
   const SDValue &getBasePtr() const { return getOperand(1); }
-  const SDValue &getMask() const { return getOperand(2); }
-  const SDValue &getVectorLength() const { return getOperand(3); }
+  const SDValue &getOffset() const { return getOperand(2); }
+  const SDValue &getMask() const { return getOperand(3); }
+  const SDValue &getVectorLength() const { return getOperand(4); }
 
   static bool classof(const SDNode *N) {
     return N->getOpcode() == ISD::VP_LOAD;
@@ -2436,11 +2466,12 @@ class VPStoreSDNode : public VPLoadStoreSDNode {
 public:
   friend class SelectionDAG;
 
-  VPStoreSDNode(unsigned Order, const DebugLoc &dl, SDVTList VTs, bool isTrunc,
+  VPStoreSDNode(unsigned Order, const DebugLoc &dl, SDVTList VTs,
+                ISD::MemIndexedMode AM, bool isTrunc, bool isCompressing,
                 EVT MemVT, MachineMemOperand *MMO)
-      : VPLoadStoreSDNode(ISD::VP_STORE, Order, dl, VTs, MemVT, MMO) {
+      : VPLoadStoreSDNode(ISD::VP_STORE, Order, dl, VTs, AM, MemVT, MMO) {
     StoreSDNodeBits.IsTruncating = isTrunc;
-    StoreSDNodeBits.IsCompressing = false;
+    StoreSDNodeBits.IsCompressing = isCompressing;
   }
 
   /// Return true if this is a truncating store.
@@ -2456,8 +2487,9 @@ public:
 
   const SDValue &getValue() const { return getOperand(1); }
   const SDValue &getBasePtr() const { return getOperand(2); }
-  const SDValue &getMask() const { return getOperand(3); }
-  const SDValue &getVectorLength() const { return getOperand(4); }
+  const SDValue &getOffset() const { return getOperand(3); }
+  const SDValue &getMask() const { return getOperand(4); }
+  const SDValue &getVectorLength() const { return getOperand(5); }
 
   static bool classof(const SDNode *N) {
     return N->getOpcode() == ISD::VP_STORE;

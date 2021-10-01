@@ -764,13 +764,12 @@ private:
   void visitIntrinsicCall(const CallInst &I, unsigned Intrinsic);
   void visitTargetIntrinsic(const CallInst &I, unsigned Intrinsic);
   void visitConstrainedFPIntrinsic(const ConstrainedFPIntrinsic &FPI);
+  void visitVPLoadGather(const VPIntrinsic &VPIntrin, EVT VT,
+                         SmallVector<SDValue, 7> &OpValues, bool isGather);
+  void visitVPStoreScatter(const VPIntrinsic &VPIntrin,
+                           SmallVector<SDValue, 7> &OpValues, bool isScatter);
   void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin);
   void visitCmpVP(const VPIntrinsic &I);
-  void visitLoadVP(const CallInst &I);
-  void visitStoreVP(const CallInst &I);
-  void visitGatherVP(const CallInst &I);
-  void visitScatterVP(const CallInst &I);
-  void visitReduceVP(const VPIntrinsic &I);
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);
