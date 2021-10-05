@@ -67,7 +67,7 @@ protected:
 " declare i32 @llvm.vp.reduce.smax.v16i32(i32, <16 x i32>, <16 x i1>, i32) "
 " declare i32 @llvm.vp.reduce.umin.v16i32(i32, <16 x i32>, <16 x i1>, i32) "
 " declare i32 @llvm.vp.reduce.umax.v16i32(i32, <16 x i32>, <16 x i1>, i32) "
-" declare <16 x float> @llvm.vp.select.v16f32(<16 x float>, <16 x float>, <16 x i1>, i32, i32) "
+" declare <16 x float> @llvm.vp.select.v16f32(<16 x i1>, <16 x float>, <16 x float>, i32) "
 " declare <16 x float> @llvm.vp.vshift.v16f32(<16 x float>, i32, <16 x i1>, i32) "
 " declare <16 x float> @llvm.vp.compress.v16f32(<16 x float>, <16 x i1>, i32) "
 " declare <16 x float> @llvm.vp.expand.v16f32(<16 x float>, <16 x i1>, i32) "
@@ -125,6 +125,8 @@ protected:
       Str << " declare float @llvm.vp.reduce." << ReductionOpcode
           << ".v8f32(float, <8 x float>, <8 x i1>, i32) ";
 
+    Str << " declare <8 x i32> @llvm.vp.select.v8i32(<8 x i1>, <8 x i32>, <8 x "
+           "i32>, i32)";
     return parseAssemblyString(Str.str(), Err, C);
   }
 };
