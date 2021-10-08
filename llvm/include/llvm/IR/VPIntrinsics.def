@@ -574,37 +574,6 @@ END_REGISTER_VP(vp_gather, VP_GATHER)
 
 ///// } Memory Operations
 
-///// Shuffle & Blend {
-
-// llvm.vp.compress(x,mask,vlen)
-/// VP_COMPRESS(VEC1, MASK, VLEN) - Returns a vector, of the same type as
-/// VEC1.
-BEGIN_REGISTER_VP_INTRINSIC(vp_compress, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_COMPRESS, -1, vp_compress, 1, 2)
-END_REGISTER_CASES(vp_compress, VP_COMPRESS)
-
-// llvm.vp.expand(x,mask,vlen)
-/// VP_EXPAND(VEC1, MASK, VLEN) - Returns a vector, of the same type as
-/// VEC1.
-BEGIN_REGISTER_VP_INTRINSIC(vp_expand, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_EXPAND, -1, vp_expand, 1, 2)
-END_REGISTER_CASES(vp_expand, VP_EXPAND)
-
-// llvm.vp.vshift(x,amount,mask,vlen)
-/// VP_VSHIFT(VEC1, AMOUNT, MASK, VLEN) - Returns a vector, of the same type as
-/// VEC1. AMOUNT is an integer value. The returned vector is equivalent
-/// to VEC1 shifted by AMOUNT (RETURNED_VEC[idx] = VEC1[idx + AMOUNT]).
-BEGIN_REGISTER_VP_INTRINSIC(vp_vshift, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_VSHIFT, -1, vp_vshift, 2, 3)
-END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
-
-// llvm.vp.select(mask,on_true,on_false,pivot,avl)
-BEGIN_REGISTER_VP_INTRINSIC(vp_select, 2, 4)
-BEGIN_REGISTER_VP_SDNODE(VP_SELECT, -1, vp_select, 0, 4)
-END_REGISTER_CASES(vp_select, VP_SELECT)
-
-///// } Shuffle & Blend
-
 ///// Reductions {
 
 // Specialized helper macro for VP reductions (%start, %x, %mask, %evl).
@@ -696,6 +665,37 @@ HELPER_REGISTER_REDUCTION_SEQ_VP(vp_reduce_fmul, VP_REDUCE_FMUL,
 #undef HELPER_REGISTER_REDUCTION_SEQ_VP
 
 ///// } Reductions
+
+///// Shuffles {
+
+// llvm.vp.select(mask,on_true,on_false,vlen)
+BEGIN_REGISTER_VP_INTRINSIC(vp_select, 0, 3)
+BEGIN_REGISTER_VP_SDNODE(VP_SELECT, -1, vp_select, 0, 3)
+END_REGISTER_CASES(vp_select, VP_SELECT)
+
+// llvm.vp.compress(x,mask,vlen)
+/// VP_COMPRESS(VEC1, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1.
+BEGIN_REGISTER_VP_INTRINSIC(vp_compress, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_COMPRESS, -1, vp_compress, 1, 2)
+END_REGISTER_CASES(vp_compress, VP_COMPRESS)
+
+// llvm.vp.expand(x,mask,vlen)
+/// VP_EXPAND(VEC1, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1.
+BEGIN_REGISTER_VP_INTRINSIC(vp_expand, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_EXPAND, -1, vp_expand, 1, 2)
+END_REGISTER_CASES(vp_expand, VP_EXPAND)
+
+// llvm.vp.vshift(x,amount,mask,vlen)
+/// VP_VSHIFT(VEC1, AMOUNT, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1. AMOUNT is an integer value. The returned vector is equivalent
+/// to VEC1 shifted by AMOUNT (RETURNED_VEC[idx] = VEC1[idx + AMOUNT]).
+BEGIN_REGISTER_VP_INTRINSIC(vp_vshift, 2, 3)
+BEGIN_REGISTER_VP_SDNODE(VP_VSHIFT, -1, vp_vshift, 2, 3)
+END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
+
+///// } Shuffles
 
 #undef BEGIN_REGISTER_VP
 #undef BEGIN_REGISTER_VP_INTRINSIC

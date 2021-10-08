@@ -62,9 +62,9 @@ def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
   SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3> 
 ]>;
 
-// select (OnTrue, OnFalse, SelMask, OpThreshold)
+// select (OnTrue, OnFalse, CondMask, VLen)
 def SDTSelectVVP : SDTypeProfile<1, 4, [       // vp_select
-  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 3>, SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>, IsVLVT<4>
+  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 3>, SDTCisSameAs<0,1>, SDTCisSameAs<1, 2>, IsVLVT<4>
 ]>;
 
 // setcc (lhs, rhs, cc, mask, vl)
@@ -161,7 +161,7 @@ def vvp_ffms    : SDNode<"VEISD::VVP_FFMS",  SDTFPTernaryOpVVP>; // (y*z) - x
 def vvp_ffmsn    : SDNode<"VEISD::VVP_FFMSN",  SDTFPTernaryOpVVP>; // (x - (y*z))
 // def vvp_ffman    : SDNode<"VEISD::VVP_FFMAN",  SDTFPTernaryOpVVP>; // -((y*z) + x)
 
-// select (OnT,OnF,SelM,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
+// select (SelM,OnT,OnF,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
 def vvp_select : SDNode<"VEISD::VVP_SELECT", SDTSelectVVP>;      
 
 // setcc (lhs, rhs, cc, mask, vl)

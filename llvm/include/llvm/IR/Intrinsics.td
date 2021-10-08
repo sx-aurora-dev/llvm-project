@@ -1507,35 +1507,6 @@ def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
 
 
 
-// Shuffle
-def int_vp_vshift: Intrinsic<[ llvm_anyvector_ty ],
-                             [ LLVMMatchType<0>,
-                               llvm_i32_ty,
-                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                               llvm_i32_ty],
-                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
-
-def int_vp_expand: Intrinsic<[ llvm_anyvector_ty ],
-                             [ LLVMMatchType<0>,
-                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                               llvm_i32_ty],
-                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
-
-def int_vp_compress: Intrinsic<[ llvm_anyvector_ty ],
-                               [ LLVMMatchType<0>,
-                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                 llvm_i32_ty],
-                               [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
-
-// Select
-def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMMatchType<0>,
-                                LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty,
-                                llvm_i32_ty],
-                              [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
-
 
 // VP fp rounding and truncation
 let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn] in {
@@ -1687,6 +1658,31 @@ let IntrProperties =
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty]>;
 }
+// Shuffles.
+def int_vp_select : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                llvm_i32_ty]>;
+def int_vp_vshift: Intrinsic<[ llvm_anyvector_ty ],
+                             [ LLVMMatchType<0>,
+                               llvm_i32_ty,
+                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                               llvm_i32_ty],
+                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
+
+def int_vp_expand: Intrinsic<[ llvm_anyvector_ty ],
+                             [ LLVMMatchType<0>,
+                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                               llvm_i32_ty],
+                             [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
+
+def int_vp_compress: Intrinsic<[ llvm_anyvector_ty ],
+                               [ LLVMMatchType<0>,
+                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                 llvm_i32_ty],
+                               [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
+
 
 
 
