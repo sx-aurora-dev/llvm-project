@@ -962,7 +962,7 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
   if (auto *IIFVTy = dyn_cast<FixedVectorType>(II->getType())) {
     auto VWidth = IIFVTy->getNumElements();
     APInt UndefElts(VWidth, 0);
-    APInt AllOnesEltMask(APInt::getAllOnesValue(VWidth));
+    APInt AllOnesEltMask(APInt::getAllOnes(VWidth));
     if (Value *V = SimplifyDemandedVectorElts(II, AllOnesEltMask, UndefElts)) {
       if (V != II)
         return replaceInstUsesWith(*II, V);
@@ -1559,18 +1559,6 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
          II->getFastMathFlags().noSignedZeros()))
       return BinaryOperator::CreateFMulFMF(Src0, Src1, II);
 
-    break;
-  }
-  case Intrinsic::isnan: {
-    Value *Arg = II->getArgOperand(0);
-    if (const auto *FPMO = dyn_cast<FPMathOperator>(Arg)) {
-      // If argument of this intrinsic call is an instruction that has 'nnan'
-      // flag, we can assume that NaN cannot be produced, otherwise it is
-      // undefined behavior.
-      if (FPMO->getFastMathFlags().noNaNs())
-        return replaceInstUsesWith(
-            *II, ConstantInt::get(II->getType(), APInt::getNullValue(1)));
-    }
     break;
   }
   case Intrinsic::copysign: {
@@ -2905,7 +2893,7 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
     // that are compatible with being a vararg call argument.
     unsigned SRetIdx;
     if (CallerPAL.hasAttrSomewhere(Attribute::StructRet, &SRetIdx) &&
-        SRetIdx > FT->getNumParams())
+        SRetIdx - AttributeList::FirstArgIndex >= FT->getNumParams())
       return false;
   }
 

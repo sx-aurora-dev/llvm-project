@@ -1532,7 +1532,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       if (!S.getOpenCLOptions().isSupported("cl_khr_fp64", S.getLangOpts()))
         S.Diag(DS.getTypeSpecTypeLoc(), diag::err_opencl_requires_extension)
             << 0 << Result
-            << (S.getLangOpts().OpenCLVersion == 300
+            << (S.getLangOpts().getOpenCLCompatibleVersion() == 300
                     ? "cl_khr_fp64 and __opencl_c_fp64"
                     : "cl_khr_fp64");
       else if (!S.getOpenCLOptions().isAvailableOption("cl_khr_fp64", S.getLangOpts()))
@@ -1546,6 +1546,13 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       S.Diag(DS.getTypeSpecTypeLoc(), diag::err_type_unsupported)
         << "__float128";
     Result = Context.Float128Ty;
+    break;
+  case DeclSpec::TST_ibm128:
+    if (!S.Context.getTargetInfo().hasIbm128Type() &&
+        !S.getLangOpts().SYCLIsDevice &&
+        !(S.getLangOpts().OpenMP && S.getLangOpts().OpenMPIsDevice))
+      S.Diag(DS.getTypeSpecTypeLoc(), diag::err_type_unsupported) << "__ibm128";
+    Result = Context.Ibm128Ty;
     break;
   case DeclSpec::TST_bool:
     Result = Context.BoolTy; // _Bool or bool
@@ -4256,8 +4263,8 @@ static void fixItNullability(Sema &S, DiagBuilderT &Diag,
       InsertionText = InsertionText.drop_back().drop_front();
     else
       InsertionText = InsertionText.drop_front();
-  } else if (!isIdentifierBody(NextChar[0], /*allow dollar*/true) &&
-             !isIdentifierBody(NextChar[-1], /*allow dollar*/true)) {
+  } else if (!isAsciiIdentifierContinue(NextChar[0], /*allow dollar*/ true) &&
+             !isAsciiIdentifierContinue(NextChar[-1], /*allow dollar*/ true)) {
     InsertionText = InsertionText.drop_back().drop_front();
   }
 

@@ -13,6 +13,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Regex.h"
+#include <cstdint>
 #include <fstream>
 #include <list>
 #include <map>
@@ -372,6 +373,7 @@ struct SampleCounter {
   BranchSample BranchCounter;
 
   void recordRangeCount(uint64_t Start, uint64_t End, uint64_t Repeat) {
+    assert(Start <= End && "Invalid instruction range");
     RangeCounter[{Start, End}] += Repeat;
   }
   void recordBranchCount(uint64_t Source, uint64_t Target, uint64_t Repeat) {
@@ -411,13 +413,8 @@ struct ProbeStack {
     // Callsite merging may cause the loss of original probe IDs.
     // Cutting off the context from here since the inliner will
     // not know how to consume a context with unknown callsites.
-    if (!CallProbe) {
-      if (!Cur->isLeafFrame())
-        WithColor::warning()
-            << "Untracked frame at " << format("%" PRIx64, Cur->Address)
-            << " due to missing call probe\n";
+    if (!CallProbe)
       return false;
-    }
     Stack.push_back(CallProbe);
     return true;
   }
@@ -464,6 +461,7 @@ public:
   VirtualUnwinder(ContextSampleCounterMap *Counter, const ProfiledBinary *B)
       : CtxCounterMap(Counter), Binary(B) {}
   bool unwind(const PerfSample *Sample, uint64_t Repeat);
+  std::set<uint64_t> &getUntrackedCallsites() { return UntrackedCallsites; }
 
 private:
   bool isCallState(UnwindState &State) const {
@@ -498,6 +496,8 @@ private:
   ContextSampleCounterMap *CtxCounterMap;
   // Profiled binary that current frame address belongs to
   const ProfiledBinary *Binary;
+  // Keep track of all untracked callsites
+  std::set<uint64_t> UntrackedCallsites;
 };
 
 // Read perf trace to parse the events and samples.

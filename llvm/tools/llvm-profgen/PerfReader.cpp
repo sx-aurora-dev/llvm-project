@@ -153,6 +153,12 @@ void VirtualUnwinder::collectSamplesFromFrameTrie(
       for (const auto &Item : Cur->Children) {
         collectSamplesFromFrameTrie(Item.second.get(), EmptyStack);
       }
+
+      // Keep note of untracked call site and deduplicate them
+      // for warning later.
+      if (!Cur->isLeafFrame())
+        UntrackedCallsites.insert(Cur->Address);
+
       return;
     }
   }
@@ -368,11 +374,21 @@ void HybridPerfReader::writeRawProfile(raw_fd_ostream &OS) {
 }
 
 void HybridPerfReader::unwindSamples() {
+  std::set<uint64_t> AllUntrackedCallsites;
   for (const auto &Item : AggregatedSamples) {
     const PerfSample *Sample = Item.first.getPtr();
     VirtualUnwinder Unwinder(&SampleCounters, Binary);
     Unwinder.unwind(Sample, Item.second);
+    auto &CurrUntrackedCallsites = Unwinder.getUntrackedCallsites();
+    AllUntrackedCallsites.insert(CurrUntrackedCallsites.begin(),
+                                 CurrUntrackedCallsites.end());
   }
+
+  // Warn about untracked frames due to missing probes.
+  for (auto Address : AllUntrackedCallsites)
+    WithColor::warning() << "Profile context truncated due to missing probe "
+                         << "for call instruction at "
+                         << format("%" PRIx64, Address) << "\n";
 
   if (SkipSymbolization)
     PerfReaderBase::writeRawProfile(OutputFilename);
@@ -406,8 +422,15 @@ bool PerfReaderBase::extractLBRStack(TraceStream &TraceIt,
     Token.split(Addresses, "/");
     uint64_t Src;
     uint64_t Dst;
-    Addresses[0].substr(2).getAsInteger(16, Src);
-    Addresses[1].substr(2).getAsInteger(16, Dst);
+
+    // Stop at broken LBR records.
+    if (Addresses[0].substr(2).getAsInteger(16, Src) ||
+        Addresses[1].substr(2).getAsInteger(16, Dst)) {
+      WithColor::warning() << "Invalid address in LBR record at line "
+                           << TraceIt.getLineNumber() << ": "
+                           << TraceIt.getCurrentLine() << "\n";
+      break;
+    }
 
     bool SrcIsInternal = Binary->addressIsCode(Src);
     bool DstIsInternal = Binary->addressIsCode(Dst);
@@ -619,11 +642,8 @@ void LBRPerfReader::computeCounterFromLBR(const PerfSample *Sample,
     // If this not the first LBR, update the range count between TO of current
     // LBR and FROM of next LBR.
     uint64_t StartOffset = TargetOffset;
-    if (EndOffeset != 0) {
-      assert(StartOffset <= EndOffeset &&
-             "Bogus range should be filtered ealier!");
+    if (EndOffeset != 0)
       Counter.recordRangeCount(StartOffset, EndOffeset, Repeat);
-    }
     EndOffeset = SourceOffset;
   }
 }

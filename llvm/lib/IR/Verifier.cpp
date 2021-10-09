@@ -572,6 +572,9 @@ private:
   /// declarations share the same calling convention.
   void verifyDeoptimizeCallingConvs();
 
+  void verifyAttachedCallBundle(const CallBase &Call,
+                                const OperandBundleUse &BU);
+
   /// Verify all-or-nothing property of DIFile source attribute within a CU.
   void verifySourceDebugInfo(const DICompileUnit &U, const DIFile &F);
 
@@ -2571,7 +2574,8 @@ void Verifier::visitFunction(const Function &F) {
   // uses.
   if (F.isIntrinsic() && F.getParent()->isMaterialized()) {
     const User *U;
-    if (F.hasAddressTaken(&U))
+    if (F.hasAddressTaken(&U, false, true, false,
+                          /*IgnoreARCAttachedCall=*/true))
       Assert(false, "Invalid user of intrinsic instruction!", U);
   }
 
@@ -3315,6 +3319,7 @@ void Verifier::visitCallBase(CallBase &Call) {
       Assert(!FoundAttachedCallBundle,
              "Multiple \"clang.arc.attachedcall\" operand bundles", Call);
       FoundAttachedCallBundle = true;
+      verifyAttachedCallBundle(Call, BU);
     } else if (Tag == LLVMContext::OB_cfp_round) {
       Assert(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
              Call);
@@ -3325,14 +3330,6 @@ void Verifier::visitCallBase(CallBase &Call) {
       FoundCFPExceptBundle = true;
     }
   }
-
-  if (FoundAttachedCallBundle)
-    Assert((FTy->getReturnType()->isPointerTy() ||
-            (Call.doesNotReturn() && FTy->getReturnType()->isVoidTy())),
-           "a call with operand bundle \"clang.arc.attachedcall\" must call a "
-           "function returning a pointer or a non-returning function that has "
-           "a void return type",
-           Call);
 
   // Verify that each inlinable callsite of a debug-info-bearing function in a
   // debug-info-bearing function has a debug location attached to it. Failure to
@@ -4461,10 +4458,21 @@ void Verifier::visitInstruction(Instruction &I) {
     }
 
     if (Function *F = dyn_cast<Function>(I.getOperand(i))) {
+      // This code checks whether the function is used as the operand of a
+      // clang_arc_attachedcall operand bundle.
+      auto IsAttachedCallOperand = [](Function *F, const CallBase *CBI,
+                                      int Idx) {
+        return CBI && CBI->isOperandBundleOfType(
+                          LLVMContext::OB_clang_arc_attachedcall, Idx);
+      };
+
       // Check to make sure that the "address of" an intrinsic function is never
-      // taken.
-      Assert(!F->isIntrinsic() ||
-                 (CBI && &CBI->getCalledOperandUse() == &I.getOperandUse(i)),
+      // taken. Ignore cases where the address of the intrinsic function is used
+      // as the argument of operand bundle "clang.arc.attachedcall" as those
+      // cases are handled in verifyAttachedCallBundle.
+      Assert((!F->isIntrinsic() ||
+              (CBI && &CBI->getCalledOperandUse() == &I.getOperandUse(i)) ||
+              IsAttachedCallOperand(F, CBI, i)),
              "Cannot take the address of an intrinsic!", &I);
       Assert(
           !F->isIntrinsic() || isa<CallInst>(I) ||
@@ -4478,9 +4486,10 @@ void Verifier::visitInstruction(Instruction &I) {
               F->getIntrinsicID() == Intrinsic::experimental_patchpoint_void ||
               F->getIntrinsicID() == Intrinsic::experimental_patchpoint_i64 ||
               F->getIntrinsicID() == Intrinsic::experimental_gc_statepoint ||
-              F->getIntrinsicID() == Intrinsic::wasm_rethrow,
+              F->getIntrinsicID() == Intrinsic::wasm_rethrow ||
+              IsAttachedCallOperand(F, CBI, i),
           "Cannot invoke an intrinsic other than donothing, patchpoint, "
-          "statepoint, coro_resume or coro_destroy",
+          "statepoint, coro_resume, coro_destroy or clang.arc.attachedcall",
           &I);
       Assert(F->getParent() == &M, "Referencing function in another module!",
              &I, &M, F, F->getParent());
@@ -4527,6 +4536,11 @@ void Verifier::visitInstruction(Instruction &I) {
     Assert(isa<LoadInst>(I) || isa<CallInst>(I) || isa<InvokeInst>(I),
            "Ranges are only for loads, calls and invokes!", &I);
     visitRangeMetadata(I, Range, I.getType());
+  }
+
+  if (I.hasMetadata(LLVMContext::MD_invariant_group)) {
+    Assert(isa<LoadInst>(I) || isa<StoreInst>(I),
+           "invariant.group metadata is only for loads and stores", &I);
   }
 
   if (I.getMetadata(LLVMContext::MD_nonnull)) {
@@ -5719,6 +5733,41 @@ void Verifier::verifyDeoptimizeCallingConvs() {
            "All llvm.experimental.deoptimize declarations must have the same "
            "calling convention",
            First, F);
+  }
+}
+
+void Verifier::verifyAttachedCallBundle(const CallBase &Call,
+                                        const OperandBundleUse &BU) {
+  FunctionType *FTy = Call.getFunctionType();
+
+  Assert((FTy->getReturnType()->isPointerTy() ||
+          (Call.doesNotReturn() && FTy->getReturnType()->isVoidTy())),
+         "a call with operand bundle \"clang.arc.attachedcall\" must call a "
+         "function returning a pointer or a non-returning function that has a "
+         "void return type",
+         Call);
+
+  Assert((BU.Inputs.empty() ||
+          (BU.Inputs.size() == 1 && isa<Function>(BU.Inputs.front()))),
+         "operand bundle \"clang.arc.attachedcall\" can take either no "
+         "arguments or one function as an argument",
+         Call);
+
+  if (BU.Inputs.empty())
+    return;
+
+  auto *Fn = cast<Function>(BU.Inputs.front());
+  Intrinsic::ID IID = Fn->getIntrinsicID();
+
+  if (IID) {
+    Assert((IID == Intrinsic::objc_retainAutoreleasedReturnValue ||
+            IID == Intrinsic::objc_unsafeClaimAutoreleasedReturnValue),
+           "invalid function argument", Call);
+  } else {
+    StringRef FnName = Fn->getName();
+    Assert((FnName == "objc_retainAutoreleasedReturnValue" ||
+            FnName == "objc_unsafeClaimAutoreleasedReturnValue"),
+           "invalid function argument", Call);
   }
 }
 

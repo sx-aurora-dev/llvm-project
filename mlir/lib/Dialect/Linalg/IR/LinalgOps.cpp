@@ -17,6 +17,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -31,6 +32,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -97,10 +99,7 @@ static SmallVector<Value> getAsValues(OpBuilder &b, Location loc,
                                       ArrayRef<OpFoldResult> valueOrAttrVec) {
   return llvm::to_vector<4>(
       llvm::map_range(valueOrAttrVec, [&](OpFoldResult value) -> Value {
-        if (auto attr = value.dyn_cast<Attribute>())
-          return b.create<ConstantIndexOp>(loc,
-                                           attr.cast<IntegerAttr>().getInt());
-        return value.get<Value>();
+        return getValueOrCreateConstantIndexOp(b, loc, value);
       }));
 }
 
@@ -977,12 +976,9 @@ struct FoldInitTensorWithDimOp : public OpRewritePattern<tensor::DimOp> {
     auto initTensorOp = dimOp.source().getDefiningOp<linalg::InitTensorOp>();
     if (!initTensorOp || !maybeConstantIndex)
       return failure();
-    if (initTensorOp.isDynamicSize(*maybeConstantIndex)) {
-      rewriter.replaceOp(dimOp,
-                         initTensorOp.getDynamicSize(*maybeConstantIndex));
-      return success();
-    }
-    rewriter.replaceOpWithNewOp<ConstantIndexOp>(dimOp, *maybeConstantIndex);
+    if (!initTensorOp.isDynamicSize(*maybeConstantIndex))
+      return failure();
+    rewriter.replaceOp(dimOp, initTensorOp.getDynamicSize(*maybeConstantIndex));
     return success();
   }
 };
@@ -1197,16 +1193,6 @@ LogicalResult PadTensorOp::reifyResultShapes(
 // Methods related to PadTensor tiling.
 //===----------------------------------------------------------------------===//
 
-/// Given an OpFoldResult, return a Value. If the OpFoldResult is an Attribute,
-/// it must be of type Integer.
-static Value getAsValue(OpBuilder &builder, Location loc, OpFoldResult ofr) {
-  if (auto val = ofr.dyn_cast<Value>())
-    return val;
-  auto intVal = getConstantIntValue(ofr);
-  assert(intVal && "expected Value or IntegerAttr");
-  return builder.create<ConstantIndexOp>(loc, *intVal);
-}
-
 SmallVector<Value> PadTensorOp::getDestinationOperands(OpBuilder &b) {
   ReifiedRankedShapedTypeDims reifiedShapes;
   (void)reifyResultShapes(b, reifiedShapes);
@@ -1294,12 +1280,12 @@ Operation *PadTensorOp::getTiledImplementation(OpBuilder &b, ValueRange dest,
 
   int64_t rank = getSourceType().getRank();
   for (unsigned dim = 0; dim < rank; ++dim) {
-    auto low = getAsValue(b, loc, getMixedLowPad()[dim]);
+    auto low = getValueOrCreateConstantIndexOp(b, loc, getMixedLowPad()[dim]);
     bool hasLowPad = getConstantIntValue(low) != static_cast<int64_t>(0);
-    auto high = getAsValue(b, loc, getMixedHighPad()[dim]);
+    auto high = getValueOrCreateConstantIndexOp(b, loc, getMixedHighPad()[dim]);
     bool hasHighPad = getConstantIntValue(high) != static_cast<int64_t>(0);
-    auto offset = getAsValue(b, loc, offsets[dim]);
-    auto length = getAsValue(b, loc, sizes[dim]);
+    auto offset = getValueOrCreateConstantIndexOp(b, loc, offsets[dim]);
+    auto length = getValueOrCreateConstantIndexOp(b, loc, sizes[dim]);
     auto srcSize = b.createOrFold<tensor::DimOp>(loc, source(), dim);
 
     // The new amount of low padding is `low - offset`. Except for the case
@@ -2288,6 +2274,44 @@ struct TiledLoopInputsFolder : public OpRewritePattern<linalg::TiledLoopOp> {
   }
 };
 
+} // namespace
+
+/// A simple, conservative analysis to determine if the loop is shape
+/// conserving. I.e., the type of the arg-th yielded value is the same as the
+/// type of the corresponding basic block argument of the loop.
+/// Note: This function handles only simple cases. Expand as needed.
+static bool isShapePreserving(TiledLoopOp loopOp, int64_t arg) {
+  auto yieldOp = cast<YieldOp>(loopOp.getLoopBody().front().getTerminator());
+  if (yieldOp.values().empty())
+    // Tiled loop either has no outputs or is a "memref-based version". In
+    // either case, the loop is shape conserving.
+    return true;
+  assert(arg < static_cast<int64_t>(yieldOp.values().size()) &&
+         "arg is out of bounds");
+  Value value = yieldOp.values()[arg];
+  while (value) {
+    if (value == loopOp.getRegionOutputArgs()[arg])
+      return true;
+    OpResult opResult = value.dyn_cast<OpResult>();
+    if (!opResult)
+      return false;
+
+    using tensor::InsertSliceOp;
+    value = llvm::TypeSwitch<Operation *, Value>(opResult.getOwner())
+                .template Case<InsertSliceOp>(
+                    [&](InsertSliceOp op) { return op.dest(); })
+                .template Case<TiledLoopOp>([&](TiledLoopOp loopOp) {
+                  return isShapePreserving(loopOp, opResult.getResultNumber())
+                             ? loopOp.outputs()[opResult.getResultNumber()]
+                             : Value();
+                })
+                .Default([&](auto op) { return Value(); });
+  }
+  return false;
+}
+
+namespace {
+
 /// Fold dim(x) where `x` is an input/output argument of a TiledLoopOp block
 /// to dim(y) where `y` is the initial input/output value of the argument.
 ///
@@ -2302,6 +2326,9 @@ struct TiledLoopInputsFolder : public OpRewritePattern<linalg::TiledLoopOp> {
 /// linalg.tiled_loop ... ins(%x = %y : tensor<...>) {
 ///   tensor.dim %y, %c0 : tensor<...>
 /// }
+///
+/// Note: Dim ops are folded only if it can be proven that the runtime type of
+/// the yielded value (in case of outputs) does not change with loop iterations.
 template <typename OpTy>
 struct DimOfTiledLoopInsOutsFolder : public OpRewritePattern<OpTy> {
   using OpRewritePattern<OpTy>::OpRewritePattern;
@@ -2314,6 +2341,12 @@ struct DimOfTiledLoopInsOutsFolder : public OpRewritePattern<OpTy> {
     auto loopOp =
         dyn_cast<TiledLoopOp>(src.getOwner()->getParent()->getParentOp());
     if (!loopOp)
+      return failure();
+    unsigned numLoops = loopOp.getNumLoops();
+    unsigned numInputArgs = loopOp.getRegionInputArgs().size();
+    if (src.getArgNumber() >= numInputArgs + numLoops &&
+        !isShapePreserving(loopOp,
+                           src.getArgNumber() - numInputArgs - numLoops))
       return failure();
 
     auto inputArgs = loopOp.getRegionInputArgs();
@@ -2336,6 +2369,45 @@ struct DimOfTiledLoopInsOutsFolder : public OpRewritePattern<OpTy> {
     }
 
     return failure();
+  }
+};
+
+/// Fold dim(r) where `r` is the result of a TiledLoopOp to dim(y) where `y`
+/// is the initial output value of the loop.
+///
+/// E.g.:
+/// %y = ... : tensor<...>
+/// %r = linalg.tiled_loop ... outs(%i = %y : tensor<...>) {
+///   ...
+/// }
+/// %0 = tensor.dim %r, %c0 : tensor<...>
+///
+/// is folded to:
+/// %y = ... : tensor<...>
+/// linalg.tiled_loop ... outs(%i = %y : tensor<...>) {
+///   ...
+/// }
+/// %0 = tensor.dim %y, %c0 : tensor<...>
+///
+/// Note: Dim ops are folded only if it can be proven that the runtime type of
+/// the yielded value (in case of outputs) does not change with loop iterations.
+template <typename OpTy>
+struct DimOfTiledLoopResultFolder : public OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(OpTy dimOp,
+                                PatternRewriter &rewriter) const final {
+    auto loopOp = dimOp.source().template getDefiningOp<TiledLoopOp>();
+    if (!loopOp)
+      return failure();
+    auto opResult = dimOp.source().template cast<OpResult>();
+    unsigned resultNumber = opResult.getResultNumber();
+    if (!isShapePreserving(loopOp, resultNumber))
+      return failure();
+    rewriter.updateRootInPlace(dimOp, [&]() {
+      dimOp.sourceMutable().assign(loopOp.outputs()[resultNumber]);
+    });
+    return success();
   }
 };
 
@@ -2444,7 +2516,9 @@ void TiledLoopOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                               MLIRContext *context) {
   results.insert<TiledLoopInputsFolder, TiledLoopResultsFolder,
                  DimOfTiledLoopInsOutsFolder<tensor::DimOp>,
-                 DimOfTiledLoopInsOutsFolder<memref::DimOp>>(context);
+                 DimOfTiledLoopInsOutsFolder<memref::DimOp>,
+                 DimOfTiledLoopResultFolder<tensor::DimOp>,
+                 DimOfTiledLoopResultFolder<memref::DimOp>>(context);
 }
 
 LogicalResult TiledLoopOp::fold(ArrayRef<Attribute>,

@@ -462,7 +462,7 @@ if(APPLE)
     endforeach()
   endif()
 
-  # Explictly disable unsupported Sanitizer configurations.
+  # Explicitly disable unsupported Sanitizer configurations.
   list(REMOVE_ITEM FUZZER_SUPPORTED_OS "watchos")
   list(REMOVE_ITEM FUZZER_SUPPORTED_OS "watchossim")
 
@@ -564,8 +564,19 @@ else()
 endif()
 
 if (MSVC)
+  # Allow setting clang-cl's /winsysroot flag.
+  set(LLVM_WINSYSROOT "" CACHE STRING
+    "If set, argument to clang-cl's /winsysroot")
+
+  if (LLVM_WINSYSROOT)
+    set(MSVC_DIA_SDK_DIR "${LLVM_WINSYSROOT}/DIA SDK" CACHE PATH
+        "Path to the DIA SDK")
+  else()
+    set(MSVC_DIA_SDK_DIR "$ENV{VSINSTALLDIR}DIA SDK" CACHE PATH
+        "Path to the DIA SDK")
+  endif()
+
   # See if the DIA SDK is available and usable.
-  set(MSVC_DIA_SDK_DIR "$ENV{VSINSTALLDIR}DIA SDK")
   if (IS_DIRECTORY ${MSVC_DIA_SDK_DIR})
     set(CAN_SYMBOLIZE 1)
   else()

@@ -576,7 +576,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
         const LLT &VecTy = Query.Types[1];
         return VecTy == v2s16 || VecTy == v4s16 || VecTy == v8s16 ||
                VecTy == v4s32 || VecTy == v2s64 || VecTy == v2s32 ||
-               VecTy == v16s8 || VecTy == v2s32 || VecTy == v2p0;
+               VecTy == v8s8 || VecTy == v16s8 || VecTy == v2s32 ||
+               VecTy == v2p0;
       })
       .minScalarOrEltIf(
           [=](const LegalityQuery &Query) {
@@ -757,9 +758,6 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
 
   // TODO: Vector types.
   getActionDefinitionsBuilder({G_SADDSAT, G_SSUBSAT}).lowerIf(isScalar(0));
-
-  getActionDefinitionsBuilder(G_ISNAN).lowerIf(
-      any(isVector(1), typeInSet(1, {s16, s32, s64})));
 
   // TODO: Vector types.
   getActionDefinitionsBuilder({G_FMAXNUM, G_FMINNUM})

@@ -46,7 +46,7 @@ static cl::opt<bool> CSProfMergeColdContext(
              "profile."));
 
 static cl::opt<bool> CSProfTrimColdContext(
-    "csprof-trim-cold-context", cl::init(true), cl::ZeroOrMore,
+    "csprof-trim-cold-context", cl::init(false), cl::ZeroOrMore,
     cl::desc("If the total count of the profile after all merge is done "
              "is still smaller than threshold, it will be trimmed."));
 
@@ -183,6 +183,7 @@ void ProfileGenerator::findDisjointRanges(RangeSample &DisjointRanges,
   for (auto Item : Ranges) {
     uint64_t Begin = Item.first.first;
     uint64_t End = Item.first.second;
+    assert(Begin <= End && "Invalid instruction range");
     uint64_t Count = Item.second;
     if (Boundaries.find(Begin) == Boundaries.end())
       Boundaries[Begin] = BoundaryPoint();
@@ -194,7 +195,7 @@ void ProfileGenerator::findDisjointRanges(RangeSample &DisjointRanges,
   }
 
   uint64_t BeginAddress = UINT64_MAX;
-  int Count = 0;
+  uint64_t Count = 0;
   for (auto Item : Boundaries) {
     uint64_t Address = Item.first;
     BoundaryPoint &Point = Item.second;
@@ -208,6 +209,7 @@ void ProfileGenerator::findDisjointRanges(RangeSample &DisjointRanges,
       assert((BeginAddress != UINT64_MAX) &&
              "First boundary point cannot be 'end' point");
       DisjointRanges[{BeginAddress, Address}] = Count;
+      assert(Count >= Point.EndCount && "Mismatched live ranges");
       Count -= Point.EndCount;
       BeginAddress = Address + 1;
     }
