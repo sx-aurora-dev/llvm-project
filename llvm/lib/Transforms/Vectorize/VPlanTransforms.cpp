@@ -106,31 +106,25 @@ bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
   bool Changed = false;
   // First, collect the operands of all predicated replicate recipes as seeds
   // for sinking.
-  SetVector<VPValue *> WorkList;
+  SetVector<std::pair<VPBasicBlock *, VPValue *>> WorkList;
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(Iter)) {
     for (auto &Recipe : *VPBB) {
       auto *RepR = dyn_cast<VPReplicateRecipe>(&Recipe);
       if (!RepR || !RepR->isPredicated())
         continue;
-      WorkList.insert(RepR->op_begin(), RepR->op_end());
+      for (VPValue *Op : RepR->operands())
+        WorkList.insert(std::make_pair(RepR->getParent(), Op));
     }
   }
 
   // Try to sink each replicate recipe in the worklist.
   while (!WorkList.empty()) {
-    auto *C = WorkList.pop_back_val();
+    VPBasicBlock *SinkTo;
+    VPValue *C;
+    std::tie(SinkTo, C) = WorkList.pop_back_val();
     auto *SinkCandidate = dyn_cast_or_null<VPReplicateRecipe>(C->Def);
-    if (!SinkCandidate || SinkCandidate->isUniform())
-      continue;
-
-    // All users of SinkCandidate must be in the same block in order to perform
-    // sinking. Therefore the destination block for sinking must match the block
-    // containing the first user.
-    auto *FirstUser = dyn_cast<VPRecipeBase>(*SinkCandidate->user_begin());
-    if (!FirstUser)
-      continue;
-    VPBasicBlock *SinkTo = FirstUser->getParent();
-    if (SinkCandidate->getParent() == SinkTo ||
+    if (!SinkCandidate || SinkCandidate->isUniform() ||
+        SinkCandidate->getParent() == SinkTo ||
         SinkCandidate->mayHaveSideEffects() ||
         SinkCandidate->mayReadOrWriteMemory())
       continue;
@@ -143,7 +137,8 @@ bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
       continue;
 
     SinkCandidate->moveBefore(*SinkTo, SinkTo->getFirstNonPhi());
-    WorkList.insert(SinkCandidate->op_begin(), SinkCandidate->op_end());
+    for (VPValue *Op : SinkCandidate->operands())
+      WorkList.insert(std::make_pair(SinkTo, Op));
     Changed = true;
   }
   return Changed;
@@ -234,12 +229,15 @@ bool VPlanTransforms::mergeReplicateRegions(VPlan &Plan) {
     for (VPRecipeBase &Phi1ToMove : make_early_inc_range(reverse(*Merge1))) {
       VPValue *PredInst1 =
           cast<VPPredInstPHIRecipe>(&Phi1ToMove)->getOperand(0);
-      for (VPUser *U : Phi1ToMove.getVPSingleValue()->users()) {
+      VPValue *Phi1ToMoveV = Phi1ToMove.getVPSingleValue();
+      SmallVector<VPUser *> Users(Phi1ToMoveV->user_begin(),
+                                  Phi1ToMoveV->user_end());
+      for (VPUser *U : Users) {
         auto *UI = dyn_cast<VPRecipeBase>(U);
         if (!UI || UI->getParent() != Then2)
           continue;
         for (unsigned I = 0, E = U->getNumOperands(); I != E; ++I) {
-          if (Phi1ToMove.getVPSingleValue() != U->getOperand(I))
+          if (Phi1ToMoveV != U->getOperand(I))
             continue;
           U->setOperand(I, PredInst1);
         }

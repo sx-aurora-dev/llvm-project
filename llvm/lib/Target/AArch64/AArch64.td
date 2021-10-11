@@ -309,10 +309,6 @@ def FeatureSEL2 : SubtargetFeature<
     "sel2", "HasSEL2", "true",
     "Enable v8.4-A Secure Exception Level 2 extension">;
 
-def FeaturePMU : SubtargetFeature<
-    "pmu", "HasPMU", "true",
-    "Enable v8.4-A PMU extension">;
-
 def FeatureTLB_RMI : SubtargetFeature<
     "tlb-rmi", "HasTLB_RMI", "true",
     "Enable v8.4-A TLB Range and Maintenance Instructions">;
@@ -462,7 +458,7 @@ def HasV8_3aOps : SubtargetFeature<"v8.3a", "HasV8_3aOps", "true",
 def HasV8_4aOps : SubtargetFeature<"v8.4a", "HasV8_4aOps", "true",
   "Support ARM v8.4a instructions", [HasV8_3aOps, FeatureDotProd,
   FeatureNV, FeatureMPAM, FeatureDIT,
-  FeatureTRACEV8_4, FeatureAM, FeatureSEL2, FeaturePMU, FeatureTLB_RMI,
+  FeatureTRACEV8_4, FeatureAM, FeatureSEL2, FeatureTLB_RMI,
   FeatureFlagM, FeatureRCPC_IMMO]>;
 
 def HasV8_5aOps : SubtargetFeature<
@@ -889,36 +885,36 @@ def ProcAppleA13 : SubtargetFeature<"apple-a13", "ARMProcFamily", "AppleA13",
                                      ]>;
 
 def ProcAppleA14 : SubtargetFeature<"apple-a14", "ARMProcFamily", "AppleA14",
-                                     "Apple A14", [
-                                     FeatureAggressiveFMA,
-                                     FeatureAlternateSExtLoadCVTF32Pattern,
-                                     FeatureAltFPCmp,
-                                     FeatureArithmeticBccFusion,
-                                     FeatureArithmeticCbzFusion,
-                                     FeatureCrypto,
-                                     FeatureDisableLatencySchedHeuristic,
-                                     FeatureFPARMv8,
-                                     FeatureFRInt3264,
-                                     FeatureFuseAddress,
-                                     FeatureFuseAES,
-                                     FeatureFuseArithmeticLogic,
-                                     FeatureFuseCCSelect,
-                                     FeatureFuseCryptoEOR,
-                                     FeatureFuseLiterals,
-                                     FeatureNEON,
-                                     FeaturePerfMon,
-                                     FeatureSpecRestrict,
-                                     FeatureSSBS,
-                                     FeatureSB,
-                                     FeaturePredRes,
-                                     FeatureCacheDeepPersist,
-                                     FeatureZCRegMove,
-                                     FeatureZCZeroing,
-                                     FeatureFullFP16,
-                                     FeatureFP16FML,
-                                     FeatureSHA3,
-                                     HasV8_4aOps
-                                     ]>;
+                                    "Apple A14", [
+                                    FeatureAggressiveFMA,
+                                    FeatureAlternateSExtLoadCVTF32Pattern,
+                                    FeatureAltFPCmp,
+                                    FeatureArithmeticBccFusion,
+                                    FeatureArithmeticCbzFusion,
+                                    FeatureCrypto,
+                                    FeatureDisableLatencySchedHeuristic,
+                                    FeatureFPARMv8,
+                                    FeatureFRInt3264,
+                                    FeatureFuseAddress,
+                                    FeatureFuseAES,
+                                    FeatureFuseArithmeticLogic,
+                                    FeatureFuseCCSelect,
+                                    FeatureFuseCryptoEOR,
+                                    FeatureFuseLiterals,
+                                    FeatureNEON,
+                                    FeaturePerfMon,
+                                    FeatureSpecRestrict,
+                                    FeatureSSBS,
+                                    FeatureSB,
+                                    FeaturePredRes,
+                                    FeatureCacheDeepPersist,
+                                    FeatureZCRegMove,
+                                    FeatureZCZeroing,
+                                    FeatureFullFP16,
+                                    FeatureFP16FML,
+                                    FeatureSHA3,
+                                    HasV8_4aOps
+                                    ]>;
 
 def ProcExynosM3 : SubtargetFeature<"exynosm3", "ARMProcFamily", "ExynosM3",
                                     "Samsung Exynos-M3 processors",

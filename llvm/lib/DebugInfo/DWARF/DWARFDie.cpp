@@ -108,130 +108,211 @@ static void dumpLocationExpr(raw_ostream &OS, const DWARFFormValue &FormValue,
   return;
 }
 
-/// Dump the name encoded in the type tag.
-static void dumpTypeTagName(raw_ostream &OS, dwarf::Tag T) {
-  StringRef TagStr = TagString(T);
-  if (!TagStr.startswith("DW_TAG_") || !TagStr.endswith("_type"))
-    return;
-  OS << TagStr.substr(7, TagStr.size() - 12) << " ";
-}
+namespace {
 
-static void dumpArrayType(raw_ostream &OS, const DWARFDie &D) {
-  for (const DWARFDie &C : D.children())
-    if (C.getTag() == DW_TAG_subrange_type) {
-      Optional<uint64_t> LB;
-      Optional<uint64_t> Count;
-      Optional<uint64_t> UB;
-      Optional<unsigned> DefaultLB;
-      if (Optional<DWARFFormValue> L = C.find(DW_AT_lower_bound))
-        LB = L->getAsUnsignedConstant();
-      if (Optional<DWARFFormValue> CountV = C.find(DW_AT_count))
-        Count = CountV->getAsUnsignedConstant();
-      if (Optional<DWARFFormValue> UpperV = C.find(DW_AT_upper_bound))
-        UB = UpperV->getAsUnsignedConstant();
-      if (Optional<DWARFFormValue> LV =
-              D.getDwarfUnit()->getUnitDIE().find(DW_AT_language))
-        if (Optional<uint64_t> LC = LV->getAsUnsignedConstant())
-          if ((DefaultLB =
-                   LanguageLowerBound(static_cast<dwarf::SourceLanguage>(*LC))))
-            if (LB && *LB == *DefaultLB)
-              LB = None;
-      if (!LB && !Count && !UB)
-        OS << "[]";
-      else if (!LB && (Count || UB) && DefaultLB)
-        OS << '[' << (Count ? *Count : *UB - *DefaultLB + 1) << ']';
-      else {
-        OS << "[[";
-        if (LB)
-          OS << *LB;
-        else
-          OS << '?';
-        OS << ", ";
-        if (Count)
+// FIXME: We should have pretty printers per language. Currently we print
+// everything as if it was C++ and fall back to the TAG type name.
+struct DWARFTypePrinter {
+  raw_ostream &OS;
+  bool Word = true;
+  bool EndedWithTemplate = false;
+
+  DWARFTypePrinter(raw_ostream &OS) : OS(OS) {}
+
+  /// Dump the name encoded in the type tag.
+  void appendTypeTagName(dwarf::Tag T) {
+    StringRef TagStr = TagString(T);
+    if (!TagStr.startswith("DW_TAG_") || !TagStr.endswith("_type"))
+      return;
+    OS << TagStr.substr(7, TagStr.size() - 12) << " ";
+  }
+
+  void appendArrayType(const DWARFDie &D) {
+    for (const DWARFDie &C : D.children())
+      if (C.getTag() == DW_TAG_subrange_type) {
+        Optional<uint64_t> LB;
+        Optional<uint64_t> Count;
+        Optional<uint64_t> UB;
+        Optional<unsigned> DefaultLB;
+        if (Optional<DWARFFormValue> L = C.find(DW_AT_lower_bound))
+          LB = L->getAsUnsignedConstant();
+        if (Optional<DWARFFormValue> CountV = C.find(DW_AT_count))
+          Count = CountV->getAsUnsignedConstant();
+        if (Optional<DWARFFormValue> UpperV = C.find(DW_AT_upper_bound))
+          UB = UpperV->getAsUnsignedConstant();
+        if (Optional<DWARFFormValue> LV =
+                D.getDwarfUnit()->getUnitDIE().find(DW_AT_language))
+          if (Optional<uint64_t> LC = LV->getAsUnsignedConstant())
+            if ((DefaultLB = LanguageLowerBound(
+                     static_cast<dwarf::SourceLanguage>(*LC))))
+              if (LB && *LB == *DefaultLB)
+                LB = None;
+        if (!LB && !Count && !UB)
+          OS << "[]";
+        else if (!LB && (Count || UB) && DefaultLB)
+          OS << '[' << (Count ? *Count : *UB - *DefaultLB + 1) << ']';
+        else {
+          OS << "[[";
           if (LB)
-            OS << *LB + *Count;
+            OS << *LB;
           else
-            OS << "? + " << *Count;
-        else if (UB)
-          OS << *UB + 1;
-        else
-          OS << '?';
-        OS << ")]";
-      }
-    }
-}
-
-/// Recursively dump the DIE type name when applicable.
-static void dumpTypeName(raw_ostream &OS, const DWARFDie &D) {
-  if (!D.isValid())
-    return;
-
-  if (const char *Name = D.getName(DINameKind::LinkageName)) {
-    OS << Name;
-    return;
-  }
-
-  // FIXME: We should have pretty printers per language. Currently we print
-  // everything as if it was C++ and fall back to the TAG type name.
-  const dwarf::Tag T = D.getTag();
-  switch (T) {
-  case DW_TAG_array_type:
-  case DW_TAG_pointer_type:
-  case DW_TAG_ptr_to_member_type:
-  case DW_TAG_reference_type:
-  case DW_TAG_rvalue_reference_type:
-  case DW_TAG_subroutine_type:
-    break;
-  default:
-    dumpTypeTagName(OS, T);
-  }
-
-  // Follow the DW_AT_type if possible.
-  DWARFDie TypeDie = D.getAttributeValueAsReferencedDie(DW_AT_type);
-  dumpTypeName(OS, TypeDie);
-
-  switch (T) {
-  case DW_TAG_subroutine_type: {
-    if (!TypeDie)
-      OS << "void";
-    OS << '(';
-    bool First = true;
-    for (const DWARFDie &C : D.children()) {
-      if (C.getTag() == DW_TAG_formal_parameter) {
-        if (!First)
+            OS << '?';
           OS << ", ";
-        First = false;
-        dumpTypeName(OS, C.getAttributeValueAsReferencedDie(DW_AT_type));
+          if (Count)
+            if (LB)
+              OS << *LB + *Count;
+            else
+              OS << "? + " << *Count;
+          else if (UB)
+            OS << *UB + 1;
+          else
+            OS << '?';
+          OS << ")]";
+        }
       }
+  }
+
+  void appendPointerLikeTypeBefore(DWARFDie D, DWARFDie Inner, StringRef Ptr) {
+    appendUnqualifiedTypeNameBefore(Inner);
+    bool NeedsParens =
+        Inner && (Inner.getTag() == llvm::dwarf::DW_TAG_subroutine_type ||
+                  Inner.getTag() == llvm::dwarf::DW_TAG_array_type);
+    if (NeedsParens)
+      OS << '(';
+    else if (Word)
+      OS << ' ';
+    OS << Ptr;
+    Word = false;
+  }
+
+  DWARFDie appendUnqualifiedTypeNameBefore(DWARFDie D) {
+    Word = true;
+    if (!D) {
+      OS << "void";
+      return DWARFDie();
     }
-    OS << ')';
-    break;
-  }
-  case DW_TAG_array_type: {
-    dumpArrayType(OS, D);
-    break;
-  }
-  case DW_TAG_pointer_type:
-    OS << '*';
-    break;
-  case DW_TAG_ptr_to_member_type:
-    if (DWARFDie Cont =
-            D.getAttributeValueAsReferencedDie(DW_AT_containing_type)) {
-      dumpTypeName(OS << ' ', Cont);
-      OS << "::";
+    if (const char *Name = D.getName(DINameKind::LinkageName)) {
+      OS << Name;
+      return DWARFDie();
     }
-    OS << '*';
-    break;
-  case DW_TAG_reference_type:
-    OS << '&';
-    break;
-  case DW_TAG_rvalue_reference_type:
-    OS << "&&";
-    break;
-  default:
-    break;
+
+    DWARFDie Inner = D.getAttributeValueAsReferencedDie(DW_AT_type);
+    const dwarf::Tag T = D.getTag();
+    switch (T) {
+    case DW_TAG_pointer_type: {
+      appendPointerLikeTypeBefore(D, Inner, "*");
+      break;
+    }
+    case DW_TAG_subroutine_type: {
+      appendUnqualifiedTypeNameBefore(Inner);
+      if (Word) {
+        OS << ' ';
+      }
+      Word = false;
+      break;
+    }
+    case DW_TAG_array_type: {
+      appendUnqualifiedTypeNameBefore(Inner);
+      if (Word)
+        OS << ' ';
+      Word = false;
+      break;
+    }
+    case DW_TAG_reference_type:
+      appendPointerLikeTypeBefore(D, Inner, "&");
+      break;
+    case DW_TAG_rvalue_reference_type:
+      appendPointerLikeTypeBefore(D, Inner, "&&");
+      break;
+    case DW_TAG_ptr_to_member_type: {
+      appendUnqualifiedTypeNameBefore(Inner);
+      bool NeedsParens =
+          Inner && (Inner.getTag() == llvm::dwarf::DW_TAG_subroutine_type ||
+                    Inner.getTag() == llvm::dwarf::DW_TAG_array_type);
+      if (NeedsParens)
+        OS << '(';
+      else if (Word)
+        OS << ' ';
+      if (DWARFDie Cont =
+              D.getAttributeValueAsReferencedDie(DW_AT_containing_type)) {
+        appendUnqualifiedTypeName(Cont);
+        OS << "::";
+      }
+      OS << "*";
+      Word = false;
+      break;
+    }
+    default:
+      appendTypeTagName(T);
+      appendUnqualifiedTypeNameBefore(Inner);
+      break;
+    }
+    return Inner;
   }
-}
+
+  void appendUnqualifiedTypeNameAfter(DWARFDie D, DWARFDie Inner,
+                                      bool SkipFirstParamIfArtificial = false) {
+    if (!D)
+      return;
+    switch (D.getTag()) {
+    case DW_TAG_subroutine_type: {
+      OS << '(';
+      bool First = true;
+      bool RealFirst = true;
+      for (const DWARFDie &C : D.children()) {
+        if (C.getTag() == DW_TAG_formal_parameter) {
+          if (SkipFirstParamIfArtificial && RealFirst &&
+              C.find(DW_AT_artificial)) {
+            RealFirst = false;
+            continue;
+          }
+          if (!First)
+            OS << ", ";
+          First = false;
+          appendUnqualifiedTypeName(
+              C.getAttributeValueAsReferencedDie(DW_AT_type));
+        }
+      }
+      OS << ')';
+      break;
+    }
+    case DW_TAG_array_type: {
+      appendArrayType(D);
+      break;
+    }
+    case DW_TAG_ptr_to_member_type:
+    case DW_TAG_reference_type:
+    case DW_TAG_rvalue_reference_type:
+    case DW_TAG_pointer_type: {
+      bool NeedsParens =
+          Inner && (Inner.getTag() == llvm::dwarf::DW_TAG_subroutine_type ||
+                    Inner.getTag() == llvm::dwarf::DW_TAG_array_type);
+      if (NeedsParens)
+        OS << ')';
+      appendUnqualifiedTypeNameAfter(
+          Inner, D.getAttributeValueAsReferencedDie(DW_AT_type),
+          /*SkipFirstParamIfArtificial=*/D.getTag() ==
+              DW_TAG_ptr_to_member_type);
+      break;
+    }
+    default:
+      break;
+    }
+  }
+
+  /// Recursively append the DIE type name when applicable.
+  void appendUnqualifiedTypeName(const DWARFDie &D,
+                                 bool SkipFirstParamIfArtificial = false) {
+    if (!D.isValid() || D.isNULL())
+      return;
+
+    // FIXME: We should have pretty printers per language. Currently we print
+    // everything as if it was C++ and fall back to the TAG type name.
+    DWARFDie Inner = appendUnqualifiedTypeNameBefore(D);
+    appendUnqualifiedTypeNameAfter(D, Inner, SkipFirstParamIfArtificial);
+  }
+};
+} // anonymous namespace
 
 static void dumpAttribute(raw_ostream &OS, const DWARFDie &Die,
                           const DWARFAttribute &AttrValue, unsigned Indent,
@@ -317,7 +398,8 @@ static void dumpAttribute(raw_ostream &OS, const DWARFDie &Die,
       OS << Space << "\"" << Name << '\"';
   } else if (Attr == DW_AT_type) {
     OS << Space << "\"";
-    dumpTypeName(OS, Die.getAttributeValueAsReferencedDie(FormValue));
+    DWARFTypePrinter(OS).appendUnqualifiedTypeName(
+        Die.getAttributeValueAsReferencedDie(FormValue));
     OS << '"';
   } else if (Attr == DW_AT_APPLE_property_attribute) {
     if (Optional<uint64_t> OptVal = FormValue.getAsUnsignedConstant())
