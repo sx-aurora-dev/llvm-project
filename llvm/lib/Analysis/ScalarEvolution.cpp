@@ -2397,6 +2397,17 @@ StrengthenNoWrapFlags(ScalarEvolution *SE, SCEVTypes Type,
       Ops[0]->isZero() && IsKnownNonNegative(Ops[1]))
     Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNUW);
 
+  // both (udiv X, Y) * Y and Y * (udiv X, Y) are always NUW
+  if (Type == scMulExpr && !ScalarEvolution::hasFlags(Flags, SCEV::FlagNUW) &&
+      Ops.size() == 2) {
+    if (auto *UDiv = dyn_cast<SCEVUDivExpr>(Ops[0]))
+      if (UDiv->getOperand(1) == Ops[1])
+        Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNUW);
+    if (auto *UDiv = dyn_cast<SCEVUDivExpr>(Ops[1]))
+      if (UDiv->getOperand(1) == Ops[0])
+        Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNUW);
+  }
+
   return Flags;
 }
 
@@ -10692,10 +10703,11 @@ bool ScalarEvolution::isImpliedCondBalancedTypes(
   }
 
   // Unsigned comparison is the same as signed comparison when both the operands
-  // are non-negative.
+  // are non-negative or negative.
   if (CmpInst::isUnsigned(FoundPred) &&
       CmpInst::getSignedPredicate(FoundPred) == Pred &&
-      isKnownNonNegative(FoundLHS) && isKnownNonNegative(FoundRHS))
+      ((isKnownNonNegative(FoundLHS) && isKnownNonNegative(FoundRHS)) ||
+       (isKnownNegative(FoundLHS) && isKnownNegative(FoundRHS))))
     return isImpliedCondOperands(Pred, LHS, RHS, FoundLHS, FoundRHS, Context);
 
   // Check if we can make progress by sharpening ranges.

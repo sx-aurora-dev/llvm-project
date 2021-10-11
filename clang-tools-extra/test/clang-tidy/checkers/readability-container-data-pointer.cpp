@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s readability-container-data-pointer %t
+// RUN: %check_clang_tidy %s readability-container-data-pointer %t -- -- -fno-delayed-template-parsing
 
 typedef __SIZE_TYPE__ size_t;
 
@@ -105,6 +105,7 @@ void l() {
 
 template <typename T>
 void m(const std::vector<T> &v) {
-  const T *p = &v[0];
-  // CHECK-MESSAGES: :[[@LINE-1]]:16: warning: 'data' should be used for accessing the data pointer instead of taking the address of the 0-th element [readability-container-data-pointer]
+  return &v[0];
+  // CHECK-MESSAGES: :[[@LINE-1]]:10: warning: 'data' should be used for accessing the data pointer instead of taking the address of the 0-th element [readability-container-data-pointer]
+  // CHECK-FIXES: {{^  }}return v.data();{{$}}
 }
