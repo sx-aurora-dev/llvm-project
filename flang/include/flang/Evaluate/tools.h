@@ -94,10 +94,9 @@ bool IsCoarray(const ActualArgument &);
 template <typename A> bool IsCoarray(const A &) { return false; }
 template <typename A> bool IsCoarray(const Designator<A> &designator) {
   if (const auto *symbol{std::get_if<SymbolRef>(&designator.u)}) {
-    return IsCoarray(symbol->get());
-  } else {
-    return false;
+    return symbol->get().Corank() > 0;
   }
+  return false;
 }
 template <typename T> bool IsCoarray(const Expr<T> &expr) {
   return std::visit([](const auto &x) { return IsCoarray(x); }, expr.u);
@@ -299,6 +298,9 @@ std::optional<DataRef> ExtractDataRef(const A *p, bool intoSubstring = false) {
     return std::nullopt;
   }
 }
+std::optional<DataRef> ExtractDataRef(
+    const ActualArgument &, bool intoSubstring = false);
+
 std::optional<DataRef> ExtractSubstringBase(const Substring &);
 
 // Predicate: is an expression is an array element reference?
