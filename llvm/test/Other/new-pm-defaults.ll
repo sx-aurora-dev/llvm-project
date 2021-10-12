@@ -14,7 +14,7 @@
 ; RUN:     -passes='default<O2>' -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O2,CHECK-O23SZ,%llvmcheckext
 ; RUN: opt -disable-verify -debug-pass-manager \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,CHECK-O23SZ,%llvmcheckext
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes='default<Os>' -S %s 2>&1 \
@@ -28,43 +28,43 @@
 
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-peephole='no-op-function' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-PEEPHOLE,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-late-loop-optimizations='no-op-loop' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-LOOP-LATE,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-loop-optimizer-end='no-op-loop' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-LOOP-END,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-scalar-optimizer-late='no-op-function' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-SCALAR-LATE,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-cgscc-optimizer-late='no-op-cgscc' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-CGSCC-LATE,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-vectorizer-start='no-op-function' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-VECTORIZER-START,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-pipeline-start='no-op-module' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-PIPELINE-START,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-pipeline-early-simplification='no-op-module' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-PIPELINE-EARLY-SIMPLIFICATION,CHECK-O23SZ
 ; RUN: opt -disable-verify -debug-pass-manager \
 ; RUN:     -passes-ep-pipeline-start='no-op-module' \
-; RUN:     -passes='lto-pre-link<O3>' -S  %s 2>&1 \
+; RUN:     -passes='lto-pre-link<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-LTO,CHECK-O3,%llvmcheckext,CHECK-EP-PIPELINE-START,CHECK-O23SZ
-; RUN: opt -disable-verify -debug-pass-manager \
+; RUN: opt -disable-verify -debug-pass-manager -rv=0 \
 ; RUN:     -passes-ep-optimizer-last='no-op-function' \
-; RUN:     -passes='default<O3>' -S  %s 2>&1 \
+; RUN:     -passes='default<O3>' -rv=0 -S  %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK-O,CHECK-DEFAULT,CHECK-O3,%llvmcheckext,CHECK-EP-OPTIMIZER-LAST,CHECK-O23SZ
 
 ; Suppress FileCheck --allow-unused-prefixes=false diagnostics.
