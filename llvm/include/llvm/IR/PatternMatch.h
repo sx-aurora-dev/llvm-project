@@ -1070,9 +1070,15 @@ template <typename OP_t> struct AnyUnaryOp_match {
 
   AnyUnaryOp_match(const OP_t &X) : X(X) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *I = dyn_cast<UnaryOperator>(V))
-      return X.match(I->getOperand(0));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto * I = match_dyn_cast<MatchContext, UnaryOperator>(V);
+    if (!I) return false;
+
+    if (!MContext.acceptInnerNode(I)) return false;
+
+    MatchContext XContext(MContext);
+    if (X.match_context(I->getOperand(0), XContext) && MContext.mergeContext(XContext)) return true;
     return false;
   }
 };
