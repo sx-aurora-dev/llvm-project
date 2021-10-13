@@ -27,8 +27,15 @@ define signext i8 @func_fr(%struct.data* readonly %0, i32 signext %1) {
 ; CHECK-LABEL: func_fr:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sll %s1, %s1, 2
-; CHECK-NEXT:    ldl.sx %s0, (%s1, %s0)
-; CHECK-NEXT:    stl %s0, 8(%s1, %s11)
+; CHECK-NEXT:    ld1b.zx %s2, 1(%s1, %s0)
+; CHECK-NEXT:    lea %s3, 8(, %s11)
+; CHECK-NEXT:    st1b %s2, 1(%s1, %s3)
+; CHECK-NEXT:    ld1b.zx %s2, 2(%s1, %s0)
+; CHECK-NEXT:    st1b %s2, 2(%s1, %s3)
+; CHECK-NEXT:    ld1b.zx %s2, 3(%s1, %s0)
+; CHECK-NEXT:    st1b %s2, 3(%s1, %s3)
+; CHECK-NEXT:    ld1b.zx %s0, (%s1, %s0)
+; CHECK-NEXT:    st1b %s0, 8(%s1, %s11)
 ; CHECK-NEXT:    ld1b.sx %s0, 8(%s1, %s11)
 ; CHECK-NEXT:    adds.l %s11, 48, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
