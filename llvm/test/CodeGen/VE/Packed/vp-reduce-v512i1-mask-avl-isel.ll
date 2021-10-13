@@ -31,7 +31,6 @@ define fastcc i1 @test_reduce_and(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 define fastcc i1 @test_reduce_or(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_or:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s0, 1, %s0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    andm %vm1, %vm2, %vm4
@@ -65,8 +64,8 @@ define fastcc i1 @test_reduce_xor(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    andm %vm1, %vm3, %vm5
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
+; CHECK-NEXT:    and %s1, 1, %s1
 ; CHECK-NEXT:    xor %s0, %s0, %s1
-; CHECK-NEXT:    and %s0, 1, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i1 @llvm.vp.reduce.xor.v512i1(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n)
   ret i1 %r
