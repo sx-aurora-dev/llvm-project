@@ -1,6 +1,5 @@
-; RUN: opt < %s  -loop-vectorize -ve-expensive-vector=1 -mtriple=ve-linux -S | FileCheck %s -check-prefix=SCALAR
-; RUN: opt < %s  -loop-vectorize -mtriple=ve-linux -S | FileCheck %s -check-prefix=VECTOR
-; RUN: opt < %s  -loop-vectorize -mtriple=x86_64-pc_linux -mcpu=core-avx2 -S | FileCheck %s -check-prefix=VECTOR
+; RUN: opt < %s -rv=0  -loop-vectorize -mtriple=ve-linux -S | FileCheck %s -check-prefix=SCALAR
+; RUN: opt < %s -rv=0  -loop-vectorize -mtriple=x86_64-pc_linux -mcpu=core-avx2 -S | FileCheck %s -check-prefix=VECTOR
 
 ; LV must not trigger for VE if TTI is configured to make vector unappealing
 
