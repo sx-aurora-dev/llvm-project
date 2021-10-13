@@ -82,12 +82,8 @@ define i8 @loadi8stk() {
 ; Function Attrs: norecurse nounwind readonly
 define double @loadf64com() {
 ; CHECK-LABEL: loadf64com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, vf64@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, vf64@hi(, %s0)
-; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NOT:     ld %s0
+; CHECK:         b.l.t (, %s10)
   %1 = load double, double* @vf64, align 4
   ret double %1
 }
@@ -108,12 +104,8 @@ define float @loadf32com() {
 ; Function Attrs: norecurse nounwind readonly
 define i64 @loadi64com() {
 ; CHECK-LABEL: loadi64com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, vi64@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, vi64@hi(, %s0)
-; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NOT:     ld %s
+; CHECK:         b.l.t (, %s10)
   %1 = load i64, i64* @vi64, align 4
   ret i64 %1
 }
