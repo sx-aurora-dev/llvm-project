@@ -82,12 +82,8 @@ define void @storei8stk(i8 %0) {
 ; Function Attrs: norecurse nounwind readonly
 define void @storef64com(double %0) {
 ; CHECK-LABEL: storef64com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, vf64@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, vf64@hi(, %s1)
-; CHECK-NEXT:    st %s0, (, %s1)
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NOT:     st %s
+; CHECK:         b.l.t (, %s10)
   store double %0, double* @vf64, align 4
   ret void
 }
@@ -108,12 +104,8 @@ define void @storef32com(float %0) {
 ; Function Attrs: norecurse nounwind readonly
 define void @storei64com(i64 %0) {
 ; CHECK-LABEL: storei64com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, vi64@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, vi64@hi(, %s1)
-; CHECK-NEXT:    st %s0, (, %s1)
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NOT:     st %s
+; CHECK:         b.l.t (, %s10)
   store i64 %0, i64* @vi64, align 4
   ret void
 }
