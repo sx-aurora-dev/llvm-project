@@ -1,4 +1,4 @@
-; RUN: opt --expand-vec-pred -S < %s | FileCheck %s
+; RUN: opt --expand-vec-pred --enable-new-pm=0 -S < %s | FileCheck %s
 
 define void @test_vp_int(<8 x i32> %i0, <8 x i32> %i1, <8 x i32> %i2, <8 x i32> %f3, <8 x i1> %m, i32 %n) {
 ; CHECK-NOT: {{call.* @llvm.vp.add}}
