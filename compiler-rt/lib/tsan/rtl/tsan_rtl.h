@@ -274,13 +274,7 @@ class ThreadContext final : public ThreadContextBase {
 
 struct RacyStacks {
   MD5Hash hash[2];
-  bool operator==(const RacyStacks &other) const {
-    if (hash[0] == other.hash[0] && hash[1] == other.hash[1])
-      return true;
-    if (hash[0] == other.hash[1] && hash[1] == other.hash[0])
-      return true;
-    return false;
-  }
+  bool operator==(const RacyStacks &other) const;
 };
 
 struct RacyAddress {
@@ -306,7 +300,6 @@ struct Context {
 
   Mutex report_mtx;
   int nreported;
-  int nmissed_expected;
   atomic_uint64_t last_symbolize_time_ns;
 
   void *background_thread;
