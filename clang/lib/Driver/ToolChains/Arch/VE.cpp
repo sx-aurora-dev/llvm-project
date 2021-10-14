@@ -57,41 +57,50 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-  // Defaults (keep in sync with llvm/lib/Target/VE/VE.td)
-  bool EnableVPU = true;
-  bool EnablePacked = true;
+  // Optional Clang -ve-* flags override the LLVM target defaults.
+  Optional<bool> EnableVPU;
+  Optional<bool> EnablePacked;
   bool EnableSIMD = false;
 
   // Whether to enable v256 VPU registers and isel.
-  if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
-    if (A->getOption().matches(options::OPT_mno_vevpu))
-      EnableVPU = false;
-  }
+  if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu))
+    EnableVPU = A->getOption().matches(options::OPT_mvevpu);
 
   // Whether to enable v512 VPU registers and isel.
   if (auto *A =
-          Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
-    if (A->getOption().matches(options::OPT_mno_vepacked))
-      EnablePacked = false;
-  }
+          Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked))
+    EnablePacked = A->getOption().matches(options::OPT_mvepacked);
 
-  // Whether to enable fixed-SIMD patterns
+  // Whether to enable legacy fixed-SIMD patterns.
   if (auto *A =
           Args.getLastArg(options::OPT_mvesimd, options::OPT_mno_vesimd)) {
-    if (A->getOption().matches(options::OPT_mvesimd)) {
-      EnableSIMD = true;
-      EnableVPU = false;
+    EnableSIMD = A->getOption().matches(options::OPT_mvesimd);
+  }
+
+  // Fixed SIMD.
+  // Disable VVP ISel.
+  if (EnableSIMD) {
+    Features.push_back("+simd");
+    EnableVPU = false;
+    EnablePacked = false;
+  }
+
+  // VVP ISel.
+  // Turning off VPU implies no packed mode.
+  if (EnableVPU) {
+    if (*EnableVPU)
+      Features.push_back("+vpu");
+    else {
+      Features.push_back("-vpu");
       EnablePacked = false;
     }
   }
 
-  // Fixed SIMD
-  if (EnableSIMD)
-    Features.push_back("+simd");
-
-  // VVP
-  if (!EnableVPU)
-    Features.push_back("-vpu");
-  if (!EnablePacked)
-    Features.push_back("-packed");
+  // VVP Packed-register ISel.
+  if (EnablePacked) {
+    if (*EnablePacked)
+      Features.push_back("+packed");
+    else
+      Features.push_back("-packed");
+  }
 }
