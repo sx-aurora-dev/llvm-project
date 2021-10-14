@@ -528,6 +528,28 @@ bool ISD::isVPOpcode(unsigned Opcode) {
   }
 }
 
+bool ISD::isVPBinaryOp(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define HANDLE_VP_IS_BINARY return true;
+#define END_REGISTER_VP_SDNODE(VPSD) return false;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+bool ISD::isVPReductionOp(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define HANDLE_VP_REDUCTION(STARTPOS, ...) return true;
+#define END_REGISTER_VP_SDNODE(VPSD) return false;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
 /// The operand position of the vector mask.
 Optional<unsigned> ISD::getVPMaskIdx(unsigned Opcode) {
   switch (Opcode) {
@@ -575,19 +597,6 @@ unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
 #define END_REGISTER_VP_SDNODE(VPOPC) return ISD::VPOPC;
 #include "llvm/IR/VPIntrinsics.def"
   }
-}
-
-bool ISD::isVPReductionOp(unsigned VPISD) {
-  switch (VPISD) {
-  default:
-    break;
-
-#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
-#define HANDLE_VP_REDUCTION(ACCUPOS, ...) return true;
-#define END_REGISTER_VP_SDNODE(VPOPC) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return false;
 }
 
 Optional<unsigned> ISD::getVPReductionStartParamPos(unsigned VPISD) {
