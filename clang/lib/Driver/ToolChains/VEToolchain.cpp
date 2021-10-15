@@ -122,13 +122,11 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     StringRef(cl_include_dir).split(Dirs, StringRef(EnvPathSeparatorStr));
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
-    return;
+  } else {
+    SmallString<128> P(getDriver().ResourceDir);
+    llvm::sys::path::append(P, "include/c++/v1");
+    addSystemInclude(DriverArgs, CC1Args, P);
   }
-
-  // libc++ installed in CMAKE_INSTALL_PREFIX by default.
-  SmallString<128> P(getDriver().ResourceDir);
-  llvm::sys::path::append(P, "/../../../include/c++/v1");
-  addSystemInclude(DriverArgs, CC1Args, P);
 }
 
 Optional<std::string> VEToolChain::getRuntimePath() const {
