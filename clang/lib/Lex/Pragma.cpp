@@ -1432,14 +1432,19 @@ struct PragmaWarningHandler : public PragmaHandler {
 
         // Figure out which warning specifier this is.
         bool SpecifierValid;
-        StringRef Specifier;
-        llvm::SmallString<1> SpecifierBuf;
+        PPCallbacks::PragmaWarningSpecifier Specifier;
         if (II) {
-          Specifier = II->getName();
-          SpecifierValid = llvm::StringSwitch<bool>(Specifier)
-                               .Cases("default", "disable", "error", "once",
-                                      "suppress", true)
-                               .Default(false);
+          int SpecifierInt = llvm::StringSwitch<int>(II->getName())
+                                 .Case("default", PPCallbacks::PWS_Default)
+                                 .Case("disable", PPCallbacks::PWS_Disable)
+                                 .Case("error", PPCallbacks::PWS_Error)
+                                 .Case("once", PPCallbacks::PWS_Once)
+                                 .Case("suppress", PPCallbacks::PWS_Suppress)
+                                 .Default(-1);
+          if ((SpecifierValid = SpecifierInt != -1))
+            Specifier =
+                static_cast<PPCallbacks::PragmaWarningSpecifier>(SpecifierInt);
+
           // If we read a correct specifier, snatch next token (that should be
           // ":", checked later).
           if (SpecifierValid)
@@ -1447,9 +1452,10 @@ struct PragmaWarningHandler : public PragmaHandler {
         } else {
           // Token is a numeric constant. It should be either 1, 2, 3 or 4.
           uint64_t Value;
-          Specifier = PP.getSpelling(Tok, SpecifierBuf);
           if (PP.parseSimpleIntegerLiteral(Tok, Value)) {
-            SpecifierValid = (Value >= 1) && (Value <= 4);
+            if ((SpecifierValid = (Value >= 1) && (Value <= 4)))
+              Specifier = static_cast<PPCallbacks::PragmaWarningSpecifier>(
+                  PPCallbacks::PWS_Level1 + Value - 1);
           } else
             SpecifierValid = false;
           // Next token already snatched by parseSimpleIntegerLiteral.
@@ -1990,7 +1996,7 @@ static IdentifierInfo *HandleMacroAnnotationPragma(Preprocessor &PP, Token &Tok,
   IdentifierInfo *II = Tok.getIdentifierInfo();
 
   if (!II->hasMacroDefinition()) {
-    PP.Diag(Tok, diag::err_pp_visibility_non_macro) << II->getName();
+    PP.Diag(Tok, diag::err_pp_visibility_non_macro) << II;
     return nullptr;
   }
 
@@ -2025,8 +2031,8 @@ struct PragmaDeprecatedHandler : public PragmaHandler {
     if (IdentifierInfo *II = HandleMacroAnnotationPragma(
             PP, Tok, "#pragma clang deprecated", MessageString)) {
       II->setIsDeprecatedMacro(true);
-      if (!MessageString.empty())
-        PP.addMacroDeprecationMsg(II, std::move(MessageString));
+      PP.addMacroDeprecationMsg(II, std::move(MessageString),
+                                Tok.getLocation());
     }
   }
 };
@@ -2050,6 +2056,47 @@ struct PragmaRestrictExpansionHandler : public PragmaHandler {
       PP.addRestrictExpansionMsg(II, std::move(MessageString),
                                  Tok.getLocation());
     }
+  }
+};
+
+/// "\#pragma clang final(...)"
+///
+/// The syntax is
+/// \code
+///   #pragma clang final(MACRO_NAME)
+/// \endcode
+struct PragmaFinalHandler : public PragmaHandler {
+  PragmaFinalHandler() : PragmaHandler("final") {}
+
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &Tok) override {
+    std::string Macro;
+
+    PP.Lex(Tok);
+    if (Tok.isNot(tok::l_paren)) {
+      PP.Diag(Tok, diag::err_expected) << "(";
+      return;
+    }
+
+    PP.LexUnexpandedToken(Tok);
+    if (!Tok.is(tok::identifier)) {
+      PP.Diag(Tok, diag::err_expected) << tok::identifier;
+      return;
+    }
+    IdentifierInfo *II = Tok.getIdentifierInfo();
+
+    if (!II->hasMacroDefinition()) {
+      PP.Diag(Tok, diag::err_pp_visibility_non_macro) << II;
+      return;
+    }
+
+    PP.Lex(Tok);
+    if (Tok.isNot(tok::r_paren)) {
+      PP.Diag(Tok, diag::err_expected) << ")";
+      return;
+    }
+    II->setIsFinal(true);
+    PP.addFinalLoc(II, Tok.getLocation());
   }
 };
 
@@ -2084,6 +2131,7 @@ void Preprocessor::RegisterBuiltinPragmas() {
   AddPragmaHandler("clang", new PragmaAssumeNonNullHandler());
   AddPragmaHandler("clang", new PragmaDeprecatedHandler());
   AddPragmaHandler("clang", new PragmaRestrictExpansionHandler());
+  AddPragmaHandler("clang", new PragmaFinalHandler());
 
   // #pragma clang module ...
   auto *ModuleHandler = new PragmaNamespace("module");
