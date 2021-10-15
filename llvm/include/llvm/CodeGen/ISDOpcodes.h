@@ -1264,6 +1264,34 @@ static const int FIRST_TARGET_MEMORY_OPCODE = BUILTIN_OP_END + 500;
 /// For example ISD::AND for ISD::VECREDUCE_AND.
 NodeType getVecReduceBaseOpcode(unsigned VecReduceOpcode);
 
+/// Vector Predication {
+
+/// Whether this is a vector-predicated Opcode.
+bool isVPOpcode(unsigned Opcode);
+
+/// Whether this is a vector-predicated binary operation opcode.
+bool isVPBinaryOp(unsigned Opcode);
+
+/// Whether this is a vector-predicated reduction opcode.
+bool isVPReductionOp(unsigned Opcode);
+
+/// The operand position of the vector mask.
+Optional<unsigned> getVPMaskIdx(unsigned Opcode);
+
+/// The operand position of the explicit vector length parameter.
+Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
+
+/// Translate this VP OpCode to an unpredicated instruction OpCode.
+Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
+
+/// Translate this non-VP Opcode to its corresponding VP Opcode
+unsigned GetVPForFunctionOpCode(unsigned OpCode);
+
+Optional<unsigned> getVPReductionStartParamPos(unsigned VPISD);
+Optional<unsigned> getVPReductionVectorParamPos(unsigned VPISD);
+
+/// } Vector Predication
+
 //===--------------------------------------------------------------------===//
 /// MemIndexedMode enum - This enum defines the load / store indexed
 /// addressing modes.
@@ -1407,27 +1435,6 @@ inline unsigned getUnorderedFlavor(CondCode Cond) {
 /// Return the operation corresponding to !(X op Y), where 'op' is a valid
 /// SetCC operation.
 CondCode getSetCCInverse(CondCode Operation, EVT Type);
-
-bool isVPOpcode(unsigned Opcode);
-
-/// Vector Predication {
-/// The operand position of the vector mask.
-Optional<unsigned> getVPMaskIdx(unsigned Opcode);
-
-/// The operand position of the explicit vector length parameter.
-Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
-
-/// Translate this VP OpCode to an unpredicated instruction OpCode.
-Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
-
-/// Translate this non-VP Opcode to its corresponding VP Opcode
-unsigned GetVPForFunctionOpCode(unsigned OpCode);
-
-bool isVPReductionOp(unsigned VPISD);
-Optional<unsigned> getVPReductionStartParamPos(unsigned VPISD);
-Optional<unsigned> getVPReductionVectorParamPos(unsigned VPISD);
-
-/// } Vector Predication
 
 namespace GlobalISel {
 /// Return the operation corresponding to !(X op Y), where 'op' is a valid
