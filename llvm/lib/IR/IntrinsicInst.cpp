@@ -597,6 +597,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
   case Intrinsic::vp_select:
+  case Intrinsic::experimental_vp_splice:
   case Intrinsic::vp_compress:
   case Intrinsic::vp_expand:
     assert(VecRetTy);
@@ -655,7 +656,8 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
   bool IsReduceOp = VPReductionIntrinsic::isVPReduction(VPID);
   bool IsShuffleOp =
       (VPID == Intrinsic::vp_compress) || (VPID == Intrinsic::vp_expand) ||
-      (VPID == Intrinsic::vp_vshift) || (VPID == Intrinsic::vp_select);
+      (VPID == Intrinsic::vp_vshift) || (VPID == Intrinsic::vp_select) || 
+      (VPID == Intrinsic::experimental_vp_splice);
   bool IsMemoryOp =
       (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load) ||
       (VPID == Intrinsic::vp_scatter) || (VPID == Intrinsic::vp_gather);
