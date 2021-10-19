@@ -2408,7 +2408,7 @@ public:
   // Mask is a vector of i1 elements;
   // the type of EVL is TLI.getVPExplicitVectorLengthTy().
   const SDValue &getOffset() const {
-    return getOperand(getOpcode() == ISD::MLOAD ? 2 : 3);
+    return getOperand(getOpcode() == ISD::VP_LOAD ? 2 : 3);
   }
   const SDValue &getBasePtr() const {
     return getOperand(getOpcode() == ISD::VP_LOAD ? 1 : 2);

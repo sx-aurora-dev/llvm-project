@@ -1413,8 +1413,6 @@ static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
     if (auto *AI =
             dyn_cast_or_null<AllocaInst>(DII->getVariableLocationOp(0))) {
       if (Optional<TypeSize> FragmentSize = AI->getAllocationSizeInBits(DL)) {
-        assert(ValueSize.isScalable() == FragmentSize->isScalable() &&
-               "Both sizes should agree on the scalable flag.");
         return TypeSize::isKnownGE(ValueSize, *FragmentSize);
       }
     }
@@ -1733,9 +1731,11 @@ void llvm::salvageDebugInfo(Instruction &I) {
 
 void llvm::salvageDebugInfoForDbgValues(
     Instruction &I, ArrayRef<DbgVariableIntrinsic *> DbgUsers) {
-  // This is an arbitrary chosen limit on the maximum number of values we can
-  // salvage up to in a DIArgList, used for performance reasons.
+  // These are arbitrary chosen limits on the maximum number of values and the
+  // maximum size of a debug expression we can salvage up to, used for
+  // performance reasons.
   const unsigned MaxDebugArgs = 16;
+  const unsigned MaxExpressionSize = 128;
   bool Salvaged = false;
 
   for (auto *DII : DbgUsers) {
@@ -1772,9 +1772,10 @@ void llvm::salvageDebugInfoForDbgValues(
       break;
 
     DII->replaceVariableLocationOp(&I, Op0);
-    if (AdditionalValues.empty()) {
+    bool IsValidSalvageExpr = SalvagedExpr->getNumElements() <= MaxExpressionSize;
+    if (AdditionalValues.empty() && IsValidSalvageExpr) {
       DII->setExpression(SalvagedExpr);
-    } else if (isa<DbgValueInst>(DII) &&
+    } else if (isa<DbgValueInst>(DII) && IsValidSalvageExpr &&
                DII->getNumVariableLocationOps() + AdditionalValues.size() <=
                    MaxDebugArgs) {
       DII->addVariableLocationOps(AdditionalValues, SalvagedExpr);
@@ -3199,7 +3200,7 @@ bool llvm::recognizeBSwapOrBitReverseIdiom(
   Instruction *Result = CallInst::Create(F, Provider, "rev", I);
   InsertedInsts.push_back(Result);
 
-  if (!DemandedMask.isAllOnesValue()) {
+  if (!DemandedMask.isAllOnes()) {
     auto *Mask = ConstantInt::get(DemandedTy, DemandedMask);
     Result = BinaryOperator::Create(Instruction::And, Result, Mask, "mask", I);
     InsertedInsts.push_back(Result);
@@ -3254,7 +3255,7 @@ bool llvm::canReplaceOperandWithVariable(const Instruction *I, unsigned OpIdx) {
     if (CB.isBundleOperand(OpIdx))
       return false;
 
-    if (OpIdx < CB.getNumArgOperands()) {
+    if (OpIdx < CB.arg_size()) {
       // Some variadic intrinsics require constants in the variadic arguments,
       // which currently aren't markable as immarg.
       if (isa<IntrinsicInst>(CB) &&

@@ -530,7 +530,7 @@ inline cst_pred_ty<is_any_apint> m_AnyIntegralConstant() {
 }
 
 struct is_all_ones {
-  bool isValue(const APInt &C) { return C.isAllOnesValue(); }
+  bool isValue(const APInt &C) { return C.isAllOnes(); }
 };
 /// Match an integer or vector with all bits set.
 /// For vectors, this includes constants with undefined elements.
@@ -598,7 +598,7 @@ inline cst_pred_ty<is_nonpositive> m_NonPositive() {
 inline api_pred_ty<is_nonpositive> m_NonPositive(const APInt *&V) { return V; }
 
 struct is_one {
-  bool isValue(const APInt &C) { return C.isOneValue(); }
+  bool isValue(const APInt &C) { return C.isOne(); }
 };
 /// Match an integer 1 or a vector with all elements equal to 1.
 /// For vectors, this includes constants with undefined elements.
@@ -2617,7 +2617,7 @@ inline VScaleVal_match m_VScale(const DataLayout &DL) {
   return VScaleVal_match(DL);
 }
 
-template <typename LHS, typename RHS, unsigned Opcode>
+template <typename LHS, typename RHS, unsigned Opcode, bool Commutable = false>
 struct LogicalOp_match {
   LHS L;
   RHS R;
@@ -2628,27 +2628,36 @@ struct LogicalOp_match {
     EmptyContext EC; return match_context(V, EC);
   }
   template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
-    if (auto *I = match_dyn_cast<MatchContext, Instruction>(V)) {
-      if (!I->getType()->isIntOrIntVectorTy(1))
-        return false;
+    auto *I = match_dyn_cast<MatchContext, Instruction>(V);
+    if (!I || !I->getType()->isIntOrIntVectorTy(1))
+      return false;
 
-      if (I->getOpcode() == Opcode && L.match(I->getOperand(0)) &&
-          R.match(I->getOperand(1)))
-        return true;
+    if (I->getOpcode() == Opcode) {
+      auto *Op0 = I->getOperand(0);
+      auto *Op1 = I->getOperand(1);
+      return (L.match(Op0) && R.match(Op1)) ||
+             (Commutable && L.match(Op1) && R.match(Op0));
+    }
 
-      if (auto *SI = match_dyn_cast<MatchContext, SelectInst>(I)) {
-        if (Opcode == Instruction::And) {
-          if (const auto *C = dyn_cast<Constant>(SI->getFalseValue()))
-            if (C->isNullValue() && L.match_context(SI->getCondition(), MContext) &&
-                R.match_context(SI->getTrueValue(), MContext))
-              return true;
-        } else {
-          assert(Opcode == Instruction::Or);
-          if (const auto *C = dyn_cast<Constant>(SI->getTrueValue()))
-            if (C->isOneValue() && L.match_context(SI->getCondition(), MContext) &&
-                R.match_context(SI->getFalseValue(), MContext))
-              return true;
-        }
+    if (auto *Select = match_dyn_cast<MatchContext, SelectInst>(I)) {
+      auto *Cond = Select->getCondition();
+      auto *TVal = Select->getTrueValue();
+      auto *FVal = Select->getFalseValue();
+      if (Opcode == Instruction::And) {
+        auto *C = dyn_cast<Constant>(FVal);
+        if (C && C->isNullValue())
+          return (L.match_context(Cond, MContext) &&
+                  R.match_context(TVal, MContext)) ||
+                 (Commutable && L.match_context(TVal, MContext) &&
+                  R.match_context(Cond, MContext));
+      } else {
+        assert(Opcode == Instruction::Or);
+        auto *C = dyn_cast<Constant>(TVal);
+        if (C && C->isOneValue())
+          return (L.match_context(Cond, MContext) &&
+                  R.match_context(FVal, MContext)) ||
+                 (Commutable && L.match_context(FVal, MContext) &&
+                  R.match_context(Cond, MContext));
       }
     }
 
@@ -2667,6 +2676,13 @@ m_LogicalAnd(const LHS &L, const RHS &R) {
 /// Matches L && R where L and R are arbitrary values.
 inline auto m_LogicalAnd() { return m_LogicalAnd(m_Value(), m_Value()); }
 
+/// Matches L && R with LHS and RHS in either order.
+template <typename LHS, typename RHS>
+inline LogicalOp_match<LHS, RHS, Instruction::And, true>
+m_c_LogicalAnd(const LHS &L, const RHS &R) {
+  return LogicalOp_match<LHS, RHS, Instruction::And, true>(L, R);
+}
+
 /// Matches L || R either in the form of L | R or L ? true : R.
 /// Note that the latter form is poison-blocking.
 template <typename LHS, typename RHS>
@@ -2676,8 +2692,13 @@ m_LogicalOr(const LHS &L, const RHS &R) {
 }
 
 /// Matches L || R where L and R are arbitrary values.
-inline auto m_LogicalOr() {
-  return m_LogicalOr(m_Value(), m_Value());
+inline auto m_LogicalOr() { return m_LogicalOr(m_Value(), m_Value()); }
+
+/// Matches L || R with LHS and RHS in either order.
+template <typename LHS, typename RHS>
+inline LogicalOp_match<LHS, RHS, Instruction::Or, true>
+m_c_LogicalOr(const LHS &L, const RHS &R) {
+  return LogicalOp_match<LHS, RHS, Instruction::Or, true>(L, R);
 }
 
 } // end namespace PatternMatch

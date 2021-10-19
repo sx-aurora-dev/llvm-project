@@ -89,6 +89,18 @@ def testAttrCast():
     print("a1 == a2:", a1 == a2)
 
 
+# CHECK-LABEL: TEST: testAttrIsInstance
+@run
+def testAttrIsInstance():
+  with Context():
+    a1 = Attribute.parse("42")
+    a2 = Attribute.parse("[42]")
+    assert IntegerAttr.isinstance(a1)
+    assert not IntegerAttr.isinstance(a2)
+    assert not ArrayAttr.isinstance(a1)
+    assert ArrayAttr.isinstance(a2)
+
+
 # CHECK-LABEL: TEST: testAttrEqDoesNotRaise
 @run
 def testAttrEqDoesNotRaise():
@@ -343,6 +355,9 @@ def testDictAttr():
     else:
       assert False, "expected IndexError on accessing an out-of-bounds attribute"
 
+    # CHECK "empty: {}"
+    print("empty: ", DictAttr.get())
+
 
 # CHECK-LABEL: TEST: testTypeAttr
 @run
@@ -404,3 +419,9 @@ def testArrayAttr():
     except RuntimeError as e:
       # CHECK: Error: Invalid attribute when attempting to create an ArrayAttribute
       print("Error: ", e)
+
+  with Context():
+    array = ArrayAttr.get([StringAttr.get("a"), StringAttr.get("b")])
+    array = array + [StringAttr.get("c")]
+    # CHECK: concat: ["a", "b", "c"]
+    print("concat: ", array)

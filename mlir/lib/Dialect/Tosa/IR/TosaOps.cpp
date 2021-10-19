@@ -222,9 +222,37 @@ struct ConstantTransposeOptimization
   }
 };
 
+struct NoOpOptimization : public OpRewritePattern<tosa::TransposeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tosa::TransposeOp op,
+                                PatternRewriter &rewriter) const override {
+    auto perm = op.perms();
+
+    DenseIntElementsAttr permAttr;
+    if (!matchPattern(perm, m_Constant(&permAttr))) {
+      return failure();
+    }
+
+    SmallVector<int64_t> permValues = llvm::to_vector<6>(
+        llvm::map_range(permAttr.getValues<APInt>(),
+                        [](const APInt &val) { return val.getSExtValue(); }));
+
+    for (int i = 0, s = permValues.size(); i < s; i++) {
+      if (i != permValues[i]) {
+        return failure();
+      }
+    }
+
+    rewriter.replaceOp(op, op.input1());
+    return success();
+  }
+};
+
 void TransposeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                               MLIRContext *context) {
   results.insert<ConstantTransposeOptimization>(context);
+  results.insert<NoOpOptimization>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -340,6 +368,26 @@ static LogicalResult verifyConvOp(T op) {
     return failure();
 
   return success();
+}
+
+static LogicalResult verifyAveragePoolOp(tosa::AvgPool2dOp op) {
+  auto inputETy = op.input().getType().cast<ShapedType>().getElementType();
+  auto resultETy = op.getType().cast<ShapedType>().getElementType();
+
+  if (auto quantType = inputETy.dyn_cast<mlir::quant::UniformQuantizedType>())
+    inputETy = quantType.getStorageType();
+
+  if (auto quantType = resultETy.dyn_cast<mlir::quant::UniformQuantizedType>())
+    resultETy = quantType.getStorageType();
+
+  if (inputETy.isF32() && resultETy.isF32())
+    return success();
+  if (inputETy.isInteger(8) && resultETy.isInteger(32))
+    return success();
+  if (inputETy.isInteger(16) && resultETy.isInteger(32))
+    return success();
+
+  return op.emitOpError("input/output element types are incompatible.");
 }
 
 //===----------------------------------------------------------------------===//
@@ -813,10 +861,16 @@ LogicalResult tosa::TransposeOp::inferReturnTypeComponents(
 
   // If input rank and permutation length is unknown, the output rank is
   // unknown.
-  if (!inputShape.hasRank() &&
-      (!permsShape.hasRank() || permsShape.isDynamicDim(0))) {
+  if (!inputShape.hasRank() || !permsShape.hasRank() ||
+      permsShape.isDynamicDim(0)) {
     inferredReturnShapes.push_back(ShapedTypeComponents());
     return success();
+  }
+
+  // This would imply the number of permutations does not match the rank of the
+  // input which is illegal.
+  if (permsShape.getDimSize(0) != inputShape.getRank()) {
+    return failure();
   }
 
   // Without the input dims we cannot determine the output dim sizes but we

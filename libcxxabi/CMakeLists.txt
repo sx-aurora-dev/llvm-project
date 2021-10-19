@@ -14,6 +14,8 @@ cmake_minimum_required(VERSION 3.13.4)
 set(CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Modules"
   ${CMAKE_MODULE_PATH}
   )
 
@@ -177,7 +179,11 @@ option(LIBCXXABI_HERMETIC_STATIC_LIBRARY
   "Do not export any symbols from the static library." OFF)
 
 set(LIBCXXABI_TEST_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/test/lit.site.cfg.in" CACHE STRING
-    "The Lit testing configuration to use when running the tests.")
+  "The path to the Lit testing configuration to use when running the tests.
+   If a relative path is provided, it is assumed to be relative to '<monorepo>/libcxxabi/test/configs'.")
+if (NOT IS_ABSOLUTE "${LIBCXXABI_TEST_CONFIG}")
+  set(LIBCXXABI_TEST_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/test/configs/${LIBCXXABI_TEST_CONFIG}")
+endif()
 set(LIBCXXABI_TEST_PARAMS "" CACHE STRING
     "A list of parameters to run the Lit test suite with.")
 

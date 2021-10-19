@@ -1042,6 +1042,9 @@ let TargetPrefix = "ppc" in {  // All PPC intrinsics start with "llvm.ppc.".
   def int_ppc_altivec_vbpermq : GCCBuiltin<"__builtin_altivec_vbpermq">,
               Intrinsic<[llvm_v2i64_ty], [llvm_v16i8_ty, llvm_v16i8_ty],
                         [IntrNoMem]>;
+  def int_ppc_altivec_vbpermd : GCCBuiltin<"__builtin_altivec_vbpermd">,
+              Intrinsic<[llvm_v2i64_ty], [llvm_v2i64_ty, llvm_v16i8_ty],
+                        [IntrNoMem]>;
 }
 
 def int_ppc_altivec_vexptefp  : PowerPC_Vec_FF_Intrinsic<"vexptefp">;
@@ -1626,8 +1629,7 @@ let TargetPrefix = "ppc" in {
         Intrinsic<[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty], [IntrNoMem]>;
   // load
   def int_ppc_load2r
-      : GCCBuiltin<"__builtin_ppc_load2r">,
-        Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrReadMem, IntrArgMemOnly]>;
+      : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrReadMem, IntrArgMemOnly]>;
   def int_ppc_load4r
       : GCCBuiltin<"__builtin_ppc_load4r">,
         Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], [IntrReadMem, IntrArgMemOnly]>;

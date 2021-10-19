@@ -42,19 +42,19 @@ enum ExceptionBehavior : uint8_t {
 /// Returns a valid RoundingMode enumerator when given a string
 /// that is valid as input in constrained intrinsic rounding mode
 /// metadata.
-Optional<RoundingMode> StrToRoundingMode(StringRef);
+Optional<RoundingMode> convertStrToRoundingMode(StringRef);
 
 /// For any RoundingMode enumerator, returns a string valid as input in
 /// constrained intrinsic rounding mode metadata.
-Optional<StringRef> RoundingModeToStr(RoundingMode);
+Optional<StringRef> convertRoundingModeToStr(RoundingMode);
 
 /// Returns a valid ExceptionBehavior enumerator when given a string
 /// valid as input in constrained intrinsic exception behavior metadata.
-Optional<fp::ExceptionBehavior> StrToExceptionBehavior(StringRef);
+Optional<fp::ExceptionBehavior> convertStrToExceptionBehavior(StringRef);
 
 /// For any ExceptionBehavior enumerator, returns a string valid as
 /// input in constrained intrinsic exception behavior metadata.
-Optional<StringRef> ExceptionBehaviorToStr(fp::ExceptionBehavior);
+Optional<StringRef> convertExceptionBehaviorToStr(fp::ExceptionBehavior);
 
 /// Return the IR Value representation of any ExceptionBehavior.
 Value *GetConstrainedFPExcept(LLVMContext &, fp::ExceptionBehavior);
@@ -68,6 +68,10 @@ inline bool isDefaultFPEnvironment(fp::ExceptionBehavior EB, RoundingMode RM) {
   return EB == fp::ebIgnore && RM == RoundingMode::NearestTiesToEven;
 }
 
-} // namespace llvm
-
+/// Returns true if the rounding mode RM may be QRM at compile time or
+/// at run time.
+inline bool canRoundingModeBe(RoundingMode RM, RoundingMode QRM) {
+  return RM == QRM || RM == RoundingMode::Dynamic;
+}
+}
 #endif

@@ -454,6 +454,8 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   CodeGenOpts.XRayAlwaysEmitTypedEvents = LangOpts.XRayAlwaysEmitTypedEvents;
   CodeGenOpts.DisableFree = FrontendOpts.DisableFree;
   FrontendOpts.GenerateGlobalModuleIndex = FrontendOpts.UseGlobalModuleIndex;
+  if (FrontendOpts.ShowStats)
+    CodeGenOpts.ClearASTBeforeBackend = false;
   LangOpts.SanitizeCoverage = CodeGenOpts.hasSanitizeCoverage();
   LangOpts.ForceEmitVTables = CodeGenOpts.ForceEmitVTables;
   LangOpts.SpeculativeLoadHardening = CodeGenOpts.SpeculativeLoadHardening;
@@ -1120,10 +1122,9 @@ static void parseAnalyzerConfigs(AnalyzerOptions &AnOpts,
     for (const StringRef &CheckerOrPackage : CheckersAndPackages) {
       if (Diags) {
         bool IsChecker = CheckerOrPackage.contains('.');
-        bool IsValidName =
-            IsChecker
-                ? llvm::find(Checkers, CheckerOrPackage) != Checkers.end()
-                : llvm::find(Packages, CheckerOrPackage) != Packages.end();
+        bool IsValidName = IsChecker
+                               ? llvm::is_contained(Checkers, CheckerOrPackage)
+                               : llvm::is_contained(Packages, CheckerOrPackage);
 
         if (!IsValidName)
           Diags->Report(diag::err_unknown_analyzer_checker_or_package)
@@ -1201,6 +1202,8 @@ ParseOptimizationRemark(DiagnosticsEngine &Diags, ArgList &Args,
         Result.Kind = CodeGenOptions::RK_Disabled;
       else if (Value == "no-everything")
         Result.Kind = CodeGenOptions::RK_DisabledEverything;
+      else
+        continue;
 
       if (Result.Kind == CodeGenOptions::RK_Disabled ||
           Result.Kind == CodeGenOptions::RK_DisabledEverything) {
@@ -2873,7 +2876,7 @@ static void GenerateHeaderSearchArgs(HeaderSearchOptions &Opts,
                     llvm::ArrayRef<frontend::IncludeDirGroup> Groups,
                     llvm::Optional<bool> IsFramework,
                     llvm::Optional<bool> IgnoreSysRoot) {
-    return llvm::find(Groups, Entry.Group) != Groups.end() &&
+    return llvm::is_contained(Groups, Entry.Group) &&
            (!IsFramework || (Entry.IsFramework == *IsFramework)) &&
            (!IgnoreSysRoot || (Entry.IgnoreSysRoot == *IgnoreSysRoot));
   };
@@ -3484,6 +3487,12 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
   if (Opts.OpenMPTargetNewRuntime)
     GenerateArg(Args, OPT_fopenmp_target_new_runtime, SA);
 
+  if (Opts.OpenMPThreadSubscription)
+    GenerateArg(Args, OPT_fopenmp_assume_threads_oversubscription, SA);
+
+  if (Opts.OpenMPTeamSubscription)
+    GenerateArg(Args, OPT_fopenmp_assume_teams_oversubscription, SA);
+
   if (Opts.OpenMPTargetDebug != 0)
     GenerateArg(Args, OPT_fopenmp_target_debug_EQ,
                 Twine(Opts.OpenMPTargetDebug), SA);
@@ -3924,6 +3933,13 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     } else {
       Diags.Report(diag::err_drv_debug_no_new_runtime);
     }
+  }
+
+  if (Opts.OpenMPIsDevice && Opts.OpenMPTargetNewRuntime) {
+    if (Args.hasArg(OPT_fopenmp_assume_teams_oversubscription))
+      Opts.OpenMPTeamSubscription = true;
+    if (Args.hasArg(OPT_fopenmp_assume_threads_oversubscription))
+      Opts.OpenMPThreadSubscription = true;
   }
 
   // Get the OpenMP target triples if any.
