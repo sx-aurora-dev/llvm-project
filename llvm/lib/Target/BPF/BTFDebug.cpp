@@ -386,15 +386,16 @@ void BTFTypeFloat::completeType(BTFDebug &BDebug) {
   BTFType.NameOff = BDebug.addString(Name);
 }
 
-BTFTypeTag::BTFTypeTag(uint32_t BaseTypeId, int ComponentIdx, StringRef Tag)
+BTFTypeDeclTag::BTFTypeDeclTag(uint32_t BaseTypeId, int ComponentIdx,
+                               StringRef Tag)
     : Tag(Tag) {
-  Kind = BTF::BTF_KIND_TAG;
+  Kind = BTF::BTF_KIND_DECL_TAG;
   BTFType.Info = Kind << 24;
   BTFType.Type = BaseTypeId;
   Info = ComponentIdx;
 }
 
-void BTFTypeTag::completeType(BTFDebug &BDebug) {
+void BTFTypeDeclTag::completeType(BTFDebug &BDebug) {
   if (IsCompleted)
     return;
   IsCompleted = true;
@@ -402,7 +403,7 @@ void BTFTypeTag::completeType(BTFDebug &BDebug) {
   BTFType.NameOff = BDebug.addString(Tag);
 }
 
-void BTFTypeTag::emitType(MCStreamer &OS) {
+void BTFTypeDeclTag::emitType(MCStreamer &OS) {
   BTFTypeBase::emitType(OS);
   OS.emitInt32(Info);
 }
@@ -496,20 +497,21 @@ void BTFDebug::visitSubroutineType(
   }
 }
 
-void BTFDebug::processAnnotations(DINodeArray Annotations, uint32_t BaseTypeId,
-                                  int ComponentIdx) {
+void BTFDebug::processDeclAnnotations(DINodeArray Annotations,
+                                      uint32_t BaseTypeId,
+                                      int ComponentIdx) {
   if (!Annotations)
      return;
 
   for (const Metadata *Annotation : Annotations->operands()) {
     const MDNode *MD = cast<MDNode>(Annotation);
     const MDString *Name = cast<MDString>(MD->getOperand(0));
-    if (!Name->getString().equals("btf_tag"))
+    if (!Name->getString().equals("btf_decl_tag"))
       continue;
 
     const MDString *Value = cast<MDString>(MD->getOperand(1));
-    auto TypeEntry = std::make_unique<BTFTypeTag>(BaseTypeId, ComponentIdx,
-                                                  Value->getString());
+    auto TypeEntry = std::make_unique<BTFTypeDeclTag>(BaseTypeId, ComponentIdx,
+                                                      Value->getString());
     addType(std::move(TypeEntry));
   }
 }
@@ -538,14 +540,14 @@ void BTFDebug::visitStructType(const DICompositeType *CTy, bool IsStruct,
   TypeId = addType(std::move(TypeEntry), CTy);
 
   // Check struct/union annotations
-  processAnnotations(CTy->getAnnotations(), TypeId, -1);
+  processDeclAnnotations(CTy->getAnnotations(), TypeId, -1);
 
   // Visit all struct members.
   int FieldNo = 0;
   for (const auto *Element : Elements) {
     const auto Elem = cast<DIDerivedType>(Element);
     visitTypeEntry(Elem);
-    processAnnotations(Elem->getAnnotations(), TypeId, FieldNo);
+    processDeclAnnotations(Elem->getAnnotations(), TypeId, FieldNo);
     FieldNo++;
   }
 }
@@ -1016,11 +1018,11 @@ void BTFDebug::beginFunctionImpl(const MachineFunction *MF) {
     if (const auto *DV = dyn_cast<DILocalVariable>(DN)) {
       uint32_t Arg = DV->getArg();
       if (Arg)
-        processAnnotations(DV->getAnnotations(), FuncTypeId, Arg - 1);
+        processDeclAnnotations(DV->getAnnotations(), FuncTypeId, Arg - 1);
     }
   }
 
-  processAnnotations(SP->getAnnotations(), FuncTypeId, -1);
+  processDeclAnnotations(SP->getAnnotations(), FuncTypeId, -1);
 
   for (const auto &TypeEntry : TypeEntries)
     TypeEntry->completeType(*this);
@@ -1272,7 +1274,7 @@ void BTFDebug::processGlobals(bool ProcessingMapDef) {
         std::make_unique<BTFKindVar>(Global.getName(), GVTypeId, GVarInfo);
     uint32_t VarId = addType(std::move(VarEntry));
 
-    processAnnotations(DIGlobal->getAnnotations(), VarId, -1);
+    processDeclAnnotations(DIGlobal->getAnnotations(), VarId, -1);
 
     // An empty SecName means an extern variable without section attribute.
     if (SecName.empty())
@@ -1369,7 +1371,7 @@ void BTFDebug::processFuncPrototypes(const Function *F) {
       std::make_unique<BTFTypeFunc>(SP->getName(), ProtoTypeId, Scope);
   uint32_t FuncId = addType(std::move(FuncTypeEntry));
 
-  processAnnotations(SP->getAnnotations(), FuncId, -1);
+  processDeclAnnotations(SP->getAnnotations(), FuncId, -1);
 
   if (F->hasSection()) {
     StringRef SecName = F->getSection();

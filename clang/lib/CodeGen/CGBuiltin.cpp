@@ -15656,6 +15656,12 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     Value *Rotate = Builder.CreateCall(F, {Ops[0], Ops[0], ShiftAmt});
     return Builder.CreateAnd(Rotate, Ops[2]);
   }
+  case PPC::BI__builtin_ppc_load2r: {
+    Function *F = CGM.getIntrinsic(Intrinsic::ppc_load2r);
+    Ops[0] = Builder.CreateBitCast(Ops[0], Int8PtrTy);
+    Value *LoadIntrinsic = Builder.CreateCall(F, Ops);
+    return Builder.CreateTrunc(LoadIntrinsic, Int16Ty);
+  }
   // FMA variations
   case PPC::BI__builtin_vsx_xvmaddadp:
   case PPC::BI__builtin_vsx_xvmaddasp:
@@ -16078,7 +16084,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
                            *this, E, Intrinsic::sqrt,
                            Intrinsic::experimental_constrained_sqrt))
         .getScalarVal();
-  case PPC::BI__builtin_ppc_test_data_class:
+  case PPC::BI__builtin_ppc_test_data_class: {
     llvm::Type *ArgType = EmitScalarExpr(E->getArg(0))->getType();
     unsigned IntrinsicID;
     if (ArgType->isDoubleTy())
@@ -16089,6 +16095,10 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
       llvm_unreachable("Invalid Argument Type");
     return Builder.CreateCall(CGM.getIntrinsic(IntrinsicID), Ops,
                               "test_data_class");
+  }
+  case PPC::BI__builtin_ppc_swdiv:
+  case PPC::BI__builtin_ppc_swdivs:
+    return Builder.CreateFDiv(Ops[0], Ops[1], "swdiv");
   }
 }
 
@@ -18299,6 +18309,17 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(IntNo, A->getType());
     return Builder.CreateCall(Callee, {A, B, C});
   }
+  case WebAssembly::BI__builtin_wasm_laneselect_i8x16:
+  case WebAssembly::BI__builtin_wasm_laneselect_i16x8:
+  case WebAssembly::BI__builtin_wasm_laneselect_i32x4:
+  case WebAssembly::BI__builtin_wasm_laneselect_i64x2: {
+    Value *A = EmitScalarExpr(E->getArg(0));
+    Value *B = EmitScalarExpr(E->getArg(1));
+    Value *C = EmitScalarExpr(E->getArg(2));
+    Function *Callee =
+        CGM.getIntrinsic(Intrinsic::wasm_laneselect, A->getType());
+    return Builder.CreateCall(Callee, {A, B, C});
+  }
   default:
     return nullptr;
   }
@@ -18559,6 +18580,7 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
 
   Intrinsic::ID ID = Intrinsic::not_intrinsic;
   unsigned NF = 1;
+  constexpr unsigned TAIL_UNDISTURBED = 0;
 
   // Required for overloaded intrinsics.
   llvm::SmallVector<llvm::Type *, 2> IntrinsicTypes;
