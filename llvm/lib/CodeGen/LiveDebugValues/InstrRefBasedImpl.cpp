@@ -692,7 +692,7 @@ MLocTracker::MLocTracker(MachineFunction &MF, const TargetInstrInfo &TII,
   // stack slot, we don't want to type the slot.
   for (unsigned int I = 1; I < TRI.getNumSubRegIndices(); ++I) {
     unsigned Size = TRI.getSubRegIdxSize(I);
-    unsigned Offs = TRI.getSubRegIdxOffset(I);
+    unsigned Offs = TRI.getSubRegIdxOffset(I).getValue();
     unsigned Idx = StackSlotIdxes.size();
 
     // Some subregs have -1, -2 and so forth fed into their fields, to mean

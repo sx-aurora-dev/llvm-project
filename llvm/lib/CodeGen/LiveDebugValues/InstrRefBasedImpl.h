@@ -451,7 +451,7 @@ public:
   /// \param SpillSubReg Subregister within the spill we're addressing.
   unsigned getLocID(SpillLocationNo Spill, unsigned SpillSubReg) {
     unsigned short Size = TRI.getSubRegIdxSize(SpillSubReg);
-    unsigned short Offs = TRI.getSubRegIdxOffset(SpillSubReg);
+    unsigned short Offs = TRI.getSubRegIdxOffset(SpillSubReg).getValue();
     return getLocID(Spill, {Size, Offs});
   }
 
