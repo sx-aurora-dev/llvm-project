@@ -16,8 +16,6 @@
 #include "llvm/ExecutionEngine/JITLink/JITLink.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "jitlink"
-
 namespace llvm {
 namespace jitlink {
 
@@ -39,16 +37,16 @@ public:
     // Build the entry if it doesn't exist.
     if (EntryI == Entries.end()) {
       auto &Entry = impl().createEntry(G, Target);
-      LLVM_DEBUG({
-        dbgs() << "    Created" << impl().getTableName() << "entry for "
+      DEBUG_WITH_TYPE("jitlink", {
+        dbgs() << "    Created" << impl().getSectionName() << "entry for "
                << Target.getName() << ": " << Entry << "\n";
       });
       EntryI = Entries.insert(std::make_pair(Target.getName(), &Entry)).first;
     }
 
     assert(EntryI != Entries.end() && "Could not get entry symbol");
-    LLVM_DEBUG({
-      dbgs() << "    Using " << impl().getTableName() << " entry "
+    DEBUG_WITH_TYPE("jitlink", {
+      dbgs() << "    Using " << impl().getSectionName() << " entry "
              << *EntryI->second << "\n";
     });
     return *EntryI->second;
