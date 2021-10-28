@@ -1,5 +1,7 @@
 // RUN: %clang_builtins %s %librt -o %t && %run %t
 
+// REQUIRES: target-supports-denormals
+
 #define QUAD_PRECISION
 #include <math.h>
 #include <stdio.h>

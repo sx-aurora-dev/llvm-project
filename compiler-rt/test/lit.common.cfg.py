@@ -248,6 +248,10 @@ if target_arch:
     config.available_features.add('x86-target-arch')
   config.available_features.add(target_arch + '-' + config.host_os.lower())
 
+# FIXME: Make this generic
+if target_arch != 've':
+  config.available_features.add("target-supports-denormals")
+
 compiler_rt_debug = getattr(config, 'compiler_rt_debug', False)
 if not compiler_rt_debug:
   config.available_features.add('compiler-rt-optimized')
