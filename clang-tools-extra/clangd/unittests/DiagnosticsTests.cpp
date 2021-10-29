@@ -181,7 +181,7 @@ o]]();
           Diag(Test.range("unk"), "use of undeclared identifier 'unknown'"),
           Diag(Test.range("type"),
                "cannot initialize a variable of type 'double' with an lvalue "
-               "of type 'const char [4]'"),
+               "of type 'const char[4]'"),
           Diag(Test.range("nomember"), "no member named 'y' in 'Foo'"),
           Diag(Test.range("nomembernamespace"),
                "no member named 'test' in namespace 'test'"),
@@ -447,6 +447,21 @@ TEST(DiagnosticTest, RespectsDiagnosticConfig) {
   EXPECT_THAT(*TU.build().getDiagnostics(),
               ElementsAre(Diag(Main.range(),
                                "use of undeclared identifier 'unknown'")));
+}
+
+TEST(DiagnosticTest, RespectsDiagnosticConfigInHeader) {
+  Annotations Header(R"cpp(
+    int x = "42";  // error-ok
+  )cpp");
+  Annotations Main(R"cpp(
+    #include "header.hpp"
+  )cpp");
+  auto TU = TestTU::withCode(Main.code());
+  TU.AdditionalFiles["header.hpp"] = std::string(Header.code());
+  Config Cfg;
+  Cfg.Diagnostics.Suppress.insert("init_conversion_failed");
+  WithContextValue WithCfg(Config::Key, std::move(Cfg));
+  EXPECT_THAT(*TU.build().getDiagnostics(), IsEmpty());
 }
 
 TEST(DiagnosticTest, ClangTidySuppressionComment) {

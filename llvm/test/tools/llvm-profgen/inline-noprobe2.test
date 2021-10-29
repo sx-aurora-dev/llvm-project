@@ -2,8 +2,8 @@
 ; RUN: FileCheck %s --input-file %t --check-prefix=CHECK-ARTIFICIAL-BRANCH
 ; RUN: llvm-profgen --format=text --perfscript=%S/Inputs/inline-noprobe2.perfscript --binary=%S/Inputs/inline-noprobe2.perfbin --output=%t  --skip-symbolization --use-offset=0
 ; RUN: FileCheck %s --input-file %t --check-prefix=CHECK-RAW-PROFILE
-; RUN: llvm-profgen --format=text --perfscript=%S/Inputs/inline-noprobe2.perfscript --binary=%S/Inputs/inline-noprobe2.perfbin --output=%t
-; RUN: FileCheck %s --input-file %t --check-prefix=CHECK
+; RUN: llvm-profgen --format=text --unsymbolized-profile=%t --binary=%S/Inputs/inline-noprobe2.perfbin --output=%t1 --use-offset=0
+; RUN: FileCheck %s --input-file %t1 --check-prefix=CHECK
 
 ; RUN: llvm-profgen --format=extbinary --perfscript=%S/Inputs/inline-noprobe2.perfscript --binary=%S/Inputs/inline-noprobe2.perfbin --output=%t
 ; RUN: llvm-profdata show -show-prof-sym-list -sample %t | FileCheck %s --check-prefix=CHECK-SYM-LIST
@@ -46,7 +46,7 @@
 ;CHECK-NEXT:   1: 6
 ;CHECK-NEXT:   2: 6
 ;CHECK-NEXT:   3: 6
-;CHECK-NEXT: partition_pivot_last:647:7
+;CHECK-NEXT: partition_pivot_last:389:7
 ;CHECK-NEXT:  1: 6
 ;CHECK-NEXT:  2: 6
 ;CHECK-NEXT:  3: 6
@@ -62,7 +62,7 @@
 
 ;CHECK-NEXT:  6: 5
 ;CHECK-NEXT:  7: 5
-;CHECK-NEXT:  5: swap:116
+;CHECK-NEXT:  5: swap:61
 
 ;w/o duplication factor :  1: 9
 ;w/o duplication factor :  2: 9

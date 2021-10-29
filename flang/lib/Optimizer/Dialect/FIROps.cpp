@@ -1311,6 +1311,10 @@ static mlir::ArrayAttr collectAsAttributes(mlir::MLIRContext *ctxt,
 // GlobalLenOp
 //===----------------------------------------------------------------------===//
 
+mlir::Type fir::GlobalOp::resultType() {
+  return wrapAllocaResultType(getType());
+}
+
 static mlir::ParseResult parseGlobalLenOp(mlir::OpAsmParser &parser,
                                           mlir::OperationState &result) {
   llvm::StringRef fieldName;
@@ -2807,13 +2811,21 @@ static mlir::LogicalResult verify(fir::ShiftOp &op) {
 // SliceOp
 //===----------------------------------------------------------------------===//
 
+void fir::SliceOp::build(mlir::OpBuilder &builder, mlir::OperationState &result,
+                         mlir::ValueRange trips, mlir::ValueRange path,
+                         mlir::ValueRange substr) {
+  const auto rank = trips.size() / 3;
+  auto sliceTy = fir::SliceType::get(builder.getContext(), rank);
+  build(builder, result, sliceTy, trips, path, substr);
+}
+
 /// Return the output rank of a slice op. The output rank must be between 1 and
 /// the rank of the array being sliced (inclusive).
 unsigned fir::SliceOp::getOutputRank(mlir::ValueRange triples) {
   unsigned rank = 0;
   if (!triples.empty()) {
     for (unsigned i = 1, end = triples.size(); i < end; i += 3) {
-      auto op = triples[i].getDefiningOp();
+      auto *op = triples[i].getDefiningOp();
       if (!mlir::isa_and_nonnull<fir::UndefOp>(op))
         ++rank;
     }
@@ -3176,7 +3188,7 @@ mlir::FuncOp fir::createFuncOp(mlir::Location loc, mlir::ModuleOp module,
   if (auto f = module.lookupSymbol<mlir::FuncOp>(name))
     return f;
   mlir::OpBuilder modBuilder(module.getBodyRegion());
-  modBuilder.setInsertionPoint(module.getBody()->getTerminator());
+  modBuilder.setInsertionPointToEnd(module.getBody());
   auto result = modBuilder.create<mlir::FuncOp>(loc, name, type, attrs);
   result.setVisibility(mlir::SymbolTable::Visibility::Private);
   return result;

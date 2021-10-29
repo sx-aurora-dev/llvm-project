@@ -129,10 +129,21 @@ namespace clang {
   };
   }
 
+  namespace RISCVVector {
+  enum {
+    LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsRISCVVector.def"
+    FirstTSBuiltin,
+  };
+  }
+
   /// RISCV builtins
   namespace RISCV {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+    FirstRVVBuiltin = clang::Builtin::FirstTSBuiltin,
+    LastRVVBuiltin = RISCVVector::FirstTSBuiltin - 1,
 #define BUILTIN(ID, TYPE, ATTRS) BI##ID,
 #include "clang/Basic/BuiltinsRISCV.def"
     LastTSBuiltin
