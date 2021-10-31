@@ -439,9 +439,8 @@ void Platform::GetStatus(Stream &strm) {
   if (!specific_info.empty())
     strm.Printf("Platform-specific connection: %s\n", specific_info.c_str());
 
-  std::string s;
-  if (GetOSKernelDescription(s))
-    strm.Printf("    Kernel: %s\n", s.c_str());
+  if (llvm::Optional<std::string> s = GetOSKernelDescription())
+    strm.Format("    Kernel: {0}\n", *s);
 }
 
 llvm::VersionTuple Platform::GetOSVersion(Process *process) {
@@ -492,10 +491,10 @@ llvm::Optional<std::string> Platform::GetOSBuildString() {
   return GetRemoteOSBuildString();
 }
 
-bool Platform::GetOSKernelDescription(std::string &s) {
+llvm::Optional<std::string> Platform::GetOSKernelDescription() {
   if (IsHost())
-    return HostInfo::GetOSKernelDescription(s);
-  return GetRemoteOSKernelDescription(s);
+    return HostInfo::GetOSKernelDescription();
+  return GetRemoteOSKernelDescription();
 }
 
 void Platform::AddClangModuleCompilationOptions(
