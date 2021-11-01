@@ -38,8 +38,9 @@ if (LIBCXXABI_SUPPORTS_NOSTDLIBXX_FLAG OR LIBCXXABI_SUPPORTS_NODEFAULTLIBS_FLAG)
     list(APPEND CMAKE_REQUIRED_LIBRARIES c)
   endif ()
   if (LIBCXXABI_USE_COMPILER_RT)
-    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -rtlib=compiler-rt")
-    find_compiler_rt_library(builtins LIBCXXABI_BUILTINS_LIBRARY)
+    include(HandleCompilerRT)
+    find_compiler_rt_library(builtins LIBCXXABI_BUILTINS_LIBRARY
+                             FLAGS "${LIBCXXABI_COMPILE_FLAGS}")
     list(APPEND CMAKE_REQUIRED_LIBRARIES "${LIBCXXABI_BUILTINS_LIBRARY}")
     # CMAKE_REQUIRED_LIBRARIES is not used to link libc++abi.so, so
     # append builtins to LIBCXXABI_SHARED_LIBRARIES too
