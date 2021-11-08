@@ -162,6 +162,10 @@ static cl::opt<bool> EnableO3NonTrivialUnswitching(
     "enable-npm-O3-nontrivial-unswitch", cl::init(true), cl::Hidden,
     cl::ZeroOrMore, cl::desc("Enable non-trivial loop unswitching for -O3"));
 
+static cl::opt<bool> EnableEagerlyInvalidateAnalyses(
+    "eagerly-invalidate-analyses", cl::init(false), cl::Hidden,
+    cl::desc("Eagerly invalidate more analyses in default pipelines"));
+
 PipelineTuningOptions::PipelineTuningOptions() {
   LoopInterleaving = true;
   LoopVectorization = true;
@@ -172,6 +176,7 @@ PipelineTuningOptions::PipelineTuningOptions() {
   LicmMssaNoAccForPromotionCap = SetLicmMssaNoAccForPromotionCap;
   CallGraphProfile = true;
   MergeFunctions = false;
+  EagerlyInvalidateAnalyses = EnableEagerlyInvalidateAnalyses;
 }
 
 namespace llvm {
@@ -596,7 +601,8 @@ void PassBuilder::addPGOInstrPasses(ModulePassManager &MPM,
     FPM.addPass(InstCombinePass()); // Combine silly sequences.
     invokePeepholeEPCallbacks(FPM, Level);
 
-    CGPipeline.addPass(createCGSCCToFunctionPassAdaptor(std::move(FPM)));
+    CGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
+        std::move(FPM), PTO.EagerlyInvalidateAnalyses));
 
     MPM.addPass(std::move(MIWP));
 
@@ -623,7 +629,8 @@ void PassBuilder::addPGOInstrPasses(ModulePassManager &MPM,
   FPM.addPass(createFunctionToLoopPassAdaptor(
       LoopRotatePass(Level != OptimizationLevel::Oz), /*UseMemorySSA=*/false,
       /*UseBlockFrequencyInfo=*/false));
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   // Add the profile lowering pass.
   InstrProfOptions Options;
@@ -723,7 +730,8 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
   // Lastly, add the core function simplification pipeline nested inside the
   // CGSCC walk.
   MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
-      buildFunctionSimplificationPipeline(Level, Phase)));
+      buildFunctionSimplificationPipeline(Level, Phase),
+      PTO.EagerlyInvalidateAnalyses));
 
   MainCGPipeline.addPass(CoroSplitPass(Level != OptimizationLevel::O0));
 
@@ -792,7 +800,8 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   // FIXME: revisit how SampleProfileLoad/Inliner/ICP is structured.
   if (LoadSampleProfile)
     EarlyFPM.addPass(InstCombinePass());
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(EarlyFPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(EarlyFPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   if (LoadSampleProfile) {
     // Annotate sample profile right after early FPM to ensure freshness of
@@ -832,7 +841,7 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
     C(MPM, Level);
 
   // Specialize functions with IPSCCP.
-  if (EnableFunctionSpecialization)
+  if (EnableFunctionSpecialization && Level == OptimizationLevel::O3)
     MPM.addPass(FunctionSpecializationPass());
 
   // Interprocedural constant propagation now that basic cleanup has occurred
@@ -866,7 +875,8 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   invokePeepholeEPCallbacks(GlobalCleanupPM, Level);
 
   GlobalCleanupPM.addPass(SimplifyCFGPass());
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(GlobalCleanupPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(GlobalCleanupPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   // Add all the requested passes for instrumentation PGO, if requested.
   if (PGOOpt && Phase != ThinOrFullLTOPhase::ThinLTOPostLink &&
@@ -1093,11 +1103,16 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
   for (auto &C : VectorizerStartEPCallbacks)
     C(OptimizePM, Level);
 
+  LoopPassManager LPM;
   // First rotate loops that may have been un-rotated by prior passes.
   // Disable header duplication at -Oz.
+  LPM.addPass(LoopRotatePass(Level != OptimizationLevel::Oz, LTOPreLink));
+  // Some loops may have become dead by now. Try to delete them.
+  // FIXME: see disscussion in https://reviews.llvm.org/D112851
+  //        this may need to be revisited once GVN is more powerful.
+  LPM.addPass(LoopDeletionPass());
   OptimizePM.addPass(createFunctionToLoopPassAdaptor(
-      LoopRotatePass(Level != OptimizationLevel::Oz, LTOPreLink),
-      /*UseMemorySSA=*/false, /*UseBlockFrequencyInfo=*/false));
+      std::move(LPM), /*UseMemorySSA=*/false, /*UseBlockFrequencyInfo=*/false));
 
   // Distribute loops to allow partial vectorization.  I.e. isolate dependences
   // into separate loop that would otherwise inhibit vectorization.  This is
@@ -1149,7 +1164,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
   OptimizePM.addPass(CoroCleanupPass());
 
   // Add the core optimizing pipeline.
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(OptimizePM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(OptimizePM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   for (auto &C : OptimizerLastEPCallbacks)
     C(MPM, Level);
@@ -1392,7 +1408,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   if (Level.getSpeedupLevel() > 1) {
     FunctionPassManager EarlyFPM;
     EarlyFPM.addPass(CallSiteSplittingPass());
-    MPM.addPass(createModuleToFunctionPassAdaptor(std::move(EarlyFPM)));
+    MPM.addPass(createModuleToFunctionPassAdaptor(
+        std::move(EarlyFPM), PTO.EagerlyInvalidateAnalyses));
 
     // Indirect call promotion. This should promote all the targets that are
     // left by the earlier promotion pass that promotes intra-module targets.
@@ -1401,7 +1418,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
     MPM.addPass(PGOIndirectCallPromotion(
         true /* InLTO */, PGOOpt && PGOOpt->Action == PGOOptions::SampleUse));
 
-    if (EnableFunctionSpecialization)
+    if (EnableFunctionSpecialization && Level == OptimizationLevel::O3)
       MPM.addPass(FunctionSpecializationPass());
     // Propagate constants at call sites into the functions they call.  This
     // opens opportunities for globalopt (and inlining) by substituting function
@@ -1468,7 +1485,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   PeepholeFPM.addPass(InstCombinePass());
   invokePeepholeEPCallbacks(PeepholeFPM, Level);
 
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(PeepholeFPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(PeepholeFPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   // Note: historically, the PruneEH pass was run first to deduce nounwind and
   // generally clean up exception handling overhead. It isn't clear this is
@@ -1515,7 +1533,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   FPM.addPass(TailCallElimPass());
 
   // Run a few AA driver optimizations here and now to cleanup the code.
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   MPM.addPass(
       createModuleToPostOrderCGSCCPassAdaptor(PostOrderFunctionAttrsPass()));
@@ -1572,7 +1591,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
 
   invokePeepholeEPCallbacks(MainFPM, Level);
   MainFPM.addPass(JumpThreadingPass(/*InsertFreezeWhenUnfoldingSelect*/ true));
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(MainFPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(MainFPM),
+                                                PTO.EagerlyInvalidateAnalyses));
 
   // Lower type metadata and the type.test intrinsic. This pass supports
   // clang's control flow integrity mechanisms (-fsanitize=cfi*) and needs

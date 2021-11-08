@@ -1387,6 +1387,8 @@ void fir::FieldIndexOp::build(mlir::OpBuilder &builder,
 
 /// Range bounds must be nonnegative, and the range must not be empty.
 static mlir::LogicalResult verify(fir::InsertOnRangeOp op) {
+  if (fir::hasDynamicSize(op.seq().getType()))
+    return op.emitOpError("must have constant shape and size");
   if (op.coor().size() < 2 || op.coor().size() % 2 != 0)
     return op.emitOpError("has uneven number of values in ranges");
   bool rangeIsKnownToBeNonempty = false;
@@ -2262,6 +2264,15 @@ fir::SelectOp::getSuccessorOperands(llvm::ArrayRef<mlir::Value> operands,
   return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
 }
 
+llvm::Optional<mlir::ValueRange>
+fir::SelectOp::getSuccessorOperands(mlir::ValueRange operands, unsigned oper) {
+  auto a =
+      (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
+}
+
 unsigned fir::SelectOp::targetOffsetSize() {
   return denseElementsSize((*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
       getTargetOffsetAttr()));
@@ -2547,6 +2558,16 @@ fir::SelectRankOp::getMutableSuccessorOperands(unsigned oper) {
 
 llvm::Optional<llvm::ArrayRef<mlir::Value>>
 fir::SelectRankOp::getSuccessorOperands(llvm::ArrayRef<mlir::Value> operands,
+                                        unsigned oper) {
+  auto a =
+      (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
+}
+
+llvm::Optional<mlir::ValueRange>
+fir::SelectRankOp::getSuccessorOperands(mlir::ValueRange operands,
                                         unsigned oper) {
   auto a =
       (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());

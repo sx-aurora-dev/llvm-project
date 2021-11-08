@@ -601,6 +601,8 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
 
   // We want to custom lower some of our intrinsics.
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::f64, Custom);
+  setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::ppcf128, Custom);
 
   // To handle counter-based loop conditions.
   setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i1, Custom);
@@ -9077,8 +9079,8 @@ static bool isValidSplatLoad(const PPCSubtarget &Subtarget, const SDValue &Op,
     return true;
 
   if (Ty == MVT::v2i64) {
-    // check the extend type if the input is i32 while the output vector type is
-    // v2i64.
+    // Check the extend type, when the input type is i32, and the output vector
+    // type is v2i64.
     if (cast<LoadSDNode>(Op.getOperand(0))->getMemoryVT() == MVT::i32) {
       if (ISD::isZEXTLoad(InputNode))
         Opcode = PPCISD::ZEXT_LD_SPLAT;
@@ -9162,8 +9164,17 @@ SDValue PPCTargetLowering::LowerBUILD_VECTOR(SDValue Op,
       const SDValue *InputLoad = &Op.getOperand(0);
       LoadSDNode *LD = cast<LoadSDNode>(*InputLoad);
 
-      unsigned ElementSize = LD->getMemoryVT().getScalarSizeInBits() *
-                             ((NewOpcode == PPCISD::LD_SPLAT) ? 1 : 2);
+      // If the input load is an extending load, it will be an i32 -> i64
+      // extending load and isValidSplatLoad() will update NewOpcode.
+      unsigned MemorySize = LD->getMemoryVT().getScalarSizeInBits();
+      unsigned ElementSize =
+          MemorySize * ((NewOpcode == PPCISD::LD_SPLAT) ? 1 : 2);
+
+      assert(((ElementSize == 2 * MemorySize)
+                  ? (NewOpcode == PPCISD::ZEXT_LD_SPLAT ||
+                     NewOpcode == PPCISD::SEXT_LD_SPLAT)
+                  : (NewOpcode == PPCISD::LD_SPLAT)) &&
+             "Unmatched element size and opcode!\n");
 
       // Checking for a single use of this load, we have to check for vector
       // width (128 bits) / ElementSize uses (since each operand of the
@@ -9173,7 +9184,7 @@ SDValue PPCTargetLowering::LowerBUILD_VECTOR(SDValue Op,
         if (BVInOp.isUndef())
           NumUsesOfInputLD--;
 
-      // Execlude somes case where LD_SPLAT is worse than scalar_to_vector:
+      // Exclude somes case where LD_SPLAT is worse than scalar_to_vector:
       // Below cases should also happen for "lfiwzx/lfiwax + LE target + index
       // 1" and "lxvrhx + BE target + index 7" and "lxvrbx + BE target + index
       // 15", but funciton IsValidSplatLoad() now will only return true when
@@ -9191,22 +9202,13 @@ SDValue PPCTargetLowering::LowerBUILD_VECTOR(SDValue Op,
            Subtarget.hasLFIWAX()))
         return SDValue();
 
-      // case 2 - lxvrhx
-      // 2.1: load result is i16;
-      // 2.2: build a v8i16 vector with above loaded value;
+      // case 2 - lxvr[hb]x
+      // 2.1: load result is at most i16;
+      // 2.2: build a vector with above loaded value;
       // 2.3: the vector has only one value at index 0, others are all undef;
-      // 2.4: on LE target, so that lxvrhx does not need any permute.
+      // 2.4: on LE target, so that lxvr[hb]x does not need any permute.
       if (NumUsesOfInputLD == 1 && Subtarget.isLittleEndian() &&
-          Subtarget.isISA3_1() && Op->getValueType(0) == MVT::v16i8)
-        return SDValue();
-
-      // case 3 - lxvrbx
-      // 3.1: load result is i8;
-      // 3.2: build a v16i8 vector with above loaded value;
-      // 3.3: the vector has only one value at index 0, others are all undef;
-      // 3.4: on LE target, so that lxvrbx does not need any permute.
-      if (NumUsesOfInputLD == 1 && Subtarget.isLittleEndian() &&
-          Subtarget.isISA3_1() && Op->getValueType(0) == MVT::v8i16)
+          Subtarget.isISA3_1() && ElementSize <= 16)
         return SDValue();
 
       assert(NumUsesOfInputLD > 0 && "No uses of input LD of a build_vector?");
@@ -10428,6 +10430,16 @@ SDValue PPCTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     }
     return DAG.getMergeValues(RetOps, dl);
   }
+
+  case Intrinsic::ppc_unpack_longdouble: {
+    auto *Idx = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+    assert(Idx && (Idx->getSExtValue() == 0 || Idx->getSExtValue() == 1) &&
+           "Argument of long double unpack must be 0 or 1!");
+    return DAG.getNode(ISD::EXTRACT_ELEMENT, dl, MVT::f64, Op.getOperand(1),
+                       DAG.getConstant(!!(Idx->getSExtValue()), dl,
+                                       Idx->getValueType(0)));
+  }
+
   case Intrinsic::ppc_compare_exp_lt:
   case Intrinsic::ppc_compare_exp_gt:
   case Intrinsic::ppc_compare_exp_eq:
@@ -10471,6 +10483,17 @@ SDValue PPCTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
              DAG.getConstant(1, dl, MVT::i32), DAG.getConstant(0, dl, MVT::i32),
              DAG.getTargetConstant(PPC::PRED_EQ, dl, MVT::i32)}),
         0);
+  }
+  case Intrinsic::ppc_convert_f128_to_ppcf128:
+  case Intrinsic::ppc_convert_ppcf128_to_f128: {
+    RTLIB::Libcall LC = IntrinsicID == Intrinsic::ppc_convert_ppcf128_to_f128
+                            ? RTLIB::CONVERT_PPCF128_F128
+                            : RTLIB::CONVERT_F128_PPCF128;
+    MakeLibCallOptions CallOptions;
+    std::pair<SDValue, SDValue> Result =
+        makeLibCall(DAG, LC, Op.getValueType(), Op.getOperand(1), CallOptions,
+                    dl, SDValue());
+    return Result.first;
   }
   }
 
@@ -11107,6 +11130,18 @@ void PPCTargetLowering::ReplaceNodeResults(SDNode *N,
 
     Results.push_back(DAG.getNode(ISD::TRUNCATE, dl, MVT::i1, NewInt));
     Results.push_back(NewInt.getValue(1));
+    break;
+  }
+  case ISD::INTRINSIC_WO_CHAIN: {
+    switch (cast<ConstantSDNode>(N->getOperand(0))->getZExtValue()) {
+    case Intrinsic::ppc_pack_longdouble:
+      Results.push_back(DAG.getNode(ISD::BUILD_PAIR, dl, MVT::ppcf128,
+                                    N->getOperand(2), N->getOperand(1)));
+      break;
+    case Intrinsic::ppc_convert_f128_to_ppcf128:
+      Results.push_back(LowerINTRINSIC_WO_CHAIN(SDValue(N, 0), DAG));
+      break;
+    }
     break;
   }
   case ISD::VAARG: {

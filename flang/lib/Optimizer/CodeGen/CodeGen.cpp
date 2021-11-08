@@ -19,6 +19,7 @@
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/ArrayRef.h"
 
@@ -45,6 +46,25 @@ protected:
   }
 };
 
+/// FIR conversion pattern template
+template <typename FromOp>
+class FIROpAndTypeConversion : public FIROpConversion<FromOp> {
+public:
+  using FIROpConversion<FromOp>::FIROpConversion;
+  using OpAdaptor = typename FromOp::Adaptor;
+
+  mlir::LogicalResult
+  matchAndRewrite(FromOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    mlir::Type ty = this->convertType(op.getType());
+    return doRewrite(op, ty, adaptor, rewriter);
+  }
+
+  virtual mlir::LogicalResult
+  doRewrite(FromOp addr, mlir::Type ty, OpAdaptor adaptor,
+            mlir::ConversionPatternRewriter &rewriter) const = 0;
+};
+
 // Lower `fir.address_of` operation to `llvm.address_of` operation.
 struct AddrOfOpConversion : public FIROpConversion<fir::AddrOfOp> {
   using FIROpConversion::FIROpConversion;
@@ -55,6 +75,22 @@ struct AddrOfOpConversion : public FIROpConversion<fir::AddrOfOp> {
     auto ty = convertType(addr.getType());
     rewriter.replaceOpWithNewOp<mlir::LLVM::AddressOfOp>(
         addr, ty, addr.symbol().getRootReference().getValue());
+    return success();
+  }
+};
+
+// `fir.call` -> `llvm.call`
+struct CallOpConversion : public FIROpConversion<fir::CallOp> {
+  using FIROpConversion::FIROpConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(fir::CallOp call, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    SmallVector<mlir::Type> resultTys;
+    for (auto r : call.getResults())
+      resultTys.push_back(convertType(r.getType()));
+    rewriter.replaceOpWithNewOp<mlir::LLVM::CallOp>(
+        call, resultTys, adaptor.getOperands(), call->getAttrs());
     return success();
   }
 };
@@ -154,6 +190,78 @@ struct GlobalOpConversion : public FIROpConversion<fir::GlobalOp> {
   }
 };
 
+template <typename OP>
+void selectMatchAndRewrite(fir::LLVMTypeConverter &lowering, OP select,
+                           typename OP::Adaptor adaptor,
+                           mlir::ConversionPatternRewriter &rewriter) {
+  unsigned conds = select.getNumConditions();
+  auto cases = select.getCases().getValue();
+  mlir::Value selector = adaptor.selector();
+  auto loc = select.getLoc();
+  assert(conds > 0 && "select must have cases");
+
+  llvm::SmallVector<mlir::Block *> destinations;
+  llvm::SmallVector<mlir::ValueRange> destinationsOperands;
+  mlir::Block *defaultDestination;
+  mlir::ValueRange defaultOperands;
+  llvm::SmallVector<int32_t> caseValues;
+
+  for (unsigned t = 0; t != conds; ++t) {
+    mlir::Block *dest = select.getSuccessor(t);
+    auto destOps = select.getSuccessorOperands(adaptor.getOperands(), t);
+    const mlir::Attribute &attr = cases[t];
+    if (auto intAttr = attr.template dyn_cast<mlir::IntegerAttr>()) {
+      destinations.push_back(dest);
+      destinationsOperands.push_back(destOps.hasValue() ? *destOps
+                                                        : ValueRange());
+      caseValues.push_back(intAttr.getInt());
+      continue;
+    }
+    assert(attr.template dyn_cast_or_null<mlir::UnitAttr>());
+    assert((t + 1 == conds) && "unit must be last");
+    defaultDestination = dest;
+    defaultOperands = destOps.hasValue() ? *destOps : ValueRange();
+  }
+
+  // LLVM::SwitchOp takes a i32 type for the selector.
+  if (select.getSelector().getType() != rewriter.getI32Type())
+    selector =
+        rewriter.create<LLVM::TruncOp>(loc, rewriter.getI32Type(), selector);
+
+  rewriter.replaceOpWithNewOp<mlir::LLVM::SwitchOp>(
+      select, selector,
+      /*defaultDestination=*/defaultDestination,
+      /*defaultOperands=*/defaultOperands,
+      /*caseValues=*/caseValues,
+      /*caseDestinations=*/destinations,
+      /*caseOperands=*/destinationsOperands,
+      /*branchWeights=*/ArrayRef<int32_t>());
+}
+
+/// conversion of fir::SelectOp to an if-then-else ladder
+struct SelectOpConversion : public FIROpConversion<fir::SelectOp> {
+  using FIROpConversion::FIROpConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(fir::SelectOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    selectMatchAndRewrite<fir::SelectOp>(lowerTy(), op, adaptor, rewriter);
+    return success();
+  }
+};
+
+/// conversion of fir::SelectRankOp to an if-then-else ladder
+struct SelectRankOpConversion : public FIROpConversion<fir::SelectRankOp> {
+  using FIROpConversion::FIROpConversion;
+
+  mlir::LogicalResult
+  matchAndRewrite(fir::SelectRankOp op, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    selectMatchAndRewrite<fir::SelectRankOp>(lowerTy(), op, adaptor, rewriter);
+    return success();
+  }
+};
+
 // convert to LLVM IR dialect `undef`
 struct UndefOpConversion : public FIROpConversion<fir::UndefOp> {
   using FIROpConversion::FIROpConversion;
@@ -196,13 +304,189 @@ struct ZeroOpConversion : public FIROpConversion<fir::ZeroOp> {
           zero, ty, mlir::FloatAttr::get(zero.getType(), 0.0));
     } else {
       // TODO: create ConstantAggregateZero for FIR aggregate/array types.
-      return zero.emitOpError(
+      return rewriter.notifyMatchFailure(
+          zero,
           "conversion of fir.zero with aggregate type not implemented yet");
     }
     return success();
   }
 };
 
+// Code shared between insert_value and extract_value Ops.
+struct ValueOpCommon {
+  // Translate the arguments pertaining to any multidimensional array to
+  // row-major order for LLVM-IR.
+  static void toRowMajor(SmallVectorImpl<mlir::Attribute> &attrs,
+                         mlir::Type ty) {
+    assert(ty && "type is null");
+    const auto end = attrs.size();
+    for (std::remove_const_t<decltype(end)> i = 0; i < end; ++i) {
+      if (auto seq = ty.dyn_cast<mlir::LLVM::LLVMArrayType>()) {
+        const auto dim = getDimension(seq);
+        if (dim > 1) {
+          auto ub = std::min(i + dim, end);
+          std::reverse(attrs.begin() + i, attrs.begin() + ub);
+          i += dim - 1;
+        }
+        ty = getArrayElementType(seq);
+      } else if (auto st = ty.dyn_cast<mlir::LLVM::LLVMStructType>()) {
+        ty = st.getBody()[attrs[i].cast<mlir::IntegerAttr>().getInt()];
+      } else {
+        llvm_unreachable("index into invalid type");
+      }
+    }
+  }
+
+  static llvm::SmallVector<mlir::Attribute>
+  collectIndices(mlir::ConversionPatternRewriter &rewriter,
+                 mlir::ArrayAttr arrAttr) {
+    llvm::SmallVector<mlir::Attribute> attrs;
+    for (auto i = arrAttr.begin(), e = arrAttr.end(); i != e; ++i) {
+      if (i->isa<mlir::IntegerAttr>()) {
+        attrs.push_back(*i);
+      } else {
+        auto fieldName = i->cast<mlir::StringAttr>().getValue();
+        ++i;
+        auto ty = i->cast<mlir::TypeAttr>().getValue();
+        auto index = ty.cast<fir::RecordType>().getFieldIndex(fieldName);
+        attrs.push_back(mlir::IntegerAttr::get(rewriter.getI32Type(), index));
+      }
+    }
+    return attrs;
+  }
+
+private:
+  static unsigned getDimension(mlir::LLVM::LLVMArrayType ty) {
+    unsigned result = 1;
+    for (auto eleTy = ty.getElementType().dyn_cast<mlir::LLVM::LLVMArrayType>();
+         eleTy;
+         eleTy = eleTy.getElementType().dyn_cast<mlir::LLVM::LLVMArrayType>())
+      ++result;
+    return result;
+  }
+
+  static mlir::Type getArrayElementType(mlir::LLVM::LLVMArrayType ty) {
+    auto eleTy = ty.getElementType();
+    while (auto arrTy = eleTy.dyn_cast<mlir::LLVM::LLVMArrayType>())
+      eleTy = arrTy.getElementType();
+    return eleTy;
+  }
+};
+
+/// Extract a subobject value from an ssa-value of aggregate type
+struct ExtractValueOpConversion
+    : public FIROpAndTypeConversion<fir::ExtractValueOp>,
+      public ValueOpCommon {
+  using FIROpAndTypeConversion::FIROpAndTypeConversion;
+
+  mlir::LogicalResult
+  doRewrite(fir::ExtractValueOp extractVal, mlir::Type ty, OpAdaptor adaptor,
+            mlir::ConversionPatternRewriter &rewriter) const override {
+    auto attrs = collectIndices(rewriter, extractVal.coor());
+    toRowMajor(attrs, adaptor.getOperands()[0].getType());
+    auto position = mlir::ArrayAttr::get(extractVal.getContext(), attrs);
+    rewriter.replaceOpWithNewOp<mlir::LLVM::ExtractValueOp>(
+        extractVal, ty, adaptor.getOperands()[0], position);
+    return success();
+  }
+};
+
+/// InsertValue is the generalized instruction for the composition of new
+/// aggregate type values.
+struct InsertValueOpConversion
+    : public FIROpAndTypeConversion<fir::InsertValueOp>,
+      public ValueOpCommon {
+  using FIROpAndTypeConversion::FIROpAndTypeConversion;
+
+  mlir::LogicalResult
+  doRewrite(fir::InsertValueOp insertVal, mlir::Type ty, OpAdaptor adaptor,
+            mlir::ConversionPatternRewriter &rewriter) const override {
+    auto attrs = collectIndices(rewriter, insertVal.coor());
+    toRowMajor(attrs, adaptor.getOperands()[0].getType());
+    auto position = mlir::ArrayAttr::get(insertVal.getContext(), attrs);
+    rewriter.replaceOpWithNewOp<mlir::LLVM::InsertValueOp>(
+        insertVal, ty, adaptor.getOperands()[0], adaptor.getOperands()[1],
+        position);
+    return success();
+  }
+};
+
+/// InsertOnRange inserts a value into a sequence over a range of offsets.
+struct InsertOnRangeOpConversion
+    : public FIROpAndTypeConversion<fir::InsertOnRangeOp> {
+  using FIROpAndTypeConversion::FIROpAndTypeConversion;
+
+  // Increments an array of subscripts in a row major fasion.
+  void incrementSubscripts(const SmallVector<uint64_t> &dims,
+                           SmallVector<uint64_t> &subscripts) const {
+    for (size_t i = dims.size(); i > 0; --i) {
+      if (++subscripts[i - 1] < dims[i - 1]) {
+        return;
+      }
+      subscripts[i - 1] = 0;
+    }
+  }
+
+  mlir::LogicalResult
+  doRewrite(fir::InsertOnRangeOp range, mlir::Type ty, OpAdaptor adaptor,
+            mlir::ConversionPatternRewriter &rewriter) const override {
+
+    llvm::SmallVector<uint64_t> dims;
+    auto type = adaptor.getOperands()[0].getType();
+
+    // Iteratively extract the array dimensions from the type.
+    while (auto t = type.dyn_cast<mlir::LLVM::LLVMArrayType>()) {
+      dims.push_back(t.getNumElements());
+      type = t.getElementType();
+    }
+
+    SmallVector<uint64_t> lBounds;
+    SmallVector<uint64_t> uBounds;
+
+    // Extract integer value from the attribute
+    SmallVector<int64_t> coordinates = llvm::to_vector<4>(
+        llvm::map_range(range.coor(), [](Attribute a) -> int64_t {
+          return a.cast<IntegerAttr>().getInt();
+        }));
+
+    // Unzip the upper and lower bound and convert to a row major format.
+    for (auto i = coordinates.rbegin(), e = coordinates.rend(); i != e; ++i) {
+      uBounds.push_back(*i++);
+      lBounds.push_back(*i);
+    }
+
+    auto &subscripts = lBounds;
+    auto loc = range.getLoc();
+    mlir::Value lastOp = adaptor.getOperands()[0];
+    mlir::Value insertVal = adaptor.getOperands()[1];
+
+    auto i64Ty = rewriter.getI64Type();
+    while (subscripts != uBounds) {
+      // Convert uint64_t's to Attribute's.
+      SmallVector<mlir::Attribute> subscriptAttrs;
+      for (const auto &subscript : subscripts)
+        subscriptAttrs.push_back(IntegerAttr::get(i64Ty, subscript));
+      lastOp = rewriter.create<mlir::LLVM::InsertValueOp>(
+          loc, ty, lastOp, insertVal,
+          ArrayAttr::get(range.getContext(), subscriptAttrs));
+
+      incrementSubscripts(dims, subscripts);
+    }
+
+    // Convert uint64_t's to Attribute's.
+    SmallVector<mlir::Attribute> subscriptAttrs;
+    for (const auto &subscript : subscripts)
+      subscriptAttrs.push_back(
+          IntegerAttr::get(rewriter.getI64Type(), subscript));
+    mlir::ArrayRef<mlir::Attribute> arrayRef(subscriptAttrs);
+
+    rewriter.replaceOpWithNewOp<mlir::LLVM::InsertValueOp>(
+        range, ty, lastOp, insertVal,
+        ArrayAttr::get(range.getContext(), arrayRef));
+
+    return success();
+  }
+};
 } // namespace
 
 namespace {
@@ -220,10 +504,12 @@ public:
     auto *context = getModule().getContext();
     fir::LLVMTypeConverter typeConverter{getModule()};
     mlir::OwningRewritePatternList pattern(context);
-    pattern
-        .insert<AddrOfOpConversion, HasValueOpConversion, GlobalOpConversion,
-                UndefOpConversion, UnreachableOpConversion, ZeroOpConversion>(
-            typeConverter);
+    pattern.insert<
+        AddrOfOpConversion, CallOpConversion, ExtractValueOpConversion,
+        HasValueOpConversion, GlobalOpConversion, InsertOnRangeOpConversion,
+        InsertValueOpConversion, SelectOpConversion, SelectRankOpConversion,
+        UndefOpConversion, UnreachableOpConversion, ZeroOpConversion>(
+        typeConverter);
     mlir::populateStdToLLVMConversionPatterns(typeConverter, pattern);
     mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter,
                                                             pattern);
