@@ -18,13 +18,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-
-#ifdef __ve__
-// VE doesn't support madvise.  VE doesn't support paging, therefore VE's
-// madvise syscall returns success always.  VEOS doesn't define MADV_DONTNEED,
-// so defines it here.
-#define MADV_DONTNEED 4
-#endif
 #endif
 
 #ifdef COMPILER_RT_HAS_UNAME
@@ -335,5 +328,28 @@ COMPILER_RT_VISIBILITY int lprofSuspendSigKill() {
 COMPILER_RT_VISIBILITY void lprofRestoreSigKill() {
 #if defined(__linux__)
   prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
+}
+
+COMPILER_RT_VISIBILITY int lprofReleaseMemoryPagesToOS(uintptr_t Begin,
+                                                       uintptr_t End) {
+#if defined(__ve__)
+  // VE doesn't support madvise.
+  return 0;
+#else
+  size_t PageSize = getpagesize();
+  uintptr_t BeginAligned = lprofRoundUpTo((uintptr_t)Begin, PageSize);
+  uintptr_t EndAligned = lprofRoundDownTo((uintptr_t)End, PageSize);
+  if (BeginAligned < EndAligned) {
+#if defined(__Fuchsia__)
+    return _zx_vmar_op_range(_zx_vmar_root_self(), ZX_VMAR_OP_DECOMMIT,
+                             (zx_vaddr_t)BeginAligned,
+                             EndAligned - BeginAligned, NULL, 0);
+#else
+    return madvise((void *)BeginAligned, EndAligned - BeginAligned,
+                   MADV_DONTNEED);
+#endif
+  }
+  return 0;
 #endif
 }

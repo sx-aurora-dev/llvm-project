@@ -6,10 +6,6 @@
 #include <string.h>
 #include <stdint.h>
 
-#if defined(__ve__)
-#define INSTR_ALIGNMENT_BYTE 8
-#endif
-
 extern void __clear_cache(void* start, void* end);
 extern void __enable_execute_stack(void* addr);
 
@@ -34,8 +30,8 @@ memcpy_f(void *dst, const void *src, size_t n) {
 
 int main()
 {
-#if defined(INSTR_ALIGNMENT_BYTE)
-    unsigned char execution_buffer[128] __attribute__((__aligned__(INSTR_ALIGNMENT_BYTE)));
+#if defined(__ve__)
+    unsigned char execution_buffer[128] __attribute__((__aligned__(8)));
 #else
     unsigned char execution_buffer[128];
 #endif
