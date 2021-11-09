@@ -13090,7 +13090,7 @@ static SDValue performCommonVectorExtendCombine(SDValue VectorShuffle,
       DAG.getAnyExtOrTrunc(Extend.getOperand(0), DL, PreExtendType),
       DAG.getConstant(0, DL, MVT::i64));
 
-  std::vector<int> ShuffleMask(TargetType.getVectorElementCount().getValue());
+  std::vector<int> ShuffleMask(TargetType.getVectorNumElements());
 
   SDValue VectorShuffleNode =
       DAG.getVectorShuffle(PreExtendVT, DL, InsertVectorNode,
@@ -13132,12 +13132,44 @@ static SDValue performMulCombine(SDNode *N, SelectionDAG &DAG,
   if (DCI.isBeforeLegalizeOps())
     return SDValue();
 
+  // Canonicalize X*(Y+1) -> X*Y+X and (X+1)*Y -> X*Y+Y,
+  // and in MachineCombiner pass, add+mul will be combined into madd.
+  // Similarly, X*(1-Y) -> X - X*Y and (1-Y)*X -> X - Y*X.
+  SDLoc DL(N);
+  EVT VT = N->getValueType(0);
+  SDValue N0 = N->getOperand(0);
+  SDValue N1 = N->getOperand(1);
+  SDValue MulOper;
+  unsigned AddSubOpc;
+
+  auto IsAddSubWith1 = [&](SDValue V) -> bool {
+    AddSubOpc = V->getOpcode();
+    if ((AddSubOpc == ISD::ADD || AddSubOpc == ISD::SUB) && V->hasOneUse()) {
+      SDValue Opnd = V->getOperand(1);
+      MulOper = V->getOperand(0);
+      if (AddSubOpc == ISD::SUB)
+        std::swap(Opnd, MulOper);
+      if (auto C = dyn_cast<ConstantSDNode>(Opnd))
+        return C->isOne();
+    }
+    return false;
+  };
+
+  if (IsAddSubWith1(N0)) {
+    SDValue MulVal = DAG.getNode(ISD::MUL, DL, VT, N1, MulOper);
+    return DAG.getNode(AddSubOpc, DL, VT, N1, MulVal);
+  }
+
+  if (IsAddSubWith1(N1)) {
+    SDValue MulVal = DAG.getNode(ISD::MUL, DL, VT, N0, MulOper);
+    return DAG.getNode(AddSubOpc, DL, VT, N0, MulVal);
+  }
+
   // The below optimizations require a constant RHS.
-  if (!isa<ConstantSDNode>(N->getOperand(1)))
+  if (!isa<ConstantSDNode>(N1))
     return SDValue();
 
-  SDValue N0 = N->getOperand(0);
-  ConstantSDNode *C = cast<ConstantSDNode>(N->getOperand(1));
+  ConstantSDNode *C = cast<ConstantSDNode>(N1);
   const APInt &ConstValue = C->getAPIntValue();
 
   // Allow the scaling to be folded into the `cnt` instruction by preventing
@@ -13178,7 +13210,7 @@ static SDValue performMulCombine(SDNode *N, SelectionDAG &DAG,
   // and shift+add+shift.
   APInt ShiftedConstValue = ConstValue.ashr(TrailingZeroes);
 
-  unsigned ShiftAmt, AddSubOpc;
+  unsigned ShiftAmt;
   // Is the shifted value the LHS operand of the add/sub?
   bool ShiftValUseIsN0 = true;
   // Do we need to negate the result?
@@ -13215,8 +13247,6 @@ static SDValue performMulCombine(SDNode *N, SelectionDAG &DAG,
       return SDValue();
   }
 
-  SDLoc DL(N);
-  EVT VT = N->getValueType(0);
   SDValue ShiftedVal = DAG.getNode(ISD::SHL, DL, VT, N0,
                                    DAG.getConstant(ShiftAmt, DL, MVT::i64));
 
@@ -15561,6 +15591,18 @@ static SDValue performSpliceCombine(SDNode *N, SelectionDAG &DAG) {
   return SDValue();
 }
 
+static SDValue performUnpackCombine(SDNode *N, SelectionDAG &DAG) {
+  assert((N->getOpcode() == AArch64ISD::UUNPKHI ||
+          N->getOpcode() == AArch64ISD::UUNPKLO) &&
+         "Unexpected Opcode!");
+
+  // uunpklo/hi undef -> undef
+  if (N->getOperand(0).isUndef())
+    return DAG.getUNDEF(N->getValueType(0));
+
+  return SDValue();
+}
+
 static SDValue performUzpCombine(SDNode *N, SelectionDAG &DAG) {
   SDLoc DL(N);
   SDValue Op0 = N->getOperand(0);
@@ -17227,6 +17269,9 @@ SDValue AArch64TargetLowering::PerformDAGCombine(SDNode *N,
     return performNVCASTCombine(N);
   case AArch64ISD::SPLICE:
     return performSpliceCombine(N, DAG);
+  case AArch64ISD::UUNPKLO:
+  case AArch64ISD::UUNPKHI:
+    return performUnpackCombine(N, DAG);
   case AArch64ISD::UZP1:
     return performUzpCombine(N, DAG);
   case AArch64ISD::SETCC_MERGE_ZERO:

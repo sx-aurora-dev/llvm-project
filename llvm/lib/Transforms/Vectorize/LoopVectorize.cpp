@@ -2034,7 +2034,6 @@ public:
         if (MemCheckExp.isInsertedInstruction(&I))
           continue;
         SE.forgetValue(&I);
-        SE.eraseValueFromMap(&I);
         I.eraseFromParent();
       }
     }
@@ -2295,12 +2294,7 @@ void InnerLoopVectorizer::createVectorIntOrFpInductionPHI(
     Start = Builder.CreateCast(Instruction::Trunc, Start, TruncType);
   }
 
-  Value *Zero;
-  if (Start->getType()->isFloatingPointTy())
-    Zero = ConstantFP::get(Start->getType(), 0);
-  else
-    Zero = ConstantInt::get(Start->getType(), 0);
-
+  Value *Zero = getSignedIntOrFpConstant(Start->getType(), 0);
   Value *SplatStart = Builder.CreateVectorSplat(VF, Start);
   Value *SteppedStart =
       getStepVector(SplatStart, Zero, Step, II.getInductionOpcode());
@@ -4356,7 +4350,7 @@ void InnerLoopVectorizer::fixReduction(VPReductionPHIRecipe *PhiR,
               RdxDesc.getOpcode(), PhiTy,
               TargetTransformInfo::ReductionFlags())) {
         auto *VecRdxPhi =
-            cast<PHINode>(State.get(PhiR->getVPSingleValue(), Part));
+            cast<PHINode>(State.get(PhiR, Part));
         VecRdxPhi->setIncomingValueForBlock(
             LI->getLoopFor(LoopVectorBody)->getLoopLatch(), Sel);
       }
@@ -4377,13 +4371,10 @@ void InnerLoopVectorizer::fixReduction(VPReductionPHIRecipe *PhiR,
       Value *Trunc = Builder.CreateTrunc(RdxParts[Part], RdxVecTy);
       Value *Extnd = RdxDesc.isSigned() ? Builder.CreateSExt(Trunc, VecTy)
                                         : Builder.CreateZExt(Trunc, VecTy);
-      for (Value::user_iterator UI = RdxParts[Part]->user_begin();
-           UI != RdxParts[Part]->user_end();)
-        if (*UI != Trunc) {
-          (*UI++)->replaceUsesOfWith(RdxParts[Part], Extnd);
+      for (User *U : llvm::make_early_inc_range(RdxParts[Part]->users()))
+        if (U != Trunc) {
+          U->replaceUsesOfWith(RdxParts[Part], Extnd);
           RdxParts[Part] = Extnd;
-        } else {
-          ++UI;
         }
     }
     Builder.SetInsertPoint(&*LoopMiddleBlock->getFirstInsertionPt());
@@ -5385,12 +5376,14 @@ void LoopVectorizationCostModel::collectLoopUniforms(ElementCount VF) {
     return (!I || !TheLoop->contains(I));
   };
 
+  // Worklist containing uniform instructions demanding lane 0.
   SetVector<Instruction *> Worklist;
   BasicBlock *Latch = TheLoop->getLoopLatch();
 
-  // Instructions that are scalar with predication must not be considered
-  // uniform after vectorization, because that would create an erroneous
-  // replicating region where only a single instance out of VF should be formed.
+  // Add uniform instructions demanding lane 0 to the worklist. Instructions
+  // that are scalar with predication must not be considered uniform after
+  // vectorization, because that would create an erroneous replicating region
+  // where only a single instance out of VF should be formed.
   // TODO: optimize such seldom cases if found important, see PR40816.
   auto addToWorklistIfAllowed = [&](Instruction *I) -> void {
     if (isOutOfScope(I)) {
@@ -6241,15 +6234,6 @@ LoopVectorizationCostModel::selectEpilogueVectorizationFactor(
     return Result;
   }
 
-  // FIXME: This can be fixed for scalable vectors later, because at this stage
-  // the LoopVectorizer will only consider vectorizing a loop with scalable
-  // vectors when the loop has a hint to enable vectorization for a given VF.
-  if (MainLoopVF.isScalable()) {
-    LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization for scalable vectors not "
-                         "yet supported.\n");
-    return Result;
-  }
-
   // Not really a cost consideration, but check for unsupported cases here to
   // simplify the logic.
   if (!isCandidateForEpilogueVectorization(*TheLoop, MainLoopVF)) {
@@ -6262,7 +6246,7 @@ LoopVectorizationCostModel::selectEpilogueVectorizationFactor(
   if (EpilogueVectorizationForceVF > 1) {
     LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization factor is forced.\n";);
     ElementCount ForcedEC = ElementCount::getFixed(EpilogueVectorizationForceVF);
-    if (LVP.hasPlanWithVFs({MainLoopVF, ForcedEC}))
+    if (LVP.hasPlanWithVF(ForcedEC))
       return {ForcedEC, 0};
     else {
       LLVM_DEBUG(
@@ -6280,14 +6264,24 @@ LoopVectorizationCostModel::selectEpilogueVectorizationFactor(
     return Result;
   }
 
-  if (!isEpilogueVectorizationProfitable(MainLoopVF))
+  auto FixedMainLoopVF = ElementCount::getFixed(MainLoopVF.getKnownMinValue());
+  if (MainLoopVF.isScalable())
+    LLVM_DEBUG(
+        dbgs() << "LEV: Epilogue vectorization using scalable vectors not "
+                  "yet supported. Converting to fixed-width (VF="
+               << FixedMainLoopVF << ") instead\n");
+
+  if (!isEpilogueVectorizationProfitable(FixedMainLoopVF)) {
+    LLVM_DEBUG(dbgs() << "LEV: Epilogue vectorization is not profitable for "
+                         "this loop\n");
     return Result;
+  }
 
   for (auto &NextVF : ProfitableVFs)
-    if (ElementCount::isKnownLT(NextVF.Width, MainLoopVF) &&
+    if (ElementCount::isKnownLT(NextVF.Width, FixedMainLoopVF) &&
         (Result.Width.getFixedValue() == 1 ||
          isMoreProfitable(NextVF, Result)) &&
-        LVP.hasPlanWithVFs({MainLoopVF, NextVF.Width}))
+        LVP.hasPlanWithVF(NextVF.Width))
       Result = NextVF;
 
   if (Result != VectorizationFactor::Disabled())
@@ -8417,7 +8411,9 @@ BasicBlock *EpilogueVectorizerMainLoop::createEpilogueVectorizedLoopSkeleton() {
   OldInduction = Legal->getPrimaryInduction();
   Type *IdxTy = Legal->getWidestInductionType();
   Value *StartIdx = ConstantInt::get(IdxTy, 0);
-  Constant *Step = ConstantInt::get(IdxTy, VF.getKnownMinValue() * UF);
+
+  IRBuilder<> B(&*Lp->getLoopPreheader()->getFirstInsertionPt());
+  Value *Step = getRuntimeVF(B, IdxTy, VF * UF);
   Value *CountRoundDown = getOrCreateVectorTripCount(Lp);
   EPI.VectorTripCount = CountRoundDown;
   Induction =
@@ -8747,9 +8743,9 @@ VPValue *VPRecipeBuilder::createBlockInMask(BasicBlock *BB, VPlanPtr &Plan) {
     if (Legal->getPrimaryInduction())
       IV = Plan->getOrAddVPValue(Legal->getPrimaryInduction());
     else {
-      auto IVRecipe = new VPWidenCanonicalIVRecipe();
+      auto *IVRecipe = new VPWidenCanonicalIVRecipe();
       Builder.getInsertBlock()->insert(IVRecipe, NewInsertionPoint);
-      IV = IVRecipe->getVPSingleValue();
+      IV = IVRecipe;
     }
     VPValue *BTC = Plan->getOrCreateBackedgeTakenCount();
     bool TailFolded = !CM.isScalarEpilogueAllowed();
@@ -10427,7 +10423,6 @@ bool LoopVectorizePass::processLoop(Loop *L) {
                              F->getParent()->getDataLayout());
     if (!VF.Width.isScalar() || IC > 1)
       Checks.Create(L, *LVL.getLAI(), PSE.getUnionPredicate());
-    VPlan &BestPlan = LVP.getBestPlanFor(VF.Width);
 
     using namespace ore;
     if (!VectorizeLoop) {
@@ -10436,6 +10431,8 @@ bool LoopVectorizePass::processLoop(Loop *L) {
       // interleave it.
       InnerLoopUnroller Unroller(L, PSE, LI, DT, TLI, TTI, AC, ORE, IC, &LVL,
                                  &CM, BFI, PSI, Checks);
+
+      VPlan &BestPlan = LVP.getBestPlanFor(VF.Width);
       LVP.executePlan(VF.Width, IC, BestPlan, Unroller, DT);
 
       ORE->emit([&]() {
@@ -10459,7 +10456,9 @@ bool LoopVectorizePass::processLoop(Loop *L) {
         EpilogueVectorizerMainLoop MainILV(L, PSE, LI, DT, TLI, TTI, AC, ORE,
                                            EPI, &LVL, &CM, BFI, PSI, Checks);
 
-        LVP.executePlan(EPI.MainLoopVF, EPI.MainLoopUF, BestPlan, MainILV, DT);
+        VPlan &BestMainPlan = LVP.getBestPlanFor(EPI.MainLoopVF);
+        LVP.executePlan(EPI.MainLoopVF, EPI.MainLoopUF, BestMainPlan, MainILV,
+                        DT);
         ++LoopsVectorized;
 
         simplifyLoop(L, DT, LI, SE, AC, nullptr, false /* PreserveLCSSA */);
@@ -10472,7 +10471,9 @@ bool LoopVectorizePass::processLoop(Loop *L) {
         EpilogueVectorizerEpilogueLoop EpilogILV(L, PSE, LI, DT, TLI, TTI, AC,
                                                  ORE, EPI, &LVL, &CM, BFI, PSI,
                                                  Checks);
-        LVP.executePlan(EPI.EpilogueVF, EPI.EpilogueUF, BestPlan, EpilogILV,
+
+        VPlan &BestEpiPlan = LVP.getBestPlanFor(EPI.EpilogueVF);
+        LVP.executePlan(EPI.EpilogueVF, EPI.EpilogueUF, BestEpiPlan, EpilogILV,
                         DT);
         ++LoopsEpilogueVectorized;
 
@@ -10481,6 +10482,8 @@ bool LoopVectorizePass::processLoop(Loop *L) {
       } else {
         InnerLoopVectorizer LB(L, PSE, LI, DT, TLI, TTI, AC, ORE, VF.Width, IC,
                                &LVL, &CM, BFI, PSI, Checks);
+
+        VPlan &BestPlan = LVP.getBestPlanFor(VF.Width);
         LVP.executePlan(VF.Width, IC, BestPlan, LB, DT);
         ++LoopsVectorized;
 
