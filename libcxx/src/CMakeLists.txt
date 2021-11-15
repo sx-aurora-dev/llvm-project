@@ -291,7 +291,11 @@ if (LIBCXX_ENABLE_STATIC)
     # If we intend to use the just-built unwinder, add a dependency so that it
     # gets built, even if we technically aren't going to link it in at this
     # stage.
-    add_dependencies(cxx_static unwind)
+    if (${LIBCXX_TARGET_TRIPLE} MATCHES "ve-.*")
+      # Nothing todo
+    else()
+      add_dependencies(cxx_static unwind)
+    endif()
   endif()
 
   if (LIBCXX_HERMETIC_STATIC_LIBRARY)
