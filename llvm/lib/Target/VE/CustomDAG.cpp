@@ -1050,7 +1050,7 @@ SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
   if (IsTrue)
     return Res;
 
-  return DAG.getNOT(DL, Res, Res.getValueType());
+  return createNot(Res, Res.getValueType());
 }
 
 SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
@@ -1360,7 +1360,7 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
   case VEISD::VVP_REDUCE_UMAX:
   case VEISD::VVP_REDUCE_SMIN:
   case VEISD::VVP_REDUCE_OR: {
-    // Mask legalization using vm_popcount
+    // Mask-out off lanes.
     if (!isAllTrueMask(Mask))
       VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
 
@@ -1377,12 +1377,13 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
   case VEISD::VVP_REDUCE_SMAX:
   case VEISD::VVP_REDUCE_MUL:
   case VEISD::VVP_REDUCE_AND: {
-    // TODO: Invert and OR the mask, then compare PCVM against AVL.
+    // Invert and OR the mask
+    if (!isAllTrueMask(Mask)) {
+      auto InverseMask = createNot(Mask, Mask.getValueType());
+      VectorV = getNode(ISD::OR, Mask.getValueType(), {InverseMask, VectorV});
+    }
 
     // Mask legalization using vm_popcount
-    if (!isAllTrueMask(Mask))
-      VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
-
     auto Pop = createMaskPopcount(VectorV, AVL);
     auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
 

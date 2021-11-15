@@ -2,12 +2,42 @@
 ; RUN: llc -O0 --march=ve -mattr=-packed,+vpu %s -o=/dev/stdout | FileCheck %s
 
 define fastcc i1 @test_reduce_and(i1 %s, <256 x i1> %v, <256 x i1> %m, i32 %n) {
-; FIXME: The generated code is incorrect!
 ; CHECK-LABEL: test_reduce_and:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.l %s11, -32, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB0_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB0_2:
+; CHECK-NEXT:    svm %s16, %vm2, 0
+; CHECK-NEXT:    st %s16, (, %s11)
+; CHECK-NEXT:    svm %s16, %vm2, 1
+; CHECK-NEXT:    st %s16, 8(, %s11)
+; CHECK-NEXT:    svm %s16, %vm2, 2
+; CHECK-NEXT:    st %s16, 16(, %s11)
+; CHECK-NEXT:    svm %s16, %vm2, 3
+; CHECK-NEXT:    st %s16, 24(, %s11) # 32-byte Folded Spill
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    ld %s16, (, %s11)
+; CHECK-NEXT:    lvm %vm1, 0, %s16
+; CHECK-NEXT:    ld %s16, 8(, %s11)
+; CHECK-NEXT:    lvm %vm1, 1, %s16
+; CHECK-NEXT:    ld %s16, 16(, %s11)
+; CHECK-NEXT:    lvm %vm1, 2, %s16
+; CHECK-NEXT:    ld %s16, 24(, %s11) # 32-byte Folded Reload
+; CHECK-NEXT:    lvm %vm1, 3, %s16
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    andm %vm1, %vm1, %vm2
+; CHECK-NEXT:    andm %vm3, %vm0, %vm0
+; CHECK-NEXT:    xorm %vm1, %vm1, %vm3
+; CHECK-NEXT:    orm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
@@ -20,6 +50,7 @@ define fastcc i1 @test_reduce_and(i1 %s, <256 x i1> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    and %s0, %s0, %s1
+; CHECK-NEXT:    adds.l %s11, 32, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i1 @llvm.vp.reduce.and.v256i1(i1 %s, <256 x i1> %v, <256 x i1> %m, i32 %n)
   ret i1 %r
