@@ -64,7 +64,7 @@ CODEGENOPT(DisableLifetimeMarkers, 1, 0) ///< Don't emit any lifetime markers
 CODEGENOPT(DisableO0ImplyOptNone , 1, 0) ///< Don't annonate function with optnone at O0
 CODEGENOPT(ExperimentalStrictFloatingPoint, 1, 0) ///< Enables the new, experimental
                                                   ///< strict floating point.
-CODEGENOPT(DisableNoundefAttrs, 1, 0) ///< Disable emitting `noundef` attributes on IR call arguments and return values
+CODEGENOPT(EnableNoundefAttrs, 1, 0) ///< Enable emitting `noundef` attributes on IR call arguments and return values
 CODEGENOPT(LegacyPassManager, 1, 0) ///< Use the legacy pass manager.
 CODEGENOPT(DebugPassManager, 1, 0) ///< Prints debug information for the new
                                    ///< pass manager.
@@ -261,6 +261,8 @@ CODEGENOPT(SanitizeCoverageInlineBoolFlag, 1, 0) ///< Use inline bool flag.
 CODEGENOPT(SanitizeCoveragePCTable, 1, 0) ///< Create a PC Table.
 CODEGENOPT(SanitizeCoverageNoPrune, 1, 0) ///< Disable coverage pruning.
 CODEGENOPT(SanitizeCoverageStackDepth, 1, 0) ///< Enable max stack depth tracing
+CODEGENOPT(SanitizeCoverageTraceLoads, 1, 0) ///< Enable tracing of loads.
+CODEGENOPT(SanitizeCoverageTraceStores, 1, 0) ///< Enable tracing of stores.
 CODEGENOPT(SanitizeStats     , 1, 0) ///< Collect statistics for sanitizers.
 CODEGENOPT(SimplifyLibCalls  , 1, 1) ///< Set when -fbuiltin is enabled.
 CODEGENOPT(SoftFloat         , 1, 0) ///< -soft-float.

@@ -1103,11 +1103,10 @@ static OptimizationRemarkAnalysis createLVAnalysis(const char *PassName,
 }
 
 /// Return a value for Step multiplied by VF.
-static Value *createStepForVF(IRBuilder<> &B, Constant *Step, ElementCount VF) {
-  assert(isa<ConstantInt>(Step) && "Expected an integer step");
-  Constant *StepVal = ConstantInt::get(
-      Step->getType(),
-      cast<ConstantInt>(Step)->getSExtValue() * VF.getKnownMinValue());
+static Value *createStepForVF(IRBuilder<> &B, Type *Ty, ElementCount VF,
+                              int64_t Step) {
+  assert(Ty->isIntegerTy() && "Expected an integer step");
+  Constant *StepVal = ConstantInt::get(Ty, Step * VF.getKnownMinValue());
   return VF.isScalable() ? B.CreateVScale(StepVal) : StepVal;
 }
 
@@ -1543,7 +1542,7 @@ public:
   // through scalar predication or masked load/store or masked gather/scatter.
   // Superset of instructions that return true for isScalarWithPredication.
   bool isPredicatedInst(Instruction *I) {
-    if (!blockNeedsPredication(I->getParent()))
+    if (!blockNeedsPredicationForAnyReason(I->getParent()))
       return false;
     // Loads and stores that need some form of masked operation are predicated
     // instructions.
@@ -1597,7 +1596,10 @@ public:
   /// Returns true if all loop blocks should be masked to fold tail loop.
   bool foldTailByMasking() const { return FoldTailByMasking; }
 
-  bool blockNeedsPredication(BasicBlock *BB) const {
+  /// Returns true if the instructions in this block requires predication
+  /// for any reason, e.g. because tail folding now requires a predicate
+  /// or because the block in the original loop was predicated.
+  bool blockNeedsPredicationForAnyReason(BasicBlock *BB) const {
     return foldTailByMasking() || Legal->blockNeedsPredication(BB);
   }
 
@@ -2393,9 +2395,13 @@ void InnerLoopVectorizer::recordVectorLoopValueForInductionCast(
   if (isa<TruncInst>(EntryVal))
     return;
 
-  const SmallVectorImpl<Instruction *> &Casts = ID.getCastInsts();
-  if (Casts.empty())
+  if (!CastDef) {
+    assert(ID.getCastInsts().empty() &&
+           "there are casts for ID, but no CastDef");
     return;
+  }
+  assert(!ID.getCastInsts().empty() &&
+         "there is a CastDef, but no casts for ID");
   // Only the first Cast instruction in the Casts vector is of interest.
   // The rest of the Casts (if exist) have no uses outside the
   // induction update chain itself.
@@ -2621,8 +2627,7 @@ void InnerLoopVectorizer::buildScalarSteps(Value *ScalarIV, Value *Step,
   }
 
   for (unsigned Part = 0; Part < UF; ++Part) {
-    Value *StartIdx0 =
-        createStepForVF(Builder, ConstantInt::get(IntStepTy, Part), VF);
+    Value *StartIdx0 = createStepForVF(Builder, IntStepTy, VF, Part);
 
     if (!IsUniform && VF.isScalable()) {
       auto *SplatStartIdx = Builder.CreateVectorSplat(VF, StartIdx0);
@@ -2964,7 +2969,8 @@ void InnerLoopVectorizer::vectorizeMemoryInstruction(
       if (isMaskRequired) // Reverse of a null all-one mask is a null mask.
         BlockInMaskParts[Part] = reverseVector(BlockInMaskParts[Part]);
     } else {
-      Value *Increment = createStepForVF(Builder, Builder.getInt32(Part), VF);
+      Value *Increment =
+          createStepForVF(Builder, Builder.getInt32Ty(), VF, Part);
       PartPtr = cast<GetElementPtrInst>(
           Builder.CreateGEP(ScalarDataTy, Ptr, Increment));
       PartPtr->setIsInBounds(InBounds);
@@ -3183,7 +3189,7 @@ Value *InnerLoopVectorizer::getOrCreateVectorTripCount(Loop *L) {
 
   Type *Ty = TC->getType();
   // This is where we can make the step a runtime constant.
-  Value *Step = createStepForVF(Builder, ConstantInt::get(Ty, UF), VF);
+  Value *Step = createStepForVF(Builder, Ty, VF, UF);
 
   // If the tail is to be folded by masking, round the number of iterations N
   // up to a multiple of Step instead of rounding down. This is done by first
@@ -3273,8 +3279,7 @@ void InnerLoopVectorizer::emitMinimumIterationCountCheck(Loop *L,
   // If tail is to be folded, vector loop takes care of all iterations.
   Value *CheckMinIters = Builder.getFalse();
   if (!Cost->foldTailByMasking()) {
-    Value *Step =
-        createStepForVF(Builder, ConstantInt::get(Count->getType(), UF), VF);
+    Value *Step = createStepForVF(Builder, Count->getType(), VF, UF);
     CheckMinIters = Builder.CreateICmp(P, Count, Step, "min.iters.check");
   }
   // Create new preheader for vector loop.
@@ -3750,7 +3755,7 @@ BasicBlock *InnerLoopVectorizer::createVectorizedLoopSkeleton() {
   // The loop step is equal to the vectorization factor (num of SIMD elements)
   // times the unroll factor (num of SIMD instructions).
   Builder.SetInsertPoint(&*Lp->getHeader()->getFirstInsertionPt());
-  Value *Step = createStepForVF(Builder, ConstantInt::get(IdxTy, UF), VF);
+  Value *Step = createStepForVF(Builder, IdxTy, VF, UF);
   Value *CountRoundDown = getOrCreateVectorTripCount(Lp);
   Induction =
       createInductionVariable(Lp, StartIdx, CountRoundDown, Step,
@@ -4752,8 +4757,8 @@ void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN,
       }
 
       for (unsigned Part = 0; Part < UF; ++Part) {
-        Value *PartStart = createStepForVF(
-            Builder, ConstantInt::get(PtrInd->getType(), Part), VF);
+        Value *PartStart =
+            createStepForVF(Builder, PtrInd->getType(), VF, Part);
 
         if (NeedsVectorIndex) {
           // Here we cache the whole vector, which means we can support the
@@ -5253,7 +5258,7 @@ void LoopVectorizationCostModel::collectLoopScalars(ElementCount VF) {
 }
 
 bool LoopVectorizationCostModel::isScalarWithPredication(Instruction *I) const {
-  if (!blockNeedsPredication(I->getParent()))
+  if (!blockNeedsPredicationForAnyReason(I->getParent()))
     return false;
   switch(I->getOpcode()) {
   default:
@@ -5300,7 +5305,8 @@ bool LoopVectorizationCostModel::interleavedAccessCanBeWidened(
   // (either a gap at the end of a load-access that may result in a speculative
   // load, or any gaps in a store-access).
   bool PredicatedAccessRequiresMasking =
-      blockNeedsPredication(I->getParent()) && Legal->isMaskRequired(I);
+      blockNeedsPredicationForAnyReason(I->getParent()) &&
+      Legal->isMaskRequired(I);
   bool LoadAccessWithGapsRequiresEpilogMasking =
       isa<LoadInst>(I) && Group->requiresScalarEpilogue() &&
       !isScalarEpilogueAllowed();
@@ -6024,19 +6030,27 @@ bool LoopVectorizationCostModel::isMoreProfitable(
     return RTCostA < RTCostB;
   }
 
-  // When set to preferred, for now assume vscale may be larger than 1, so
-  // that scalable vectorization is slightly favorable over fixed-width
-  // vectorization.
+  // Improve estimate for the vector width if it is scalable.
+  unsigned EstimatedWidthA = A.Width.getKnownMinValue();
+  unsigned EstimatedWidthB = B.Width.getKnownMinValue();
+  if (Optional<unsigned> VScale = TTI.getVScaleForTuning()) {
+    if (A.Width.isScalable())
+      EstimatedWidthA *= VScale.getValue();
+    if (B.Width.isScalable())
+      EstimatedWidthB *= VScale.getValue();
+  }
+
+  // When set to preferred, for now assume vscale may be larger than 1 (or the
+  // one being tuned for), so that scalable vectorization is slightly favorable
+  // over fixed-width vectorization.
   if (Hints->isScalableVectorizationPreferred())
     if (A.Width.isScalable() && !B.Width.isScalable())
-      return (CostA * B.Width.getKnownMinValue()) <=
-             (CostB * A.Width.getKnownMinValue());
+      return (CostA * B.Width.getFixedValue()) <= (CostB * EstimatedWidthA);
 
   // To avoid the need for FP division:
   //      (CostA / A.Width) < (CostB / B.Width)
   // <=>  (CostA * B.Width) < (CostB * A.Width)
-  return (CostA * B.Width.getKnownMinValue()) <
-         (CostB * A.Width.getKnownMinValue());
+  return (CostA * EstimatedWidthB) < (CostB * EstimatedWidthA);
 }
 
 VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
@@ -6066,11 +6080,22 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
 
     VectorizationCostTy C = expectedCost(i, &InvalidCosts);
     VectorizationFactor Candidate(i, C.first);
-    LLVM_DEBUG(
-        dbgs() << "LV: Vector loop of width " << i << " costs: "
-               << (Candidate.Cost / Candidate.Width.getKnownMinValue())
-               << (i.isScalable() ? " (assuming a minimum vscale of 1)" : "")
-               << ".\n");
+
+#ifndef NDEBUG
+    unsigned AssumedMinimumVscale = 1;
+    if (Optional<unsigned> VScale = TTI.getVScaleForTuning())
+      AssumedMinimumVscale = VScale.getValue();
+    unsigned Width =
+        Candidate.Width.isScalable()
+            ? Candidate.Width.getKnownMinValue() * AssumedMinimumVscale
+            : Candidate.Width.getFixedValue();
+    LLVM_DEBUG(dbgs() << "LV: Vector loop of width " << i
+                      << " costs: " << (Candidate.Cost / Width));
+    if (i.isScalable())
+      LLVM_DEBUG(dbgs() << " (assuming a minimum vscale of "
+                        << AssumedMinimumVscale << ")");
+    LLVM_DEBUG(dbgs() << ".\n");
+#endif
 
     if (!C.second && !ForceVectorization) {
       LLVM_DEBUG(
@@ -6826,7 +6851,7 @@ void LoopVectorizationCostModel::collectInstsToScalarize(ElementCount VF) {
   // determine if it would be better to not if-convert the blocks they are in.
   // If so, we also record the instructions to scalarize.
   for (BasicBlock *BB : TheLoop->blocks()) {
-    if (!blockNeedsPredication(BB))
+    if (!blockNeedsPredicationForAnyReason(BB))
       continue;
     for (Instruction &I : *BB)
       if (isScalarWithPredication(&I)) {
@@ -8119,7 +8144,7 @@ LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
     return None;
 
   // Invalidate interleave groups if all blocks of loop will be predicated.
-  if (CM.blockNeedsPredication(OrigLoop->getHeader()) &&
+  if (CM.blockNeedsPredicationForAnyReason(OrigLoop->getHeader()) &&
       !useMaskedInterleavedAccesses(*TTI)) {
     LLVM_DEBUG(
         dbgs()
@@ -8462,7 +8487,7 @@ BasicBlock *EpilogueVectorizerMainLoop::emitMinimumIterationCountCheck(
       ICmpInst::ICMP_ULE : ICmpInst::ICMP_ULT;
 
   Value *CheckMinIters = Builder.CreateICmp(
-      P, Count, getRuntimeVF(Builder, Count->getType(), VFactor * UFactor),
+      P, Count, createStepForVF(Builder, Count->getType(), VFactor, UFactor),
       "min.iters.check");
 
   if (!ForEpilogue)
@@ -8614,10 +8639,11 @@ EpilogueVectorizerEpilogueLoop::emitMinimumVectorEpilogueIterCountCheck(
   auto P = Cost->requiresScalarEpilogue(EPI.EpilogueVF) ?
       ICmpInst::ICMP_ULE : ICmpInst::ICMP_ULT;
 
-  Value *CheckMinIters = Builder.CreateICmp(
-      P, Count,
-      getRuntimeVF(Builder, Count->getType(), EPI.EpilogueVF * EPI.EpilogueUF),
-      "min.epilog.iters.check");
+  Value *CheckMinIters =
+      Builder.CreateICmp(P, Count,
+                         createStepForVF(Builder, Count->getType(),
+                                         EPI.EpilogueVF, EPI.EpilogueUF),
+                         "min.epilog.iters.check");
 
   ReplaceInstWithInst(
       Insert->getTerminator(),
@@ -8728,7 +8754,7 @@ VPValue *VPRecipeBuilder::createBlockInMask(BasicBlock *BB, VPlanPtr &Plan) {
   VPValue *BlockMask = nullptr;
 
   if (OrigLoop->getHeader() == BB) {
-    if (!CM.blockNeedsPredication(BB))
+    if (!CM.blockNeedsPredicationForAnyReason(BB))
       return BlockMaskCache[BB] = BlockMask; // Loop incoming mask is all-one.
 
     // Create the block in mask as the first non-phi instruction in the block.
@@ -9316,6 +9342,8 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
   DFS.perform(LI);
 
   VPBasicBlock *VPBB = nullptr;
+  VPBasicBlock *HeaderVPBB = nullptr;
+  SmallVector<VPWidenIntOrFpInductionRecipe *> InductionsToMove;
   for (BasicBlock *BB : make_range(DFS.beginRPO(), DFS.endRPO())) {
     // Relevant instructions from basic block BB will be grouped into VPRecipe
     // ingredients and fill a new VPBasicBlock.
@@ -9323,8 +9351,10 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
     auto *FirstVPBBForBB = new VPBasicBlock(BB->getName());
     if (VPBB)
       VPBlockUtils::insertBlockAfter(FirstVPBBForBB, VPBB);
-    else
+    else {
       Plan->setEntry(FirstVPBBForBB);
+      HeaderVPBB = FirstVPBBForBB;
+    }
     VPBB = FirstVPBBForBB;
     Builder.setInsertPoint(VPBB);
 
@@ -9366,15 +9396,19 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
           Plan->addVPValue(UV, Def);
         }
 
+        if (isa<VPWidenIntOrFpInductionRecipe>(Recipe) &&
+            HeaderVPBB->getFirstNonPhi() != VPBB->end()) {
+          // Keep track of VPWidenIntOrFpInductionRecipes not in the phi section
+          // of the header block. That can happen for truncates of induction
+          // variables. Those recipes are moved to the phi section of the header
+          // block after applying SinkAfter, which relies on the original
+          // position of the trunc.
+          assert(isa<TruncInst>(Instr));
+          InductionsToMove.push_back(
+              cast<VPWidenIntOrFpInductionRecipe>(Recipe));
+        }
         RecipeBuilder.setRecipe(Instr, Recipe);
-        if (isa<VPWidenIntOrFpInductionRecipe>(Recipe)) {
-          // Make sure induction recipes are all kept in the header block.
-          // VPWidenIntOrFpInductionRecipe may be generated when reaching a
-          // Trunc of an induction Phi, where Trunc may not be in the header.
-          auto *Header = Plan->getEntry()->getEntryBasicBlock();
-          Header->insert(Recipe, Header->getFirstNonPhi());
-        } else
-          VPBB->appendRecipe(Recipe);
+        VPBB->appendRecipe(Recipe);
         continue;
       }
 
@@ -9463,6 +9497,11 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
     }
   }
 
+  // Now that sink-after is done, move induction recipes for optimized truncates
+  // to the phi section of the header block.
+  for (VPWidenIntOrFpInductionRecipe *Ind : InductionsToMove)
+    Ind->moveBefore(*HeaderVPBB, HeaderVPBB->getFirstNonPhi());
+
   // Adjust the recipes for any inloop reductions.
   adjustRecipesForReductions(VPBB, Plan, RecipeBuilder, Range.Start);
 
@@ -9473,16 +9512,20 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
     if (!RecurPhi)
       continue;
 
+    VPRecipeBase *PrevRecipe = RecurPhi->getBackedgeRecipe();
+    VPBasicBlock *InsertBlock = PrevRecipe->getParent();
+    auto *Region = GetReplicateRegion(PrevRecipe);
+    if (Region)
+      InsertBlock = cast<VPBasicBlock>(Region->getSingleSuccessor());
+    if (Region || PrevRecipe->isPhi())
+      Builder.setInsertPoint(InsertBlock, InsertBlock->getFirstNonPhi());
+    else
+      Builder.setInsertPoint(InsertBlock, std::next(PrevRecipe->getIterator()));
+
     auto *RecurSplice = cast<VPInstruction>(
         Builder.createNaryOp(VPInstruction::FirstOrderRecurrenceSplice,
                              {RecurPhi, RecurPhi->getBackedgeValue()}));
 
-    VPRecipeBase *PrevRecipe = RecurPhi->getBackedgeRecipe();
-    if (auto *Region = GetReplicateRegion(PrevRecipe)) {
-      VPBasicBlock *Succ = cast<VPBasicBlock>(Region->getSingleSuccessor());
-      RecurSplice->moveBefore(*Succ, Succ->getFirstNonPhi());
-    } else
-      RecurSplice->moveAfter(PrevRecipe);
     RecurPhi->replaceAllUsesWith(RecurSplice);
     // Set the first operand of RecurSplice to RecurPhi again, after replacing
     // all users.
@@ -9540,6 +9583,7 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
   RSO.flush();
   Plan->setName(PlanName);
 
+  assert(VPlanVerifier::verifyPlanIsValid(*Plan) && "VPlan is invalid");
   return Plan;
 }
 

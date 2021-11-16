@@ -79,25 +79,6 @@ static AffineMap adjustMap(AffineMap map, int64_t index,
   return AffineMap::get(map.getNumDims() - 1, 0, results, ctx);
 }
 
-// Helper to drop dimension from vector type.
-static Type adjustType(VectorType tp, int64_t index) {
-  int64_t rank = tp.getRank();
-  Type eltType = tp.getElementType();
-  if (rank == 1) {
-    assert(index == 0 && "index for scalar result out of bounds");
-    return eltType;
-  }
-  SmallVector<int64_t, 4> adjustedShape;
-  for (int64_t i = 0; i < rank; ++i) {
-    // Omit dimension at the given index.
-    if (i == index)
-      continue;
-    // Otherwise, add dimension back.
-    adjustedShape.push_back(tp.getDimSize(i));
-  }
-  return VectorType::get(adjustedShape, eltType);
-}
-
 // Helper method to possibly drop a dimension in a load.
 // TODO
 static Value reshapeLoad(Location loc, Value val, VectorType type,
@@ -105,7 +86,7 @@ static Value reshapeLoad(Location loc, Value val, VectorType type,
                          PatternRewriter &rewriter) {
   if (index == -1)
     return val;
-  Type lowType = adjustType(type, 0);
+  Type lowType = VectorType::Builder(type).dropDim(0);
   // At extraction dimension?
   if (index == 0) {
     auto posAttr = rewriter.getI64ArrayAttr(pos);
@@ -113,7 +94,7 @@ static Value reshapeLoad(Location loc, Value val, VectorType type,
   }
   // Unroll leading dimensions.
   VectorType vType = lowType.cast<VectorType>();
-  VectorType resType = adjustType(type, index).cast<VectorType>();
+  auto resType = VectorType::Builder(type).dropDim(index).cast<VectorType>();
   Value result = rewriter.create<arith::ConstantOp>(
       loc, resType, rewriter.getZeroAttr(resType));
   for (int64_t d = 0, e = resType.getDimSize(0); d < e; d++) {
@@ -140,9 +121,9 @@ static Value reshapeStore(Location loc, Value val, Value result,
     return rewriter.create<vector::InsertOp>(loc, type, val, result, posAttr);
   }
   // Unroll leading dimensions.
-  Type lowType = adjustType(type, 0);
+  Type lowType = VectorType::Builder(type).dropDim(0);
   VectorType vType = lowType.cast<VectorType>();
-  Type insType = adjustType(vType, 0);
+  Type insType = VectorType::Builder(vType).dropDim(0);
   for (int64_t d = 0, e = type.getDimSize(0); d < e; d++) {
     auto posAttr = rewriter.getI64ArrayAttr(d);
     Value ext = rewriter.create<vector::ExtractOp>(loc, vType, result, posAttr);
@@ -881,16 +862,16 @@ private:
       combinedResult = rewriter.create<arith::MulIOp>(loc, mul, acc);
       break;
     case CombiningKind::MINUI:
-      combinedResult = rewriter.create<MinUIOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MinUIOp>(loc, mul, acc);
       break;
     case CombiningKind::MINSI:
-      combinedResult = rewriter.create<MinSIOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MinSIOp>(loc, mul, acc);
       break;
     case CombiningKind::MAXUI:
-      combinedResult = rewriter.create<MaxUIOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MaxUIOp>(loc, mul, acc);
       break;
     case CombiningKind::MAXSI:
-      combinedResult = rewriter.create<MaxSIOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MaxSIOp>(loc, mul, acc);
       break;
     case CombiningKind::AND:
       combinedResult = rewriter.create<arith::AndIOp>(loc, mul, acc);
@@ -929,10 +910,10 @@ private:
       combinedResult = rewriter.create<arith::MulFOp>(loc, mul, acc);
       break;
     case CombiningKind::MINF:
-      combinedResult = rewriter.create<MinFOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MinFOp>(loc, mul, acc);
       break;
     case CombiningKind::MAXF:
-      combinedResult = rewriter.create<MaxFOp>(loc, mul, acc);
+      combinedResult = rewriter.create<arith::MaxFOp>(loc, mul, acc);
       break;
     case CombiningKind::ADD:   // Already handled this special case above.
     case CombiningKind::AND:   // Only valid for integer types.
@@ -3579,7 +3560,7 @@ class DropInnerMostUnitDims : public OpRewritePattern<vector::TransferReadOp> {
 
   LogicalResult matchAndRewrite(vector::TransferReadOp readOp,
                                 PatternRewriter &rewriter) const override {
-    auto srcType = readOp.source().getType().cast<MemRefType>();
+    auto srcType = readOp.source().getType().dyn_cast<MemRefType>();
     if (!srcType || !srcType.hasStaticShape())
       return failure();
 
