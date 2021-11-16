@@ -169,7 +169,7 @@ static constexpr const CombiningKind combiningKindsList[] = {
     // clang-format on
 };
 
-void CombiningKindAttr::print(DialectAsmPrinter &printer) const {
+void CombiningKindAttr::print(AsmPrinter &printer) const {
   printer << "kind<";
   auto kinds = llvm::make_filter_range(combiningKindsList, [&](auto kind) {
     return bitEnumContains(this->getKind(), kind);
@@ -179,7 +179,7 @@ void CombiningKindAttr::print(DialectAsmPrinter &printer) const {
   printer << ">";
 }
 
-Attribute CombiningKindAttr::parse(DialectAsmParser &parser) {
+Attribute CombiningKindAttr::parse(AsmParser &parser, Type type) {
   if (failed(parser.parseLess()))
     return {};
 
@@ -207,7 +207,7 @@ Attribute VectorDialect::parseAttribute(DialectAsmParser &parser,
     return {};
 
   if (attrKind == "kind")
-    return CombiningKindAttr::parse(parser);
+    return CombiningKindAttr::parse(parser, {});
 
   parser.emitError(parser.getNameLoc(), "Unknown attribute type: ") << attrKind;
   return {};
@@ -472,8 +472,8 @@ static ParseResult parseContractionOp(OpAsmParser &parser,
   auto rhsType = types[1].cast<VectorType>();
   auto maskElementType = parser.getBuilder().getI1Type();
   std::array<Type, 2> maskTypes = {
-      VectorType::get(lhsType.getShape(), maskElementType),
-      VectorType::get(rhsType.getShape(), maskElementType)};
+      VectorType::Builder(lhsType).setElementType(maskElementType),
+      VectorType::Builder(rhsType).setElementType(maskElementType)};
   if (parser.resolveOperands(masksInfo, maskTypes, loc, result.operands))
     return failure();
   return success();
@@ -1395,7 +1395,7 @@ OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
   if (operands[0].getType().isIntOrIndexOrFloat())
     return DenseElementsAttr::get(vectorType, operands[0]);
   if (auto attr = operands[0].dyn_cast<SplatElementsAttr>())
-    return DenseElementsAttr::get(vectorType, attr.getSplatValue());
+    return DenseElementsAttr::get(vectorType, attr.getSplatValue<Attribute>());
   return {};
 }
 
@@ -2212,7 +2212,7 @@ public:
     if (!dense)
       return failure();
     auto newAttr = DenseElementsAttr::get(extractStridedSliceOp.getType(),
-                                          dense.getSplatValue());
+                                          dense.getSplatValue<Attribute>());
     rewriter.replaceOpWithNewOp<arith::ConstantOp>(extractStridedSliceOp,
                                                    newAttr);
     return success();
@@ -3670,8 +3670,9 @@ public:
     auto dense = constantOp.getValue().dyn_cast<SplatElementsAttr>();
     if (!dense)
       return failure();
-    auto newAttr = DenseElementsAttr::get(
-        shapeCastOp.getType().cast<VectorType>(), dense.getSplatValue());
+    auto newAttr =
+        DenseElementsAttr::get(shapeCastOp.getType().cast<VectorType>(),
+                               dense.getSplatValue<Attribute>());
     rewriter.replaceOpWithNewOp<arith::ConstantOp>(shapeCastOp, newAttr);
     return success();
   }

@@ -1574,7 +1574,7 @@ static bool isZeroAttribute(Attribute value) {
   if (auto fpValue = value.dyn_cast<FloatAttr>())
     return fpValue.getValue().isZero();
   if (auto splatValue = value.dyn_cast<SplatElementsAttr>())
-    return isZeroAttribute(splatValue.getSplatValue());
+    return isZeroAttribute(splatValue.getSplatValue<Attribute>());
   if (auto elementsValue = value.dyn_cast<ElementsAttr>())
     return llvm::all_of(elementsValue.getValues<Attribute>(), isZeroAttribute);
   if (auto arrayValue = value.dyn_cast<ArrayAttr>())
@@ -2425,8 +2425,8 @@ static constexpr const FastmathFlags fastmathFlagsList[] = {
     // clang-format on
 };
 
-void FMFAttr::print(DialectAsmPrinter &printer) const {
-  printer << "fastmath<";
+void FMFAttr::print(AsmPrinter &printer) const {
+  printer << "<";
   auto flags = llvm::make_filter_range(fastmathFlagsList, [&](auto flag) {
     return bitEnumContains(this->getFlags(), flag);
   });
@@ -2435,7 +2435,7 @@ void FMFAttr::print(DialectAsmPrinter &printer) const {
   printer << ">";
 }
 
-Attribute FMFAttr::parse(DialectAsmParser &parser, Type type) {
+Attribute FMFAttr::parse(AsmParser &parser, Type type) {
   if (failed(parser.parseLess()))
     return {};
 
@@ -2463,8 +2463,8 @@ Attribute FMFAttr::parse(DialectAsmParser &parser, Type type) {
   return FMFAttr::get(parser.getContext(), flags);
 }
 
-void LinkageAttr::print(DialectAsmPrinter &printer) const {
-  printer << "linkage<";
+void LinkageAttr::print(AsmPrinter &printer) const {
+  printer << "<";
   if (static_cast<uint64_t>(getLinkage()) <= getMaxEnumValForLinkage())
     printer << stringifyEnum(getLinkage());
   else
@@ -2472,7 +2472,7 @@ void LinkageAttr::print(DialectAsmPrinter &printer) const {
   printer << ">";
 }
 
-Attribute LinkageAttr::parse(DialectAsmParser &parser, Type type) {
+Attribute LinkageAttr::parse(AsmParser &parser, Type type) {
   StringRef elemName;
   if (parser.parseLess() || parser.parseKeyword(&elemName) ||
       parser.parseGreater())
@@ -2579,8 +2579,8 @@ LoopOptionsAttr LoopOptionsAttr::get(MLIRContext *context,
   return Base::get(context, optionBuilders.options);
 }
 
-void LoopOptionsAttr::print(DialectAsmPrinter &printer) const {
-  printer << getMnemonic() << "<";
+void LoopOptionsAttr::print(AsmPrinter &printer) const {
+  printer << "<";
   llvm::interleaveComma(getOptions(), printer, [&](auto option) {
     printer << stringifyEnum(option.first) << " = ";
     switch (option.first) {
@@ -2598,7 +2598,7 @@ void LoopOptionsAttr::print(DialectAsmPrinter &printer) const {
   printer << ">";
 }
 
-Attribute LoopOptionsAttr::parse(DialectAsmParser &parser, Type type) {
+Attribute LoopOptionsAttr::parse(AsmParser &parser, Type type) {
   if (failed(parser.parseLess()))
     return {};
 

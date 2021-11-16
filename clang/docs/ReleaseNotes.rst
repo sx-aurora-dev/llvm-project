@@ -158,7 +158,7 @@ C++2b Feature Support
 CUDA Language Changes in Clang
 ------------------------------
 
-- Clang now supports CUDA versions up to 11.4.
+- Clang now supports CUDA versions up to 11.5.
 - Default GPU architecture has been changed from sm_20 to sm_35.
 
 Objective-C Language Changes in Clang
@@ -202,6 +202,16 @@ Arm and AArch64 Support in Clang
   architecture features, but will enable certain optimizations specific to
   Cortex-A57 CPUs and enable the use of a more accurate scheduling model.
 
+
+Floating Point Support in Clang
+-------------------------------
+- The -ffp-model=precise now implies -ffp-contract=on rather than
+  -ffp-contract=fast, and the documentation of these features has been
+  clarified. Previously, the documentation claimed that -ffp-model=precise was
+  the default, but this was incorrect because the precise model implied
+  -ffp-contract=fast, whereas the default behavior is -ffp-contract=on.
+  -ffp-model=precise is now exactly the default mode of the compiler.
+
 Internal API Changes
 --------------------
 
@@ -220,6 +230,13 @@ AST Matchers
   matcher or the ``hasReturnTypeLoc`` matcher. The addition of these matchers
   was made possible by changes to the handling of ``TypeLoc`` nodes that
   allows them to enjoy the same static type checking as other AST node kinds.
+- ``LambdaCapture`` AST Matchers are now available. These matchers allow for
+  the binding of ``LambdaCapture`` nodes. The ``LambdaCapture`` matchers added
+  include the ``lambdaCapture`` node matcher, the ``capturesVar`` traversal
+  matcher, and ``capturesThis`` narrowing matcher.
+- The ``hasAnyCapture`` matcher now only accepts an inner matcher of type
+  ``Matcher<LambdaCapture>``. The matcher originally accepted an inner matcher
+  of type ``Matcher<CXXThisExpr>`` or ``Matcher<VarDecl>``.
 
 clang-format
 ------------
@@ -236,6 +253,10 @@ clang-format
 - Option ``QualifierOrder`` has been added to allow the order
   `const` `volatile` `static` `inline` `constexpr` `restrict`
   to be controlled relative to the `type`.
+
+- Add a ``Custom`` style to ``SpaceBeforeParens``, to better configure the
+  space before parentheses. The custom options can be set using
+  ``SpaceBeforeParensOptions``.
 
 libclang
 --------
