@@ -13,54 +13,69 @@
 // RUN: %clangxx -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
 // RUN:     2>&1 | FileCheck -check-prefix=DEFINC %s
-// DEFINC: clang{{.*}} "-cc1"
+// DEFINC: [[BIN_DIR:/.+]]/clang{{.*}} "-cc1"
 // DEFINC-SAME: "-nostdsysteminc"
 // DEFINC-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // DEFINC-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// DEFINC-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include/c++/v1"
+
+// Following directory is created iff LLVM_ENABLE_RUNTIMES is used.  We use
+// standalone build often, and it breaks this.  So, commenting out it for a
+// while
+// IGNORE-DEFINC-SAME: "-internal-isystem" "[[BIN_DIR]]/../include/ve-unknown-linux-gnu/c++/v1"
+
+// DEFINC-SAME: "-internal-isystem" "[[BIN_DIR]]/../include/c++/v1"
 // DEFINC-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // DEFINC-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clangxx -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
 // RUN:     -nostdlibinc 2>&1 | FileCheck -check-prefix=NOSTDLIBINC %s
-// NOSTDLIBINC: clang{{.*}} "-cc1"
+// NOSTDLIBINC: [[BIN_DIR:/.+]]/clang{{.*}} "-cc1"
 // NOSTDLIBINC-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // NOSTDLIBINC-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// NOSTDLIBINC-NOT: "-internal-isystem" "[[RESOURCE_DIR]]/include/c++/v1"
+// NOSTDLIBINC-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/ve-unknown-linux-gnu/c++/v1"
+// NOSTDLIBINC-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/c++/v1"
 // NOSTDLIBINC-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // NOSTDLIBINC-NOT: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clangxx -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
 // RUN:     -nobuiltininc 2>&1 | FileCheck -check-prefix=NOBUILTININC %s
-// NOBUILTININC: clang{{.*}} "-cc1"
+// NOBUILTININC: [[BIN_DIR:/.+]]/clang{{.*}} "-cc1"
 // NOBUILTININC-SAME: "-nobuiltininc"
 // NOBUILTININC-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // NOBUILTININC-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// NOBUILTININC-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include/c++/v1"
+
+// Following directory is created iff LLVM_ENABLE_RUNTIMES is used.  We use
+// standalone build often, and it breaks this.  So, commenting out it for a
+// while
+// IGNORE-NOBUILTININC-SAME: "-internal-isystem" "[[BIN_DIR]]/../include/ve-unknown-linux-gnu/c++/v1"
+
+// NOBUILTININC-SAME: "-internal-isystem" "[[BIN_DIR]]/../include/c++/v1"
 // NOBUILTININC-NOT: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // NOBUILTININC-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clangxx -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
 // RUN:     -nostdinc 2>&1 | FileCheck -check-prefix=NOSTDINC %s
-// NOSTDINC: clang{{.*}} "-cc1"
+// NOSTDINC: [[BIN_DIR:/.+]]/clang{{.*}} "-cc1"
 // NOSTDINC-SAME: "-nobuiltininc"
 // NOSTDINC-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // NOSTDINC-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// NOSTDINC-NOT: "-internal-isystem" "[[RESOURCE_DIR]]/include/c++/v1"
+// NOSTDINC-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/ve-unknown-linux-gnu/c++/v1"
+// NOSTDINC-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/c++/v1"
 // NOSTDINC-NOT: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // NOSTDINC-NOT: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clangxx -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
 // RUN:     -nostdinc++ 2>&1 | FileCheck -check-prefix=NOSTDINCXX %s
-// NOSTDINCXX: clang{{.*}} "-cc1"
+// NOSTDINCXX: [[BIN_DIR:/.+]]/clang{{.*}} "-cc1"
 // NOSTDINCXX-SAME: "-nostdinc++"
 // NOSTDINCXX-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // NOSTDINCXX-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// NOSTDINCXX-NOT: "-internal-isystem" "[[RESOURCE_DIR]]/include/c++/v1"
+// NOSTDINCXX-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/ve-unknown-linux-gnu/c++/v1"
+// NOSTDINCXX-NOT: "-internal-isystem" "[[BIN_DIR]]/../include/c++/v1"
 // NOSTDINCXX-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // NOSTDINCXX-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
