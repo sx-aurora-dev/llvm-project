@@ -107,6 +107,7 @@ function(builtin_register_target compiler_rt_path target)
 
   check_apple_target(${target} builtin)
 
+  set(${target}_extra_args ${ARG_CMAKE_ARGS})
   get_cmake_property(variableNames VARIABLES)
   foreach(variableName ${variableNames})
     string(FIND "${variableName}" "BUILTINS_${target}" out)
