@@ -11,7 +11,7 @@
 /// Checking include-path
 
 // RUN: %clang -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
-// RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
+// RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     2>&1 | FileCheck -check-prefix=DEFINC %s
 // DEFINC: clang{{.*}} "-cc1"
 // DEFINC-SAME: "-nostdsysteminc"
@@ -21,7 +21,7 @@
 // DEFINC-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clang -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
-// RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
+// RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     -nostdlibinc 2>&1 | FileCheck -check-prefix=NOSTDLIBINC %s
 // NOSTDLIBINC: clang{{.*}} "-cc1"
 // NOSTDLIBINC-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
@@ -30,7 +30,7 @@
 // NOSTDLIBINC-NOT: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clang -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
-// RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
+// RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     -nobuiltininc 2>&1 | FileCheck -check-prefix=NOBUILTININC %s
 // NOBUILTININC: clang{{.*}} "-cc1"
 // NOBUILTININC-SAME: "-nobuiltininc"
@@ -40,7 +40,7 @@
 // NOBUILTININC-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
 
 // RUN: %clang -### -target ve --sysroot %S/Inputs/basic_ve_tree %s \
-// RUN:     -resource-dir=%S/Input/basic_ve_tree/resource_dir \
+// RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     -nostdinc 2>&1 | FileCheck -check-prefix=NOSTDINC %s
 // NOSTDINC: clang{{.*}} "-cc1"
 // NOSTDINC-SAME: "-nobuiltininc"
