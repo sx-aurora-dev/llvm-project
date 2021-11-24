@@ -2777,8 +2777,9 @@ static bool isMImm(SDValue V) {
       if (VT == MVT::f32) {
         // Float value places at higher bits, so ignore lower 32 bits.
         return isMImm32Val(getFpImmVal(C) >> 32);
+      } else if (VT == MVT::f64) {
+        return isMImmVal(getFpImmVal(C));
       }
-      return isMImmVal(getFpImmVal(C));
     }
   }
   return false;
