@@ -70,7 +70,7 @@ endif()
 # Link, install and tests
 ################################################################################
 
-target_link_libraries(${SOTOC_PROJECT_NAME} PRIVATE ${USE_LLVM_LIBS} ${USE_CLANG_LIBS})
+clang_target_link_libraries(${SOTOC_PROJECT_NAME} PRIVATE ${USE_LLVM_LIBS} ${USE_CLANG_LIBS})
 
 install(TARGETS ${SOTOC_PROJECT_NAME} DESTINATION bin)
 
