@@ -59,13 +59,10 @@ unsigned MCRegisterInfo::getSubRegIdxSize(unsigned Idx) const {
   return SubRegIdxRanges[Idx].Size;
 }
 
-Optional<unsigned> MCRegisterInfo::getSubRegIdxOffset(unsigned Idx) const {
+unsigned MCRegisterInfo::getSubRegIdxOffset(unsigned Idx) const {
   assert(Idx && Idx < getNumSubRegIndices() &&
          "This is not a subregister index");
-  uint16_t Offset = SubRegIdxRanges[Idx].Offset;
-  if (Offset == (uint16_t)-1)
-    return None;
-  return Offset;
+  return SubRegIdxRanges[Idx].Offset;
 }
 
 int MCRegisterInfo::getDwarfRegNum(MCRegister RegNum, bool isEH) const {
