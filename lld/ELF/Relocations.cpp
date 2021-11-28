@@ -1210,6 +1210,7 @@ static unsigned handleTlsRelocation(RelType type, Symbol &sym,
   bool toExecRelax = !config->shared && config->emachine != EM_ARM &&
                      config->emachine != EM_HEXAGON &&
                      config->emachine != EM_RISCV &&
+                     config->emachine != EM_VE &&
                      !c.file->ppc64DisableTLSRelax;
 
   // If we are producing an executable and the symbol is non-preemptable, it
