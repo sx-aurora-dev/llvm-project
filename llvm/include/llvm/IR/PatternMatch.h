@@ -1076,22 +1076,41 @@ struct BinaryOp_match {
   // The LHS is always matched first.
   BinaryOp_match(const LHS_t &LHS, const RHS_t &RHS) : L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
-  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
-    auto * I = match_dyn_cast<MatchContext, const BinaryOperator>(V);
-    if (I && I->getOpcode() == Opcode) {
+  template <typename OpTy> bool match(unsigned Opc, OpTy *V) {
+    EmptyContext EContext;
+    return match_context(Opc, V, EContext);
+  }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
+    return match_context<>(Opcode, V, MContext);
+  }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(unsigned Opc, OpTy *V, MatchContext &MContext) {
+    auto *I = match_dyn_cast<MatchContext, const BinaryOperator>(V);
+    if (I && I->getOpcode() == Opc) {
       MatchContext LRContext(MContext);
-      if (!MContext.acceptInnerNode(I)) return false;
-      if (L.match_context(I->getOperand(0), LRContext) && R.match_context(I->getOperand(1), LRContext) && MContext.mergeContext(LRContext)) return true;
-      if (Commutable && (L.match_context(I->getOperand(1), MContext) && R.match_context(I->getOperand(0), MContext))) return true;
+      if (!MContext.acceptInnerNode(I))
+        return false;
+      if (L.match_context(I->getOperand(0), LRContext) &&
+          R.match_context(I->getOperand(1), LRContext) &&
+          MContext.mergeContext(LRContext))
+        return true;
+      if (Commutable && (L.match_context(I->getOperand(1), MContext) &&
+                         R.match_context(I->getOperand(0), MContext)))
+        return true;
       return false;
     }
     if (auto *CE = dyn_cast<ConstantExpr>(V))
-      return CE->getOpcode() == Opcode &&
+      return CE->getOpcode() == Opc &&
              ((L.match(CE->getOperand(0)) && R.match(CE->getOperand(1))) ||
               (Commutable && L.match(CE->getOperand(1)) &&
                R.match(CE->getOperand(0))));
     return false;
+  }
+
+  template <typename OpTy> bool match(OpTy *V) {
+    EmptyContext EC;
+    return match_context<>(Opcode, V, EC);
   }
 };
 
@@ -1337,6 +1356,32 @@ m_NUWShl(const LHS &L, const RHS &R) {
   return OverflowingBinaryOp_match<LHS, RHS, Instruction::Shl,
                                    OverflowingBinaryOperator::NoUnsignedWrap>(
       L, R);
+}
+
+template <typename LHS_t, typename RHS_t, bool Commutable = false>
+struct SpecificBinaryOp_match
+    : public BinaryOp_match<LHS_t, RHS_t, 0, Commutable> {
+  unsigned Opcode;
+
+  SpecificBinaryOp_match(unsigned Opcode, const LHS_t &LHS, const RHS_t &RHS)
+      : BinaryOp_match<LHS_t, RHS_t, 0, Commutable>(LHS, RHS), Opcode(Opcode) {}
+
+  template <typename OpTy> bool match(OpTy *V) {
+    return BinaryOp_match<LHS_t, RHS_t, 0, Commutable>::match(Opcode, V);
+  }
+
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
+    return BinaryOp_match<LHS_t, RHS_t, 0, Commutable>::match_context(Opcode, V,
+                                                                      MContext);
+  }
+};
+
+/// Matches a specific opcode.
+template <typename LHS, typename RHS>
+inline SpecificBinaryOp_match<LHS, RHS> m_BinOp(unsigned Opcode, const LHS &L,
+                                                const RHS &R) {
+  return SpecificBinaryOp_match<LHS, RHS>(Opcode, L, R);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2351,6 +2396,13 @@ inline CmpClass_match<LHS, RHS, ICmpInst, ICmpInst::Predicate, true>
 m_c_ICmp(ICmpInst::Predicate &Pred, const LHS &L, const RHS &R) {
   return CmpClass_match<LHS, RHS, ICmpInst, ICmpInst::Predicate, true>(Pred, L,
                                                                        R);
+}
+
+/// Matches a specific opcode with LHS and RHS in either order.
+template <typename LHS, typename RHS>
+inline SpecificBinaryOp_match<LHS, RHS, true>
+m_c_BinOp(unsigned Opcode, const LHS &L, const RHS &R) {
+  return SpecificBinaryOp_match<LHS, RHS, true>(Opcode, L, R);
 }
 
 /// Matches a Add with LHS and RHS in either order.
