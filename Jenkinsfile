@@ -6,6 +6,9 @@ pipeline {
         TOP = pwd()
         CMAKE = "cmake"
         PYTHON = "python3"
+        // Job pool
+        COMPILE_THREADS = 24
+        LINK_THREADS = 8
         // Need to use either gcc-10 or clang to compile recent llvm
         CC = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang"
         CXX = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang++"
@@ -43,7 +46,8 @@ pipeline {
                         make clean
                         CC="${CC}" CXX="${CXX}" make \
                             SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
-                            THREADS= cmake build
+                            COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS} cmake build
                     """
                 }
             }
@@ -52,7 +56,8 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make THREADS= check-clang check-llvm
+                        make COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS} check-clang check-llvm
                     """
                 }
             }
@@ -61,7 +66,9 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} THREADS=
+                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                            COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS}
                     """
                 }
             }
@@ -100,6 +107,8 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
+                                # Use sed since CMakeLists.txt does not use option command.
+                                sed -e 's:linux/libclang_rt.builtins-ve.a:ve-unknown-linux-gnu/libclang_rt.builtins.a:' -i ../CMakeLists.txt
                                 ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
                                     -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/14.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
