@@ -7138,11 +7138,13 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL) {
   EVT VT = LHS.getValueType();
 
   // The target must have at least one rotate/funnel flavor.
+  // We still try to match rotate by constant pre-legalization.
+  // TODO: Support pre-legalization funnel-shift by constant.
   bool HasROTL = hasOperation(ISD::ROTL, VT);
   bool HasROTR = hasOperation(ISD::ROTR, VT);
   bool HasFSHL = hasOperation(ISD::FSHL, VT);
   bool HasFSHR = hasOperation(ISD::FSHR, VT);
-  if (!HasROTL && !HasROTR && !HasFSHL && !HasFSHR)
+  if (LegalOperations && !HasROTL && !HasROTR && !HasFSHL && !HasFSHR)
     return SDValue();
 
   // Check for truncated rotate.
@@ -7195,6 +7197,7 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL) {
   if (LHSShift.getOpcode() == RHSShift.getOpcode())
     return SDValue(); // Shifts must disagree.
 
+  // TODO: Support pre-legalization funnel-shift by constant.
   bool IsRotate = LHSShift.getOperand(0) == RHSShift.getOperand(0);
   if (!IsRotate && !(HasFSHL || HasFSHR))
     return SDValue(); // Requires funnel shift support.
@@ -7223,12 +7226,15 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL) {
   };
   if (ISD::matchBinaryPredicate(LHSShiftAmt, RHSShiftAmt, MatchRotateSum)) {
     SDValue Res;
-    if (IsRotate && (HasROTL || HasROTR))
-      Res = DAG.getNode(HasROTL ? ISD::ROTL : ISD::ROTR, DL, VT, LHSShiftArg,
-                        HasROTL ? LHSShiftAmt : RHSShiftAmt);
-    else
-      Res = DAG.getNode(HasFSHL ? ISD::FSHL : ISD::FSHR, DL, VT, LHSShiftArg,
-                        RHSShiftArg, HasFSHL ? LHSShiftAmt : RHSShiftAmt);
+    if (IsRotate && (HasROTL || HasROTR || !(HasFSHL || HasFSHR))) {
+      bool UseROTL = !LegalOperations || HasROTL;
+      Res = DAG.getNode(UseROTL ? ISD::ROTL : ISD::ROTR, DL, VT, LHSShiftArg,
+                        UseROTL ? LHSShiftAmt : RHSShiftAmt);
+    } else {
+      bool UseFSHL = !LegalOperations || HasFSHL;
+      Res = DAG.getNode(UseFSHL ? ISD::FSHL : ISD::FSHR, DL, VT, LHSShiftArg,
+                        RHSShiftArg, UseFSHL ? LHSShiftAmt : RHSShiftAmt);
+    }
 
     // If there is an AND of either shifted operand, apply it to the result.
     if (LHSMask.getNode() || RHSMask.getNode()) {
@@ -7251,6 +7257,11 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL) {
 
     return Res;
   }
+
+  // Even pre-legalization, we can't easily rotate/funnel-shift by a variable
+  // shift.
+  if (!HasROTL && !HasROTR && !HasFSHL && !HasFSHR)
+    return SDValue();
 
   // If there is a mask here, and we have a variable shift, we can't be sure
   // that we're masking out the right stuff.
@@ -7878,9 +7889,12 @@ SDValue DAGCombiner::MatchLoadCombine(SDNode *N) {
 //    |  D  |
 // Into:
 //   (x & m) | (y & ~m)
-// If y is a constant, and the 'andn' does not work with immediates,
-// we unfold into a different pattern:
+// If y is a constant, m is not a 'not', and the 'andn' does not work with
+// immediates, we unfold into a different pattern:
 //   ~(~x & m) & (m | y)
+// If x is a constant, m is a 'not', and the 'andn' does not work with
+// immediates, we unfold into a different pattern:
+//   (x | ~m) & ~(~m & ~y)
 // NOTE: we don't unfold the pattern if 'xor' is actually a 'not', because at
 //       the very least that breaks andnpd / andnps patterns, and because those
 //       patterns are simplified in IR and shouldn't be created in the DAG
@@ -7935,8 +7949,9 @@ SDValue DAGCombiner::unfoldMaskedMerge(SDNode *N) {
 
   SDLoc DL(N);
 
-  // If Y is a constant, check that 'andn' works with immediates.
-  if (!TLI.hasAndNot(Y)) {
+  // If Y is a constant, check that 'andn' works with immediates. Unless M is
+  // a bitwise not that would already allow ANDN to be used.
+  if (!TLI.hasAndNot(Y) && !isBitwiseNot(M)) {
     assert(TLI.hasAndNot(X) && "Only mask is a variable? Unreachable.");
     // If not, we need to do a bit more work to make sure andn is still used.
     SDValue NotX = DAG.getNOT(DL, X, VT);
@@ -7944,6 +7959,19 @@ SDValue DAGCombiner::unfoldMaskedMerge(SDNode *N) {
     SDValue NotLHS = DAG.getNOT(DL, LHS, VT);
     SDValue RHS = DAG.getNode(ISD::OR, DL, VT, M, Y);
     return DAG.getNode(ISD::AND, DL, VT, NotLHS, RHS);
+  }
+
+  // If X is a constant and M is a bitwise not, check that 'andn' works with
+  // immediates.
+  if (!TLI.hasAndNot(X) && isBitwiseNot(M)) {
+    assert(TLI.hasAndNot(Y) && "Only mask is a variable? Unreachable.");
+    // If not, we need to do a bit more work to make sure andn is still used.
+    SDValue NotM = M.getOperand(0);
+    SDValue LHS = DAG.getNode(ISD::OR, DL, VT, X, NotM);
+    SDValue NotY = DAG.getNOT(DL, Y, VT);
+    SDValue RHS = DAG.getNode(ISD::AND, DL, VT, NotM, NotY);
+    SDValue NotRHS = DAG.getNOT(DL, RHS, VT);
+    return DAG.getNode(ISD::AND, DL, VT, LHS, NotRHS);
   }
 
   SDValue LHS = DAG.getNode(ISD::AND, DL, VT, X, M);

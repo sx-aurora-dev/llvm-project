@@ -4570,7 +4570,7 @@ SDValue DAGTypeLegalizer::WidenVSELECTMask(SDNode *N) {
 
 SDValue DAGTypeLegalizer::WidenVecRes_SELECT(SDNode *N) {
   EVT WidenVT = TLI.getTypeToTransformTo(*DAG.getContext(), N->getValueType(0));
-  unsigned WidenNumElts = WidenVT.getVectorNumElements();
+  ElementCount WidenEC = WidenVT.getVectorElementCount();
 
   SDValue Cond1 = N->getOperand(0);
   EVT CondVT = Cond1.getValueType();
@@ -4584,8 +4584,7 @@ SDValue DAGTypeLegalizer::WidenVecRes_SELECT(SDNode *N) {
     }
 
     EVT CondEltVT = CondVT.getVectorElementType();
-    EVT CondWidenVT =  EVT::getVectorVT(*DAG.getContext(),
-                                        CondEltVT, WidenNumElts);
+    EVT CondWidenVT = EVT::getVectorVT(*DAG.getContext(), CondEltVT, WidenEC);
     if (getTypeAction(CondVT) == TargetLowering::TypeWidenVector)
       Cond1 = GetWidenedVector(Cond1);
 

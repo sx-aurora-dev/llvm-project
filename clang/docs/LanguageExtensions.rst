@@ -738,7 +738,7 @@ targets pending ABI standardization:
 * 64-bit ARM (AArch64)
 * AMDGPU
 * SPIR
-* X86 (Only available under feature AVX512-FP16)
+* X86 (Available with feature SSE2 and up enabled)
 
 ``_Float16`` will be supported on more targets as they define ABIs for it.
 
@@ -3863,7 +3863,8 @@ Multiple match rules can be specified using the ``any`` match rule, as shown
 in the example above. The ``any`` rule applies attributes to all declarations
 that are matched by at least one of the rules in the ``any``. It doesn't nest
 and can't be used inside the other match rules. Redundant match rules or rules
-that conflict with one another should not be used inside of ``any``.
+that conflict with one another should not be used inside of ``any``. Failing to
+specify a rule within the ``any`` rule results in an error.
 
 Clang supports the following match rules:
 
