@@ -1500,6 +1500,7 @@ td_library(
     srcs = ["include/mlir/Dialect/X86Vector/X86Vector.td"],
     includes = ["include"],
     deps = [
+        ":InferTypeOpInterfaceTdFiles",
         ":LLVMOpsTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -1548,6 +1549,7 @@ cc_library(
     includes = ["include"],
     deps = [
         ":IR",
+        ":InferTypeOpInterface",
         ":LLVMDialect",
         ":SideEffectInterfaces",
         ":X86VectorIncGen",
@@ -1688,6 +1690,7 @@ td_library(
     ],
     includes = ["include"],
     deps = [
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -1788,6 +1791,7 @@ cc_library(
     deps = [
         ":ArithmeticDialect",
         ":IR",
+        ":InferTypeOpInterface",
         ":SideEffectInterfaces",
         ":SparseTensorAttrDefsIncGen",
         ":SparseTensorOpsIncGen",
@@ -1856,6 +1860,7 @@ td_library(
         ":CallInterfacesTdFiles",
         ":CastInterfacesTdFiles",
         ":ControlFlowInterfacesTdFiles",
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
         ":VectorInterfacesTdFiles",
@@ -2519,6 +2524,7 @@ cc_library(
         ":CommonFolders",
         ":ControlFlowInterfaces",
         ":IR",
+        ":InferTypeOpInterface",
         ":SideEffectInterfaces",
         ":StandardOpsIncGen",
         ":Support",
@@ -2750,6 +2756,7 @@ cc_library(
         ":ControlFlowInterfaces",
         ":DataLayoutInterfaces",
         ":IR",
+        ":InferTypeOpInterface",
         ":LLVMDialectAttributesIncGen",
         ":LLVMDialectInterfaceIncGen",
         ":LLVMOpsIncGen",
@@ -2915,6 +2922,7 @@ cc_library(
         ":GPUBaseIncGen",
         ":GPUOpsIncGen",
         ":IR",
+        ":InferTypeOpInterface",
         ":LLVMDialect",
         ":MemRefDialect",
         ":SideEffectInterfaces",
@@ -3011,6 +3019,7 @@ td_library(
     includes = ["include"],
     deps = [
         ":ControlFlowInterfacesTdFiles",
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -3669,6 +3678,7 @@ td_library(
     deps = [
         ":CallInterfacesTdFiles",
         ":ControlFlowInterfacesTdFiles",
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -3819,6 +3829,7 @@ cc_library(
         ":CommonFolders",
         ":ControlFlowInterfaces",
         ":IR",
+        ":InferTypeOpInterface",
         ":Parser",
         ":Pass",
         ":SPIRVAttrUtilsGen",
@@ -4421,6 +4432,7 @@ cc_library(
     includes = ["include"],
     deps = [
         ":Affine",
+        ":AllocationOpInterface",
         ":Analysis",
         ":ArithmeticDialect",
         ":ControlFlowInterfaces",
@@ -4980,6 +4992,7 @@ cc_library(
         ":IR",
         ":Parser",
         ":Support",
+        "//llvm:AllTargetsAsmParsers",
         "//llvm:Support",
     ],
 )
@@ -6037,6 +6050,7 @@ td_library(
     ],
     includes = ["include"],
     deps = [
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -6286,6 +6300,7 @@ cc_library(
     deps = [
         ":BufferizableOpInterfaceIncGen",
         ":IR",
+        ":MemRefDialect",
         ":Support",
         "//llvm:Support",
     ],
@@ -6939,6 +6954,7 @@ td_library(
     ],
     includes = ["include"],
     deps = [
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -7073,6 +7089,7 @@ td_library(
     includes = ["include"],
     deps = [
         ":CastInterfacesTdFiles",
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
         ":VectorInterfacesTdFiles",
@@ -7218,6 +7235,7 @@ td_library(
     ],
     includes = ["include"],
     deps = [
+        ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
         ":VectorInterfacesTdFiles",
@@ -7469,6 +7487,43 @@ cc_library(
         ":Transforms",
         ":VectorOps",
         "//llvm:Support",
+    ],
+)
+
+td_library(
+    name = "AllocationOpInterfaceTdFiles",
+    srcs = ["include/mlir/Dialect/Bufferization/IR/AllocationOpInterface.td"],
+    includes = ["include"],
+    deps = [":OpBaseTdFiles"],
+)
+
+gentbl_cc_library(
+    name = "AllocationOpInterfaceIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            ["-gen-op-interface-decls"],
+            "include/mlir/Dialect/Bufferization/IR/AllocationOpInterface.h.inc",
+        ),
+        (
+            ["-gen-op-interface-defs"],
+            "include/mlir/Dialect/Bufferization/IR/AllocationOpInterface.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/Dialect/Bufferization/IR/AllocationOpInterface.td",
+    deps = [":AllocationOpInterfaceTdFiles"],
+)
+
+cc_library(
+    name = "AllocationOpInterface",
+    srcs = ["lib/Dialect/Bufferization/IR/AllocationOpInterface.cpp"],
+    hdrs = ["include/mlir/Dialect/Bufferization/IR/AllocationOpInterface.h"],
+    includes = ["include"],
+    deps = [
+        ":AllocationOpInterfaceIncGen",
+        ":IR",
+        ":MemRefDialect",
     ],
 )
 
