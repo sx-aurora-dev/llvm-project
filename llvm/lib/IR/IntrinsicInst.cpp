@@ -348,6 +348,25 @@ MaybeAlign VPIntrinsic::getPointerAlignment() const {
   return getParamAlign(PtrParamOpt.getValue());
 }
 
+/// \return The pointer operand of this load,store, gather or scatter.
+Value *VPIntrinsic::getMemoryPointerParam() const {
+  if (auto PtrParamOpt = getMemoryPointerParamPos(getIntrinsicID()))
+    return getArgOperand(PtrParamOpt.getValue());
+  return nullptr;
+}
+
+Optional<unsigned> VPIntrinsic::getMemoryPointerParamPos(Intrinsic::ID VPID) {
+  switch (VPID) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define VP_PROPERTY_MEMOP(POINTERPOS, ...) return POINTERPOS;
+#define END_REGISTER_VP_INTRINSIC(VPID) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+
 /// \return The data (payload) operand of this store or scatter.
 Value *VPIntrinsic::getMemoryDataParam() const {
   auto DataParamOpt = getMemoryDataParamPos(getIntrinsicID());
@@ -356,17 +375,28 @@ Value *VPIntrinsic::getMemoryDataParam() const {
   return getArgOperand(DataParamOpt.getValue());
 }
 
+Optional<unsigned> VPIntrinsic::getMemoryDataParamPos(Intrinsic::ID VPID) {
+  switch (VPID) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define VP_PROPERTY_MEMOP(POINTERPOS, DATAPOS) return DATAPOS;
+#define END_REGISTER_VP_INTRINSIC(VPID) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+
 bool VPIntrinsic::isVPIntrinsic(Intrinsic::ID ID) {
   switch (ID) {
   default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...)                                 \
-  case Intrinsic::VPID:                                                        \
     break;
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                    \
+  case Intrinsic::VPID:                                                        \
+    return true;
 #include "llvm/IR/VPIntrinsics.def"
   }
-  return true;
+  return false;
 }
 
 Intrinsic::ID VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID) {
@@ -376,7 +406,7 @@ Intrinsic::ID VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID) {
     break;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_CONSTRAINED_INTRIN(CFPID) ConstrainedID = Intrinsic::CFPID;
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID) ConstrainedID = Intrinsic::CFPID;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -390,7 +420,7 @@ Intrinsic::ID VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
     break;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_INTRIN(INTRINID) FunctionalID = Intrinsic::INTRINID;
+#define VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRINID) FunctionalID = Intrinsic::INTRINID;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -399,28 +429,28 @@ Intrinsic::ID VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
 
 // Equivalent non-predicated opcode
 Optional<unsigned> VPIntrinsic::getFunctionalOpcodeForVP(Intrinsic::ID ID) {
-  Optional<unsigned> FunctionalOC;
   switch (ID) {
   default:
     break;
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_OPC(OPC) FunctionalOC = Instruction::OPC;
+#define VP_PROPERTY_FUNCTIONAL_OPC(OPC) return Instruction::OPC;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
-
-  return FunctionalOC;
+  return None;
 }
 
 Intrinsic::ID VPIntrinsic::getForOpcode(unsigned IROPC) {
   switch (IROPC) {
   default:
-    return Intrinsic::not_intrinsic;
+    break;
 
-#define HANDLE_VP_TO_OPC(OPC) case Instruction::OPC:
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) break;
+#define VP_PROPERTY_FUNCTIONAL_OPC(OPC) case Instruction::OPC:
 #define END_REGISTER_VP_INTRINSIC(VPID) return Intrinsic::VPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
+  return Intrinsic::not_intrinsic;
 }
 
 bool VPIntrinsic::canIgnoreVectorLengthParam() const {
@@ -489,42 +519,6 @@ Optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
     return None;
 
   return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
-}
-
-/// \return The pointer operand of this load,store, gather or scatter.
-Value *VPIntrinsic::getMemoryPointerParam() const {
-  auto PtrParamOpt = getMemoryPointerParamPos(getIntrinsicID());
-  if (!PtrParamOpt.hasValue())
-    return nullptr;
-  return getArgOperand(PtrParamOpt.getValue());
-}
-
-Optional<unsigned> VPIntrinsic::getMemoryPointerParamPos(Intrinsic::ID VPID) {
-  Optional<unsigned> ParamPos;
-  switch (VPID) {
-  default:
-    return None;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_MEMOP(POINTERPOS, DATAPOS) ParamPos = POINTERPOS;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return ParamPos;
-}
-
-Optional<unsigned> VPIntrinsic::getMemoryDataParamPos(Intrinsic::ID VPID) {
-  Optional<unsigned> ParamPos;
-  switch (VPID) {
-  default:
-    return None;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_MEMOP(POINTERPOS, DATAPOS) ParamPos = DATAPOS;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return ParamPos;
 }
 
 enum class VPTypeToken : int8_t {
@@ -728,7 +722,7 @@ bool VPIntrinsic::IsUnaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_UNARY IsUnary = true;
+#define VP_PROPERTY_UNARYOP IsUnary = true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -745,7 +739,7 @@ bool VPIntrinsic::IsBinaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_BINARY IsBinary = true;
+#define VP_PROPERTY_BINARYOP IsBinary = true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -764,7 +758,7 @@ bool VPIntrinsic::IsTernaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_TERNARY IsTernary = true;
+#define VP_PROPERTY_TERNARYOP IsTernary = true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -783,7 +777,7 @@ bool VPIntrinsic::IsCompareVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_XCMP IsCompare = true;
+#define VP_PROPERTY_XCMP IsCompare = true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -799,7 +793,7 @@ VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasExcept = (bool) HASEXCEPT;
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasExcept = (bool) HASEXCEPT;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -814,7 +808,7 @@ bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasRound = (bool) HASROUND;
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasRound = (bool) HASROUND;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -827,10 +821,10 @@ Intrinsic::ID VPIntrinsic::getForIntrinsic(Intrinsic::ID IntrinsicID) {
   if (IntrinToVP.empty()) {
     unsigned CurrentVPID;
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) CurrentVPID = Intrinsic::VPID;
-#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
   if (Intrinsic::CFPID != Intrinsic::not_intrinsic)                            \
     IntrinToVP[(unsigned)Intrinsic::CFPID] = CurrentVPID;
-#define HANDLE_VP_TO_INTRIN(INTRINID)                                          \
+#define VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRINID)                                          \
   IntrinToVP[(unsigned)Intrinsic::INTRINID] = CurrentVPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -844,9 +838,9 @@ Intrinsic::ID VPIntrinsic::getForIntrinsic(Intrinsic::ID IntrinsicID) {
 bool VPReductionIntrinsic::isVPReduction(Intrinsic::ID ID) {
   switch (ID) {
   default:
-    return false;
+    break;
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_REDUCTION(STARTPOS, ...) return true;
+#define VP_PROPERTY_REDUCTION(STARTPOS, ...) return true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -862,31 +856,27 @@ unsigned VPReductionIntrinsic::getStartParamPos() const {
 }
 
 Optional<unsigned> VPReductionIntrinsic::getVectorParamPos(Intrinsic::ID ID) {
-  Optional<unsigned> VectorPos;
   switch (ID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return VECTORPOS;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
-    // FIXME Use property scopes.
-#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) VectorPos = VECTORPOS;
 #include "llvm/IR/VPIntrinsics.def"
   default:
-    return None;
+    break;
   }
-  return VectorPos;
+  return None;
 }
 
 Optional<unsigned> VPReductionIntrinsic::getStartParamPos(Intrinsic::ID ID) {
-  Optional<unsigned> StartPos;
   switch (ID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return STARTPOS;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
-    // FIXME Use property scopes.
-#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) StartPos = STARTPOS;
 #include "llvm/IR/VPIntrinsics.def"
   default:
-    return None;
+    break;
   }
-  return StartPos;
+  return None;
 }
 
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {

@@ -22346,7 +22346,7 @@ SDValue DAGCombiner::visitVPOp(SDNode *N) {
   }
 
   // Reduction operations return the start operand when no elements are active.
-  if (ISD::isVPReductionOp(N->getOpcode()))
+  if (ISD::isVPReduction(N->getOpcode()))
     return N->getOperand(0);
 
   return SDValue();

@@ -365,7 +365,7 @@ TEST_F(VPIntrinsicTest, VPIntrinsicDeclarationForParams) {
 /// Check that the HANDLE_VP_TO_CONSTRAINEDFP maps to an existing intrinsic with
 /// the right amount of metadata args.
 TEST_F(VPIntrinsicTest, HandleToConstrainedFP) {
-#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                  \
   if (Intrinsic::CFPID != Intrinsic::not_intrinsic) {                          \
     SmallVector<Intrinsic::IITDescriptor, 5> T;                                \
     Intrinsic::getIntrinsicInfoTableEntries(Intrinsic::CFPID, T);              \

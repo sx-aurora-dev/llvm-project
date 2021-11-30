@@ -402,6 +402,91 @@ ISD::NodeType ISD::getVecReduceBaseOpcode(unsigned VecReduceOpcode) {
   }
 }
 
+bool ISD::isVPOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...)                                    \
+  case ISD::VPSD:                                                              \
+    return true;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+bool ISD::isVPBinaryOp(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define VP_PROPERTY_BINARYOP return true;
+#define END_REGISTER_VP_SDNODE(VPSD) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return false;
+}
+
+bool ISD::isVPReduction(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define VP_PROPERTY_REDUCTION(STARTPOS, ...) return true;
+#define END_REGISTER_VP_SDNODE(VPSD) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return false;
+}
+
+Optional<unsigned> ISD::getVPReductionStartParamPos(unsigned VPISD) {
+  switch (VPISD) {
+  default:
+    break;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return STARTPOS;
+#define END_REGISTER_VP_SDNODE(VPSD) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+
+Optional<unsigned> ISD::getVPReductionVectorParamPos(unsigned VPISD) {
+  switch (VPISD) {
+  default:
+    break;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return VECTORPOS;
+#define END_REGISTER_VP_SDNODE(VPSD) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+
+/// The operand position of the vector mask.
+Optional<unsigned> ISD::getVPMaskIdx(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return None;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, LEGALPOS, TDNAME, MASKPOS, ...)         \
+  case ISD::VPSD:                                                              \
+    return MASKPOS;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+/// The operand position of the explicit vector length parameter.
+Optional<unsigned> ISD::getVPExplicitVectorLengthIdx(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return None;
+#define BEGIN_REGISTER_VP_SDNODE(VPSD, LEGALPOS, TDNAME, MASKPOS, EVLPOS)      \
+  case ISD::VPSD:                                                              \
+    return EVLPOS;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
 ISD::NodeType ISD::getExtForLoadExtType(bool IsFP, ISD::LoadExtType ExtType) {
   switch (ExtType) {
   case ISD::EXTLOAD:
@@ -518,63 +603,6 @@ ISD::CondCode ISD::getSetCCAndOperation(ISD::CondCode Op1, ISD::CondCode Op2,
 //                           SDNode VP Support
 //===----------------------------------------------------------------------===//
 
-bool ISD::isVPOpcode(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return false;
-#define BEGIN_REGISTER_VP_SDNODE(SDOPC, ...)                                   \
-  case ISD::SDOPC:                                                             \
-    return true;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-}
-
-bool ISD::isVPBinaryOp(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return false;
-#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
-#define HANDLE_VP_IS_BINARY return true;
-#define END_REGISTER_VP_SDNODE(VPSD) return false;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-}
-
-bool ISD::isVPReductionOp(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return false;
-#define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) case ISD::VPSD:
-#define HANDLE_VP_REDUCTION(STARTPOS, ...) return true;
-#define END_REGISTER_VP_SDNODE(VPSD) return false;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-}
-
-/// The operand position of the vector mask.
-Optional<unsigned> ISD::getVPMaskIdx(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return None;
-#define BEGIN_REGISTER_VP_SDNODE(SDOPC, LEGALPOS, TDNAME, MASKPOS, ...)        \
-  case ISD::SDOPC:                                                             \
-    return MASKPOS;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-}
-
-/// The operand position of the explicit vector length parameter.
-Optional<unsigned> ISD::getVPExplicitVectorLengthIdx(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return None;
-#define BEGIN_REGISTER_VP_SDNODE(SDOPC, LEGALPOS, TDNAME, MASKPOS, EVLPOS)     \
-  case ISD::SDOPC:                                                             \
-    return EVLPOS;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-}
-
 Optional<unsigned> ISD::GetFunctionOpCodeForVP(unsigned OpCode,
                                                bool hasFPExcept) {
   // FIXME: Return strict opcodes in case of fp exceptions.
@@ -582,7 +610,7 @@ Optional<unsigned> ISD::GetFunctionOpCodeForVP(unsigned OpCode,
   default:
     return None;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
-#define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
+#define VP_PROPERTY_FUNCTIONAL(SDOPC) return ISD::SDOPC;
 #define END_REGISTER_VP_SDNODE(VPOPC) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -600,31 +628,6 @@ unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
   }
 }
 
-Optional<unsigned> ISD::getVPReductionStartParamPos(unsigned VPISD) {
-  switch (VPISD) {
-  default:
-    break;
-
-#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
-#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) return STARTPOS;
-#define END_REGISTER_VP_SDNODE(VPOPC) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return None;
-}
-
-Optional<unsigned> ISD::getVPReductionVectorParamPos(unsigned VPISD) {
-  switch (VPISD) {
-  default:
-    break;
-
-#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
-#define HANDLE_VP_REDUCTION(STARTPOS, VECTORPOS, ...) return VECTORPOS;
-#define END_REGISTER_VP_SDNODE(VPOPC) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return None;
-}
 
 //===----------------------------------------------------------------------===//
 //                           SDNode Profile Support

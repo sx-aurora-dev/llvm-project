@@ -1278,7 +1278,7 @@ bool isVPOpcode(unsigned Opcode);
 bool isVPBinaryOp(unsigned Opcode);
 
 /// Whether this is a vector-predicated reduction opcode.
-bool isVPReductionOp(unsigned Opcode);
+bool isVPReduction(unsigned Opcode);
 
 /// The operand position of the vector mask.
 Optional<unsigned> getVPMaskIdx(unsigned Opcode);
