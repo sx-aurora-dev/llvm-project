@@ -976,12 +976,16 @@ void LinkerScript::assignOffsets(OutputSection *sec) {
   // reuse previous lmaOffset; otherwise, reset lmaOffset to 0. This emulates
   // heuristics described in
   // https://sourceware.org/binutils/docs/ld/Output-Section-LMA.html
-  if (sec->lmaExpr)
+  if (sec->lmaExpr) {
     ctx->lmaOffset = sec->lmaExpr().getValue() - dot;
-  else if (MemoryRegion *mr = sec->lmaRegion)
-    ctx->lmaOffset = alignTo(mr->curPos, sec->alignment) - dot;
-  else if (!sameMemRegion || !prevLMARegionIsDefault)
+  } else if (MemoryRegion *mr = sec->lmaRegion) {
+    uint64_t lmaStart = alignTo(mr->curPos, sec->alignment);
+    if (mr->curPos < lmaStart)
+      expandMemoryRegion(mr, lmaStart - mr->curPos, mr->name, sec->name);
+    ctx->lmaOffset = lmaStart - dot;
+  } else if (!sameMemRegion || !prevLMARegionIsDefault) {
     ctx->lmaOffset = 0;
+  }
 
   // Propagate ctx->lmaOffset to the first "non-header" section.
   if (PhdrEntry *l = ctx->outSec->ptLoad)
@@ -1030,7 +1034,7 @@ void LinkerScript::assignOffsets(OutputSection *sec) {
   }
 }
 
-static bool isDiscardable(OutputSection &sec) {
+static bool isDiscardable(const OutputSection &sec) {
   if (sec.name == "/DISCARD/")
     return true;
 
@@ -1057,6 +1061,11 @@ static bool isDiscardable(OutputSection &sec) {
       return false;
   }
   return true;
+}
+
+bool LinkerScript::isDiscarded(const OutputSection *sec) const {
+  return hasSectionsCommand && (getFirstInputSection(sec) == nullptr) &&
+         isDiscardable(*sec);
 }
 
 static void maybePropagatePhdrs(OutputSection &sec,

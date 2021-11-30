@@ -114,7 +114,8 @@ static bool equalsConstant(const ConcatInputSection *ia,
       if (sa->kind() != sb->kind())
         return false;
       if (!isa<Defined>(sa)) {
-        assert(isa<DylibSymbol>(sa));
+        // ICF runs before Undefineds are reported.
+        assert(isa<DylibSymbol>(sa) || isa<Undefined>(sa));
         return sa == sb;
       }
       const auto *da = cast<Defined>(sa);
@@ -187,7 +188,7 @@ static bool equalsVariable(const ConcatInputSection *ia,
   // info matches. For simplicity, we only handle the case where there are only
   // symbols at offset zero within the section (which is typically the case with
   // .subsections_via_symbols.)
-  auto hasCU = [](Defined *d) { return d->compactUnwind; };
+  auto hasCU = [](Defined *d) { return d->unwindEntry != nullptr; };
   auto itA = std::find_if(ia->symbols.begin(), ia->symbols.end(), hasCU);
   auto itB = std::find_if(ib->symbols.begin(), ib->symbols.end(), hasCU);
   if (itA == ia->symbols.end())
@@ -196,8 +197,8 @@ static bool equalsVariable(const ConcatInputSection *ia,
     return false;
   const Defined *da = *itA;
   const Defined *db = *itB;
-  if (da->compactUnwind->icfEqClass[icfPass % 2] !=
-          db->compactUnwind->icfEqClass[icfPass % 2] ||
+  if (da->unwindEntry->icfEqClass[icfPass % 2] !=
+          db->unwindEntry->icfEqClass[icfPass % 2] ||
       da->value != 0 || db->value != 0)
     return false;
   auto isZero = [](Defined *d) { return d->value == 0; };
@@ -275,7 +276,7 @@ void ICF::run() {
             } else {
               hash += defined->value;
             }
-          } else if (!isa<Undefined>(sym))
+          } else if (!isa<Undefined>(sym)) // ICF runs before Undefined diags.
             llvm_unreachable("foldIdenticalSections symbol kind");
         }
       }
@@ -363,8 +364,8 @@ void macho::foldIdenticalSections() {
     if (isHashable) {
       hashable.push_back(isec);
       for (Defined *d : isec->symbols)
-        if (d->compactUnwind)
-          hashable.push_back(d->compactUnwind);
+        if (d->unwindEntry)
+          hashable.push_back(d->unwindEntry);
     } else {
       isec->icfEqClass[0] = ++icfUniqueID;
     }
