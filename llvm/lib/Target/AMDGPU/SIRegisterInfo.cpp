@@ -308,7 +308,7 @@ SIRegisterInfo::SIRegisterInfo(const GCNSubtarget &ST)
       if (Size & 31)
         continue;
       std::vector<int16_t> &Vec = RegSplitParts[Size / 32 - 1];
-      unsigned Pos = getSubRegIdxOffset(Idx).getValue();
+      unsigned Pos = getSubRegIdxOffset(Idx);
       if (Pos % Size)
         continue;
       Pos /= Size;

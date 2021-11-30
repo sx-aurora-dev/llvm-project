@@ -692,7 +692,7 @@ MLocTracker::MLocTracker(MachineFunction &MF, const TargetInstrInfo &TII,
   // stack slot, we don't want to type the slot.
   for (unsigned int I = 1; I < TRI.getNumSubRegIndices(); ++I) {
     unsigned Size = TRI.getSubRegIdxSize(I);
-    unsigned Offs = TRI.getSubRegIdxOffset(I).getValue();
+    unsigned Offs = TRI.getSubRegIdxOffset(I);
     unsigned Idx = StackSlotIdxes.size();
 
     // Some subregs have -1, -2 and so forth fed into their fields, to mean
@@ -1084,7 +1084,7 @@ bool InstrRefBasedLDV::transferDebugInstrRef(MachineInstr &MI,
     // iterate in reverse order so that we go from wide to small.
     for (unsigned Subreg : reverse(SeenSubregs)) {
       unsigned ThisSize = TRI->getSubRegIdxSize(Subreg);
-      unsigned ThisOffset = TRI->getSubRegIdxOffset(Subreg).getValue();
+      unsigned ThisOffset = TRI->getSubRegIdxOffset(Subreg);
       Offset += ThisOffset;
       Size = (Size == 0) ? ThisSize : std::min(Size, ThisSize);
     }
@@ -1113,7 +1113,7 @@ bool InstrRefBasedLDV::transferDebugInstrRef(MachineInstr &MI,
         for (MCSubRegIterator SRI(Reg, TRI, false); SRI.isValid(); ++SRI) {
           unsigned Subreg = TRI->getSubRegIndex(Reg, *SRI);
           unsigned SubregSize = TRI->getSubRegIdxSize(Subreg);
-          unsigned SubregOffset = TRI->getSubRegIdxOffset(Subreg).getValue();
+          unsigned SubregOffset = TRI->getSubRegIdxOffset(Subreg);
           if (SubregSize == Size && SubregOffset == Offset) {
             NewReg = *SRI;
             break;
