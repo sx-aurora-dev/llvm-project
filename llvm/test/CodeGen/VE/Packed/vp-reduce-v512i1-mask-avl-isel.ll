@@ -8,9 +8,14 @@ define fastcc i1 @test_reduce_and(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-NEXT:    andm %vm4, %vm3, %vm5
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    pcvm %s3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm3, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    adds.l %s1, %s1, %s3
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
@@ -34,9 +39,14 @@ define fastcc i1 @test_reduce_or(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-NEXT:    andm %vm4, %vm3, %vm5
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pcvm %s2, %vm1
-; CHECK-NEXT:    andm %vm1, %vm3, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
@@ -59,9 +69,14 @@ define fastcc i1 @test_reduce_xor(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-NEXT:    andm %vm4, %vm3, %vm5
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pcvm %s2, %vm1
-; CHECK-NEXT:    andm %vm1, %vm3, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
 ; CHECK-NEXT:    and %s1, 1, %s1
