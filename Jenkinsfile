@@ -113,7 +113,8 @@ pipeline {
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
                                     -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/14.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
-                                make -j
+                                # make -j often crash
+                                make -j${COMPILE_THREADS}
                             """
                         }
                     }

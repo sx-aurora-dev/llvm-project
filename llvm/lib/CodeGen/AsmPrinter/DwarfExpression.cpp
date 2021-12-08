@@ -146,6 +146,9 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
     unsigned Idx = TRI.getSubRegIndex(MachineReg, *SR);
     unsigned Size = TRI.getSubRegIdxSize(Idx);
     unsigned Offset = TRI.getSubRegIdxOffset(Idx);
+    // Skip if an Offset doesn't make sense.
+    if (Offset == 0xffff)
+      continue;
     Reg = TRI.getDwarfRegNum(*SR, false);
     if (Reg < 0)
       continue;
