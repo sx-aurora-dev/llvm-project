@@ -85,16 +85,7 @@ protected:
 " declare <8 x double> @llvm.vp.trunc.v8f64(<8 x double>, <8 x i1>, i32) "
 " declare <8 x float> @llvm.vp.fptrunc.v8f32v8f64(<8 x double>, <8 x i1>, i32) "
 " declare <8 x double> @llvm.vp.fpext.v8f64v8f32(<8 x float>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.pow.v8f64(<8 x double>, <8 x double> %y, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.powi.v8f64(<8 x double>, i32 %y, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.sqrt.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.sin.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.cos.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.log.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.log10.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.log2.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.exp.v8f64(<8 x double>, <8 x i1>, i32) "
-" declare <8 x double> @llvm.vp.exp2.v8f64(<8 x double>, <8 x i1>, i32) ";
+" declare <8 x double> @llvm.vp.sqrt.v8f64(<8 x double>, <8 x i1>, i32) ";
 
     const char *BinaryIntOpcodes[] = {"add",  "sub",  "mul", "sdiv", "srem",
                                       "udiv", "urem", "and", "xor",  "or",
@@ -365,7 +356,7 @@ TEST_F(VPIntrinsicTest, VPIntrinsicDeclarationForParams) {
 /// Check that the HANDLE_VP_TO_CONSTRAINEDFP maps to an existing intrinsic with
 /// the right amount of metadata args.
 TEST_F(VPIntrinsicTest, HandleToConstrainedFP) {
-#define HANDLE_VP_TO_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
+#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                  \
   if (Intrinsic::CFPID != Intrinsic::not_intrinsic) {                          \
     SmallVector<Intrinsic::IITDescriptor, 5> T;                                \
     Intrinsic::getIntrinsicInfoTableEntries(Intrinsic::CFPID, T);              \
