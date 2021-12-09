@@ -2463,6 +2463,32 @@ m_Not(const ValTy &V) {
   return m_c_Xor(V, m_AllOnes());
 }
 
+template <typename ValTy> struct NotForbidUndef_match {
+  ValTy Val;
+  NotForbidUndef_match(const ValTy &V) : Val(V) {}
+
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    // We do not use m_c_Xor because that could match an arbitrary APInt that is
+    // not -1 as C and then fail to match the other operand if it is -1.
+    // This code should still work even when both operands are constants.
+    Value *X;
+    const APInt *C;
+    if (m_Xor(m_Value(X), m_APIntForbidUndef(C)).match_context(V, MContext) && C->isAllOnes())
+      return Val.match_context(X, MContext);
+    if (m_Xor(m_APIntForbidUndef(C), m_Value(X)).match_context(V, MContext) && C->isAllOnes())
+      return Val.match_context(X, MContext);
+    return false;
+  }
+};
+
+/// Matches a bitwise 'not' as 'xor V, -1' or 'xor -1, V'. For vectors, the
+/// constant value must be composed of only -1 scalar elements.
+template <typename ValTy>
+inline NotForbidUndef_match<ValTy> m_NotForbidUndef(const ValTy &V) {
+  return NotForbidUndef_match<ValTy>(V);
+}
+
 /// Matches an SMin with LHS and RHS in either order.
 template <typename LHS, typename RHS>
 inline MaxMin_match<ICmpInst, LHS, RHS, smin_pred_ty, true>

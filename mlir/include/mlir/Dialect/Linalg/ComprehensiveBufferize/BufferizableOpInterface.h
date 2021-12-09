@@ -26,7 +26,84 @@ class FuncOp;
 namespace linalg {
 namespace comprehensive_bufferize {
 
-class BufferizationAliasInfo;
+// TODO: from some HW description.
+static constexpr int64_t kBufferAlignments = 128;
+
+struct BufferizationState;
+
+/// Callback functions that are used to allocate/deallocate/copy memory buffers.
+/// Comprehensive Bufferize provides default implementations of these functions.
+// TODO: Could be replaced with a "bufferization strategy" object with virtual
+// functions in the future.
+struct AllocationCallbacks {
+  using AllocationFn = std::function<Optional<Value>(
+      OpBuilder &, Location, MemRefType, ArrayRef<Value>)>;
+  using DeallocationFn = std::function<void(OpBuilder &, Location, Value)>;
+  using MemCpyFn = std::function<void(OpBuilder &, Location, Value, Value)>;
+
+  AllocationCallbacks(AllocationFn allocFn, DeallocationFn deallocFn,
+                      MemCpyFn copyFn)
+      : allocationFn(allocFn), deallocationFn(deallocFn), memCpyFn(copyFn) {}
+
+  /// A function that allocates memory.
+  AllocationFn allocationFn;
+
+  /// A function that deallocated memory. Must be allocated by `allocationFn`.
+  DeallocationFn deallocationFn;
+
+  /// A function that copies memory between two allocations.
+  MemCpyFn memCpyFn;
+};
+
+/// Return default allocation callbacks.
+std::unique_ptr<AllocationCallbacks> defaultAllocationCallbacks();
+
+/// PostAnalysisSteps can be registered with `BufferizationOptions` and are
+/// executed after the analysis, but before bufferization. They can be used
+/// implement custom dialect-specific optimizations.
+struct PostAnalysisStep {
+  virtual ~PostAnalysisStep() {}
+
+  /// Run the post analysis step. This function may modify the IR, but must keep
+  /// `aliasInfo` (inside `state`) consistent. Newly created operations and
+  /// operations that should be re-analyzed must be stored in `newOps`.
+  virtual LogicalResult run(FuncOp funcOp, BufferizationState &state,
+                            SmallVector<Operation *> &newOps) = 0;
+};
+
+/// Options for ComprehensiveBufferize.
+struct BufferizationOptions {
+  BufferizationOptions();
+
+  // BufferizationOptions cannot be copied.
+  BufferizationOptions(const BufferizationOptions &other) = delete;
+
+  /// Register a "post analysis" step. Such steps are executed after the
+  /// analysis, but before bufferization.
+  template <typename Step, typename... Args>
+  void addPostAnalysisStep(Args... args) {
+    postAnalysisSteps.emplace_back(
+        std::make_unique<Step>(std::forward<Args>(args)...));
+  }
+
+  /// Helper functions for allocation, deallocation, memory copying.
+  std::unique_ptr<AllocationCallbacks> allocationFns;
+
+  /// Specifies whether returning newly allocated memrefs should be allowed.
+  /// Otherwise, a pass failure is triggered.
+  bool allowReturnMemref = false;
+
+  /// Seed for the analysis fuzzer. If set to `0`, the fuzzer is deactivated.
+  /// Should be used only with `testAnalysisOnly = true`.
+  unsigned analysisFuzzerSeed = 0;
+
+  /// If set to `true`, does not modify the IR apart from adding attributes (for
+  /// checking the results of the analysis) and post analysis steps.
+  bool testAnalysisOnly = false;
+
+  /// Registered post analysis steps.
+  std::vector<std::unique_ptr<PostAnalysisStep>> postAnalysisSteps;
+};
 
 /// Specify fine-grain relationship between buffers to enable more analysis.
 enum class BufferRelation {
@@ -204,48 +281,27 @@ findValueInReverseUseDefChain(Value value,
 /// is returned regardless of whether it is a memory write or not.
 Value findLastPrecedingWrite(Value value);
 
-struct BufferizationState;
-
-/// Callback functions that are used to allocate/deallocate/copy memory buffers.
-/// Comprehensive Bufferize provides default implementations of these functions.
-// TODO: Could be replaced with a "bufferization strategy" object with virtual
-// functions in the future.
-struct AllocationCallbacks {
-  using AllocationFn = std::function<Optional<Value>(
-      OpBuilder &, Location, MemRefType, const SmallVector<Value> &)>;
-  using DeallocationFn = std::function<void(OpBuilder &, Location, Value)>;
-  using MemCpyFn = std::function<void(OpBuilder &, Location, Value, Value)>;
-  using CreateAllocDeallocFn =
-      std::function<Value(OpBuilder &, Location, Value, BufferizationState &)>;
-
-  AllocationCallbacks(AllocationFn allocFn, DeallocationFn deallocFn,
-                      MemCpyFn copyFn, CreateAllocDeallocFn allocDeallocFn)
-      : allocationFn(allocFn), deallocationFn(deallocFn), memCpyFn(copyFn),
-        createAllocDeallocFn(allocDeallocFn) {}
-
-  /// A function that allocates memory.
-  AllocationFn allocationFn;
-
-  /// A function that deallocated memory. Must be allocated by `allocationFn`.
-  DeallocationFn deallocationFn;
-
-  /// A function that copies memory between two allocations.
-  MemCpyFn memCpyFn;
-
-  /// A function that creates an alloc-dealloc pair. This function may perform
-  /// additional optimizations such as buffer allocation hoisting. This function
-  /// calls `allocationFn` and `deallocationFn` to create (de)allocations.
-  CreateAllocDeallocFn createAllocDeallocFn;
+/// Dialect-specific bufferization state. Analysis/bufferization information
+/// that is specific to ops from a certain dialect can be stored in derived
+/// variants of this struct.
+struct DialectBufferizationState {
+  virtual ~DialectBufferizationState() = default;
 };
 
 /// BufferizationState keeps track of bufferization state and provides access to
 /// the results of the analysis.
 struct BufferizationState {
-  BufferizationState(ModuleOp moduleOp, AllocationCallbacks &allocationFns)
-      : aliasInfo(moduleOp), allocationFns(allocationFns) {}
+  BufferizationState(ModuleOp moduleOp, const BufferizationOptions &options)
+      : aliasInfo(moduleOp), options(options) {}
 
   // BufferizationState should be passed as a reference.
   BufferizationState(const BufferizationState &) = delete;
+
+  /// A function that creates an alloc-dealloc pair. This function may perform
+  /// additional optimizations such as buffer allocation hoisting. This function
+  /// calls `allocationFn` and `deallocationFn` to create (de)allocations.
+  Value createAllocDeallocFn(OpBuilder &builder, Location loc,
+                             Value shapedValue);
 
   /// Map tensor values to memref buffers.
   void mapBuffer(ValueRange tensors, ValueRange buffers);
@@ -273,12 +329,16 @@ struct BufferizationState {
   /// Erase all ops that were marked obsolete.
   void eraseObsoleteOps();
 
+  /// Return dialect-specific bufferization state.
+  template <typename StateT> StateT &getDialectState(StringRef name) {
+    // Create state if it does not exist yet.
+    if (!dialectState.count(name))
+      dialectState[name] = std::make_unique<StateT>();
+    return static_cast<StateT &>(*dialectState[name]);
+  }
+
   /// `aliasInfo` keeps track of aliasing and equivalent values.
   BufferizationAliasInfo aliasInfo;
-
-  /// `allocationFns` contains helper functions for creating alloc ops, dealloc
-  /// ops and memcpy ops.
-  AllocationCallbacks &allocationFns;
 
   /// The mapping of tensors to buffers. May also contain mappings of non-tensor
   /// values.
@@ -287,9 +347,11 @@ struct BufferizationState {
   /// Obsolete ops that should be deleted after bufferization.
   SmallVector<Operation *> obsoleteOps;
 
-  /// A map for looking up bufferized function types.
-  // TODO: Entangle function calls and FuncOps from the remaining bufferization.
-  DenseMap<FuncOp, FunctionType> bufferizedFunctionTypes;
+  /// Dialect-specific bufferization state.
+  DenseMap<StringRef, std::unique_ptr<DialectBufferizationState>> dialectState;
+
+  /// A reference to current bufferization options.
+  const BufferizationOptions &options;
 };
 
 /// Return the result buffer (memref) for a given OpResult (tensor). Allocate
@@ -308,19 +370,25 @@ LogicalResult bufferize(Block *block, BufferizationState &state);
 /// method of `BufferizableOpInterface`.
 LogicalResult bufferize(Operation *op, BufferizationState &state);
 
-/// PostAnalysisSteps can be registered with `BufferizationOptions` and are
-/// executed after the analysis, but before bufferization. They can be used
-/// implement custom dialect-specific optimizations.
-struct PostAnalysisStep {
-  virtual ~PostAnalysisStep() {}
+/// Return a contiguous MemRefType (i.e. with canonical/empty layout map)
+/// with the same shape as `shapedType` and specified `layout` and
+/// `addressSpace`.
+MemRefType getContiguousMemRefType(ShapedType shapedType,
+                                   MemRefLayoutAttrInterface layout = {},
+                                   Attribute memorySpace = {});
 
-  /// Run the post analysis step. This function may modify the IR, but must keep
-  /// `aliasInfo` consistent. Newly created operations and operations that
-  /// should be re-analyzed must be stored in `newOps`.
-  virtual LogicalResult run(FuncOp funcOp, BufferizationAliasInfo &aliasInfo,
-                            DominanceInfo &domInfo,
-                            SmallVector<Operation *> &newOps) = 0;
-};
+/// Return a contiguous MemRefType (i.e. with canonical/empty layout map)
+/// with the same shape as `shapedType` and specified `layout` and
+/// `addressSpace` or an UnrankedMemRefType otherwise.
+Type getContiguousOrUnrankedMemRefType(Type type,
+                                       MemRefLayoutAttrInterface layout = {},
+                                       Attribute memorySpace = {});
+
+/// Return a MemRefType to which the `tensorType` can be bufferized in a
+/// composable fashion. The layout must be the most dynamic possible and
+/// canonicalize away once bufferization is finished.
+MemRefType getDynamicMemRefType(RankedTensorType tensorType,
+                                unsigned addressSpace = 0);
 
 } // namespace comprehensive_bufferize
 } // namespace linalg
