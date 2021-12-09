@@ -1032,7 +1032,7 @@ void SelectionDAG::DeallocateNode(SDNode *N) {
 }
 
 #ifndef NDEBUG
-/// VerifySDNode - Sanity check the given SDNode.  Aborts if it is invalid.
+/// VerifySDNode - Check the given SDNode.  Aborts if it is invalid.
 static void VerifySDNode(SDNode *N) {
   switch (N->getOpcode()) {
   default:
@@ -4598,10 +4598,25 @@ bool SelectionDAG::isEqualTo(SDValue A, SDValue B) const {
 }
 
 // FIXME: unify with llvm::haveNoCommonBitsSet.
-// FIXME: could also handle masked merge pattern (X & ~M) op (Y & M)
 bool SelectionDAG::haveNoCommonBitsSet(SDValue A, SDValue B) const {
   assert(A.getValueType() == B.getValueType() &&
          "Values must have the same type");
+  // Match masked merge pattern (X & ~M) op (Y & M)
+  if (A->getOpcode() == ISD::AND && B->getOpcode() == ISD::AND) {
+    auto MatchNoCommonBitsPattern = [&](SDValue NotM, SDValue And) {
+      if (isBitwiseNot(NotM, true)) {
+        SDValue NotOperand = NotM->getOperand(0);
+        return NotOperand == And->getOperand(0) ||
+               NotOperand == And->getOperand(1);
+      }
+      return false;
+    };
+    if (MatchNoCommonBitsPattern(A->getOperand(0), B) ||
+        MatchNoCommonBitsPattern(A->getOperand(1), B) ||
+        MatchNoCommonBitsPattern(B->getOperand(0), A) ||
+        MatchNoCommonBitsPattern(B->getOperand(1), A))
+      return true;
+  }
   return KnownBits::haveNoCommonBitsSet(computeKnownBits(A),
                                         computeKnownBits(B));
 }
@@ -5128,7 +5143,6 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
       return getUNDEF(VT);
     break;
   case ISD::BITCAST:
-    // Basic sanity checking.
     assert(VT.getSizeInBits() == Operand.getValueSizeInBits() &&
            "Cannot BITCAST between types of different sizes!");
     if (VT == Operand.getValueType()) return Operand;  // noop conversion.

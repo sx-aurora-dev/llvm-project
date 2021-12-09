@@ -376,6 +376,147 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<MulOneOptimization>(context);
 }
 
+struct MaterializePadValue : public OpRewritePattern<tosa::PadOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tosa::PadOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.pad_const())
+      return failure();
+
+    auto input = op.input1();
+    auto padding = op.padding();
+
+    ShapedType inputTy = input.getType().cast<ShapedType>();
+    Type elementTy = inputTy.getElementType();
+
+    Attribute constantAttr;
+    if (elementTy.isa<FloatType>())
+      constantAttr = rewriter.getFloatAttr(elementTy, 0.0);
+    else if (elementTy.isa<IntegerType>() && !op.quantization_info())
+      constantAttr = rewriter.getIntegerAttr(elementTy, 0);
+    else if (elementTy.isa<IntegerType>() && op.quantization_info()) {
+      auto value = op.quantization_info().getValue().input_zp().getValue();
+      constantAttr = rewriter.getIntegerAttr(elementTy, value.getZExtValue());
+    }
+
+    if (!constantAttr) {
+      return rewriter.notifyMatchFailure(
+          op,
+          "tosa.pad to linalg lowering encountered an unknown element type");
+    }
+
+    auto denseAttr = DenseElementsAttr::get(
+        RankedTensorType::get({}, elementTy), constantAttr);
+    auto constantVal = rewriter.create<tosa::ConstOp>(
+        op.getLoc(), denseAttr.getType(), denseAttr);
+
+    rewriter.replaceOpWithNewOp<tosa::PadOp>(
+        op, op.getType(), ValueRange{input, padding, constantVal},
+        op->getAttrs());
+    return success();
+  }
+};
+
+void PadOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  results.insert<MaterializePadValue>(context);
+}
+
+struct Conv2DFullyConnectedOptimization
+    : public OpRewritePattern<tosa::Conv2DOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tosa::Conv2DOp op,
+                                PatternRewriter &rewriter) const override {
+    Value input = op.input();
+    Value weight = op.weight();
+    ShapedType inputType = input.getType().cast<ShapedType>();
+    ShapedType weightType = weight.getType().cast<ShapedType>();
+
+    if (!inputType.hasStaticShape() || !weightType.hasRank()) {
+      return failure();
+    }
+
+    // Stride must be 1 for this optimization.
+    for (Attribute stride : op.stride().getValue()) {
+      if (!stride.cast<IntegerAttr>().getValue().isOne()) {
+        return failure();
+      }
+    }
+
+    // Only works for a 1x1 kernel.
+    ArrayRef<int64_t> weightShape = weightType.getShape();
+    if (weightShape[1] != 1 || weightShape[2] != 1) {
+      return failure();
+    }
+
+    // Reshape input to [N,IH,IW,IC] -> [N * IH * IW, IC].
+    ArrayRef<int64_t> inputShape = inputType.getShape();
+    llvm::SmallVector<int64_t, 2> revisedInputShape{
+        inputShape[0] * inputShape[1] * inputShape[2], inputShape[3]};
+    auto revisedInputShapeType = RankedTensorType::get(
+        revisedInputShape,
+        input.getType().dyn_cast<RankedTensorType>().getElementType());
+    auto reshapedInput = rewriter
+                             .create<tosa::ReshapeOp>(
+                                 op.getLoc(), revisedInputShapeType, input,
+                                 rewriter.getI64ArrayAttr(revisedInputShape))
+                             .getResult();
+
+    // Reshape kernel to [OC,KH,KW,IC] -> [OC, IC].
+    llvm::SmallVector<int64_t, 2> revisedWeightShape{weightShape[0],
+                                                     weightShape[3]};
+    auto revisedWeightShapeType = RankedTensorType::get(
+        revisedWeightShape,
+        weight.getType().dyn_cast<RankedTensorType>().getElementType());
+    auto reshapedWeight = rewriter
+                              .create<tosa::ReshapeOp>(
+                                  op.getLoc(), revisedWeightShapeType, weight,
+                                  rewriter.getI64ArrayAttr(revisedWeightShape))
+                              .getResult();
+
+    // Perform a fully connected network over the reshaped input and weight.
+    llvm::SmallVector<int64_t, 2> fullyConnectedShape{
+        inputShape[0] * inputShape[1] * inputShape[2], inputShape[3]};
+    auto fullyConnectedShapeType = RankedTensorType::get(
+        fullyConnectedShape,
+        weight.getType().dyn_cast<RankedTensorType>().getElementType());
+
+    Value fullyConnectedValue;
+    if (op.quantization_info()) {
+      fullyConnectedValue =
+          rewriter
+              .create<tosa::FullyConnectedOp>(
+                  op.getLoc(), fullyConnectedShapeType, reshapedInput,
+                  reshapedWeight, op.bias(), op.quantization_info().getValue())
+              .getResult();
+    } else {
+      fullyConnectedValue = rewriter
+                                .create<tosa::FullyConnectedOp>(
+                                    op.getLoc(), fullyConnectedShapeType,
+                                    reshapedInput, reshapedWeight, op.bias())
+                                .getResult();
+    }
+
+    // Reshape output to [N, IH, IW, OC].
+    llvm::SmallVector<int64_t, 4> outputShape{inputShape[0], inputShape[1],
+                                              inputShape[2], weightShape[0]};
+    auto outputShapeType = RankedTensorType::get(
+        outputShape,
+        input.getType().dyn_cast<RankedTensorType>().getElementType());
+    rewriter.replaceOpWithNewOp<tosa::ReshapeOp>(
+        op, outputShapeType, fullyConnectedValue,
+        rewriter.getI64ArrayAttr(outputShape));
+    return success();
+  }
+};
+
+void Conv2DOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  results.insert<Conv2DFullyConnectedOptimization>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // Operator Folders.
 //===----------------------------------------------------------------------===//
@@ -413,6 +554,18 @@ ReduceFolder(ReduceAllOp) ReduceFolder(ReduceAnyOp) ReduceFolder(ReduceMaxOp)
   if (!inputTy || !outputTy || inputTy != outputTy)
     return {};
   return input1();
+}
+
+OpFoldResult PadOp::fold(ArrayRef<Attribute> operands) {
+  // If the pad is all zeros we can fold this operation away.
+  if (operands[1]) {
+    auto densePad = operands[1].cast<DenseElementsAttr>();
+    if (densePad.isSplat() && densePad.getSplatValue<APInt>().isZero()) {
+      return input1();
+    }
+  }
+
+  return {};
 }
 
 OpFoldResult SliceOp::fold(ArrayRef<Attribute> operands) {

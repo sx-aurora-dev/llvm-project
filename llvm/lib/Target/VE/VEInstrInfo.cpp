@@ -1103,11 +1103,11 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     MachineInstrBuilder MIB =
         BuildMI(*MBB, MI, DL, get(VE::SVMmi), Dest).addReg(VMZ).addImm(Imm);
     MachineInstr *Inst = MIB.getInstr();
-    MI.eraseFromParent();
     if (KillSrc) {
       const TargetRegisterInfo *TRI = &getRegisterInfo();
       Inst->addRegisterKilled(MI.getOperand(1).getReg(), TRI, true);
     }
+    MI.eraseFromParent();
     return true;
   }
   case VE::VFMKyal:
@@ -1117,6 +1117,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::VFMKSyvl:
   case VE::VFMKSyvyl:
     expandPseudoVFMK(*this, MI);
+    return true;
   }
   return false;
 }
