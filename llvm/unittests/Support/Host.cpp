@@ -416,7 +416,7 @@ TEST_F(HostTest, getMacOSHostVersion) {
   std::unique_ptr<char[]> Buffer;
   off_t Size;
   ASSERT_EQ(runAndGetCommandOutput(SwVersPath, argv, Buffer, Size), true);
-  StringRef SystemVersionStr(Buffer.get(), Size);
+  StringRef SystemVersionStr = StringRef(Buffer.get(), Size).rtrim();
 
   // Ensure that the two versions match.
   VersionTuple SystemVersion;
@@ -451,7 +451,7 @@ TEST_F(HostTest, AIXVersionDetect) {
   std::unique_ptr<char[]> Buffer;
   off_t Size;
   ASSERT_EQ(runAndGetCommandOutput(ExePath, argv, Buffer, Size), true);
-  StringRef SystemVersionStr(Buffer.get(), Size);
+  StringRef SystemVersionStr = StringRef(Buffer.get(), Size).rtrim();
 
   VersionTuple SystemVersion =
       llvm::Triple((Twine("powerpc-ibm-aix") + SystemVersionStr))
