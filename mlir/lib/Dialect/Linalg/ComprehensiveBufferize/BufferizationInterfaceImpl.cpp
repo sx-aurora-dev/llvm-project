@@ -41,11 +41,6 @@ struct ToMemrefOpInterface
     return true;
   }
 
-  SmallVector<OpOperand *> getAliasingOpOperand(Operation *op,
-                                                OpResult opResult) const {
-    return {};
-  }
-
   OpResult getAliasingOpResult(Operation *op, OpOperand &opOperand) const {
     return OpResult();
   }
@@ -69,11 +64,6 @@ struct ToMemrefOpInterface
 struct ToTensorOpInterface
     : public BufferizableOpInterface::ExternalModel<ToTensorOpInterface,
                                                     bufferization::ToTensorOp> {
-  SmallVector<OpOperand *> getAliasingOpOperand(Operation *op,
-                                                OpResult opResult) const {
-    return {};
-  }
-
   LogicalResult bufferize(Operation *op, OpBuilder &b,
                           BufferizationState &state) const {
     auto tensorLoadOp = cast<bufferization::ToTensorOp>(op);
@@ -81,7 +71,7 @@ struct ToTensorOpInterface
     return success();
   }
 
-  bool isWritable(Operation *op, Value value) const {
+  bool isWritable(Operation *op, Value value, BufferizationState &state) const {
     // It is unknown whether the MemRef operand is writable or not.
     return false;
   }

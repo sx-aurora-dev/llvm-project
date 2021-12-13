@@ -71,6 +71,8 @@ struct PostAnalysisStep {
                             SmallVector<Operation *> &newOps) = 0;
 };
 
+using PostAnalysisStepList = std::vector<std::unique_ptr<PostAnalysisStep>>;
+
 /// Options for ComprehensiveBufferize.
 struct BufferizationOptions {
   BufferizationOptions();
@@ -93,6 +95,11 @@ struct BufferizationOptions {
   /// Otherwise, a pass failure is triggered.
   bool allowReturnMemref = false;
 
+  /// Specifies whether not bufferizable ops are allowed in the input. If so,
+  /// bufferization.to_memref and bufferization.to_tensor ops are inserted at
+  /// the boundaries.
+  bool allowUnknownOps = false;
+
   /// Seed for the analysis fuzzer. If set to `0`, the fuzzer is deactivated.
   /// Should be used only with `testAnalysisOnly = true`.
   unsigned analysisFuzzerSeed = 0;
@@ -102,7 +109,7 @@ struct BufferizationOptions {
   bool testAnalysisOnly = false;
 
   /// Registered post analysis steps.
-  std::vector<std::unique_ptr<PostAnalysisStep>> postAnalysisSteps;
+  PostAnalysisStepList postAnalysisSteps;
 };
 
 /// Specify fine-grain relationship between buffers to enable more analysis.
@@ -165,13 +172,6 @@ public:
   /// Apply `fun` to all aliases of `v`.
   void applyOnAliases(Value v, function_ref<void(Value)> fun) const;
 
-  // TODO: Move these out of BufferizationAliasInfo.
-  /// Return true if the value is known to bufferize to writable memory.
-  bool bufferizesToWritableMemory(Value v) const;
-
-  /// Specify that the value is known to bufferize to writable memory.
-  void setBufferizesToWritableMemory(Value v);
-
   /// Mark a value as in-place bufferized.
   void markInPlace(OpResult v) { inplaceBufferized.insert(v); }
 
@@ -192,9 +192,6 @@ private:
       llvm::EquivalenceClasses<Value, ValueComparator>::member_iterator>;
   /// Check that aliasInfo for `v` exists and return a reference to it.
   EquivalenceClassRangeType getAliases(Value v) const;
-
-  /// Set of tensors that are known to bufferize to writable memory.
-  llvm::DenseSet<Value> bufferizeToWritableMemory;
 
   /// Set of all OpResults that were decided to bufferize in-place.
   llvm::DenseSet<OpResult> inplaceBufferized;
@@ -239,10 +236,6 @@ bool bufferizesToAliasOnly(OpOperand &opOperand);
 /// read. Also takes into account ops that create an alias but do not read by
 /// themselves (e.g., ExtractSliceOp).
 bool isValueRead(Value value);
-
-/// Return the relationship between the operand and the its corresponding
-/// OpResult that it may alias with. Return None if the op is not bufferizable.
-BufferRelation bufferRelation(OpOperand &opOperand);
 
 /// Starting from `value`, follow the use-def chain in reverse, always selecting
 /// the aliasing OpOperands. Find and return Values for which `condition`
@@ -292,7 +285,8 @@ struct DialectBufferizationState {
 /// the results of the analysis.
 struct BufferizationState {
   BufferizationState(ModuleOp moduleOp, const BufferizationOptions &options)
-      : aliasInfo(moduleOp), options(options) {}
+      : aliasInfo(moduleOp), options(options),
+        builder(moduleOp->getContext()) {}
 
   // BufferizationState should be passed as a reference.
   BufferizationState(const BufferizationState &) = delete;
@@ -306,22 +300,20 @@ struct BufferizationState {
   /// Map tensor values to memref buffers.
   void mapBuffer(ValueRange tensors, ValueRange buffers);
 
-  /// Map a value to another value.
-  void mapValue(Value from, Value to);
-
   /// Map a tensor value to a memref buffer.
   void mapBuffer(Value tensor, Value buffer);
 
   /// Lookup the memref buffer that is associated to the given tensor value.
   /// Asserts if no buffer is associated.
-  Value lookupBuffer(Value tensor) const;
-
-  /// Lookup the value that is associated to the given value. Asserts if no
-  /// value is associated.
-  Value lookupValue(Value value) const;
+  Value lookupBuffer(Value tensor);
 
   /// Return `true` if the given value is mapped.
   bool isMapped(Value value) const;
+
+  /// Return the result buffer (memref) for a given OpResult (tensor). Allocate
+  /// a new buffer and copy over data from the existing buffer if out-of-place
+  /// bufferization is necessary.
+  Value getResultBuffer(OpResult result);
 
   /// Mark `op` as obsolete, so that it is deleted after bufferization.
   void markOpObsolete(Operation *op);
@@ -340,8 +332,7 @@ struct BufferizationState {
   /// `aliasInfo` keeps track of aliasing and equivalent values.
   BufferizationAliasInfo aliasInfo;
 
-  /// The mapping of tensors to buffers. May also contain mappings of non-tensor
-  /// values.
+  /// The mapping of tensors to buffers.
   BlockAndValueMapping mapping;
 
   /// Obsolete ops that should be deleted after bufferization.
@@ -352,12 +343,10 @@ struct BufferizationState {
 
   /// A reference to current bufferization options.
   const BufferizationOptions &options;
-};
 
-/// Return the result buffer (memref) for a given OpResult (tensor). Allocate
-/// a new buffer and copy over data from the existing buffer if out-of-place
-/// bufferization is necessary.
-Value getResultBuffer(OpBuilder &b, OpResult result, BufferizationState &state);
+  /// The OpBuilder used during bufferization.
+  OpBuilder builder;
+};
 
 /// Bufferize all ops in the given region.
 LogicalResult bufferize(Region *region, BufferizationState &state);
@@ -425,18 +414,27 @@ struct AllocationHoistingBarrierOnly
     return OpResult();
   }
 
-  BufferRelation bufferRelation(Operation *op, OpOperand &opOperand) const {
+  BufferRelation bufferRelation(Operation *op, OpResult opResult,
+                                const BufferizationAliasInfo &aliasInfo) const {
     return BufferRelation::None;
   }
 
-  bool isWritable(Operation *op, Value value) const { return false; }
+  bool isWritable(Operation *op, Value value, BufferizationState &state) const {
+    return false;
+  }
 
   LogicalResult bufferize(Operation *op, OpBuilder &b,
                           BufferizationState &state) const {
     auto isaTensor = [](Type t) { return t.isa<TensorType>(); };
     if (any_of(op->getOperandTypes(), isaTensor) ||
         any_of(op->getResultTypes(), isaTensor))
-      return op->emitError() << "unsupported op with tensors";
+      if (!state.options.allowUnknownOps)
+        return op->emitError() << "unsupported op with tensors";
+
+    for (Region &region : op->getRegions())
+      if (failed(comprehensive_bufferize::bufferize(&region, state)))
+        return failure();
+
     return success();
   }
 

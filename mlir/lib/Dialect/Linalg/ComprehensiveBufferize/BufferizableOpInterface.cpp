@@ -130,33 +130,9 @@ void BufferizationAliasInfo::insertNewBufferEquivalence(Value newValue,
   equivalentInfo.unionSets(newValue, alias);
 }
 
-bool BufferizationAliasInfo::bufferizesToWritableMemory(Value v) const {
-  return bufferizeToWritableMemory.count(v) > 0;
-}
-
-/// Specify that the value is known to bufferize to writable memory.
-void BufferizationAliasInfo::setBufferizesToWritableMemory(Value v) {
-  bufferizeToWritableMemory.insert(v);
-}
-
 /// Return `true` if a value was marked as in-place bufferized.
 bool BufferizationAliasInfo::isInPlace(OpResult opResult) const {
-  bool inplace = inplaceBufferized.contains(opResult);
-#ifndef NDEBUG
-  if (inplace) {
-    auto bufferizableOp =
-        dyn_cast<BufferizableOpInterface>(opResult.getDefiningOp());
-    assert(bufferizableOp &&
-           "expected that in-place bufferized op is bufferizable");
-    SmallVector<OpOperand *> operands =
-        bufferizableOp.getAliasingOpOperand(opResult);
-    for (OpOperand *operand : operands)
-      assert(areAliasingBufferizedValues(operand->get(), opResult) &&
-             "expected that in-place bufferized OpResult aliases with "
-             "aliasing OpOperand");
-  }
-#endif // NDEBUG
-  return inplace;
+  return inplaceBufferized.contains(opResult);
 }
 
 /// Set the inPlace bufferization spec to true.
@@ -167,8 +143,6 @@ void BufferizationAliasInfo::bufferizeInPlace(OpResult result,
 
   markInPlace(result);
   aliasInfo.unionSets(result, operand.get());
-  if (bufferRelation(operand) == BufferRelation::Equivalent)
-    equivalentInfo.unionSets(result, operand.get());
 }
 
 /// Set the inPlace bufferization spec to false.
@@ -214,6 +188,14 @@ BufferizationAliasInfo::getAliases(Value v) const {
 //===----------------------------------------------------------------------===//
 // Helper functions for BufferizableOpInterface
 //===----------------------------------------------------------------------===//
+
+static void setInsertionPointAfter(OpBuilder &b, Value value) {
+  if (auto bbArg = value.dyn_cast<BlockArgument>()) {
+    b.setInsertionPointToStart(bbArg.getOwner());
+  } else {
+    b.setInsertionPointAfter(value.getDefiningOp());
+  }
+}
 
 /// Determine which OpOperand* will alias with `result` if the op is bufferized
 /// in place. Return an empty vector if the op is not bufferizable.
@@ -295,19 +277,6 @@ bool mlir::linalg::comprehensive_bufferize::isValueRead(Value value) {
   return false;
 }
 
-/// Return the relationship between the operand and the its corresponding
-/// OpResult that it may alias with. Return None if the op is not bufferizable.
-BufferRelation
-mlir::linalg::comprehensive_bufferize::bufferRelation(OpOperand &opOperand) {
-  if (auto bufferizableOp =
-          dyn_cast<BufferizableOpInterface>(opOperand.getOwner()))
-    return bufferizableOp.bufferRelation(opOperand);
-
-  // Unknown op that returns a tensor. The inplace analysis does not support it.
-  // Conservatively return None.
-  return BufferRelation::None;
-}
-
 // Starting from `value`, follow the use-def chain in reverse, always selecting
 // the aliasing OpOperands. Find and return Values for which `condition`
 // evaluates to true. OpOperands of such matching Values are not traversed any
@@ -364,29 +333,30 @@ Value mlir::linalg::comprehensive_bufferize::findLastPrecedingWrite(
 /// Return the result buffer (memref) for a given OpResult (tensor). Allocate
 /// a new buffer and copy over data from the existing buffer if out-of-place
 /// bufferization is necessary.
-Value mlir::linalg::comprehensive_bufferize::getResultBuffer(
-    OpBuilder &b, OpResult result, BufferizationState &state) {
-  OpBuilder::InsertionGuard guard(b);
+Value mlir::linalg::comprehensive_bufferize::BufferizationState::
+    getResultBuffer(OpResult result) {
+  OpBuilder::InsertionGuard guard(builder);
   Operation *op = result.getOwner();
   SmallVector<OpOperand *> aliasingOperands = getAliasingOpOperand(result);
   assert(!aliasingOperands.empty() && "could not get aliasing OpOperand");
   OpOperand *opOperand = aliasingOperands.front();
   Value operand = opOperand->get();
-  Value operandBuffer = state.lookupBuffer(operand);
+  Value operandBuffer = lookupBuffer(operand);
   // Make sure that all OpOperands are the same buffer. If this is not the case,
   // we would have to materialize a memref value.
   // TODO: Should be looking for checking for "equivalent buffers" instead of
   // operator== here, but equivalent buffers for scf.if yield values are not
   // set up yet.
-  if (!llvm::all_of(aliasingOperands, [&](OpOperand *o) {
-        return state.lookupBuffer(o->get()) == operandBuffer;
+  if (aliasingOperands.size() > 1 &&
+      !llvm::all_of(aliasingOperands, [&](OpOperand *o) {
+        return lookupBuffer(o->get()) == operandBuffer;
       })) {
     op->emitError("result buffer is ambiguous");
     return Value();
   }
 
   // If bufferizing out-of-place, allocate a new buffer.
-  if (!state.aliasInfo.isInPlace(result)) {
+  if (!aliasInfo.isInPlace(result)) {
     // Ops with multiple aliasing operands can currently not bufferize
     // out-of-place.
     assert(
@@ -395,13 +365,9 @@ Value mlir::linalg::comprehensive_bufferize::getResultBuffer(
     Location loc = op->getLoc();
     // Move insertion point right after `operandBuffer`. That is where the
     // allocation should be inserted (in the absence of allocation hoisting).
-    if (auto bbArg = operandBuffer.dyn_cast<BlockArgument>()) {
-      b.setInsertionPointToStart(bbArg.getOwner());
-    } else {
-      b.setInsertionPointAfter(operandBuffer.getDefiningOp());
-    }
+    setInsertionPointAfter(builder, operandBuffer);
     // Allocate the result buffer.
-    Value resultBuffer = state.createAllocDeallocFn(b, loc, operandBuffer);
+    Value resultBuffer = createAllocDeallocFn(builder, loc, operandBuffer);
     bool skipCopy = false;
     // Do not copy if the last preceding write of `operand` is an op that does
     // not write (skipping ops that merely create aliases). E.g., InitTensorOp.
@@ -422,9 +388,9 @@ Value mlir::linalg::comprehensive_bufferize::getResultBuffer(
       skipCopy = true;
     if (!skipCopy) {
       // The copy happens right before the op that is bufferized.
-      b.setInsertionPoint(op);
-      state.options.allocationFns->memCpyFn(b, loc, operandBuffer,
-                                            resultBuffer);
+      builder.setInsertionPoint(op);
+      options.allocationFns->memCpyFn(builder, loc, operandBuffer,
+                                      resultBuffer);
     }
     return resultBuffer;
   }
@@ -454,7 +420,7 @@ mlir::linalg::comprehensive_bufferize::bufferize(Block *block,
 LogicalResult
 mlir::linalg::comprehensive_bufferize::bufferize(Operation *op,
                                                  BufferizationState &state) {
-  OpBuilder b(op->getContext());
+  OpBuilder &b = state.builder;
 
   // Check if op has tensor results or operands.
   auto isaTensor = [](Type t) { return t.isa<TensorType>(); };
@@ -471,12 +437,31 @@ mlir::linalg::comprehensive_bufferize::bufferize(Operation *op,
 
   // Bufferize using `BufferizableOpInterface`. Interface implementations are
   // responsible for bufferizing nested ops.
-  b.setInsertionPoint(op);
-  if (auto bufferizableOp = dyn_cast<BufferizableOpInterface>(op))
+  if (auto bufferizableOp = dyn_cast<BufferizableOpInterface>(op)) {
+    b.setInsertionPoint(op);
     return bufferizableOp.bufferize(b, state);
+  }
 
-  // Emit error if tensor op is not bufferizable.
-  return op->emitError() << "unsupported op with tensors";
+  // `op` is an unbufferizable tensor op.
+  if (!state.options.allowUnknownOps)
+    return op->emitError() << "unsupported op with tensors";
+
+  // Replace all OpOperands with "to-tensor casted" bufferized values.
+  for (OpOperand &operand : op->getOpOperands()) {
+    if (operand.get().getType().isa<TensorType>() &&
+        state.isMapped(operand.get())) {
+      b.setInsertionPoint(op);
+      Value toTensorOp = b.create<bufferization::ToTensorOp>(
+          op->getLoc(), state.lookupBuffer(operand.get()));
+      operand.set(toTensorOp);
+    }
+  }
+
+  for (Region &region : op->getRegions())
+    if (failed(bufferize(&region, state)))
+      return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -532,14 +517,14 @@ static MemRefType getAllocationTypeAndShape(OpBuilder &b, Location loc,
       reifiedShapes = true;
       OpResult resultValue = shapedValue.dyn_cast<OpResult>();
       auto &shape = resultDims[resultValue.getResultNumber()];
-      for (auto dim : enumerate(allocMemRefType.getShape()))
+      for (const auto &dim : enumerate(allocMemRefType.getShape()))
         if (ShapedType::isDynamic(dim.value()))
           dynShape.push_back(shape[dim.index()]);
     }
   }
 
   if (!reifiedShapes) {
-    for (auto dim : enumerate(allocMemRefType.getShape()))
+    for (const auto &dim : enumerate(allocMemRefType.getShape()))
       if (ShapedType::isDynamic(dim.value())) {
         assert((shapedValue.getType().isa<UnrankedMemRefType>() ||
                 shapedValue.getType().isa<MemRefType>()) &&
@@ -584,7 +569,6 @@ Value mlir::linalg::comprehensive_bufferize::BufferizationState::
   Value casted = allocated.getValue();
   if (memRefType && memRefType != allocMemRefType) {
     casted = b.create<memref::CastOp>(loc, memRefType, allocated.getValue());
-    aliasInfo.insertNewBufferEquivalence(casted, allocated.getValue());
   }
 
   // 2. Create memory deallocation.
@@ -628,40 +612,38 @@ void mlir::linalg::comprehensive_bufferize::BufferizationState::mapBuffer(
   return mapping.map(tensor, buffer);
 }
 
-void mlir::linalg::comprehensive_bufferize::BufferizationState::mapValue(
-    Value from, Value to) {
-  assert(from && "unexpected empty value");
-  return mapping.map(from, to);
-}
-
 /// Wrapper for better debugging.
 Value mlir::linalg::comprehensive_bufferize::BufferizationState::lookupBuffer(
-    Value tensor) const {
+    Value tensor) {
   // TODO: if key comes from bbArg, forward.
   assert(tensor.getType().isa<TensorType>() && "unexpected non-tensor type");
-  Value v = mapping.lookupOrNull(tensor);
+  Value buffer = mapping.lookupOrNull(tensor);
 
-  if (!v) {
+  if (!buffer) {
+    if (options.allowUnknownOps) {
+      // `tensor` was not bufferized yet. This should never happen with
+      // bufferizable ops.
+      assert(!tensor.getDefiningOp<BufferizableOpInterface>() &&
+             "tensor is not mapped");
+      // Insert to_memref op.
+      OpBuilder b(tensor.getContext());
+      setInsertionPointAfter(b, tensor);
+      return b.create<bufferization::ToMemrefOp>(
+          tensor.getLoc(),
+          getDynamicMemRefType(tensor.getType().cast<RankedTensorType>()),
+          tensor);
+    }
+
     // Dump tensor for easier debugging.
     tensor.dump();
     llvm_unreachable("tensor is not mapped");
     return Value();
   }
 
-  assert((v.getType().isa<MemRefType>() ||
-          v.getType().isa<UnrankedMemRefType>()) &&
+  assert((buffer.getType().isa<MemRefType>() ||
+          buffer.getType().isa<UnrankedMemRefType>()) &&
          "expected that tensor is mapped to memref");
-  return v;
-}
-
-Value mlir::linalg::comprehensive_bufferize::BufferizationState::lookupValue(
-    Value value) const {
-  Value v = mapping.lookupOrNull(value);
-  if (!v) {
-    llvm_unreachable("tensor is not mapped");
-    return Value();
-  }
-  return v;
+  return buffer;
 }
 
 bool mlir::linalg::comprehensive_bufferize::BufferizationState::isMapped(

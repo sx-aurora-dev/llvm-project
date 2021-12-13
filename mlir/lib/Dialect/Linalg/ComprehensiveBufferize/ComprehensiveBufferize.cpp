@@ -16,10 +16,9 @@
 // Composability with extensible set of ops is not a first-class concern.
 //
 // Bufferization occurs by:
-//  a. performing an inPlace analysis `inPlaceAnalysisFuncOpBody`
-//     which marks each operation within the function with the
-//     `kInPlaceResultsAttrName` attribute.
-//  b. traversing each operation in the function and rewriting it in
+//  a. performing an inPlace analysis `inPlaceAnalysis` which marks each
+//     operation within the op with the `kInPlaceResultsAttrName` attribute.
+//  b. traversing each operation in the op and rewriting it in
 //     buffer form and keeping a BlockAndValueMapping mapping of the
 //     rewrites. New allocations are introduced during this step.
 //     TODO: Allocation + depending op hoisting to outermost enclosing
@@ -172,15 +171,6 @@ static void setInPlaceOpResult(OpResult opResult, bool inPlace) {
               OpBuilder(op).getStrArrayAttr(inPlaceVector));
 }
 
-/// Set the attribute that triggers inplace bufferization on a FuncOp argument
-/// `bbArg`.
-static void setInPlaceFuncArgument(BlockArgument bbArg, bool inPlace) {
-  auto funcOp = cast<FuncOp>(bbArg.getOwner()->getParentOp());
-  funcOp.setArgAttr(bbArg.getArgNumber(),
-                    BufferizableOpInterface::kInplaceableAttrName,
-                    BoolAttr::get(bbArg.getContext(), inPlace));
-}
-
 //===----------------------------------------------------------------------===//
 // Printing helpers.
 //===----------------------------------------------------------------------===//
@@ -259,25 +249,22 @@ static bool isInplaceMemoryWrite(OpOperand &opOperand,
 /// Return true if, under current bufferization decisions, the buffer of `value`
 /// is not writable.
 static bool aliasesNonWritableBuffer(Value value,
-                                     const BufferizationAliasInfo &aliasInfo) {
+                                     const BufferizationAliasInfo &aliasInfo,
+                                     BufferizationState &state) {
   LDBG("WRITABILITY ANALYSIS FOR " << printValueInfo(value) << "\n");
   bool foundNonWritableBuffer = false;
   aliasInfo.applyOnAliases(value, [&](Value v) {
-    // Some values are known to be writable.
-    if (aliasInfo.bufferizesToWritableMemory(v))
-      return;
-
     // Query BufferizableOpInterface to see if the OpResult is writable.
     // TODO: Out-of-place bufferized OpResult could be considered writable.
     if (auto bufferizableOp = v.getDefiningOp<BufferizableOpInterface>())
-      if (bufferizableOp && bufferizableOp.isWritable(v))
+      if (bufferizableOp && bufferizableOp.isWritable(v, state))
         return;
 
     // Query BufferizableOpInterface to see if the BlockArgument is writable.
     if (auto bbArg = v.dyn_cast<BlockArgument>())
       if (auto bufferizableOp = dyn_cast<BufferizableOpInterface>(
               bbArg.getOwner()->getParentOp()))
-        if (bufferizableOp.isWritable(bbArg))
+        if (bufferizableOp.isWritable(bbArg, state))
           return;
 
     foundNonWritableBuffer = true;
@@ -516,7 +503,8 @@ bool wouldCreateReadAfterWriteInterference(
 /// a write to a non-writable buffer.
 static bool
 wouldCreateWriteToNonWritableBuffer(OpOperand &opOperand, OpResult opResult,
-                                    const BufferizationAliasInfo &aliasInfo) {
+                                    const BufferizationAliasInfo &aliasInfo,
+                                    BufferizationState &state) {
 #ifndef NDEBUG
   SmallVector<OpOperand *> opOperands = getAliasingOpOperand(opResult);
   assert(llvm::find(opOperands, &opOperand) != opOperands.end() &&
@@ -526,9 +514,10 @@ wouldCreateWriteToNonWritableBuffer(OpOperand &opOperand, OpResult opResult,
   // Certain buffers are not writeable:
   //   1. A function bbArg that is not inplaceable or
   //   2. A constant op.
-  assert(!aliasesNonWritableBuffer(opResult, aliasInfo) &&
+  assert(!aliasesNonWritableBuffer(opResult, aliasInfo, state) &&
          "expected that opResult does not alias non-writable buffer");
-  bool nonWritable = aliasesNonWritableBuffer(opOperand.get(), aliasInfo);
+  bool nonWritable =
+      aliasesNonWritableBuffer(opOperand.get(), aliasInfo, state);
   if (!nonWritable)
     return false;
 
@@ -544,45 +533,13 @@ wouldCreateWriteToNonWritableBuffer(OpOperand &opOperand, OpResult opResult,
 }
 
 //===----------------------------------------------------------------------===//
-// Bufferization as simple BlockAndValueMapping rewrites.
-//===----------------------------------------------------------------------===//
-
-/// FuncOp always creates TensorToMemRef ops.
-static LogicalResult bufferizeFuncOp(FuncOp funcOp, BufferizationState &state) {
-  // Take a guard before anything else.
-  OpBuilder b(funcOp->getContext());
-  b.setInsertionPointToStart(&funcOp.body().front());
-
-  // Create BufferCastOps for function args.
-  for (auto bbArg : funcOp.getArguments()) {
-    auto tensorType = bbArg.getType().dyn_cast<TensorType>();
-    if (!tensorType)
-      continue;
-    auto rankedTensorType = tensorType.dyn_cast<RankedTensorType>();
-    // Cast the tensor to the most dynamic buffer possible. Further
-    // canonicalizations will clean up.
-    Type memRefType = rankedTensorType
-                          ? getDynamicMemRefType(rankedTensorType)
-                          : getContiguousOrUnrankedMemRefType(tensorType);
-    Value bufferCast =
-        b.create<bufferization::ToMemrefOp>(funcOp.getLoc(), memRefType, bbArg);
-    state.aliasInfo.insertNewBufferEquivalence(bufferCast, bbArg);
-    state.mapBuffer(bbArg, bufferCast);
-  }
-
-  // Bufferize function body.
-  return bufferize(&funcOp.body(), state);
-}
-
-//===----------------------------------------------------------------------===//
 // Bufferization analyses.
 //===----------------------------------------------------------------------===//
 
 /// Determine if `operand` can be bufferized in-place with `result`.
-static LogicalResult
-bufferizableInPlaceAnalysisImpl(OpOperand &operand, OpResult result,
-                                BufferizationAliasInfo &aliasInfo,
-                                const DominanceInfo &domInfo) {
+static LogicalResult bufferizableInPlaceAnalysisImpl(
+    OpOperand &operand, OpResult result, BufferizationAliasInfo &aliasInfo,
+    BufferizationState &state, const DominanceInfo &domInfo) {
 #ifndef NDEBUG
   SmallVector<OpOperand *> opOperands = getAliasingOpOperand(result);
   assert(llvm::find(opOperands, &operand) != opOperands.end() &&
@@ -597,7 +554,7 @@ bufferizableInPlaceAnalysisImpl(OpOperand &operand, OpResult result,
                                    << printValueInfo(result) << '\n');
 
   bool foundInterference =
-      wouldCreateWriteToNonWritableBuffer(operand, result, aliasInfo) ||
+      wouldCreateWriteToNonWritableBuffer(operand, result, aliasInfo, state) ||
       wouldCreateReadAfterWriteInterference(operand, result, domInfo,
                                             aliasInfo);
 
@@ -631,6 +588,7 @@ bufferizableInPlaceAnalysisImpl(OpOperand &operand, OpResult result,
 /// RaW dependence violations.
 static LogicalResult inPlaceAnalysis(SmallVector<Operation *> &ops,
                                      BufferizationAliasInfo &aliasInfo,
+                                     BufferizationState &state,
                                      const DominanceInfo &domInfo,
                                      unsigned analysisFuzzerSeed = 0) {
   if (analysisFuzzerSeed) {
@@ -647,26 +605,22 @@ static LogicalResult inPlaceAnalysis(SmallVector<Operation *> &ops,
       if (opOperand.get().getType().isa<TensorType>())
         if (auto bufferizableOp = dyn_cast<BufferizableOpInterface>(op))
           if (OpResult opResult = bufferizableOp.getAliasingOpResult(opOperand))
-            if (failed(bufferizableInPlaceAnalysisImpl(opOperand, opResult,
-                                                       aliasInfo, domInfo)))
+            if (failed(bufferizableInPlaceAnalysisImpl(
+                    opOperand, opResult, aliasInfo, state, domInfo)))
               return failure();
 
   return success();
 }
 
-/// Analyze the `funcOp` body to determine which OpResults are inplaceable.
-static LogicalResult
-inPlaceAnalysisFuncOpBody(FuncOp funcOp, BufferizationAliasInfo &aliasInfo,
-                          const DominanceInfo &domInfo,
-                          unsigned analysisFuzzerSeed = 0) {
-  LLVM_DEBUG(llvm::dbgs() << "\n\n");
-  LDBG("Begin InPlaceAnalysisFuncOpInternals:\n" << funcOp << '\n');
-  assert(funcOp && funcOp->getNumRegions() > 0 && !funcOp.body().empty() &&
-         "expected a funcOp definition with a body");
-
+/// Analyze all ops that are contained in `op`.
+static LogicalResult inPlaceAnalysis(Operation *op,
+                                     BufferizationAliasInfo &aliasInfo,
+                                     BufferizationState &state,
+                                     const DominanceInfo &domInfo,
+                                     unsigned analysisFuzzerSeed = 0) {
   // Collect ops so we can build our own reverse traversal.
   SmallVector<Operation *> ops;
-  funcOp.walk([&](Operation *op) {
+  op->walk([&](Operation *op) {
     // No tensors => no buffers.
     if (none_of(op->getOperandTypes(), isaTensor) &&
         none_of(op->getResultTypes(), isaTensor))
@@ -674,20 +628,41 @@ inPlaceAnalysisFuncOpBody(FuncOp funcOp, BufferizationAliasInfo &aliasInfo,
     ops.push_back(op);
   });
 
-  // Set the function arguments marked with inplaceable to be known as
-  // bufferizing to a writeable memory.
-  for (BlockArgument bbArg : funcOp.getArguments()) {
-    BoolAttr inplaceAttr = funcOp.getArgAttrOfType<BoolAttr>(
-        bbArg.getArgNumber(), BufferizableOpInterface::kInplaceableAttrName);
-    if (inplaceAttr && inplaceAttr.getValue())
-      aliasInfo.setBufferizesToWritableMemory(bbArg);
-  }
+  return inPlaceAnalysis(ops, aliasInfo, state, domInfo, analysisFuzzerSeed);
+}
 
-  LogicalResult res =
-      inPlaceAnalysis(ops, aliasInfo, domInfo, analysisFuzzerSeed);
-  LDBG("End InPlaceAnalysisFuncOpInternals:\n" << funcOp << '\n');
+/// Analyze equivalence of tied OpResult/OpOperand pairs of the given ops.
+static void equivalenceAnalysis(SmallVector<Operation *> &ops,
+                                BufferizationAliasInfo &aliasInfo) {
+  for (Operation *op : ops)
+    if (auto bufferizableOp = dyn_cast<BufferizableOpInterface>(op))
+      for (OpResult opResult : op->getOpResults())
+        if (opResult.getType().isa<TensorType>())
+          if (aliasInfo.isInPlace(opResult)) {
+            SmallVector<OpOperand *> opOperands =
+                bufferizableOp.getAliasingOpOperand(opResult);
+            if (!opOperands.empty())
+              if (bufferizableOp.bufferRelation(opResult, aliasInfo) ==
+                  BufferRelation::Equivalent)
+                for (OpOperand *opOperand : opOperands)
+                  aliasInfo.unionEquivalenceClasses(opResult, opOperand->get());
+          }
+}
 
-  return res;
+/// Analyze equivalence of tied OpResult/OpOperand pairs of all ops contained
+/// in `op`.
+static void equivalenceAnalysis(Operation *op,
+                                BufferizationAliasInfo &aliasInfo) {
+  // Traverse ops in PostOrder: Nested ops first, then enclosing ops.
+  SmallVector<Operation *> ops;
+  op->walk<WalkOrder::PostOrder>([&](Operation *op) {
+    // No tensors => no buffers.
+    if (none_of(op->getResultTypes(), isaTensor))
+      return;
+    ops.push_back(op);
+  });
+
+  equivalenceAnalysis(ops, aliasInfo);
 }
 
 /// Assert that the current bufferization decisions are consistent.
@@ -728,21 +703,15 @@ static void
 annotateOpsWithBufferizationMarkers(Operation *op,
                                     const BufferizationAliasInfo &aliasInfo) {
   op->walk([&](Operation *op) {
-    for (OpResult opResult : op->getResults()) {
+    for (OpResult opResult : op->getResults())
       if (opResult.getType().isa<TensorType>())
         setInPlaceOpResult(opResult, aliasInfo.isInPlace(opResult));
-      if (auto funcOp = dyn_cast<FuncOp>(op))
-        for (BlockArgument bbArg : funcOp.getArguments())
-          if (bbArg.getType().isa<TensorType>())
-            setInPlaceFuncArgument(bbArg,
-                                   aliasInfo.bufferizesToWritableMemory(bbArg));
-    }
   });
 }
 
 LogicalResult mlir::linalg::comprehensive_bufferize::runComprehensiveBufferize(
     FuncOp funcOp, const BufferizationOptions &options,
-    BufferizationState &state) {
+    BufferizationState &state, const PostAnalysisStepList &extraSteps) {
 
   DominanceInfo domInfo(funcOp);
   BufferizationAliasInfo &aliasInfo = state.aliasInfo;
@@ -754,19 +723,29 @@ LogicalResult mlir::linalg::comprehensive_bufferize::runComprehensiveBufferize(
     return failure();
 
   // If the analysis fails, just return.
-  if (failed(inPlaceAnalysisFuncOpBody(funcOp, aliasInfo, domInfo,
-                                       options.analysisFuzzerSeed)))
+  Operation *op = funcOp.getOperation();
+  if (failed(inPlaceAnalysis(op, aliasInfo, state, domInfo,
+                             options.analysisFuzzerSeed)))
     return failure();
+  equivalenceAnalysis(op, aliasInfo);
 
-  for (const std::unique_ptr<PostAnalysisStep> &step :
-       options.postAnalysisSteps) {
-    SmallVector<Operation *> newOps;
-    if (failed(step->run(funcOp, state, newOps)))
-      return failure();
-    // Analyze ops that were created by the PostAnalysisStep.
-    if (failed(inPlaceAnalysis(newOps, aliasInfo, domInfo)))
-      return failure();
-  }
+  auto runPostAnalysisSteps = [&](const PostAnalysisStepList &steps) {
+    for (const std::unique_ptr<PostAnalysisStep> &step : steps) {
+      SmallVector<Operation *> newOps;
+      if (failed(step->run(funcOp, state, newOps)))
+        return failure();
+      // Analyze ops that were created by the PostAnalysisStep.
+      if (failed(inPlaceAnalysis(newOps, aliasInfo, state, domInfo)))
+        return failure();
+      equivalenceAnalysis(newOps, aliasInfo);
+    }
+    return success();
+  };
+
+  if (failed(runPostAnalysisSteps(extraSteps)))
+    return failure();
+  if (failed(runPostAnalysisSteps(options.postAnalysisSteps)))
+    return failure();
 
   // Annotate operations if we only want to report the analysis.
   if (options.testAnalysisOnly) {
@@ -775,7 +754,11 @@ LogicalResult mlir::linalg::comprehensive_bufferize::runComprehensiveBufferize(
   }
 
   // Bufferize all ops in funcOp.
-  if (failed(bufferizeFuncOp(funcOp, state)))
+  OpBuilder b(funcOp.getContext());
+  auto bufferizableOp =
+      dyn_cast<BufferizableOpInterface>(funcOp.getOperation());
+  assert(bufferizableOp && "must use ModuleBufferization");
+  if (failed(bufferizableOp.bufferize(b, state)))
     return failure();
 
   // Erase all obsolete ops.
