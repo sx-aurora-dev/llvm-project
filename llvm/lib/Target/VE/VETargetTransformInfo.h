@@ -286,7 +286,8 @@ public:
 
   bool supportsScalableVectors() const { return false; }
 
-  bool hasActiveVectorLength() const { return true; }
+  bool hasActiveVectorLength(unsigned Opcode, Type *DataType,
+                             Align Alignment) const { return true; }
 
   TargetTransformInfo::VPLegalization
   getVPLegalizationStrategy(const VPIntrinsic &VPI) const {

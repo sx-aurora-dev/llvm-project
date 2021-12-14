@@ -110,10 +110,10 @@
 /// Checking -fintegrated-as
 
 // RUN: %clangxx -### -target ve-unknown-linux-gnu \
-// RUN:    -x assembler -fuse-ld=ld %s 2>&1 | \
+// RUN:     -x assembler -fuse-ld=ld %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=AS %s
 // RUN: %clangxx -### -target ve-unknown-linux-gnu \
-// RUN:    -fno-integrated-as -x assembler -fuse-ld=ld %s 2>&1 | \
+// RUN:     -fno-integrated-as -x assembler -fuse-ld=ld %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=NAS %s
 
 // AS: clang{{.*}} "-cc1as"
