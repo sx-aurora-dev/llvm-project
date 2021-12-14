@@ -33,11 +33,6 @@ set(RUNTIMES_ve-unknown-linux-gnu_LIBCXXABI_USE_COMPILER_RT TRUE CACHE BOOL "")
 # VE uses Compiler-RT from libcxx.
 set(RUNTIMES_ve-unknown-linux-gnu_LIBCXX_USE_COMPILER_RT TRUE CACHE BOOL "")
 
-# VE/X86 libomptarget requires host ZLIB.  These may cause failures at
-# re-compile of OpenMP.
-set(RUNTIMES_x86_64-unknown-linux-gnu_ZLIB_LIBRARY "/lib/x86_64-linux-gnu/libz.so" CACHE STRING "")
-set(RUNTIMES_ve-unknown-linux-gnu_ZLIB_LIBRARY "/lib/x86_64-linux-gnu/libz.so" CACHE STRING "")
-
 # Pretended standalone build for OpenMP since OpenMP doesn't support
 # LLVM_ENABLE_PER_TARGET_RUNTIME_DIR yet.
 set(RUNTIMES_x86_64-unknown-linux-gnu_OPENMP_STANDALONE_BUILD ON CACHE BOOL "")
