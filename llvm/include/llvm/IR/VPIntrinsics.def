@@ -27,6 +27,7 @@
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, MASKPOS, EVLPOS)
 #endif
 
+// End the property scope of a VP intrinsic.
 #ifndef END_REGISTER_VP_INTRINSIC
 #define END_REGISTER_VP_INTRINSIC(VPID)
 #endif
@@ -454,8 +455,7 @@ END_REGISTER_VP_SDNODE(VP_SETCC)
 // due to type legalization. The extra elements are ignored.
 
 ///// Memory Operations {
-
-// llvm.vp.store(ptr,val,mask,vlen)
+// llvm.vp.store(val,ptr,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_store, 2, 3)
 // chain = VP_STORE chain,val,base,offset,mask,evl
 BEGIN_REGISTER_VP_SDNODE(VP_STORE, 0, vp_store, 4, 5)
@@ -581,7 +581,7 @@ HELPER_REGISTER_REDUCTION_SEQ_VP(vp_reduce_fmul, VP_REDUCE_FMUL,
 
 #undef HELPER_REGISTER_REDUCTION_SEQ_VP
 
-///// } Reductions
+///// } Reduction
 
 ///// Shuffles {
 
