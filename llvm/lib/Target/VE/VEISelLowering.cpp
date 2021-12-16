@@ -1095,6 +1095,9 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
 
     TARGET_NODE_CASE(REPL_F32)
     TARGET_NODE_CASE(REPL_I32)
+
+    TARGET_NODE_CASE(LEGALAVL)
+
     // Register the VVP_* SDNodes.
 #define REGISTER_VVP_OP(VVP_NAME) TARGET_NODE_CASE(VVP_NAME)
 #include "VVPNodes.def"
@@ -3555,11 +3558,16 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
 
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
+  // Remove the 'LEGALAVL' wrapper once everything is legal.
+#if 0
+  if (DCI.isAfterLegalizeDAG())
+    if (N->getOpcode() == VEISD::LEGALAVL)
+      return N->getOperand(0);
+#endif
+
   SDLoc dl(N);
   unsigned Opcode = N->getOpcode();
   switch (Opcode) {
-  case ISD::EntryToken:
-    return combineEntryToken_VVP(N, DCI);
   default:
     if (!Subtarget->enableVPU())
       return SDValue();

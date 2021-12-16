@@ -343,9 +343,22 @@ Optional<int> getMaskPos(unsigned Opc) {
   return None;
 }
 
+bool isLegalAVL(SDValue AVL) {
+  return AVL->getOpcode() == VEISD::LEGALAVL;
+}
+
 SDValue getNodeAVL(SDValue Op) {
   auto PosOpt = getAVLPos(Op->getOpcode());
   return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
+}
+
+std::pair<SDValue,bool> getAnnotatedNodeAVL(SDValue Op) {
+  SDValue AVL = getNodeAVL(Op);
+  if (!AVL)
+    return {SDValue(), true};
+  if (AVL->getOpcode() == VEISD::LEGALAVL)
+    return {AVL->getOperand(0), true};
+  return {AVL, false};
 }
 
 SDValue getNodeMask(SDValue Op) {
@@ -1269,6 +1282,12 @@ SDValue CustomDAG::createBitReverse(SDValue ScalarReg) const {
 }
 
 void CustomDAG::dump(SDValue V) const { print(errs(), V); }
+
+SDValue CustomDAG::annotateLegalAVL(SDValue AVL) const {
+  if (isLegalAVL(AVL))
+    return AVL;
+  return getNode(VEISD::LEGALAVL, MVT::i32, AVL);
+}
 
 raw_ostream &CustomDAG::print(raw_ostream &Out, SDValue V) const {
   V->print(Out, &DAG);

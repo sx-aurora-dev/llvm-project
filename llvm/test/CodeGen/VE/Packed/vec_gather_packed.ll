@@ -163,6 +163,7 @@ define fastcc <512 x float> @vp_gather_v512f32(<512 x float*> %P, <512 x i1> %M,
 define fastcc <512 x float> @vp_gather_idx_v512f32(float* %B, <512 x i64> %I, <512 x i1> %M, i32 %avl) {
 ; CHECK-LABEL: vp_gather_idx_v512f32:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    srl %s2, %s2, 1

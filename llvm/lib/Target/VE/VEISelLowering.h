@@ -94,6 +94,10 @@ enum NodeType : unsigned {
   REPL_F32,
   REPL_I32,
 
+  // VL annotation that identifies a VL that is legal for packed mode vector
+  // instructions.
+  LEGALAVL,
+
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
   /// MCSymbol and TargetBlockAddress.
@@ -127,15 +131,6 @@ struct VVPWideningInfo {
 };
 
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
-  // FIXME: Find a more robust solution for this.
-  mutable std::set<const SDNode *> LegalizedVectorNodes;
-  bool isPackLegalizedInternalNode(const SDNode *N) const {
-    return LegalizedVectorNodes.count(N);
-  }
-  void addPackLegalizedNode(const SDNode *N) const {
-    LegalizedVectorNodes.insert(N);
-  }
-
   const VESubtarget *Subtarget;
 
   void initRegisterClasses();
@@ -267,7 +262,6 @@ public:
   /// VVP Lowering {
   // internal node tracker reset checkpoint.
 
-  SDValue combineEntryToken_VVP(SDNode *N, DAGCombinerInfo &DCI) const;
   // Expand SETCC operands directly used in vector arithmetic ops.
   SDValue lowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandSELECT(SDValue Op, SmallVectorImpl<SDValue> &LegalOperands,

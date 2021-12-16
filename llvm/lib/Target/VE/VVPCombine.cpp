@@ -180,7 +180,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
              dbgs() << "\n";);
 
   CustomDAG CDAG(*this, DCI.DAG, N);
-  bool RootIsPackLegalized = isPackLegalizedInternalNode(N);
   SDNodeFlags Flags = N->getFlags();
   switch (N->getOpcode()) {
 
@@ -191,8 +190,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       MVT ResVT = N->getSimpleValueType(0);
       auto N =
           CDAG.getNode(VEISD::VVP_FFMA, ResVT, {VY, VZ, VW, Mask, AVL}, Flags);
-      if (RootIsPackLegalized)
-        addPackLegalizedNode(N.getNode());
       return N;
     }
   } break;
@@ -203,8 +200,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       MVT ResVT = N->getSimpleValueType(0);
       unsigned Opcode = Negated ? VEISD::VVP_FFMSN : VEISD::VVP_FFMS;
       auto N = CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL}, Flags);
-      if (RootIsPackLegalized)
-        addPackLegalizedNode(N.getNode());
       return N;
     }
   } break;
@@ -233,8 +228,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
     // 1 / vy
     if (match_FPOne(VX)) {
       auto N = CDAG.getNode(VEISD::VVP_FRCP, ResVT, {VY, Mask, AVL}, Flags);
-      if (RootIsPackLegalized)
-        addPackLegalizedNode(N.getNode());
       return N;
     }
     // vx * VRCP(vy)
@@ -242,10 +235,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
         CDAG.getNode(VEISD::VVP_FRCP, ResVT, {VY, Mask, AVL}, Flags);
     auto MulV =
         CDAG.getNode(VEISD::VVP_FMUL, ResVT, {VX, RecipV, Mask, AVL}, Flags);
-    if (RootIsPackLegalized) {
-      addPackLegalizedNode(RecipV.getNode());
-      addPackLegalizedNode(MulV.getNode());
-    }
     return MulV;
   } break;
   default:
