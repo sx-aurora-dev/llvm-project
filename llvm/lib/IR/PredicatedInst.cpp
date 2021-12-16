@@ -79,7 +79,7 @@ Instruction *PredicatedUnaryOperator::Create(
   // Fetch the VP intrinsic
   auto &VecTy = cast<VectorType>(*V->getType());
   auto *VPFunc =
-      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V}, &VecTy);
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, &VecTy, {V});
 
   // Encode default environment fp behavior
 
@@ -139,7 +139,7 @@ Instruction *PredicatedBinaryOperator::Create(
   // Fetch the VP intrinsic
   auto &VecTy = cast<VectorType>(*V1->getType());
   auto *VPFunc =
-      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V1, V2}, &VecTy);
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, &VecTy, {V1, V2});
 
   // Encode default environment fp behavior
 

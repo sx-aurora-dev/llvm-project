@@ -541,6 +541,9 @@ using VPTypeTokenVec = SmallVector<VPTypeToken, 4>;
 static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
                                                  Type *VecRetTy, Type *VecPtrTy,
                                                  Type *VectorTy) {
+  if (VPReductionIntrinsic::isVPReduction(ID))
+    return VPIntrinsic::ShortTypeVec{VectorTy};
+
   switch (ID) {
   default:
     llvm_unreachable("not implemented!");
@@ -616,9 +619,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
 
   case Intrinsic::vp_gather:
   case Intrinsic::vp_load:
-    assert(VecRetTy);
     return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
-
   case Intrinsic::vp_scatter:
   case Intrinsic::vp_store:
     return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy};
@@ -639,8 +640,8 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
 }
 
 Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
-                                               ArrayRef<Value *> Params,
-                                               Type *VecRetTy) {
+                                               Type *VecRetTy,
+                                               ArrayRef<Value *> Params) {
   assert(VPID != Intrinsic::not_intrinsic && "todo dispatch to default insts");
 
   bool IsArithOp = VPIntrinsic::IsBinaryVPOp(VPID) ||
@@ -683,15 +684,6 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
     if (DataPosOpt.hasValue()) {
       // store-kind operation
       VecTy = Params[DataPosOpt.getValue()]->getType();
-    } else if (VPID == Intrinsic::vp_gather) {
-      // Construct data vector from vector of pointer to element.
-      auto *ElemTy =
-          cast<VectorType>(VecPtrTy)->getElementType()->getPointerElementType();
-      VecTy = VectorType::get(ElemTy,
-                                 cast<VectorType>(VecPtrTy)->getElementCount());
-    } else {
-      // load-kind operation
-      VecTy = VecPtrTy->getPointerElementType();
     }
 
   } else if (IsShuffleOp) {

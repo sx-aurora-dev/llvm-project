@@ -783,9 +783,10 @@ public:
 
 
   /// Call an arithmetic VP intrinsic.
-  Instruction *CreateVectorPredicatedInst(unsigned OC, ArrayRef<Value *>,
-                             Instruction *FMFSource = nullptr,
-                             const Twine &Name = "");
+  Instruction *CreateVectorPredicatedInst(unsigned OC, Type *ReturnTy,
+                                          ArrayRef<Value *>,
+                                          Instruction *FMFSource = nullptr,
+                                          const Twine &Name = "");
 
   /// Call an comparison VP intrinsic.
   Instruction *CreateVectorPredicatedCmp(CmpInst::Predicate Pred,
