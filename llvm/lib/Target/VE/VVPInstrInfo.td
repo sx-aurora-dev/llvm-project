@@ -34,10 +34,6 @@ def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
-def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
-  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
-]>;
-
 // Special case (VX, VY, SX)
 def SDTSFAOpVVP : SDTypeProfile<1, 5, [     // vvp_sfa
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
@@ -132,18 +128,18 @@ def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMay
 
 // int
 def vvp_and    : SDNode<"VEISD::VVP_AND",  SDTIntBinOpVVP>;
-def vvp_or     : SDNode<"VEISD::VVP_OR",  SDTIntBinOpVVP>;
+def vvp_or     : SDNode<"VEISD::VVP_OR",   SDTIntBinOpVVP>;
 def vvp_xor    : SDNode<"VEISD::VVP_XOR",  SDTIntBinOpVVP>;
 
 def vvp_add    : SDNode<"VEISD::VVP_ADD",  SDTIntBinOpVVP>;
 def vvp_sub    : SDNode<"VEISD::VVP_SUB",  SDTIntBinOpVVP>;
 def vvp_mul    : SDNode<"VEISD::VVP_MUL",  SDTIntBinOpVVP>;
-def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV",  SDTIntBinOpVVP>;
-def vvp_udiv   : SDNode<"VEISD::VVP_UDIV",  SDTIntBinOpVVP>;
+def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV", SDTIntBinOpVVP>;
+def vvp_udiv   : SDNode<"VEISD::VVP_UDIV", SDTIntBinOpVVP>;
 
-def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntShiftOpVVP>;
-def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntShiftOpVVP>;
-def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
+def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntBinOpVVP>;
+def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntBinOpVVP>;
+def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntBinOpVVP>;
 
 // fused
 def vvp_sfa    : SDNode<"VEISD::VVP_ADD",  SDTSFAOpVVP>;
