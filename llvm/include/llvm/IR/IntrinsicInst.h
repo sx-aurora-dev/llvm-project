@@ -399,10 +399,11 @@ public:
   static bool HasExceptionMode(Intrinsic::ID VPID);
 
   /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters
-  /// \p Params.
+  /// \p Params. Additionally, the load and gather intrinsics require
+  /// \p ReturnType to be specified.
   static Function *getDeclarationForParams(Module *M, Intrinsic::ID,
-                                           ArrayRef<Value *> Params,
-                                           Type *VecRetTy = nullptr);
+                                           Type *ReturnType,
+                                           ArrayRef<Value *> Params);
 
   static Optional<unsigned> getMaskParamPos(Intrinsic::ID IntrinsicID);
   static Optional<unsigned> getVectorLengthParamPos(Intrinsic::ID IntrinsicID);

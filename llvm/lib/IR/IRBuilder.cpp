@@ -563,6 +563,7 @@ CallInst *IRBuilderBase::CreateMaskedIntrinsic(Intrinsic::ID Id,
 /// \p FMFSource     - Copy source for Fast Math Flags
 /// \p Name          - name of the result variable
 Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
+                                                       Type *ReturnTy,
                                                        ArrayRef<Value *> Params,
                                                        Instruction *FMFSource,
                                                        const Twine &Name) {
@@ -570,7 +571,7 @@ Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
   Module *M = BB->getParent()->getParent();
 
   Intrinsic::ID VPID = VPIntrinsic::getForOpcode(OC);
-  auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, Params);
+  auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, ReturnTy, Params);
   auto *VPCall = createCallHelper(VPFunc, Params, this, Name);
 
   // transfer fast math flags
@@ -594,7 +595,9 @@ Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
 
   Module *M = BB->getParent()->getParent();
 
-  // encode comparison predicate as MD
+  auto *ReturnTy = MaskParam->getType();
+
+  // Encode comparison predicate as MD
   uint8_t RawPred = static_cast<uint8_t>(Pred);
   auto Int8Ty = Type::getInt8Ty(getContext());
   auto PredParam = ConstantInt::get(Int8Ty, RawPred, false);
@@ -604,7 +607,8 @@ Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
                            : Intrinsic::vp_fcmp;
 
   auto VPFunc = VPIntrinsic::getDeclarationForParams(
-      M, VPID, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
+      M, VPID, ReturnTy,
+      {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
 
   return createCallHelper(
       VPFunc, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam},
