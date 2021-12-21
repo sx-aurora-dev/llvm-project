@@ -19,8 +19,6 @@
 // windows.h needs to be included before tlhelp32.h
 #  include <tlhelp32.h>
 
-#  include <algorithm>
-
 #  include "sanitizer_stoptheworld.h"
 
 namespace __sanitizer {
@@ -44,19 +42,26 @@ struct SuspendedThreadsListWindows final : public SuspendedThreadsList {
   uptr ThreadCount() const override;
 };
 
+// Stack Pointer register names on different architectures
+#  if SANITIZER_X64
+#    define SP_REG Rsp
+#  elif SANITIZER_I386
+#    define SP_REG Esp
+#  elif SANITIZER_ARM | SANITIZER_ARM64
+#    define SP_REG Sp
+#  else
+#    error Architecture not supported!
+#  endif
+
 PtraceRegistersStatus SuspendedThreadsListWindows::GetRegistersAndSP(
     uptr index, InternalMmapVector<uptr> *buffer, uptr *sp) const {
   CHECK_LT(index, threadHandles.size());
 
-  CONTEXT thread_context;
-  thread_context.ContextFlags = CONTEXT_ALL;
-  CHECK(GetThreadContext(threadHandles[index], &thread_context));
-
-  buffer->resize(RoundUpTo(sizeof(thread_context), sizeof(uptr)) /
-                 sizeof(uptr));
-  internal_memcpy(buffer->data(), &thread_context, sizeof(thread_context));
-
-  *sp = thread_context.Rsp;
+  buffer->resize(RoundUpTo(sizeof(CONTEXT), sizeof(uptr)) / sizeof(uptr));
+  CONTEXT *thread_context = reinterpret_cast<CONTEXT *>(buffer->data());
+  thread_context->ContextFlags = CONTEXT_ALL;
+  CHECK(GetThreadContext(threadHandles[index], thread_context));
+  *sp = thread_context->SP_REG;
 
   return REGISTERS_AVAILABLE;
 }
@@ -101,13 +106,16 @@ DWORD WINAPI RunThread(void *argument) {
           thread_entry.th32OwnerProcessID != this_process)
         continue;
 
-      const bool thread_already_suspended =
-          std::find(suspended_threads_list.threadIds.begin(),
-                    suspended_threads_list.threadIds.end(),
-                    thread_entry.th32ThreadID) !=
-          suspended_threads_list.threadIds.end();
+      bool suspended_thread = false;
+      for (const auto thread_id : suspended_threads_list.threadIds) {
+        if (thread_id == thread_entry.th32ThreadID) {
+          suspended_thread = true;
+          break;
+        }
+      }
 
-      if (thread_already_suspended)
+      // Skip the Thread if it was already suspended
+      if (suspended_thread)
         continue;
 
       const HANDLE thread =
