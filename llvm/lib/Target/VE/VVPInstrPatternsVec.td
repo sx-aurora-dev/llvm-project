@@ -371,19 +371,36 @@ defm : Binary_vr_vv_ShortLong<vvp_srl,
                               i32, v256i32, "PVSRLLO">;
 
 // Floating-point arithmetic (256 elements)
-defm : Unary_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
-defm : Unary_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
-defm : Binary_rv_vv_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
-defm : Binary_rv_vv_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
-defm : Binary_rv_vr_vv_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS">;
+defm : Unary_ShortLong<vvp_frcp,
+                       f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_fsqrt,
+                       f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
+defm : Binary_rv_vv_ShortLong<c_vvp_fadd,
+                              f64, v256f64, "VFADDD",
+                              f32, v256f32, "PVFADDUP">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmul,
+                              f64, v256f64, "VFMULD",
+                              f32, v256f32, "PVFMULUP">;
+defm : Binary_rv_vv_ShortLong<vvp_fsub,
+                              f64, v256f64, "VFSUBD",
+                              f32, v256f32, "PVFSUBUP">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_fdiv,
+                              f64, v256f64, "VFDIVD",
+                              f32, v256f32, "VFDIVS">;
 
-defm : Binary_rv_vv_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fminnum,
+                              f64, v256f64, "VFMIND",
+                              f32, v256f32, "VFMINS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum,
+                              f64, v256f64, "VFMAXD",
+                              f32, v256f32, "VFMAXS">;
 
-defm : Ternary_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
-defm : Ternary_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
-defm : Ternary_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffma,
+                         f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : Ternary_ShortLong<c_vvp_ffms,
+                         f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffmsn,
+                         f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
 // TODO: vvp_ffman
 
 ///// Selection /////

@@ -21,8 +21,14 @@
 ///// V(E) - VP internal nodes
 // fp node types
 
-def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vvp_fadd, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
+// BinaryFPOp(x,y,mask,vl)
+def SDTFPBinOpVVP : SDTypeProfile<1, 4, [      // vvp_fadd, etc.
+  SDTCisSameAs<0, 1>,
+  SDTCisSameAs<0, 2>,
+  SDTCisFP<0>,
+  SDTCisInt<3>,
+  SDTCisSameNumEltsAs<0, 3>,
+  IsVLVT<4>
 ]>;
 
 def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [  // vvp_ffma
@@ -207,10 +213,12 @@ def vvp_reduce_umax         : SDNode<"VEISD::VVP_REDUCE_UMAX", SDTReduceVVP>;
 // math funcs
 def vvp_fsqrt                : SDNode<"VEISD::VVP_FSQRT", SDTFPUnaryOpVVP>;
 
+// Binary operator commutative pattern.
 class vvp_commutative<SDNode RootOp> :
-  PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
-                       [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
-                        (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
+  PatFrags<
+  (ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
+  [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
+   (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
 
 class vvp_fma_commutative<SDNode RootOp> :
   PatFrags<(ops node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
