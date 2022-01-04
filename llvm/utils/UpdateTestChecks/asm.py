@@ -167,13 +167,10 @@ ASM_FUNCTION_WASM32_RE = re.compile(
     flags=(re.M | re.S))
 
 ASM_FUNCTION_VE_RE = re.compile(
-    r'^_?(?P<func>[^:]+):[ \t]*#+[ \t]*@(?P=func)\n(?:\s*\.?Lfunc_begin[^:\n]*:\n)?[^:]*?'
+    r'^_?(?P<func>[^:]+):[ \t]*#+[ \t]*@(?P=func)\n'
     r'(?P<body>^##?[ \t]+[^:]+:.*?)\s*'
     r'.Lfunc_end[0-9]+:\n',
     flags=(re.M | re.S))
-
-SCRUB_LOOP_COMMENT_RE = re.compile(
-    r'# =>This Inner Loop Header:.*|# in Loop:.*', flags=re.M)
 
 SCRUB_X86_SHUFFLES_RE = (
     re.compile(

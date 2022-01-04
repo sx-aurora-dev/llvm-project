@@ -40,7 +40,6 @@ using llvm::SmallVector;
 using llvm::SMLoc;
 using llvm::StringMap;
 using llvm::StringRef;
-using llvm::Twine;
 using mlir::tblgen::Attribute;
 using mlir::tblgen::EnumAttr;
 using mlir::tblgen::EnumAttrCase;
@@ -1103,7 +1102,7 @@ emitExtendedSetDeserializationDispatch(const RecordKeeper &recordKeeper,
     Operator op(def);
     auto setName = def->getValueAsString("extendedInstSetName");
     if (!extensionSets.count(setName)) {
-      extensionSetNames.push_back("");
+      extensionSetNames.emplace_back("");
       extensionSets.try_emplace(setName, extensionSetNames.back());
       auto &setos = extensionSets.find(setName)->second;
       setos << formatv("  if ({0} == \"{1}\") {{\n", extensionSetName, setName);
