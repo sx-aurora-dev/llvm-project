@@ -229,6 +229,14 @@ multiclass Binary_rv_vv<
   defm : Binary_vv<OpNode, DataVT, MaskVT, OpBaseName>;
 }
 
+multiclass Binary_rv_vr_vv<
+    SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT, ValueType MaskVT,
+    string OpBaseName> {
+  defm : Binary_rv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
+  defm : Binary_vr_vv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
+}
+
 // Expand both 64bit and 32 bit variant (256 elements)
 multiclass Binary_rv_vv_ShortLong<
     SDPatternOperator OpNode,
@@ -252,23 +260,6 @@ multiclass Binary_vr_vv_ShortLong<
   defm : Binary_vr_vv<OpNode,
                       ShortScalarVT, ShortDataVT, v256i1,
                       ShortOpBaseName>;
-}
-
-// Binary operators that support broadcasts on LHS and RHS.
-multiclass Binary_all<
-    SDPatternOperator OpNode,
-    ValueType ScalarVT, ValueType DataVT,
-    ValueType MaskVT, string OpBaseName> {
-  defm : Binary_rv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-  defm : Binary_vr_vv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-}
-
-multiclass Binary_ShortLong<
-    SDPatternOperator OpNode,
-    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
-    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : Binary_all<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : Binary_all<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
 multiclass Ternary<
@@ -332,6 +323,18 @@ multiclass Ternary_ShortLong<
 // Integer arithmetic (256 elements)
 defm : Unary_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
 
+multiclass Binary_rv_vr_vv_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
+    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Binary_rv_vr_vv<OpNode,
+                      LongScalarVT, LongDataVT, v256i1,
+                      LongOpBaseName>;
+  defm : Binary_rv_vr_vv<OpNode,
+                      ShortScalarVT, ShortDataVT, v256i1,
+                      ShortOpBaseName>;
+}
+
 defm : Binary_rv_vv_ShortLong<c_vvp_add,
                               i64, v256i64, "VADDSL",
                               i32, v256i32, "VADDSWSX">;
@@ -341,6 +344,12 @@ defm : Binary_rv_vv_ShortLong<vvp_sub,
 defm : Binary_rv_vv_ShortLong<c_vvp_mul,
                               i64, v256i64, "VMULSL",
                               i32, v256i32, "VMULSWSX">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_sdiv,
+                              i64, v256i64, "VDIVSL",
+                              i32, v256i32, "VDIVSWSX">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_udiv,
+                              i64, v256i64, "VDIVUL",
+                              i32, v256i32, "VDIVUW">;
 defm : Binary_rv_vv_ShortLong<c_vvp_and,
                               i64, v256i64, "VAND",
                               i32, v256i32, "PVANDLO">;
@@ -350,9 +359,6 @@ defm : Binary_rv_vv_ShortLong<c_vvp_or,
 defm : Binary_rv_vv_ShortLong<c_vvp_xor,
                               i64, v256i64, "VXOR",
                               i32, v256i32, "PVXORLO">;
-
-defm : Binary_ShortLong<vvp_sdiv, i64, v256i64, "VDIVSL", i32, v256i32, "VDIVSWSX">;
-defm : Binary_ShortLong<vvp_udiv, i64, v256i64, "VDIVUL", i32, v256i32, "VDIVUW">;
 
 defm : Binary_vr_vv_ShortLong<vvp_shl,
                               i64, v256i64, "VSLL",
@@ -365,19 +371,36 @@ defm : Binary_vr_vv_ShortLong<vvp_srl,
                               i32, v256i32, "PVSRLLO">;
 
 // Floating-point arithmetic (256 elements)
-defm : Unary_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
-defm : Unary_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
-defm : Binary_rv_vv_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
-defm : Binary_rv_vv_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
-defm : Binary_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS">;
+defm : Unary_ShortLong<vvp_frcp,
+                       f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_fsqrt,
+                       f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
+defm : Binary_rv_vv_ShortLong<c_vvp_fadd,
+                              f64, v256f64, "VFADDD",
+                              f32, v256f32, "PVFADDUP">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmul,
+                              f64, v256f64, "VFMULD",
+                              f32, v256f32, "PVFMULUP">;
+defm : Binary_rv_vv_ShortLong<vvp_fsub,
+                              f64, v256f64, "VFSUBD",
+                              f32, v256f32, "PVFSUBUP">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_fdiv,
+                              f64, v256f64, "VFDIVD",
+                              f32, v256f32, "VFDIVS">;
 
-defm : Binary_rv_vv_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fminnum,
+                              f64, v256f64, "VFMIND",
+                              f32, v256f32, "VFMINS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum,
+                              f64, v256f64, "VFMAXD",
+                              f32, v256f32, "VFMAXS">;
 
-defm : Ternary_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
-defm : Ternary_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
-defm : Ternary_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffma,
+                         f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : Ternary_ShortLong<c_vvp_ffms,
+                         f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffmsn,
+                         f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
 // TODO: vvp_ffman
 
 ///// Selection /////
