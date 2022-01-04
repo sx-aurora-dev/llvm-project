@@ -4065,7 +4065,7 @@ SDValue DAGCombiner::visitMUL(SDNode *N) {
   // Change (mul (shl X, C), Y) -> (shl (mul X, Y), C) when the shift has one
   // use.
   {
-    SDValue Sh(nullptr, 0), Y(nullptr, 0);
+    SDValue Sh, Y;
 
     // Check for both (mul (shl X, C), Y)  and  (mul Y, (shl X, C)).
     if (N0.getOpcode() == ISD::SHL &&
@@ -18569,8 +18569,8 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
   if (StoreSDNode *ST1 = dyn_cast<StoreSDNode>(Chain)) {
     if (ST->isUnindexed() && ST->isSimple() &&
         ST1->isUnindexed() && ST1->isSimple()) {
-      if (ST1->getBasePtr() == Ptr && ST1->getValue() == Value &&
-          ST->getMemoryVT() == ST1->getMemoryVT() &&
+      if (OptLevel != CodeGenOpt::None && ST1->getBasePtr() == Ptr &&
+          ST1->getValue() == Value && ST->getMemoryVT() == ST1->getMemoryVT() &&
           ST->getAddressSpace() == ST1->getAddressSpace()) {
         // If this is a store followed by a store with the same value to the
         // same location, then the store is dead/noop.

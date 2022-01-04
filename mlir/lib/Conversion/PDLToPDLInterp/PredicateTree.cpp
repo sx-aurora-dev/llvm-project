@@ -162,7 +162,7 @@ static void getTreePredicates(std::vector<PositionalPredicate> &predList,
                       builder.getAllOperands(opPos));
   } else {
     bool foundVariableLength = false;
-    for (auto operandIt : llvm::enumerate(operands)) {
+    for (const auto &operandIt : llvm::enumerate(operands)) {
       bool isVariadic = operandIt.value().getType().isa<pdl::RangeType>();
       foundVariableLength |= isVariadic;
 
@@ -271,7 +271,7 @@ static void getConstraintPredicates(pdl::ApplyNativeConstraintOp op,
   Position *pos = *std::max_element(allPositions.begin(), allPositions.end(),
                                     comparePosDepth);
   PredicateBuilder::Predicate pred =
-      builder.getConstraint(op.name(), std::move(allPositions), parameters);
+      builder.getConstraint(op.name(), allPositions, parameters);
   predList.emplace_back(pos, pred);
 }
 
@@ -460,7 +460,7 @@ static void buildCostGraph(ArrayRef<Value> roots, RootOrderingGraph &graph,
             }
 
             // Default case: visit all the operands.
-            for (auto p : llvm::enumerate(operationOp.operands()))
+            for (const auto &p : llvm::enumerate(operationOp.operands()))
               toVisit.emplace(p.value(), entry.value, p.index(),
                               entry.depth + 1);
           })
@@ -487,12 +487,12 @@ static void buildCostGraph(ArrayRef<Value> roots, RootOrderingGraph &graph,
         if (&p == &q)
           continue;
         // Insert or retrieve the property of edge from p to q.
-        RootOrderingCost &cost = graph[q.root][p.root];
-        if (!cost.connector /* new edge */ || cost.cost.first > q.depth) {
-          if (!cost.connector)
-            cost.cost.second = nextID++;
-          cost.cost.first = q.depth;
-          cost.connector = value;
+        RootOrderingEntry &entry = graph[q.root][p.root];
+        if (!entry.connector /* new edge */ || entry.cost.first > q.depth) {
+          if (!entry.connector)
+            entry.cost.second = nextID++;
+          entry.cost.first = q.depth;
+          entry.connector = value;
         }
       }
     }
@@ -570,10 +570,10 @@ static Value buildPredicateList(pdl::PatternOp pattern,
     for (auto &target : graph) {
       llvm::dbgs() << "  * " << target.first << "\n";
       for (auto &source : target.second) {
-        RootOrderingCost c = source.second;
-        llvm::dbgs() << "      <- " << source.first << ": " << c.cost.first
-                     << ":" << c.cost.second << " via " << c.connector.getLoc()
-                     << "\n";
+        RootOrderingEntry &entry = source.second;
+        llvm::dbgs() << "      <- " << source.first << ": " << entry.cost.first
+                     << ":" << entry.cost.second << " via "
+                     << entry.connector.getLoc() << "\n";
       }
     }
   });

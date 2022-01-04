@@ -407,7 +407,7 @@ LogicalResult mlir::affineForOpBodySkew(AffineForOp forOp,
       lbShift = d * step;
     }
     // Augment the list of operations that get into the current open interval.
-    opGroupQueue.push_back({d, sortedOpGroups[d]});
+    opGroupQueue.emplace_back(d, sortedOpGroups[d]);
   }
 
   // Those operations groups left in the queue now need to be processed (FIFO)
@@ -1345,9 +1345,7 @@ static bool areInnerBoundsInvariant(AffineForOp forOp) {
     }
     return WalkResult::advance();
   });
-  if (walkResult.wasInterrupted())
-    return false;
-  return true;
+  return !walkResult.wasInterrupted();
 }
 
 // Gathers all maximal sub-blocks of operations that do not themselves
@@ -1370,7 +1368,7 @@ struct JamBlockGatherer {
       while (it != e && !isa<AffineForOp>(&*it))
         ++it;
       if (it != subBlockStart)
-        subBlocks.push_back({subBlockStart, std::prev(it)});
+        subBlocks.emplace_back(subBlockStart, std::prev(it));
       // Process all for ops that appear next.
       while (it != e && isa<AffineForOp>(&*it))
         walk(&*it++);
@@ -1551,7 +1549,7 @@ LogicalResult mlir::loopUnrollJamByFactor(AffineForOp forOp,
       for (unsigned i = unrollJamFactor - 1; i >= 1; --i) {
         rhs = forOp.getResult(i * oldNumResults + pos);
         // Create ops based on reduction type.
-        lhs = getReductionOp(reduction.kind, builder, loc, lhs, rhs);
+        lhs = arith::getReductionOp(reduction.kind, builder, loc, lhs, rhs);
         if (!lhs)
           return failure();
         Operation *op = lhs.getDefiningOp();
@@ -1608,8 +1606,7 @@ static bool checkLoopInterchangeDependences(
   // lexicographically negative.
   // Example 1: [-1, 1][0, 0]
   // Example 2: [0, 0][-1, 1]
-  for (unsigned i = 0, e = depCompsVec.size(); i < e; ++i) {
-    const SmallVector<DependenceComponent, 2> &depComps = depCompsVec[i];
+  for (const auto &depComps : depCompsVec) {
     assert(depComps.size() >= maxLoopDepth);
     // Check if the first non-zero dependence component is positive.
     // This iterates through loops in the desired order.
@@ -1748,8 +1745,7 @@ AffineForOp mlir::sinkSequentialLoops(AffineForOp forOp) {
 
   // Mark loops as either parallel or sequential.
   SmallVector<bool, 8> isParallelLoop(maxLoopDepth, true);
-  for (unsigned i = 0, e = depCompsVec.size(); i < e; ++i) {
-    SmallVector<DependenceComponent, 2> &depComps = depCompsVec[i];
+  for (auto &depComps : depCompsVec) {
     assert(depComps.size() >= maxLoopDepth);
     for (unsigned j = 0; j < maxLoopDepth; ++j) {
       DependenceComponent &depComp = depComps[j];
@@ -2884,8 +2880,8 @@ static LogicalResult generateCopy(
                                  /*extraIndices=*/{}, indexRemap,
                                  /*extraOperands=*/regionSymbols,
                                  /*symbolOperands=*/{},
-                                 /*domInstFilter=*/&*begin,
-                                 /*postDomInstFilter=*/&*postDomFilter);
+                                 /*domOpFilter=*/&*begin,
+                                 /*postDomOpFilter=*/&*postDomFilter);
 
   *nBegin = isBeginAtStartOfBlock ? block->begin() : std::next(prevOfBegin);
 
@@ -3181,7 +3177,7 @@ gatherLoopsInBlock(Block *block, unsigned currLoopDepth,
   // Add a new empty level to output if it doesn't exist level already.
   assert(currLoopDepth <= depthToLoops.size() && "Unexpected currLoopDepth");
   if (currLoopDepth == depthToLoops.size())
-    depthToLoops.push_back(SmallVector<AffineForOp, 2>());
+    depthToLoops.emplace_back();
 
   for (auto &op : *block) {
     if (auto forOp = dyn_cast<AffineForOp>(op)) {
@@ -3260,7 +3256,7 @@ static AffineIfOp createSeparationCondition(MutableArrayRef<AffineForOp> loops,
                                1);
     unsigned fullTileLbPos, fullTileUbPos;
     if (!cst.getConstantBoundOnDimSize(0, /*lb=*/nullptr,
-                                       /*lbFloorDivisor=*/nullptr,
+                                       /*boundFloorDivisor=*/nullptr,
                                        /*ub=*/nullptr, &fullTileLbPos,
                                        &fullTileUbPos)) {
       LLVM_DEBUG(llvm::dbgs() << "Can't get constant diff pair for a loop\n");
@@ -3357,7 +3353,7 @@ createFullTiles(MutableArrayRef<AffineForOp> inputNest,
 
   // Add the body for the full tile loop nest.
   BlockAndValueMapping operandMap;
-  for (auto loopEn : llvm::enumerate(inputNest))
+  for (const auto &loopEn : llvm::enumerate(inputNest))
     operandMap.map(loopEn.value().getInductionVar(),
                    fullTileLoops[loopEn.index()].getInductionVar());
   b = OpBuilder::atBlockTerminator(fullTileLoops.back().getBody());
