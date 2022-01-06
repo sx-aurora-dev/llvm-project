@@ -75,8 +75,11 @@ void DAGTypeLegalizer::PromoteIntegerResult(SDNode *N, unsigned ResNo) {
     break;
   case ISD::MGATHER:     Res = PromoteIntRes_MGATHER(cast<MaskedGatherSDNode>(N));
     break;
-  case ISD::SELECT:      Res = PromoteIntRes_SELECT(N); break;
-  case ISD::VSELECT:     Res = PromoteIntRes_VSELECT(N); break;
+  case ISD::SELECT:
+  case ISD::VSELECT:
+  case ISD::VP_SELECT:
+    Res = PromoteIntRes_Select(N);
+    break;
   case ISD::SELECT_CC:   Res = PromoteIntRes_SELECT_CC(N); break;
   case ISD::STRICT_FSETCC:
   case ISD::STRICT_FSETCCS:
@@ -1127,20 +1130,18 @@ SDValue DAGTypeLegalizer::PromoteIntRes_SADDSUBO(SDNode *N, unsigned ResNo) {
   return Res;
 }
 
-SDValue DAGTypeLegalizer::PromoteIntRes_SELECT(SDNode *N) {
-  SDValue LHS = GetPromotedInteger(N->getOperand(1));
-  SDValue RHS = GetPromotedInteger(N->getOperand(2));
-  return DAG.getSelect(SDLoc(N),
-                       LHS.getValueType(), N->getOperand(0), LHS, RHS);
-}
-
-SDValue DAGTypeLegalizer::PromoteIntRes_VSELECT(SDNode *N) {
+SDValue DAGTypeLegalizer::PromoteIntRes_Select(SDNode *N) {
   SDValue Mask = N->getOperand(0);
 
   SDValue LHS = GetPromotedInteger(N->getOperand(1));
   SDValue RHS = GetPromotedInteger(N->getOperand(2));
-  return DAG.getNode(ISD::VSELECT, SDLoc(N),
-                     LHS.getValueType(), Mask, LHS, RHS);
+
+  unsigned Opcode = N->getOpcode();
+  return Opcode == ISD::VP_SELECT
+             ? DAG.getNode(Opcode, SDLoc(N), LHS.getValueType(), Mask, LHS, RHS,
+                           N->getOperand(3))
+             : DAG.getNode(Opcode, SDLoc(N), LHS.getValueType(), Mask, LHS,
+                           RHS);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_SELECT_CC(SDNode *N) {
@@ -1751,18 +1752,16 @@ void DAGTypeLegalizer::PromoteSetCCOperands(SDValue &LHS, SDValue &RHS,
 
   // Prefer to promote the comparison operand with zero extension.
 
-  // If this is an equality comparison and the width of OpL/OpR excluding the
-  // duplicated sign bits is no greater than the width of LHS/RHS, we can avoid
-  // inserting a zext_inreg operation that we might not be able to remove.
-  if (ISD::isIntEqualitySetCC(CCCode)) {
-    unsigned OpLEffectiveBits = DAG.ComputeMinSignedBits(OpL);
-    unsigned OpREffectiveBits = DAG.ComputeMinSignedBits(OpR);
-    if (OpLEffectiveBits <= LHS.getScalarValueSizeInBits() &&
-        OpREffectiveBits <= RHS.getScalarValueSizeInBits()) {
-      LHS = OpL;
-      RHS = OpR;
-      return;
-    }
+  // If the width of OpL/OpR excluding the duplicated sign bits is no greater
+  // than the width of LHS/RHS, we can avoid/ inserting a zext_inreg operation
+  // that we might not be able to remove.
+  unsigned OpLEffectiveBits = DAG.ComputeMaxSignificantBits(OpL);
+  unsigned OpREffectiveBits = DAG.ComputeMaxSignificantBits(OpR);
+  if (OpLEffectiveBits <= LHS.getScalarValueSizeInBits() &&
+      OpREffectiveBits <= RHS.getScalarValueSizeInBits()) {
+    LHS = OpL;
+    RHS = OpR;
+    return;
   }
 
   // Otherwise, use zext_inreg.
