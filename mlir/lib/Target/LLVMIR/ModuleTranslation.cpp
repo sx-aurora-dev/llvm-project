@@ -386,8 +386,15 @@ static Value getPHISourceValue(Block *current, Block *pred,
         return switchOp.getCaseOperands(i.index())[index];
   }
 
-  llvm_unreachable("only branch or switch operations can be terminators of a "
-                   "block that has successors");
+  if (auto invokeOp = dyn_cast<LLVM::InvokeOp>(terminator)) {
+    return invokeOp.getNormalDest() == current
+               ? invokeOp.getNormalDestOperands()[index]
+               : invokeOp.getUnwindDestOperands()[index];
+  }
+
+  llvm_unreachable(
+      "only branch, switch or invoke operations can be terminators "
+      "of a block that has successors");
 }
 
 /// Connect the PHI nodes to the results of preceding blocks.
@@ -622,7 +629,7 @@ LogicalResult ModuleTranslation::convertGlobals() {
       llvm::Function *f = lookupFunction(
           std::get<0>(symbolAndPriority).cast<FlatSymbolRefAttr>().getValue());
       appendGlobalFn(
-          *llvmModule.get(), f,
+          *llvmModule, f,
           std::get<1>(symbolAndPriority).cast<IntegerAttr>().getInt(),
           /*Data=*/nullptr);
     }

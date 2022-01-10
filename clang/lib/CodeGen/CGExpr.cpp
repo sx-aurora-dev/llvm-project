@@ -1965,7 +1965,7 @@ RValue CodeGenFunction::EmitLoadOfLValue(LValue LV, SourceLocation Loc) {
   if (LV.isMatrixElt()) {
     llvm::Value *Idx = LV.getMatrixIdx();
     if (CGM.getCodeGenOpts().OptimizationLevel > 0) {
-      const auto *const MatTy = LV.getType()->getAs<ConstantMatrixType>();
+      const auto *const MatTy = LV.getType()->castAs<ConstantMatrixType>();
       llvm::MatrixBuilder<CGBuilderTy> MB(Builder);
       MB.CreateIndexAssumption(Idx, MatTy->getNumElementsFlattened());
     }
@@ -2122,7 +2122,7 @@ void CodeGenFunction::EmitStoreThroughLValue(RValue Src, LValue Dst,
     if (Dst.isMatrixElt()) {
       llvm::Value *Idx = Dst.getMatrixIdx();
       if (CGM.getCodeGenOpts().OptimizationLevel > 0) {
-        const auto *const MatTy = Dst.getType()->getAs<ConstantMatrixType>();
+        const auto *const MatTy = Dst.getType()->castAs<ConstantMatrixType>();
         llvm::MatrixBuilder<CGBuilderTy> MB(Builder);
         MB.CreateIndexAssumption(Idx, MatTy->getNumElementsFlattened());
       }

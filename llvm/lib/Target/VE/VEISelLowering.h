@@ -566,4 +566,4 @@ public:
 };
 } // namespace llvm
 
-#endif // VE_ISELLOWERING_H
+#endif // LLVM_LIB_TARGET_VE_VEISELLOWERING_H

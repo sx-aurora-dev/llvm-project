@@ -45,10 +45,11 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   getFilePaths().clear();
 
   // Add library directories:
-  //   ${BINPATH}/../lib/ve-unknown-linux-gnu, (== getStdlibPath)
+  //   ${BINPATH}/../lib/ve-unknown-linux-gnu, (== getStdlibPaths)
   //   ${RESOURCEDIR}/lib/linux/ve, (== getArchSpecificLibPath)
   //   ${SYSROOT}/opt/nec/ve/lib,
-  getFilePaths().push_back(getStdlibPath());
+  for (auto &Path : getStdlibPaths())
+    getFilePaths().push_back(std::move(Path));
   getFilePaths().push_back(getArchSpecificLibPath());
   getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/lib");
 }
@@ -146,7 +147,8 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 
   // Add libc++.so rpath.
   CmdArgs.push_back("-rpath");
-  CmdArgs.push_back(Args.MakeArgString(getStdlibPath()));
+  for (auto &Path : getStdlibPaths())
+    CmdArgs.push_back(Args.MakeArgString(std::move(Path)));
 
   CmdArgs.push_back("-lc++");
   CmdArgs.push_back("-lc++abi");

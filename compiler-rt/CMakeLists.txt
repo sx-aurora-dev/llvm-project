@@ -28,6 +28,7 @@ else()
   set(CMAKE_CFG_RESOLVED_INTDIR "")
 endif()
 
+include(SetPlatformToolchainTools)
 include(base-config-ix)
 include(CompilerRTUtils)
 
@@ -53,6 +54,7 @@ option(COMPILER_RT_BUILD_ORC "Build ORC runtime" ON)
 mark_as_advanced(COMPILER_RT_BUILD_ORC)
 option(COMPILER_RT_BUILD_GWP_ASAN "Build GWP-ASan, and link it into SCUDO" ON)
 mark_as_advanced(COMPILER_RT_BUILD_GWP_ASAN)
+option(COMPILER_RT_ENABLE_CET "Build Compiler RT with CET enabled" OFF)
 
 if(FUCHSIA)
   set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS_DEFAULT OFF)
@@ -248,6 +250,14 @@ include(config-ix)
 #================================
 # Setup Compiler Flags
 #================================
+
+# fcf-protection is a gcc/clang option for CET support on Linux platforms.
+# We need to handle MSVC CET option on Windows platforms.
+if (NOT MSVC)
+  if (COMPILER_RT_ENABLE_CET AND NOT COMPILER_RT_HAS_FCF_PROTECTION_FLAG)
+    message(FATAL_ERROR "Compiler used to build compiler-rt doesn't support CET!")
+  endif()
+endif()
 
 if(MSVC)
   # Override any existing /W flags with /W4. This is what LLVM does.  Failing to
@@ -578,15 +588,6 @@ if (CMAKE_LINKER MATCHES "link.exe$")
   # individual static libraries, so we enable the suppression flag for
   # the whole compiler-rt project.
   set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /IGNORE:4221")
-endif()
-
-if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
-  set(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> -X32_64 qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> -X32_64 qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_C_ARCHIVE_APPEND "<CMAKE_AR> -X32_64 q <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> -X32_64 q <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_C_ARCHIVE_FINISH "<CMAKE_RANLIB> -X32_64 <TARGET>")
-  set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -X32_64 <TARGET>")
 endif()
 
 add_subdirectory(include)
