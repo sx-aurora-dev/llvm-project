@@ -160,6 +160,7 @@ static Value *EmitFromInt(CodeGenFunction &CGF, llvm::Value *V,
 static Value *MakeBinaryAtomicValue(
     CodeGenFunction &CGF, llvm::AtomicRMWInst::BinOp Kind, const CallExpr *E,
     AtomicOrdering Ordering = AtomicOrdering::SequentiallyConsistent) {
+
   QualType T = E->getType();
   assert(E->getArg(0)->getType()->isPointerType());
   assert(CGF.getContext().hasSameUnqualifiedType(T,
@@ -1061,7 +1062,10 @@ static llvm::Value *emitPPCLoadReserveIntrinsic(CodeGenFunction &CGF,
 
   llvm::InlineAsm *IA =
       llvm::InlineAsm::get(FTy, Asm, Constraints, /*hasSideEffects=*/true);
-  return CGF.Builder.CreateCall(IA, {Addr});
+  llvm::CallInst *CI = CGF.Builder.CreateCall(IA, {Addr});
+  CI->addParamAttr(
+      0, Attribute::get(CGF.getLLVMContext(), Attribute::ElementType, RetType));
+  return CI;
 }
 
 namespace {
@@ -3141,6 +3145,15 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_elementwise_ceil:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::ceil, "elt.ceil"));
+  case Builtin::BI__builtin_elementwise_floor:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::floor, "elt.floor"));
+  case Builtin::BI__builtin_elementwise_roundeven:
+    return RValue::get(emitUnaryBuiltin(*this, E, llvm::Intrinsic::roundeven,
+                                        "elt.roundeven"));
+  case Builtin::BI__builtin_elementwise_trunc:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::trunc, "elt.trunc"));
 
   case Builtin::BI__builtin_elementwise_max: {
     Value *Op0 = EmitScalarExpr(E->getArg(0));

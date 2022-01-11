@@ -397,6 +397,10 @@ void RISCVDAGToDAGISel::selectVLXSEG(SDNode *Node, bool IsMasked,
 
   RISCVII::VLMUL IndexLMUL = RISCVTargetLowering::getLMUL(IndexVT);
   unsigned IndexLog2EEW = Log2_32(IndexVT.getScalarSizeInBits());
+  if (IndexLog2EEW == 6 && !Subtarget->is64Bit()) {
+    report_fatal_error("The V extension does not support EEW=64 for index "
+                       "values when XLEN=32");
+  }
   const RISCV::VLXSEGPseudo *P = RISCV::getVLXSEGPseudo(
       NF, IsMasked, IsOrdered, IndexLog2EEW, static_cast<unsigned>(LMUL),
       static_cast<unsigned>(IndexLMUL));
@@ -475,6 +479,10 @@ void RISCVDAGToDAGISel::selectVSXSEG(SDNode *Node, bool IsMasked,
 
   RISCVII::VLMUL IndexLMUL = RISCVTargetLowering::getLMUL(IndexVT);
   unsigned IndexLog2EEW = Log2_32(IndexVT.getScalarSizeInBits());
+  if (IndexLog2EEW == 6 && !Subtarget->is64Bit()) {
+    report_fatal_error("The V extension does not support EEW=64 for index "
+                       "values when XLEN=32");
+  }
   const RISCV::VSXSEGPseudo *P = RISCV::getVSXSEGPseudo(
       NF, IsMasked, IsOrdered, IndexLog2EEW, static_cast<unsigned>(LMUL),
       static_cast<unsigned>(IndexLMUL));
@@ -534,9 +542,6 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     return;
   }
   case ISD::SRL: {
-    // We don't need this transform if zext.h is supported.
-    if (Subtarget->hasStdExtZbb() || Subtarget->hasStdExtZbp())
-      break;
     // Optimize (srl (and X, 0xffff), C) ->
     //          (srli (slli X, (XLen-16), (XLen-16) + C)
     // Taking into account that the 0xffff may have had lower bits unset by
@@ -566,6 +571,37 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     }
 
     break;
+  }
+  case ISD::SRA: {
+    // Optimize (sra (sext_inreg X, i16), C) ->
+    //          (srai (slli X, (XLen-16), (XLen-16) + C)
+    // And      (sra (sext_inreg X, i8), C) ->
+    //          (srai (slli X, (XLen-8), (XLen-8) + C)
+    // This can occur when Zbb is enabled, which makes sext_inreg i16/i8 legal.
+    // This transform matches the code we get without Zbb. The shifts are more
+    // compressible, and this can help expose CSE opportunities in the sdiv by
+    // constant optimization.
+    auto *N1C = dyn_cast<ConstantSDNode>(Node->getOperand(1));
+    if (!N1C)
+      break;
+    SDValue N0 = Node->getOperand(0);
+    if (N0.getOpcode() != ISD::SIGN_EXTEND_INREG || !N0.hasOneUse())
+      break;
+    uint64_t ShAmt = N1C->getZExtValue();
+    unsigned ExtSize =
+        cast<VTSDNode>(N0.getOperand(1))->getVT().getSizeInBits();
+    // ExtSize of 32 should use sraiw via tablegen pattern.
+    if (ExtSize >= 32 || ShAmt >= ExtSize)
+      break;
+    unsigned LShAmt = Subtarget->getXLen() - ExtSize;
+    SDNode *SLLI =
+        CurDAG->getMachineNode(RISCV::SLLI, DL, VT, N0->getOperand(0),
+                               CurDAG->getTargetConstant(LShAmt, DL, VT));
+    SDNode *SRAI = CurDAG->getMachineNode(
+        RISCV::SRAI, DL, VT, SDValue(SLLI, 0),
+        CurDAG->getTargetConstant(LShAmt + ShAmt, DL, VT));
+    ReplaceNode(Node, SRAI);
+    return;
   }
   case ISD::AND: {
     auto *N1C = dyn_cast<ConstantSDNode>(Node->getOperand(1));
@@ -833,41 +869,20 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
       switch (RISCVTargetLowering::getLMUL(Src1VT)) {
       default:
         llvm_unreachable("Unexpected LMUL!");
-      case RISCVII::VLMUL::LMUL_F8:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF8 : RISCV::PseudoVMSLT_VX_MF8;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_MF8;
+#define CASE_VMSLT_VMNAND_OPCODES(lmulenum, suffix) \
+      case RISCVII::VLMUL::lmulenum: \
+        VMSLTOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_##suffix \
+                                 : RISCV::PseudoVMSLT_VX_##suffix; \
+        VMNANDOpcode = RISCV::PseudoVMNAND_MM_##suffix; \
         break;
-      case RISCVII::VLMUL::LMUL_F4:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF4 : RISCV::PseudoVMSLT_VX_MF4;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_MF4;
-        break;
-      case RISCVII::VLMUL::LMUL_F2:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF2 : RISCV::PseudoVMSLT_VX_MF2;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_MF2;
-        break;
-      case RISCVII::VLMUL::LMUL_1:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M1 : RISCV::PseudoVMSLT_VX_M1;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_M1;
-        break;
-      case RISCVII::VLMUL::LMUL_2:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M2 : RISCV::PseudoVMSLT_VX_M2;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_M2;
-        break;
-      case RISCVII::VLMUL::LMUL_4:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M4 : RISCV::PseudoVMSLT_VX_M4;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_M4;
-        break;
-      case RISCVII::VLMUL::LMUL_8:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M8 : RISCV::PseudoVMSLT_VX_M8;
-        VMNANDOpcode = RISCV::PseudoVMNAND_MM_M8;
-        break;
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_F8, MF8)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_F4, MF4)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_F2, MF2)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_1, M1)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_2, M2)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_4, M4)
+      CASE_VMSLT_VMNAND_OPCODES(LMUL_8, M8)
+#undef CASE_VMSLT_VMNAND_OPCODES
       }
       SDValue SEW = CurDAG->getTargetConstant(
           Log2_32(Src1VT.getScalarSizeInBits()), DL, XLenVT);
@@ -902,81 +917,39 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
       switch (RISCVTargetLowering::getLMUL(Src1VT)) {
       default:
         llvm_unreachable("Unexpected LMUL!");
-      case RISCVII::VLMUL::LMUL_F8:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF8 : RISCV::PseudoVMSLT_VX_MF8;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF8_MASK
-                                     : RISCV::PseudoVMSLT_VX_MF8_MASK;
+#define CASE_VMSLT_OPCODES(lmulenum, suffix) \
+      case RISCVII::VLMUL::lmulenum: \
+        VMSLTOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_##suffix \
+                                 : RISCV::PseudoVMSLT_VX_##suffix; \
+        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_##suffix##_MASK \
+                                     : RISCV::PseudoVMSLT_VX_##suffix##_MASK; \
         break;
-      case RISCVII::VLMUL::LMUL_F4:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF4 : RISCV::PseudoVMSLT_VX_MF4;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF4_MASK
-                                     : RISCV::PseudoVMSLT_VX_MF4_MASK;
-        break;
-      case RISCVII::VLMUL::LMUL_F2:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF2 : RISCV::PseudoVMSLT_VX_MF2;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_MF2_MASK
-                                     : RISCV::PseudoVMSLT_VX_MF2_MASK;
-        break;
-      case RISCVII::VLMUL::LMUL_1:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M1 : RISCV::PseudoVMSLT_VX_M1;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_M1_MASK
-                                     : RISCV::PseudoVMSLT_VX_M1_MASK;
-        break;
-      case RISCVII::VLMUL::LMUL_2:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M2 : RISCV::PseudoVMSLT_VX_M2;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_M2_MASK
-                                     : RISCV::PseudoVMSLT_VX_M2_MASK;
-        break;
-      case RISCVII::VLMUL::LMUL_4:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M4 : RISCV::PseudoVMSLT_VX_M4;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_M4_MASK
-                                     : RISCV::PseudoVMSLT_VX_M4_MASK;
-        break;
-      case RISCVII::VLMUL::LMUL_8:
-        VMSLTOpcode =
-            IsUnsigned ? RISCV::PseudoVMSLTU_VX_M8 : RISCV::PseudoVMSLT_VX_M8;
-        VMSLTMaskOpcode = IsUnsigned ? RISCV::PseudoVMSLTU_VX_M8_MASK
-                                     : RISCV::PseudoVMSLT_VX_M8_MASK;
-        break;
+      CASE_VMSLT_OPCODES(LMUL_F8, MF8)
+      CASE_VMSLT_OPCODES(LMUL_F4, MF4)
+      CASE_VMSLT_OPCODES(LMUL_F2, MF2)
+      CASE_VMSLT_OPCODES(LMUL_1, M1)
+      CASE_VMSLT_OPCODES(LMUL_2, M2)
+      CASE_VMSLT_OPCODES(LMUL_4, M4)
+      CASE_VMSLT_OPCODES(LMUL_8, M8)
+#undef CASE_VMSLT_OPCODES
       }
       // Mask operations use the LMUL from the mask type.
       switch (RISCVTargetLowering::getLMUL(VT)) {
       default:
         llvm_unreachable("Unexpected LMUL!");
-      case RISCVII::VLMUL::LMUL_F8:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_MF8;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_MF8;
+#define CASE_VMXOR_VANDN_OPCODES(lmulenum, suffix) \
+      case RISCVII::VLMUL::lmulenum: \
+        VMXOROpcode = RISCV::PseudoVMXOR_MM_##suffix; \
+        VMANDNOpcode = RISCV::PseudoVMANDN_MM_##suffix; \
         break;
-      case RISCVII::VLMUL::LMUL_F4:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_MF4;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_MF4;
-        break;
-      case RISCVII::VLMUL::LMUL_F2:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_MF2;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_MF2;
-        break;
-      case RISCVII::VLMUL::LMUL_1:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_M1;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_M1;
-        break;
-      case RISCVII::VLMUL::LMUL_2:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_M2;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_M2;
-        break;
-      case RISCVII::VLMUL::LMUL_4:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_M4;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_M4;
-        break;
-      case RISCVII::VLMUL::LMUL_8:
-        VMXOROpcode = RISCV::PseudoVMXOR_MM_M8;
-        VMANDNOpcode = RISCV::PseudoVMANDN_MM_M8;
-        break;
+      CASE_VMXOR_VANDN_OPCODES(LMUL_F8, MF8)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_F4, MF4)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_F2, MF2)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_1, M1)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_2, M2)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_4, M4)
+      CASE_VMXOR_VANDN_OPCODES(LMUL_8, M8)
+#undef CASE_VMXOR_VANDN_OPCODES
       }
       SDValue SEW = CurDAG->getTargetConstant(
           Log2_32(Src1VT.getScalarSizeInBits()), DL, XLenVT);
@@ -1194,6 +1167,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
       RISCVII::VLMUL LMUL = RISCVTargetLowering::getLMUL(VT);
       RISCVII::VLMUL IndexLMUL = RISCVTargetLowering::getLMUL(IndexVT);
       unsigned IndexLog2EEW = Log2_32(IndexVT.getScalarSizeInBits());
+      if (IndexLog2EEW == 6 && !Subtarget->is64Bit()) {
+        report_fatal_error("The V extension does not support EEW=64 for index "
+                           "values when XLEN=32");
+      }
       const RISCV::VLX_VSXPseudo *P = RISCV::getVLXPseudo(
           IsMasked, IsOrdered, IndexLog2EEW, static_cast<unsigned>(LMUL),
           static_cast<unsigned>(IndexLMUL));
@@ -1384,6 +1361,10 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
       RISCVII::VLMUL LMUL = RISCVTargetLowering::getLMUL(VT);
       RISCVII::VLMUL IndexLMUL = RISCVTargetLowering::getLMUL(IndexVT);
       unsigned IndexLog2EEW = Log2_32(IndexVT.getScalarSizeInBits());
+      if (IndexLog2EEW == 6 && !Subtarget->is64Bit()) {
+        report_fatal_error("The V extension does not support EEW=64 for index "
+                           "values when XLEN=32");
+      }
       const RISCV::VLX_VSXPseudo *P = RISCV::getVSXPseudo(
           IsMasked, IsOrdered, IndexLog2EEW, static_cast<unsigned>(LMUL),
           static_cast<unsigned>(IndexLMUL));

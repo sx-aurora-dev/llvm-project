@@ -8374,7 +8374,8 @@ public:
   /// corresponds to.  If there is no Value* for this operand, it returns
   /// MVT::Other.
   EVT getCallOperandValEVT(LLVMContext &Context, const TargetLowering &TLI,
-                           const DataLayout &DL) const {
+                           const DataLayout &DL,
+                           llvm::Type *ParamElemType) const {
     if (!CallOperandVal) return MVT::Other;
 
     if (isa<BasicBlock>(CallOperandVal))
@@ -8386,10 +8387,8 @@ public:
     // If this is an indirect operand, the operand is a pointer to the
     // accessed type.
     if (isIndirect) {
-      PointerType *PtrTy = dyn_cast<PointerType>(OpTy);
-      if (!PtrTy)
-        report_fatal_error("Indirect operand for inline asm not a pointer!");
-      OpTy = PtrTy->getElementType();
+      OpTy = ParamElemType;
+      assert(OpTy && "Indirect opernad must have elementtype attribute");
     }
 
     // Look for vector wrapped in a struct. e.g. { <16 x i8> }.
@@ -8689,19 +8688,17 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
     SDISelAsmOperandInfo &OpInfo = ConstraintOperands.back();
 
     // Compute the value type for each operand.
-    if (OpInfo.Type == InlineAsm::isInput ||
-        (OpInfo.Type == InlineAsm::isOutput && OpInfo.isIndirect)) {
-      OpInfo.CallOperandVal = Call.getArgOperand(ArgNo++);
+    if (OpInfo.hasArg()) {
+      OpInfo.CallOperandVal = Call.getArgOperand(ArgNo);
 
       // Process the call argument. BasicBlocks are labels, currently appearing
       // only in asm's.
       if (isa<CallBrInst>(Call) &&
-          ArgNo - 1 >= (cast<CallBrInst>(&Call)->arg_size() -
+          ArgNo >= (cast<CallBrInst>(&Call)->arg_size() -
                         cast<CallBrInst>(&Call)->getNumIndirectDests() -
                         NumMatchingOps) &&
           (NumMatchingOps == 0 ||
-           ArgNo - 1 <
-               (cast<CallBrInst>(&Call)->arg_size() - NumMatchingOps))) {
+           ArgNo < (cast<CallBrInst>(&Call)->arg_size() - NumMatchingOps))) {
         const auto *BA = cast<BlockAddress>(OpInfo.CallOperandVal);
         EVT VT = TLI.getValueType(DAG.getDataLayout(), BA->getType(), true);
         OpInfo.CallOperand = DAG.getTargetBlockAddress(BA, VT);
@@ -8711,9 +8708,11 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
         OpInfo.CallOperand = getValue(OpInfo.CallOperandVal);
       }
 
+      Type *ParamElemTy = Call.getAttributes().getParamElementType(ArgNo);
       EVT VT = OpInfo.getCallOperandValEVT(*DAG.getContext(), TLI,
-                                           DAG.getDataLayout());
+                                           DAG.getDataLayout(), ParamElemTy);
       OpInfo.ConstraintVT = VT.isSimple() ? VT.getSimpleVT() : MVT::Other;
+      ArgNo++;
     } else if (OpInfo.Type == InlineAsm::isOutput && !OpInfo.isIndirect) {
       // The return value of the call is this value.  As such, there is no
       // corresponding argument.

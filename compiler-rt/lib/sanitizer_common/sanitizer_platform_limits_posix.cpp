@@ -170,13 +170,9 @@ typedef struct user_fpregs elf_fpregset_t;
 #endif
 
 // Include these after system headers to avoid name clashes and ambiguities.
-#include "sanitizer_internal_defs.h"
-#include "sanitizer_platform_limits_posix.h"
-
-// To prevent macro redefinition warning between our sanitizer_thread_safety.h
-// and system's scsi.h.
-#  undef RELEASE
 #  include "sanitizer_common.h"
+#  include "sanitizer_internal_defs.h"
+#  include "sanitizer_platform_limits_posix.h"
 
 namespace __sanitizer {
   unsigned struct_utsname_sz = sizeof(struct utsname);
@@ -224,9 +220,13 @@ namespace __sanitizer {
 #    if SANITIZER_LINUX && SANITIZER_X64
     // See kernel arch/x86/kernel/fpu/signal.c for details.
     const auto *fpregs = static_cast<ucontext_t *>(ctx)->uc_mcontext.fpregs;
-    if (fpregs->__glibc_reserved1[12] == FP_XSTATE_MAGIC1)
-      return reinterpret_cast<const char *>(fpregs) +
-             fpregs->__glibc_reserved1[13] - static_cast<const char *>(ctx);
+    // The member names differ across header versions, but the actual layout
+    // is always the same.  So avoid using members, just use arithmetic.
+    const uint32_t *after_xmm =
+        reinterpret_cast<const uint32_t *>(fpregs + 1) - 24;
+    if (after_xmm[12] == FP_XSTATE_MAGIC1)
+      return reinterpret_cast<const char *>(fpregs) + after_xmm[13] -
+             static_cast<const char *>(ctx);
 #    endif
     return sizeof(ucontext_t);
   }

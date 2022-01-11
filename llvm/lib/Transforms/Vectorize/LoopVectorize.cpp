@@ -2065,8 +2065,8 @@ public:
   /// Remove the created SCEV & memory runtime check blocks & instructions, if
   /// unused.
   ~GeneratedRTChecks() {
-    SCEVExpanderCleaner SCEVCleaner(SCEVExp, *DT);
-    SCEVExpanderCleaner MemCheckCleaner(MemCheckExp, *DT);
+    SCEVExpanderCleaner SCEVCleaner(SCEVExp);
+    SCEVExpanderCleaner MemCheckCleaner(MemCheckExp);
     if (!SCEVCheckCond)
       SCEVCleaner.markResultUsed();
 
@@ -5991,8 +5991,8 @@ void LoopVectorizationCostModel::collectElementTypesForWidening() {
       if (auto *ST = dyn_cast<StoreInst>(&I))
         T = ST->getValueOperand()->getType();
 
-      if (!T->isSized())
-        continue;
+      assert(T->isSized() &&
+             "Expected the load/store/recurrence type to be sized");
 
       ElementTypesInLoop.insert(T);
     }
@@ -10002,7 +10002,7 @@ void VPWidenMemoryInstructionRecipe::execute(VPTransformState &State) {
         NewLI = Builder.CreateVectorReverse(NewLI, "reverse");
     }
 
-    State.set(getVPSingleValue(), NewLI, Part);
+    State.set(this, NewLI, Part);
   }
 }
 

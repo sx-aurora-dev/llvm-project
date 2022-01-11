@@ -826,7 +826,7 @@ SDValue VETargetLowering::lowerSIMD_INSERT_VECTOR_ELT(SDValue Op,
     Val = DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i64, Val);
 
     SDValue Result = Op;
-    if (0 /* Idx->isConstant()*/) {
+    if (false /* Idx->isConstant()*/) {
       // FIXME: optimized implementation using constant values
     } else {
       SDValue Const1 = DAG.getConstant(1, DL, MVT::i64);
@@ -878,7 +878,7 @@ VETargetLowering::lowerSIMD_EXTRACT_VECTOR_ELT(SDValue Op,
       Idx = DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i64, Idx);
 
     SDValue Result = Op;
-    if (0 /* Idx->isConstant() */) {
+    if (false /* Idx->isConstant() */) {
       // FIXME: optimized implementation using constant values
     } else {
       SDValue Const1 = DAG.getConstant(1, DL, MVT::i64);

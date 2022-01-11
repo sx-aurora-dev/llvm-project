@@ -962,6 +962,7 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
   setMinFunctionAlignment(Align(4));
   // Set preferred alignments.
   setPrefLoopAlignment(Align(1ULL << STI.getPrefLoopLogAlignment()));
+  setMaxBytesForAlignment(STI.getMaxBytesForLoopAlignment());
   setPrefFunctionAlignment(Align(1ULL << STI.getPrefFunctionLogAlignment()));
 
   // Only change the limit for entries in a jump table if specified by
@@ -19775,7 +19776,7 @@ bool AArch64TargetLowering::SimplifyDemandedBitsForTargetNode(
       Op, OriginalDemandedBits, OriginalDemandedElts, Known, TLO, Depth);
 }
 
-bool AArch64TargetLowering::isConstantUnsignedBitfieldExtactLegal(
+bool AArch64TargetLowering::isConstantUnsignedBitfieldExtractLegal(
     unsigned Opc, LLT Ty1, LLT Ty2) const {
   return Ty1 == Ty2 && (Ty1 == LLT::scalar(32) || Ty1 == LLT::scalar(64));
 }
