@@ -1751,7 +1751,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   SDValue AVL = getAnnotatedNodeAVL(Op).first;
   SDValue Mask = getNodeMask(Op);
   // TODO: this can be refined.. the mask has to be compactable for stores.
-  bool IsPackable = isPackableVVPLoadStore(Op);
+  bool IsPackable = isPackableLoadStore(Op);
   if (!IsPackable)
     return splitLoadStore(Op, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 

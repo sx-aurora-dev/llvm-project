@@ -214,8 +214,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       break;
     MVT ResVT = N->getSimpleValueType(0);
     auto N = CDAG.getNode(VEISD::VVP_FRSQRT, ResVT, {VX, Mask, AVL}, Flags);
-    if (RootIsPackLegalized)
-      addPackLegalizedNode(N.getNode());
     return N;
   }
 
