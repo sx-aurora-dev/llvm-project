@@ -3223,7 +3223,7 @@ static void emitCheckHandlerCall(CodeGenFunction &CGF,
   bool MayReturn =
       !IsFatal || RecoverKind == CheckRecoverableKind::AlwaysRecoverable;
 
-  llvm::AttrBuilder B;
+  llvm::AttrBuilder B(CGF.getLLVMContext());
   if (!MayReturn) {
     B.addAttribute(llvm::Attribute::NoReturn)
         .addAttribute(llvm::Attribute::NoUnwind);
@@ -4744,12 +4744,9 @@ LValue CodeGenFunction::EmitCastLValue(const CastExpr *E) {
     if (LV.isSimple()) {
       Address V = LV.getAddress(*this);
       if (V.isValid()) {
-        llvm::Type *T =
-            ConvertTypeForMem(E->getType())
-                ->getPointerTo(
-                    cast<llvm::PointerType>(V.getType())->getAddressSpace());
-        if (V.getType() != T)
-          LV.setAddress(Builder.CreateBitCast(V, T));
+        llvm::Type *T = ConvertTypeForMem(E->getType());
+        if (V.getElementType() != T)
+          LV.setAddress(Builder.CreateElementBitCast(V, T));
       }
     }
     return LV;
@@ -4808,8 +4805,9 @@ LValue CodeGenFunction::EmitCastLValue(const CastExpr *E) {
 
     CGM.EmitExplicitCastExprType(CE, this);
     LValue LV = EmitLValue(E->getSubExpr());
-    Address V = Builder.CreateBitCast(LV.getAddress(*this),
-                                      ConvertType(CE->getTypeAsWritten()));
+    Address V = Builder.CreateElementBitCast(
+        LV.getAddress(*this),
+        ConvertTypeForMem(CE->getTypeAsWritten()->getPointeeType()));
 
     if (SanOpts.has(SanitizerKind::CFIUnrelatedCast))
       EmitVTablePtrCheckForCast(E->getType(), V.getPointer(),

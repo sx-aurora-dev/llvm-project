@@ -7727,8 +7727,7 @@ Sema::ActOnCastExpr(Scope *S, SourceLocation LParenLoc,
     CastExpr = Result.get();
   }
 
-  if (getLangOpts().CPlusPlus && !castType->isVoidType() &&
-      !getSourceManager().isInSystemMacro(LParenLoc))
+  if (getLangOpts().CPlusPlus && !castType->isVoidType())
     Diag(LParenLoc, diag::warn_old_style_cast) << CastExpr->getSourceRange();
 
   CheckTollFreeBridgeCast(castType, CastExpr);
@@ -19270,10 +19269,12 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
 }
 
 Sema::ConditionResult Sema::ActOnCondition(Scope *S, SourceLocation Loc,
-                                           Expr *SubExpr, ConditionKind CK) {
-  // Empty conditions are valid in for-statements.
+                                           Expr *SubExpr, ConditionKind CK,
+                                           bool MissingOK) {
+  // MissingOK indicates whether having no condition expression is valid
+  // (for loop) or invalid (e.g. while loop).
   if (!SubExpr)
-    return ConditionResult();
+    return MissingOK ? ConditionResult() : ConditionError();
 
   ExprResult Cond;
   switch (CK) {
@@ -19291,7 +19292,7 @@ Sema::ConditionResult Sema::ActOnCondition(Scope *S, SourceLocation Loc,
   }
   if (Cond.isInvalid()) {
     Cond = CreateRecoveryExpr(SubExpr->getBeginLoc(), SubExpr->getEndLoc(),
-                              {SubExpr});
+                              {SubExpr}, PreferredConditionType(CK));
     if (!Cond.get())
       return ConditionError();
   }

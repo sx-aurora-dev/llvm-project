@@ -1227,9 +1227,8 @@ private:
 public:
   Value *CreateAdd(Value *LHS, Value *RHS, const Twine &Name = "",
                    bool HasNUW = false, bool HasNSW = false) {
-    if (auto *LC = dyn_cast<Constant>(LHS))
-      if (auto *RC = dyn_cast<Constant>(RHS))
-        return Insert(Folder.CreateAdd(LC, RC, HasNUW, HasNSW), Name);
+    if (auto *V = Folder.FoldAdd(LHS, RHS, HasNUW, HasNSW))
+      return V;
     return CreateInsertNUWNSWBinOp(Instruction::Add, LHS, RHS, Name,
                                    HasNUW, HasNSW);
   }
@@ -1402,12 +1401,8 @@ public:
   }
 
   Value *CreateOr(Value *LHS, Value *RHS, const Twine &Name = "") {
-    if (auto *RC = dyn_cast<Constant>(RHS)) {
-      if (RC->isNullValue())
-        return LHS;  // LHS | 0 -> LHS
-      if (auto *LC = dyn_cast<Constant>(LHS))
-        return Insert(Folder.CreateOr(LC, RC), Name);
-    }
+    if (auto *V = Folder.FoldOr(LHS, RHS))
+      return V;
     return Insert(BinaryOperator::CreateOr(LHS, RHS), Name);
   }
 
@@ -1585,6 +1580,15 @@ public:
     assert(Cond2->getType()->isIntOrIntVectorTy(1));
     return CreateSelect(Cond1, ConstantInt::getAllOnesValue(Cond2->getType()),
                         Cond2, Name);
+  }
+
+  // NOTE: this is sequential, non-commutative, ordered reduction!
+  Value *CreateLogicalOr(ArrayRef<Value *> Ops) {
+    assert(!Ops.empty());
+    Value *Accum = Ops[0];
+    for (unsigned i = 1; i < Ops.size(); i++)
+      Accum = CreateLogicalOr(Accum, Ops[i]);
+    return Accum;
   }
 
   CallInst *CreateConstrainedFPBinOp(
@@ -2231,9 +2235,8 @@ public:
 
   Value *CreateICmp(CmpInst::Predicate P, Value *LHS, Value *RHS,
                     const Twine &Name = "") {
-    if (auto *LC = dyn_cast<Constant>(LHS))
-      if (auto *RC = dyn_cast<Constant>(RHS))
-        return Insert(Folder.CreateICmp(P, LC, RC), Name);
+    if (auto *V = Folder.FoldICmp(P, LHS, RHS))
+      return V;
     return Insert(new ICmpInst(P, LHS, RHS), Name);
   }
 
