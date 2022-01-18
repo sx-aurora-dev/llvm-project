@@ -59,7 +59,7 @@ const SBFileSpec &SBFileSpec::operator=(const SBFileSpec &rhs) {
 
   if (this != &rhs)
     m_opaque_up = clone(rhs.m_opaque_up);
-  return LLDB_RECORD_RESULT(*this);
+  return *this;
 }
 
 bool SBFileSpec::operator==(const SBFileSpec &rhs) const {
@@ -143,8 +143,8 @@ void SBFileSpec::SetDirectory(const char *directory) {
 }
 
 uint32_t SBFileSpec::GetPath(char *dst_path, size_t dst_len) const {
-  LLDB_RECORD_CHAR_PTR_METHOD_CONST(uint32_t, SBFileSpec, GetPath,
-                                    (char *, size_t), dst_path, "", dst_len);
+  LLDB_RECORD_METHOD_CONST(uint32_t, SBFileSpec, GetPath, (char *, size_t),
+                           dst_path, "", dst_len);
 
   uint32_t result = m_opaque_up->GetPath(dst_path, dst_len);
 
