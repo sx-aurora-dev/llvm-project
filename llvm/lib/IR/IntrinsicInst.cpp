@@ -593,6 +593,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_vshift:
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
+  case Intrinsic::vp_merge:
   case Intrinsic::vp_select:
   case Intrinsic::experimental_vp_splice:
   case Intrinsic::vp_compress:

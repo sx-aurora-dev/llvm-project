@@ -1695,6 +1695,12 @@ def int_vp_fma : Intrinsic<[ llvm_anyvector_ty ],
                            [ IntrNoMem, IntrNoSync, IntrWillReturn]>;
 
 
+def int_vp_merge : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                llvm_i32_ty]>;
+
 // Reductions
 let IntrProperties = [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn] in {
   def int_vp_reduce_fadd : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
