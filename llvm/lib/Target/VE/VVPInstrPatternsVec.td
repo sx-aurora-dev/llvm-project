@@ -22,10 +22,10 @@ defm : VectorGather<v256i32, v256i64, v256i1, "VGTLZX">;
 multiclass VectorScatter<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string SCPrefix> {
   // Unmasked.
   def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(SCPrefix#"vizvl") $data, 0, 0, $addr, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvl") $addr, 0, 0, $data, $avl)>;
   // Masked.
   def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(SCPrefix#"vizvml") $data, 0, 0, $addr, $mask, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvml") $addr, 0, 0, $data, $mask, $avl)>;
 }
 
 defm : VectorScatter<v256f64, v256i64, v256i1, "VSC">;

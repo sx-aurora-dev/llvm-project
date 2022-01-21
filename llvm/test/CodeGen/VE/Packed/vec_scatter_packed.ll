@@ -9,7 +9,7 @@ define fastcc void @vec_scatter_v128f64(<128 x double*> %P, <128 x double> %D,<1
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vsc %v0, %v1, 0, 0, %vm1
+; CHECK-NEXT:    vsc %v1, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.scatter.v128f64.v128p0f64(<128 x double> %D, <128 x double*> %P, i32 16, <128 x i1> %M)
   ret void
@@ -21,7 +21,7 @@ define fastcc void @vec_scatter_v256f64(<256 x double*> %P, <256 x double> %D, <
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vsc %v0, %v1, 0, 0, %vm1
+; CHECK-NEXT:    vsc %v1, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.scatter.v256f64.v256p0f64(<256 x double> %D, <256 x double*> %P, i32 16, <256 x i1> %M)
   ret void
@@ -35,8 +35,8 @@ define fastcc void @vec_scatter_v512f64(<512 x double*> %P, <512 x double> %D, <
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vsc %v0, %v2, 0, 0, %vm2
-; CHECK-NEXT:    vsc %v1, %v3, 0, 0, %vm3
+; CHECK-NEXT:    vsc %v2, %v0, 0, 0, %vm2
+; CHECK-NEXT:    vsc %v3, %v1, 0, 0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.scatter.v512f64.v512p0f64(<512 x double> %D, <512 x double*> %P, i32 16, <512 x i1> %M)
   ret void
@@ -50,9 +50,9 @@ define fastcc void @vec_scatter_v512f32(<512 x float*> %P, <512 x float> %D, <51
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vscu %v0, %v2, 0, 0, %vm2
+; CHECK-NEXT:    vscu %v2, %v0, 0, 0, %vm2
 ; CHECK-NEXT:    vshf %v0, %v2, %v2, 4
-; CHECK-NEXT:    vscu %v1, %v0, 0, 0, %vm3
+; CHECK-NEXT:    vscu %v0, %v1, 0, 0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.scatter.v512f32.v512p0f32(<512 x float> %D, <512 x float*> %P, i32 16, <512 x i1> %M)
   ret void
