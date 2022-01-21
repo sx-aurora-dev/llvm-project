@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #----------------------------------------------------------------------
 # Be sure to add the python path that points to the LLDB shared library.
@@ -83,6 +83,7 @@ class CrashLog(symbolication.Symbolicator):
             self.registers = dict()
             self.reason = None
             self.queue = None
+            self.crashed = False
             self.app_specific_backtrace = app_specific_backtrace
 
         def dump(self, prefix):
@@ -97,7 +98,7 @@ class CrashLog(symbolication.Symbolicator):
             if self.registers:
                 print("%s  Registers:" % (prefix))
                 for reg in self.registers.keys():
-                    print("%s    %-5s = %#16.16x" % (prefix, reg, self.registers[reg]))
+                    print("%s    %-8s = %#16.16x" % (prefix, reg, self.registers[reg]))
 
         def dump_symbolicated(self, crash_log, options):
             this_thread_crashed = self.app_specific_backtrace
@@ -156,6 +157,13 @@ class CrashLog(symbolication.Symbolicator):
                         symbolicated_frame_address_idx += 1
                 else:
                     print(frame)
+            if self.registers:
+                print()
+                for reg in self.registers.keys():
+                    print("    %-8s = %#16.16x" % (reg, self.registers[reg]))
+            elif self.crashed:
+               print()
+               print("No thread state (register information) available")
 
         def add_ident(self, ident):
             if ident not in self.idents:
@@ -289,18 +297,24 @@ class CrashLog(symbolication.Symbolicator):
                     return False
             if not self.resolved_path and not os.path.exists(self.path):
                 try:
-                    dsym = subprocess.check_output(
+                    mdfind_results = subprocess.check_output(
                         ["/usr/bin/mdfind",
-                         "com_apple_xcode_dsym_uuids == %s"%uuid_str]).decode("utf-8")[:-1]
-                    if dsym and os.path.exists(dsym):
-                        print(('falling back to binary inside "%s"'%dsym))
-                        self.symfile = dsym
+                         "com_apple_xcode_dsym_uuids == %s" % uuid_str]).decode("utf-8").splitlines()
+                    found_matching_slice = False
+                    for dsym in mdfind_results:
                         dwarf_dir = os.path.join(dsym, 'Contents/Resources/DWARF')
+                        if not os.path.exists(dwarf_dir):
+                            # Not a dSYM bundle, probably an Xcode archive.
+                            continue
+                        print('falling back to binary inside "%s"' % dsym)
+                        self.symfile = dsym
                         for filename in os.listdir(dwarf_dir):
-                            self.path = os.path.join(dwarf_dir, filename)
-                            if not self.find_matching_slice():
-                                return False
-                            break
+                           self.path = os.path.join(dwarf_dir, filename)
+                           if self.find_matching_slice():
+                              found_matching_slice = True
+                              break
+                        if found_matching_slice:
+                           break
                 except:
                     pass
             if (self.resolved_path and os.path.exists(self.resolved_path)) or (
@@ -320,6 +334,7 @@ class CrashLog(symbolication.Symbolicator):
         self.threads = list()
         self.backtraces = list()  # For application specific backtraces
         self.idents = list()  # A list of the required identifiers for doing all stack backtraces
+        self.errors = list()
         self.crashed_thread_idx = -1
         self.version = -1
         self.target = None
@@ -383,6 +398,10 @@ class CrashLogFormatException(Exception):
     pass
 
 
+class CrashLogParseException(Exception):
+   pass
+
+
 class CrashLogParser:
     def parse(self, debugger, path, verbose):
         try:
@@ -401,20 +420,35 @@ class JSONCrashLogParser:
         with open(self.path, 'r') as f:
             buffer = f.read()
 
-        # First line is meta-data.
-        buffer = buffer[buffer.index('\n') + 1:]
+        # Skip the first line if it contains meta data.
+        head, _, tail = buffer.partition('\n')
+        try:
+            metadata = json.loads(head)
+            if 'app_name' in metadata and 'app_version' in metadata:
+                buffer = tail
+        except ValueError:
+            pass
 
         try:
             self.data = json.loads(buffer)
         except ValueError:
             raise CrashLogFormatException()
 
-        self.parse_process_info(self.data)
-        self.parse_images(self.data['usedImages'])
-        self.parse_threads(self.data['threads'])
-
-        thread = self.crashlog.threads[self.crashlog.crashed_thread_idx]
-        thread.reason = self.parse_crash_reason(self.data['exception'])
+        try:
+            self.parse_process_info(self.data)
+            self.parse_images(self.data['usedImages'])
+            self.parse_threads(self.data['threads'])
+            self.parse_errors(self.data)
+            thread = self.crashlog.threads[self.crashlog.crashed_thread_idx]
+            reason = self.parse_crash_reason(self.data['exception'])
+            if thread.reason:
+                thread.reason = '{} {}'.format(thread.reason, reason)
+            else:
+                thread.reason = reason
+        except (KeyError, ValueError, TypeError) as e:
+            raise CrashLogParseException(
+                'Failed to parse JSON crashlog: {}: {}'.format(
+                    type(e).__name__, e))
 
         return self.crashlog
 
@@ -444,9 +478,9 @@ class JSONCrashLogParser:
             img_uuid = uuid.UUID(json_image['uuid'])
             low = int(json_image['base'])
             high = int(0)
-            name = json_image['name']
-            path = json_image['path']
-            version = ""
+            name = json_image['name'] if 'name' in json_image else ''
+            path = json_image['path'] if 'path' in json_image else ''
+            version = ''
             darwin_image = self.crashlog.DarwinImage(low, high, name, version,
                                                      img_uuid, path,
                                                      self.verbose)
@@ -457,7 +491,8 @@ class JSONCrashLogParser:
         idx = 0
         for json_frame in json_frames:
             image_id = int(json_frame['imageIndex'])
-            ident = self.get_used_image(image_id)['name']
+            json_image = self.get_used_image(image_id)
+            ident = json_image['name'] if 'name' in json_image else ''
             thread.add_ident(ident)
             if ident not in self.crashlog.idents:
                 self.crashlog.idents.append(ident)
@@ -472,30 +507,32 @@ class JSONCrashLogParser:
         idx = 0
         for json_thread in json_threads:
             thread = self.crashlog.Thread(idx, False)
+            if 'name' in json_thread:
+                thread.reason = json_thread['name']
             if json_thread.get('triggered', False):
                 self.crashlog.crashed_thread_idx = idx
-                self.registers = self.parse_thread_registers(
-                    json_thread['threadState'])
+                thread.crashed = True
+                if 'threadState' in json_thread:
+                    thread.registers = self.parse_thread_registers(
+                        json_thread['threadState'])
             thread.queue = json_thread.get('queue')
             self.parse_frames(thread, json_thread.get('frames', []))
             self.crashlog.threads.append(thread)
             idx += 1
 
     def parse_thread_registers(self, json_thread_state):
-        idx = 0
         registers = dict()
-        for json_reg in json_thread_state.get('x', []):
-            key = str('x{}'.format(idx))
-            value = int(json_reg['value'])
-            registers[key] = value
-            idx += 1
-
-        for register in ['lr', 'cpsr', 'fp', 'sp', 'esr', 'pc']:
-            if register in json_thread_state:
-                json_reg = json_thread_state[register]
-                registers[register] = int(json_reg['value'])
-
+        for key, state in json_thread_state.items():
+            try:
+               value = int(state['value'])
+               registers[key] = value
+            except (TypeError, ValueError):
+               pass
         return registers
+
+    def parse_errors(self, json_data):
+       if 'reportNotes' in json_data:
+          self.crashlog.errors = json_data['reportNotes']
 
 
 class CrashLogParseMode:
@@ -1035,6 +1072,11 @@ def SymbolicateCrashLog(crash_log, options):
     for thread in crash_log.threads:
         thread.dump_symbolicated(crash_log, options)
         print()
+
+    if crash_log.errors:
+        print("Errors:")
+        for error in crash_log.errors:
+            print(error)
 
 
 def CreateSymbolicateCrashLogOptions(

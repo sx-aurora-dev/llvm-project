@@ -1,4 +1,4 @@
-//===-- M68kInstrInfo.cpp - M68k Instruction Information ----*- C++ -*-===//
+//===-- M68kInstrInfo.cpp - M68k Instruction Information --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,6 +16,7 @@
 #include "M68kInstrBuilder.h"
 #include "M68kMachineFunction.h"
 #include "M68kTargetMachine.h"
+#include "MCTargetDesc/M68kMCCodeEmitter.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -23,8 +24,8 @@
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/TargetRegistry.h"
 
 #include <functional>
 
@@ -441,8 +442,8 @@ bool M68kInstrInfo::ExpandMOVSZX_RM(MachineInstrBuilder &MIB, bool IsSigned,
   // We need the subreg of Dst to make instruction verifier happy because the
   // real machine instruction consumes and produces values of the same size and
   // the registers the will be used here fall into different classes and this
-  // makes IV cry. We could of course use bigger operation but this will put
-  // some pressure on cache and memory so no.
+  // makes IV cry. We could use a bigger operation, but this will put some
+  // pressure on cache and memory, so no.
   unsigned SubDst =
       RI.getSubReg(Dst, MVTSrc == MVT::i8 ? M68k::MxSubRegIndex8Lo
                                           : M68k::MxSubRegIndex16Lo);

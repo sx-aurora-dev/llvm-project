@@ -13,19 +13,19 @@ llvm_add_library(MLIRTableGen STATIC
   Attribute.cpp
   AttrOrTypeDef.cpp
   Builder.cpp
+  Class.cpp
   Constraint.cpp
   Dialect.cpp
   Format.cpp
   Interfaces.cpp
   Operator.cpp
-  OpClass.cpp
-  OpTrait.cpp
   Pass.cpp
   Pattern.cpp
   Predicate.cpp
   Region.cpp
   SideEffects.cpp
   Successor.cpp
+  Trait.cpp
   Type.cpp
 
   DISABLE_LLVM_LINK_LLVM_DYLIB

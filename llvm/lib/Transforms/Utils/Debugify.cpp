@@ -25,6 +25,8 @@
 #include "llvm/IR/PassInstrumentation.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/JSON.h"
 
 #define DEBUG_TYPE "debugify"
 
@@ -302,18 +304,39 @@ bool llvm::collectDebugInfoMetadata(Module &M,
     // Collect the DISubprogram.
     auto *SP = F.getSubprogram();
     DIPreservationMap[NameOfWrappedPass].DIFunctions.insert({F.getName(), SP});
-    if (SP)
+    if (SP) {
       LLVM_DEBUG(dbgs() << "  Collecting subprogram: " << *SP << '\n');
+      for (const DINode *DN : SP->getRetainedNodes()) {
+        if (const auto *DV = dyn_cast<DILocalVariable>(DN)) {
+          DIPreservationMap[NameOfWrappedPass].DIVariables[DV] = 0;
+        }
+      }
+    }
 
     for (BasicBlock &BB : F) {
-      // Collect debug locations (!dbg).
-      // TODO: Collect dbg.values.
+      // Collect debug locations (!dbg) and debug variable intrinsics.
       for (Instruction &I : BB) {
         // Skip PHIs.
         if (isa<PHINode>(I))
           continue;
 
-        // Skip debug instructions.
+        // Collect dbg.values and dbg.declares.
+        if (auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I)) {
+          if (!SP)
+            continue;
+          // Skip inlined variables.
+          if (I.getDebugLoc().getInlinedAt())
+            continue;
+          // Skip undef values.
+          if (DVI->isUndef())
+            continue;
+
+          auto *Var = DVI->getVariable();
+          DIPreservationMap[NameOfWrappedPass].DIVariables[Var]++;
+          continue;
+        }
+
+        // Skip debug instructions other than dbg.value and dbg.declare.
         if (isa<DbgInfoIntrinsic>(&I))
           continue;
 
@@ -334,16 +357,22 @@ bool llvm::collectDebugInfoMetadata(Module &M,
 static bool checkFunctions(const DebugFnMap &DIFunctionsBefore,
                            const DebugFnMap &DIFunctionsAfter,
                            StringRef NameOfWrappedPass,
-                           StringRef FileNameFromCU) {
+                           StringRef FileNameFromCU, bool ShouldWriteIntoJSON,
+                           llvm::json::Array &Bugs) {
   bool Preserved = true;
   for (const auto &F : DIFunctionsAfter) {
     if (F.second)
       continue;
     auto SPIt = DIFunctionsBefore.find(F.first);
     if (SPIt == DIFunctionsBefore.end()) {
-      dbg() << "ERROR: " << NameOfWrappedPass
-            << " did not generate DISubprogram for " << F.first << " from "
-            << FileNameFromCU << '\n';
+      if (ShouldWriteIntoJSON)
+        Bugs.push_back(llvm::json::Object({{"metadata", "DISubprogram"},
+                                           {"name", F.first},
+                                           {"action", "not-generate"}}));
+      else
+        dbg() << "ERROR: " << NameOfWrappedPass
+              << " did not generate DISubprogram for " << F.first << " from "
+              << FileNameFromCU << '\n';
       Preserved = false;
     } else {
       auto SP = SPIt->second;
@@ -351,8 +380,13 @@ static bool checkFunctions(const DebugFnMap &DIFunctionsBefore,
         continue;
       // If the function had the SP attached before the pass, consider it as
       // a debug info bug.
-      dbg() << "ERROR: " << NameOfWrappedPass << " dropped DISubprogram of "
-            << F.first << " from " << FileNameFromCU << '\n';
+      if (ShouldWriteIntoJSON)
+        Bugs.push_back(llvm::json::Object({{"metadata", "DISubprogram"},
+                                           {"name", F.first},
+                                           {"action", "drop"}}));
+      else
+        dbg() << "ERROR: " << NameOfWrappedPass << " dropped DISubprogram of "
+              << F.first << " from " << FileNameFromCU << '\n';
       Preserved = false;
     }
   }
@@ -366,7 +400,9 @@ static bool checkInstructions(const DebugInstMap &DILocsBefore,
                               const DebugInstMap &DILocsAfter,
                               const WeakInstValueMap &InstToDelete,
                               StringRef NameOfWrappedPass,
-                              StringRef FileNameFromCU) {
+                              StringRef FileNameFromCU,
+                              bool ShouldWriteIntoJSON,
+                              llvm::json::Array &Bugs) {
   bool Preserved = true;
   for (const auto &L : DILocsAfter) {
     if (L.second)
@@ -382,22 +418,37 @@ static bool checkInstructions(const DebugInstMap &DILocsBefore,
     auto FnName = Instr->getFunction()->getName();
     auto BB = Instr->getParent();
     auto BBName = BB->hasName() ? BB->getName() : "no-name";
+    auto InstName = Instruction::getOpcodeName(Instr->getOpcode());
 
     auto InstrIt = DILocsBefore.find(Instr);
     if (InstrIt == DILocsBefore.end()) {
-      dbg() << "WARNING: " << NameOfWrappedPass
-            << " did not generate DILocation for " << *Instr
-            << " (BB: " << BBName << ", Fn: " << FnName
-            << ", File: " << FileNameFromCU << ")\n";
+      if (ShouldWriteIntoJSON)
+        Bugs.push_back(llvm::json::Object({{"metadata", "DILocation"},
+                                           {"fn-name", FnName.str()},
+                                           {"bb-name", BBName.str()},
+                                           {"instr", InstName},
+                                           {"action", "not-generate"}}));
+      else
+        dbg() << "WARNING: " << NameOfWrappedPass
+              << " did not generate DILocation for " << *Instr
+              << " (BB: " << BBName << ", Fn: " << FnName
+              << ", File: " << FileNameFromCU << ")\n";
       Preserved = false;
     } else {
       if (!InstrIt->second)
         continue;
       // If the instr had the !dbg attached before the pass, consider it as
       // a debug info issue.
-      dbg() << "WARNING: " << NameOfWrappedPass << " dropped DILocation of "
-            << *Instr << " (BB: " << BBName << ", Fn: " << FnName
-            << ", File: " << FileNameFromCU << ")\n";
+      if (ShouldWriteIntoJSON)
+        Bugs.push_back(llvm::json::Object({{"metadata", "DILocation"},
+                                           {"fn-name", FnName.str()},
+                                           {"bb-name", BBName.str()},
+                                           {"instr", InstName},
+                                           {"action", "drop"}}));
+      else
+        dbg() << "WARNING: " << NameOfWrappedPass << " dropped DILocation of "
+              << *Instr << " (BB: " << BBName << ", Fn: " << FnName
+              << ", File: " << FileNameFromCU << ")\n";
       Preserved = false;
     }
   }
@@ -405,11 +456,68 @@ static bool checkInstructions(const DebugInstMap &DILocsBefore,
   return Preserved;
 }
 
+// This checks the preservation of original debug variable intrinsics.
+static bool checkVars(const DebugVarMap &DIVarsBefore,
+                      const DebugVarMap &DIVarsAfter,
+                      StringRef NameOfWrappedPass, StringRef FileNameFromCU,
+                      bool ShouldWriteIntoJSON, llvm::json::Array &Bugs) {
+  bool Preserved = true;
+  for (const auto &V : DIVarsBefore) {
+    auto VarIt = DIVarsAfter.find(V.first);
+    if (VarIt == DIVarsAfter.end())
+      continue;
+
+    unsigned NumOfDbgValsAfter = VarIt->second;
+
+    if (V.second > NumOfDbgValsAfter) {
+      if (ShouldWriteIntoJSON)
+        Bugs.push_back(llvm::json::Object(
+            {{"metadata", "dbg-var-intrinsic"},
+             {"name", V.first->getName()},
+             {"fn-name", V.first->getScope()->getSubprogram()->getName()},
+             {"action", "drop"}}));
+      else
+        dbg() << "WARNING: " << NameOfWrappedPass
+              << " drops dbg.value()/dbg.declare() for " << V.first->getName()
+              << " from "
+              << "function " << V.first->getScope()->getSubprogram()->getName()
+              << " (file " << FileNameFromCU << ")\n";
+      Preserved = false;
+    }
+  }
+
+  return Preserved;
+}
+
+// Write the json data into the specifed file.
+static void writeJSON(StringRef OrigDIVerifyBugsReportFilePath,
+                      StringRef FileNameFromCU, StringRef NameOfWrappedPass,
+                      llvm::json::Array &Bugs) {
+  std::error_code EC;
+  raw_fd_ostream OS_FILE{OrigDIVerifyBugsReportFilePath, EC,
+                         sys::fs::OF_Append | sys::fs::OF_TextWithCRLF};
+  if (EC) {
+    errs() << "Could not open file: " << EC.message() << ", "
+           << OrigDIVerifyBugsReportFilePath << '\n';
+    return;
+  }
+
+  OS_FILE << "{\"file\":\"" << FileNameFromCU << "\", ";
+
+  StringRef PassName = NameOfWrappedPass != "" ? NameOfWrappedPass : "no-name";
+  OS_FILE << "\"pass\":\"" << PassName << "\", ";
+
+  llvm::json::Value BugsToPrint{std::move(Bugs)};
+  OS_FILE << "\"bugs\": " << BugsToPrint;
+
+  OS_FILE << "}\n";
+}
+
 bool llvm::checkDebugInfoMetadata(Module &M,
                                   iterator_range<Module::iterator> Functions,
                                   DebugInfoPerPassMap &DIPreservationMap,
-                                  StringRef Banner,
-                                  StringRef NameOfWrappedPass) {
+                                  StringRef Banner, StringRef NameOfWrappedPass,
+                                  StringRef OrigDIVerifyBugsReportFilePath) {
   LLVM_DEBUG(dbgs() << Banner << ": (after) " << NameOfWrappedPass << '\n');
 
   if (!M.getNamedMetadata("llvm.dbg.cu")) {
@@ -428,19 +536,42 @@ bool llvm::checkDebugInfoMetadata(Module &M,
     // TODO: Collect metadata other than DISubprograms.
     // Collect the DISubprogram.
     auto *SP = F.getSubprogram();
-    DIPreservationAfter[NameOfWrappedPass].DIFunctions.insert({F.getName(), SP});
-    if (SP)
+    DIPreservationAfter[NameOfWrappedPass].DIFunctions.insert(
+        {F.getName(), SP});
+
+    if (SP) {
       LLVM_DEBUG(dbgs() << "  Collecting subprogram: " << *SP << '\n');
+      for (const DINode *DN : SP->getRetainedNodes()) {
+        if (const auto *DV = dyn_cast<DILocalVariable>(DN)) {
+          DIPreservationAfter[NameOfWrappedPass].DIVariables[DV] = 0;
+        }
+      }
+    }
 
     for (BasicBlock &BB : F) {
-      // Collect debug locations (!dbg attachments).
-      // TODO: Collect dbg.values.
+      // Collect debug locations (!dbg) and debug variable intrinsics.
       for (Instruction &I : BB) {
         // Skip PHIs.
         if (isa<PHINode>(I))
           continue;
 
-        // Skip debug instructions.
+        // Collect dbg.values and dbg.declares.
+        if (auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I)) {
+          if (!SP)
+            continue;
+          // Skip inlined variables.
+          if (I.getDebugLoc().getInlinedAt())
+            continue;
+          // Skip undef values.
+          if (DVI->isUndef())
+            continue;
+
+          auto *Var = DVI->getVariable();
+          DIPreservationAfter[NameOfWrappedPass].DIVariables[Var]++;
+          continue;
+        }
+
+        // Skip debug instructions other than dbg.value and dbg.declare.
         if (isa<DbgInfoIntrinsic>(&I))
           continue;
 
@@ -465,16 +596,31 @@ bool llvm::checkDebugInfoMetadata(Module &M,
   auto DILocsBefore = DIPreservationMap[NameOfWrappedPass].DILocations;
   auto DILocsAfter = DIPreservationAfter[NameOfWrappedPass].DILocations;
 
-  auto InstToDelete = DIPreservationAfter[NameOfWrappedPass].InstToDelete;
+  auto InstToDelete = DIPreservationMap[NameOfWrappedPass].InstToDelete;
 
-  bool ResultForFunc = checkFunctions(DIFunctionsBefore, DIFunctionsAfter,
-                                      NameOfWrappedPass, FileNameFromCU);
-  bool ResultForInsts =
-      checkInstructions(DILocsBefore, DILocsAfter, InstToDelete,
-                        NameOfWrappedPass, FileNameFromCU);
-  bool Result = ResultForFunc && ResultForInsts;
+  auto DIVarsBefore = DIPreservationMap[NameOfWrappedPass].DIVariables;
+  auto DIVarsAfter = DIPreservationAfter[NameOfWrappedPass].DIVariables;
+
+  bool ShouldWriteIntoJSON = !OrigDIVerifyBugsReportFilePath.empty();
+  llvm::json::Array Bugs;
+
+  bool ResultForFunc =
+      checkFunctions(DIFunctionsBefore, DIFunctionsAfter, NameOfWrappedPass,
+                     FileNameFromCU, ShouldWriteIntoJSON, Bugs);
+  bool ResultForInsts = checkInstructions(
+      DILocsBefore, DILocsAfter, InstToDelete, NameOfWrappedPass,
+      FileNameFromCU, ShouldWriteIntoJSON, Bugs);
+
+  bool ResultForVars = checkVars(DIVarsBefore, DIVarsAfter, NameOfWrappedPass,
+                                 FileNameFromCU, ShouldWriteIntoJSON, Bugs);
+
+  bool Result = ResultForFunc && ResultForInsts && ResultForVars;
 
   StringRef ResultBanner = NameOfWrappedPass != "" ? NameOfWrappedPass : Banner;
+  if (ShouldWriteIntoJSON && !Bugs.empty())
+    writeJSON(OrigDIVerifyBugsReportFilePath, FileNameFromCU, NameOfWrappedPass,
+              Bugs);
+
   if (Result)
     dbg() << ResultBanner << ": PASS\n";
   else
@@ -560,7 +706,7 @@ bool checkDebugifyMetadata(Module &M,
 
     // Find missing lines.
     for (Instruction &I : instructions(F)) {
-      if (isa<DbgValueInst>(&I) || isa<PHINode>(&I))
+      if (isa<DbgValueInst>(&I))
         continue;
 
       auto DL = I.getDebugLoc();
@@ -569,7 +715,7 @@ bool checkDebugifyMetadata(Module &M,
         continue;
       }
 
-      if (!DL) {
+      if (!isa<PHINode>(&I) && !DL) {
         dbg() << "WARNING: Instruction with empty DebugLoc in function ";
         dbg() << F.getName() << " --";
         I.print(dbg());
@@ -680,15 +826,18 @@ struct CheckDebugifyModulePass : public ModulePass {
                                    "CheckModuleDebugify", Strip, StatsMap);
     return checkDebugInfoMetadata(
         M, M.functions(), *DIPreservationMap,
-        "CheckModuleDebugify (original debuginfo)", NameOfWrappedPass);
+        "CheckModuleDebugify (original debuginfo)", NameOfWrappedPass,
+        OrigDIVerifyBugsReportFilePath);
   }
 
   CheckDebugifyModulePass(
       bool Strip = false, StringRef NameOfWrappedPass = "",
       DebugifyStatsMap *StatsMap = nullptr,
       enum DebugifyMode Mode = DebugifyMode::SyntheticDebugInfo,
-      DebugInfoPerPassMap *DIPreservationMap = nullptr)
+      DebugInfoPerPassMap *DIPreservationMap = nullptr,
+      StringRef OrigDIVerifyBugsReportFilePath = "")
       : ModulePass(ID), NameOfWrappedPass(NameOfWrappedPass),
+        OrigDIVerifyBugsReportFilePath(OrigDIVerifyBugsReportFilePath),
         StatsMap(StatsMap), DIPreservationMap(DIPreservationMap), Mode(Mode),
         Strip(Strip) {}
 
@@ -700,6 +849,7 @@ struct CheckDebugifyModulePass : public ModulePass {
 
 private:
   StringRef NameOfWrappedPass;
+  StringRef OrigDIVerifyBugsReportFilePath;
   DebugifyStatsMap *StatsMap;
   DebugInfoPerPassMap *DIPreservationMap;
   enum DebugifyMode Mode;
@@ -718,15 +868,18 @@ struct CheckDebugifyFunctionPass : public FunctionPass {
                                    Strip, StatsMap);
     return checkDebugInfoMetadata(
         M, make_range(FuncIt, std::next(FuncIt)), *DIPreservationMap,
-        "CheckFunctionDebugify (original debuginfo)", NameOfWrappedPass);
+        "CheckFunctionDebugify (original debuginfo)", NameOfWrappedPass,
+        OrigDIVerifyBugsReportFilePath);
   }
 
   CheckDebugifyFunctionPass(
       bool Strip = false, StringRef NameOfWrappedPass = "",
       DebugifyStatsMap *StatsMap = nullptr,
       enum DebugifyMode Mode = DebugifyMode::SyntheticDebugInfo,
-      DebugInfoPerPassMap *DIPreservationMap = nullptr)
+      DebugInfoPerPassMap *DIPreservationMap = nullptr,
+      StringRef OrigDIVerifyBugsReportFilePath = "")
       : FunctionPass(ID), NameOfWrappedPass(NameOfWrappedPass),
+        OrigDIVerifyBugsReportFilePath(OrigDIVerifyBugsReportFilePath),
         StatsMap(StatsMap), DIPreservationMap(DIPreservationMap), Mode(Mode),
         Strip(Strip) {}
 
@@ -738,6 +891,7 @@ struct CheckDebugifyFunctionPass : public FunctionPass {
 
 private:
   StringRef NameOfWrappedPass;
+  StringRef OrigDIVerifyBugsReportFilePath;
   DebugifyStatsMap *StatsMap;
   DebugInfoPerPassMap *DIPreservationMap;
   enum DebugifyMode Mode;
@@ -794,22 +948,26 @@ PreservedAnalyses NewPMDebugifyPass::run(Module &M, ModuleAnalysisManager &) {
 
 ModulePass *createCheckDebugifyModulePass(
     bool Strip, StringRef NameOfWrappedPass, DebugifyStatsMap *StatsMap,
-    enum DebugifyMode Mode, DebugInfoPerPassMap *DIPreservationMap) {
+    enum DebugifyMode Mode, DebugInfoPerPassMap *DIPreservationMap,
+    StringRef OrigDIVerifyBugsReportFilePath) {
   if (Mode == DebugifyMode::SyntheticDebugInfo)
     return new CheckDebugifyModulePass(Strip, NameOfWrappedPass, StatsMap);
   assert(Mode == DebugifyMode::OriginalDebugInfo && "Must be original mode");
   return new CheckDebugifyModulePass(false, NameOfWrappedPass, nullptr, Mode,
-                                     DIPreservationMap);
+                                     DIPreservationMap,
+                                     OrigDIVerifyBugsReportFilePath);
 }
 
 FunctionPass *createCheckDebugifyFunctionPass(
     bool Strip, StringRef NameOfWrappedPass, DebugifyStatsMap *StatsMap,
-    enum DebugifyMode Mode, DebugInfoPerPassMap *DIPreservationMap) {
+    enum DebugifyMode Mode, DebugInfoPerPassMap *DIPreservationMap,
+    StringRef OrigDIVerifyBugsReportFilePath) {
   if (Mode == DebugifyMode::SyntheticDebugInfo)
     return new CheckDebugifyFunctionPass(Strip, NameOfWrappedPass, StatsMap);
   assert(Mode == DebugifyMode::OriginalDebugInfo && "Must be original mode");
   return new CheckDebugifyFunctionPass(false, NameOfWrappedPass, nullptr, Mode,
-                                       DIPreservationMap);
+                                       DIPreservationMap,
+                                       OrigDIVerifyBugsReportFilePath);
 }
 
 PreservedAnalyses NewPMCheckDebugifyPass::run(Module &M,

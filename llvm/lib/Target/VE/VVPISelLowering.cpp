@@ -1452,6 +1452,8 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
   Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
   if (!VecVTOpt.hasValue() || !VecVTOpt.getValue().isVector()) {
+    LLVM_DEBUG(if (VecVTOpt) dbgs()
+               << "VecVT: " << VecVTOpt->getEVTString() << "\n");
     LLVM_DEBUG(dbgs() << "\tno idiomatic vector VT.\n");
     return VVPWideningInfo();
   }
@@ -1704,19 +1706,11 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   if (IsReduceOp) {
-    // FIXME
-    // SDValue Attempt = LowerVECREDUCE(Op, DAG);
-    // if (Attempt)
-    //  return Attempt;
-    auto PosOpt = getVVPReductionStartParamPos(VVPOC.getValue());
-    if (PosOpt) {
-      return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                          {LegalOperands[0], LegalOperands[1], MaskingArgs.Mask,
-                           MaskingArgs.AVL});
-    }
-
+    auto HasStartV = getVVPReductionStartParamPos(VVPOC.getValue());
+    SDValue StartV = HasStartV ? LegalOperands[0] : SDValue();
+    SDValue VectorV = HasStartV ? LegalOperands[1] : LegalOperands[0];
     assert(VVPOC.hasValue());
-    return CDAG.getLegalReductionOpVVP(*VVPOC, ResVecTy, LegalOperands[0],
+    return CDAG.getLegalReductionOpVVP(*VVPOC, ResVecTy, StartV, VectorV,
                                        MaskingArgs.Mask, MaskingArgs.AVL,
                                        Op->getFlags());
   }
@@ -2028,10 +2022,64 @@ VETargetLowering::lowerVVP_EXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   return lowerVectorShuffleOp(Op, DAG, Mode);
 }
 
+SDValue VETargetLowering::lowerReduction_VPToVVP(SDValue Op, SelectionDAG &DAG,
+                     VVPExpansionMode Mode) const {
+  LLVM_DEBUG(dbgs() << "::lowerReduction_VPToVVP\n");
+
+  // Check whether this should be Widened to VVP
+  CustomDAG CDAG(*this, DAG, Op);
+  VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
+
+  if (!WidenInfo.isValid()) {
+    LLVM_DEBUG(dbgs() << "Cannot Custom-VVP-widen this VP operator.\n");
+    return SDValue();
+  }
+
+  // (64bit) packed required -> split!
+  auto OpVecTy = *getIdiomaticType(Op.getNode());
+  EVT ElemVT = OpVecTy.getVectorElementType();
+  const bool IsOverPacked =
+      ElemVT.getScalarSizeInBits() > 32 && WidenInfo.PackedMode;
+  if (IsOverPacked)
+    return splitVectorOp(Op, DAG, Mode);
+
+  // create suitable mask and avl parameters (accounts for packing)
+  PosOpt MaskPos = Op->getVPMaskPos();
+  PosOpt AVLPos = Op->getVPVectorLenPos();
+  SDValue Mask = getNodeMask(Op);
+  SDValue AVL = getNodeAVL(Op);
+
+  unsigned OPC = Op->getOpcode();
+  unsigned VVPOC = *getVVPOpcode(OPC);
+
+  std::vector<SDValue> OpVec;
+  // Default.
+  unsigned NumOps = Op.getNumOperands();
+  for (unsigned i = 0; i < NumOps; ++i) {
+    if (MaskPos && (i == MaskPos)) {
+      OpVec.push_back(Mask);
+      continue;
+    }
+    if (AVLPos && (i == AVLPos)) {
+      OpVec.push_back(AVL);
+      continue;
+    }
+    OpVec.push_back(Op.getOperand(i));
+  }
+  // Create a matching VVP_* node
+  EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
+  assert(WidenInfo.isValid() && "Cannot widen this VP op into VVP");
+  SDValue NewV = CDAG.getLegalOpVVP(VVPOC, NewResVT, OpVec);
+  NewV->setFlags(Op->getFlags());
+  return NewV;
+}
+
 SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                                        VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "::lowerVPToVVP\n");
   auto VVPOC = getVVPForVP(Op.getOpcode());
+  if (VVPOC && isVVPReductionOp(*VVPOC))
+    return lowerReduction_VPToVVP(Op, DAG, Mode);
 
   // TODO VP reductions
   switch (Op.getOpcode()) {
@@ -2051,6 +2099,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   default:
     break;
   }
+
 
   // Check whether this should be Widened to VVP
   CustomDAG CDAG(*this, DAG, Op);

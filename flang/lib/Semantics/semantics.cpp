@@ -185,8 +185,9 @@ SemanticsContext::SemanticsContext(
     : defaultKinds_{defaultKinds}, languageFeatures_{languageFeatures},
       allCookedSources_{allCookedSources},
       intrinsics_{evaluate::IntrinsicProcTable::Configure(defaultKinds_)},
-      foldingContext_{
-          parser::ContextualMessages{&messages_}, defaultKinds_, intrinsics_} {}
+      globalScope_{*this}, foldingContext_{
+                               parser::ContextualMessages{&messages_},
+                               defaultKinds_, intrinsics_} {}
 
 SemanticsContext::~SemanticsContext() {}
 
@@ -341,7 +342,35 @@ SourceName SemanticsContext::GetTempName(const Scope &scope) {
   return SaveTempName(".F18."s + std::to_string(tempNames_.size()));
 }
 
+Scope *SemanticsContext::GetBuiltinModule(const char *name) {
+  return ModFileReader{*this}.Read(
+      SourceName{name, std::strlen(name)}, nullptr, true /*silence errors*/);
+}
+
+void SemanticsContext::UseFortranBuiltinsModule() {
+  if (builtinsScope_ == nullptr) {
+    builtinsScope_ = GetBuiltinModule("__fortran_builtins");
+    if (builtinsScope_) {
+      intrinsics_.SupplyBuiltins(*builtinsScope_);
+    }
+  }
+}
+
 bool Semantics::Perform() {
+  // Implicitly USE the __Fortran_builtins module so that special types
+  // (e.g., __builtin_team_type) are available to semantics, esp. for
+  // intrinsic checking.
+  if (!program_.v.empty()) {
+    const auto *frontModule{std::get_if<common::Indirection<parser::Module>>(
+        &program_.v.front().u)};
+    if (frontModule &&
+        std::get<parser::Statement<parser::ModuleStmt>>(frontModule->value().t)
+                .statement.v.source == "__fortran_builtins") {
+      // Don't try to read the builtins module when we're actually building it.
+    } else {
+      context_.UseFortranBuiltinsModule();
+    }
+  }
   return ValidateLabels(context_, program_) &&
       parser::CanonicalizeDo(program_) && // force line break
       CanonicalizeAcc(context_.messages(), program_) &&

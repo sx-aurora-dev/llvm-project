@@ -1,4 +1,4 @@
-//===-- M68kInstrInfo.h - M68k Instruction Information ------*- C++ -*-===//
+//===-- M68kInstrInfo.h - M68k Instruction Information ----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -30,9 +30,6 @@ namespace llvm {
 class M68kSubtarget;
 
 namespace M68k {
-// Forward declaration
-const uint8_t *getMCInstrBeads(unsigned Opcode);
-
 // These MUST be kept in sync with codes definitions in M68kInstrInfo.td
 enum CondCode {
   COND_T = 0,   // True
@@ -176,7 +173,7 @@ static inline unsigned IsCMP(unsigned Op) {
   case M68k::CMP8di:
   case M68k::CMP8dj:
   case M68k::CMP8dp:
-  case M68k::CMP16dd:
+  case M68k::CMP16dr:
   case M68k::CMP16df:
   case M68k::CMP16di:
   case M68k::CMP16dj:
@@ -339,4 +336,4 @@ public:
 
 } // namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_M68K_M68KINSTRINFO_H

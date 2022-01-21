@@ -87,13 +87,16 @@ def _match_decorator_property(expected, actual):
         return expected == actual
 
 
-def _compiler_supports(compiler, flag):
+def _compiler_supports(compiler,
+                       flag,
+                       source='int main() {}',
+                       output_file=tempfile.NamedTemporaryFile()):
     """Test whether the compiler supports the given flag."""
     if platform.system() == 'Darwin':
         compiler = "xcrun " + compiler
-    f = tempfile.NamedTemporaryFile()
     try:
-        cmd = "echo 'int main() {}' | %s %s -x c -o %s -" % (compiler, flag, f.name)
+        cmd = "echo '%s' | %s %s -x c -o %s -" % (source, compiler, flag,
+                                                  output_file.name)
         subprocess.check_call(cmd, shell=True)
     except subprocess.CalledProcessError:
         return False
@@ -755,16 +758,13 @@ def skipUnlessUndefinedBehaviorSanitizer(func):
         if is_running_under_asan():
             return "Undefined behavior sanitizer tests are disabled when runing under ASAN"
 
-        # Write out a temp file which exhibits UB.
-        inputf = tempfile.NamedTemporaryFile(suffix='.c', mode='w')
-        inputf.write('int main() { int x = 0; return x / x; }\n')
-        inputf.flush()
-
         # We need to write out the object into a named temp file for inspection.
         outputf = tempfile.NamedTemporaryFile()
 
         # Try to compile with ubsan turned on.
-        if not _compiler_supports(self.getCompiler(), '-fsanitize=undefined'):
+        if not _compiler_supports(self.getCompiler(), '-fsanitize=undefined',
+                                  'int main() { int x = 0; return x / x; }',
+                                  outputf):
             return "Compiler cannot compile with -fsanitize=undefined"
 
         # Check that we actually see ubsan instrumentation in the binary.
@@ -823,6 +823,39 @@ def skipIfAsan(func):
     """Skip this test if the environment is set up to run LLDB *itself* under ASAN."""
     return skipTestIfFn(is_running_under_asan)(func)
 
+def skipUnlessAArch64MTELinuxCompiler(func):
+    """Decorate the item to skip test unless MTE is supported by the test compiler."""
+
+    def is_toolchain_with_mte(self):
+        compiler_path = self.getCompiler()
+        compiler = os.path.basename(compiler_path)
+        f = tempfile.NamedTemporaryFile()
+        if lldbplatformutil.getPlatform() == 'windows':
+            return "MTE tests are not compatible with 'windows'"
+
+        cmd = "echo 'int main() {}' | %s -x c -o %s -" % (compiler_path, f.name)
+        if os.popen(cmd).close() is not None:
+            # Cannot compile at all, don't skip the test
+            # so that we report the broken compiler normally.
+            return None
+
+        # We need the Linux headers and ACLE MTE intrinsics
+        test_src = """
+            #include <asm/hwcap.h>
+            #include <arm_acle.h>
+            #ifndef HWCAP2_MTE
+            #error
+            #endif
+            int main() {
+                void* ptr = __arm_mte_create_random_tag((void*)(0), 0);
+            }"""
+        cmd = "echo '%s' | %s -march=armv8.5-a+memtag -x c -o %s -" % (test_src, compiler_path, f.name)
+        if os.popen(cmd).close() is not None:
+            return "Toolchain does not support MTE"
+        return None
+
+    return skipTestIfFn(is_toolchain_with_mte)(func)
+
 def _get_bool_config(key, fail_value = True):
     """
     Returns the current LLDB's build config value.
@@ -847,6 +880,9 @@ def skipIfXmlSupportMissing(func):
 
 def skipIfEditlineSupportMissing(func):
     return _get_bool_config_skip_if_decorator("editline")(func)
+
+def skipIfFBSDVMCoreSupportMissing(func):
+    return _get_bool_config_skip_if_decorator("fbsdvmcore")(func)
 
 def skipIfLLVMTargetMissing(target):
     config = lldb.SBDebugger.GetBuildConfiguration()
@@ -875,9 +911,3 @@ def skipUnlessFeature(feature):
             except subprocess.CalledProcessError:
                 return "%s is not supported on this system." % feature
     return skipTestIfFn(is_feature_enabled)
-
-def skipIfReproducer(func):
-    """Skip this test if the environment is set up to run LLDB with reproducers."""
-    return unittest2.skipIf(
-        configuration.capture_path or configuration.replay_path,
-        "reproducers unsupported")(func)

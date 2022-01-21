@@ -40,6 +40,11 @@ MergeEndDec("arm-enable-merge-loopenddec", cl::Hidden,
     cl::desc("Enable merging Loop End and Dec instructions."),
     cl::init(true));
 
+static cl::opt<bool>
+SetLRPredicate("arm-set-lr-predicate", cl::Hidden,
+    cl::desc("Enable setting lr as a predicate in tail predication regions."),
+    cl::init(true));
+
 namespace {
 class MVETPAndVPTOptimisations : public MachineFunctionPass {
 public:
@@ -64,6 +69,7 @@ public:
   }
 
 private:
+  bool LowerWhileLoopStart(MachineLoop *ML);
   bool MergeLoopEnd(MachineLoop *ML);
   bool ConvertTailPredLoop(MachineLoop *ML, MachineDominatorTree *DT);
   MachineInstr &ReplaceRegisterUseWithVPNOT(MachineBasicBlock &MBB,
@@ -74,6 +80,9 @@ private:
   bool ReplaceVCMPsByVPNOTs(MachineBasicBlock &MBB);
   bool ReplaceConstByVPNOTs(MachineBasicBlock &MBB, MachineDominatorTree *DT);
   bool ConvertVPSEL(MachineBasicBlock &MBB);
+  bool HintDoLoopStartReg(MachineBasicBlock &MBB);
+  MachineInstr *CheckForLRUseInPredecessors(MachineBasicBlock *PreHeader,
+                                            MachineInstr *LoopStart);
 };
 
 char MVETPAndVPTOptimisations::ID = 0;
@@ -164,13 +173,141 @@ static bool findLoopComponents(MachineLoop *ML, MachineRegisterInfo *MRI,
                           ? LoopPhi->getOperand(3).getReg()
                           : LoopPhi->getOperand(1).getReg();
   LoopStart = LookThroughCOPY(MRI->getVRegDef(StartReg), MRI);
-  if (!LoopStart || LoopStart->getOpcode() != ARM::t2DoLoopStart) {
+  if (!LoopStart || (LoopStart->getOpcode() != ARM::t2DoLoopStart &&
+                     LoopStart->getOpcode() != ARM::t2WhileLoopSetup &&
+                     LoopStart->getOpcode() != ARM::t2WhileLoopStartLR)) {
     LLVM_DEBUG(dbgs() << "  didn't find Start where we expected!\n");
     return false;
   }
   LLVM_DEBUG(dbgs() << "  found loop start: " << *LoopStart);
 
   return true;
+}
+
+static void RevertWhileLoopSetup(MachineInstr *MI, const TargetInstrInfo *TII) {
+  MachineBasicBlock *MBB = MI->getParent();
+  assert(MI->getOpcode() == ARM::t2WhileLoopSetup &&
+         "Only expected a t2WhileLoopSetup in RevertWhileLoopStart!");
+
+  // Subs
+  MachineInstrBuilder MIB =
+      BuildMI(*MBB, MI, MI->getDebugLoc(), TII->get(ARM::t2SUBri));
+  MIB.add(MI->getOperand(0));
+  MIB.add(MI->getOperand(1));
+  MIB.addImm(0);
+  MIB.addImm(ARMCC::AL);
+  MIB.addReg(ARM::NoRegister);
+  MIB.addReg(ARM::CPSR, RegState::Define);
+
+  // Attempt to find a t2WhileLoopStart and revert to a t2Bcc.
+  for (MachineInstr &I : MBB->terminators()) {
+    if (I.getOpcode() == ARM::t2WhileLoopStart) {
+      MachineInstrBuilder MIB =
+          BuildMI(*MBB, &I, I.getDebugLoc(), TII->get(ARM::t2Bcc));
+      MIB.add(MI->getOperand(1)); // branch target
+      MIB.addImm(ARMCC::EQ);
+      MIB.addReg(ARM::CPSR);
+      I.eraseFromParent();
+      break;
+    }
+  }
+
+  MI->eraseFromParent();
+}
+
+// The Hardware Loop insertion and ISel Lowering produce the pseudos for the
+// start of a while loop:
+//   %a:gprlr = t2WhileLoopSetup %Cnt
+//   t2WhileLoopStart %a, %BB
+// We want to convert those to a single instruction which, like t2LoopEndDec and
+// t2DoLoopStartTP is both a terminator and produces a value:
+//   %a:grplr: t2WhileLoopStartLR %Cnt, %BB
+//
+// Otherwise if we can't, we revert the loop. t2WhileLoopSetup and
+// t2WhileLoopStart are not valid past regalloc.
+bool MVETPAndVPTOptimisations::LowerWhileLoopStart(MachineLoop *ML) {
+  LLVM_DEBUG(dbgs() << "LowerWhileLoopStart on loop "
+                    << ML->getHeader()->getName() << "\n");
+
+  MachineInstr *LoopEnd, *LoopPhi, *LoopStart, *LoopDec;
+  if (!findLoopComponents(ML, MRI, LoopStart, LoopPhi, LoopDec, LoopEnd))
+    return false;
+
+  if (LoopStart->getOpcode() != ARM::t2WhileLoopSetup)
+    return false;
+
+  Register LR = LoopStart->getOperand(0).getReg();
+  auto WLSIt = find_if(MRI->use_nodbg_instructions(LR), [](auto &MI) {
+    return MI.getOpcode() == ARM::t2WhileLoopStart;
+  });
+  if (!MergeEndDec || WLSIt == MRI->use_instr_nodbg_end()) {
+    RevertWhileLoopSetup(LoopStart, TII);
+    RevertLoopDec(LoopStart, TII);
+    RevertLoopEnd(LoopStart, TII);
+    return true;
+  }
+
+  MachineInstrBuilder MI =
+      BuildMI(*WLSIt->getParent(), *WLSIt, WLSIt->getDebugLoc(),
+              TII->get(ARM::t2WhileLoopStartLR), LR)
+          .add(LoopStart->getOperand(1))
+          .add(WLSIt->getOperand(1));
+  (void)MI;
+  LLVM_DEBUG(dbgs() << "Lowered WhileLoopStart into: " << *MI.getInstr());
+
+  WLSIt->eraseFromParent();
+  LoopStart->eraseFromParent();
+  return true;
+}
+
+// Return true if this instruction is invalid in a low overhead loop, usually
+// because it clobbers LR.
+static bool IsInvalidTPInstruction(MachineInstr &MI) {
+  return MI.isCall() || isLoopStart(MI);
+}
+
+// Starting from PreHeader, search for invalid instructions back until the
+// LoopStart block is reached. If invalid instructions are found, the loop start
+// is reverted from a WhileLoopStart to a DoLoopStart on the same loop. Will
+// return the new DLS LoopStart if updated.
+MachineInstr *MVETPAndVPTOptimisations::CheckForLRUseInPredecessors(
+    MachineBasicBlock *PreHeader, MachineInstr *LoopStart) {
+  SmallVector<MachineBasicBlock *> Worklist;
+  SmallPtrSet<MachineBasicBlock *, 4> Visited;
+  Worklist.push_back(PreHeader);
+  Visited.insert(LoopStart->getParent());
+
+  while (!Worklist.empty()) {
+    MachineBasicBlock *MBB = Worklist.pop_back_val();
+    if (Visited.count(MBB))
+      continue;
+
+    for (MachineInstr &MI : *MBB) {
+      if (!IsInvalidTPInstruction(MI))
+        continue;
+
+      LLVM_DEBUG(dbgs() << "Found LR use in predecessors, reverting: " << MI);
+
+      // Create a t2DoLoopStart at the end of the preheader.
+      MachineInstrBuilder MIB =
+          BuildMI(*PreHeader, PreHeader->getFirstTerminator(),
+                  LoopStart->getDebugLoc(), TII->get(ARM::t2DoLoopStart));
+      MIB.add(LoopStart->getOperand(0));
+      MIB.add(LoopStart->getOperand(1));
+
+      // Make sure to remove the kill flags, to prevent them from being invalid.
+      LoopStart->getOperand(1).setIsKill(false);
+
+      // Revert the t2WhileLoopStartLR to a CMP and Br.
+      RevertWhileLoopStartLR(LoopStart, TII, ARM::t2Bcc, true);
+      return MIB;
+    }
+
+    Visited.insert(MBB);
+    for (auto *Pred : MBB->predecessors())
+      Worklist.push_back(Pred);
+  }
+  return LoopStart;
 }
 
 // This function converts loops with t2LoopEnd and t2LoopEnd instructions into
@@ -192,12 +329,20 @@ bool MVETPAndVPTOptimisations::MergeLoopEnd(MachineLoop *ML) {
     return false;
 
   // Check if there is an illegal instruction (a call) in the low overhead loop
-  // and if so revert it now before we get any further.
+  // and if so revert it now before we get any further. While loops also need to
+  // check the preheaders, but can be reverted to a DLS loop if needed.
+  auto *PreHeader = ML->getLoopPreheader();
+  if (LoopStart->getOpcode() == ARM::t2WhileLoopStartLR && PreHeader)
+    LoopStart = CheckForLRUseInPredecessors(PreHeader, LoopStart);
+
   for (MachineBasicBlock *MBB : ML->blocks()) {
     for (MachineInstr &MI : *MBB) {
-      if (MI.isCall()) {
-        LLVM_DEBUG(dbgs() << "Found call in loop, reverting: " << MI);
-        RevertDoLoopStart(LoopStart, TII);
+      if (IsInvalidTPInstruction(MI)) {
+        LLVM_DEBUG(dbgs() << "Found LR use in loop, reverting: " << MI);
+        if (LoopStart->getOpcode() == ARM::t2DoLoopStart)
+          RevertDoLoopStart(LoopStart, TII);
+        else
+          RevertWhileLoopStartLR(LoopStart, TII);
         RevertLoopDec(LoopDec, TII);
         RevertLoopEnd(LoopEnd, TII);
         return true;
@@ -221,7 +366,7 @@ bool MVETPAndVPTOptimisations::MergeLoopEnd(MachineLoop *ML) {
     while (!Worklist.empty()) {
       Register Reg = Worklist.pop_back_val();
       for (MachineInstr &MI : MRI->use_nodbg_instructions(Reg)) {
-        if (count(ExpectedUsers, &MI))
+        if (llvm::is_contained(ExpectedUsers, &MI))
           continue;
         if (MI.getOpcode() != TargetOpcode::COPY ||
             !MI.getOperand(0).getReg().isVirtual()) {
@@ -236,8 +381,16 @@ bool MVETPAndVPTOptimisations::MergeLoopEnd(MachineLoop *ML) {
   };
   if (!CheckUsers(PhiReg, {LoopDec}, MRI) ||
       !CheckUsers(DecReg, {LoopPhi, LoopEnd}, MRI) ||
-      !CheckUsers(StartReg, {LoopPhi}, MRI))
+      !CheckUsers(StartReg, {LoopPhi}, MRI)) {
+    // Don't leave a t2WhileLoopStartLR without the LoopDecEnd.
+    if (LoopStart->getOpcode() == ARM::t2WhileLoopStartLR) {
+      RevertWhileLoopStartLR(LoopStart, TII);
+      RevertLoopDec(LoopDec, TII);
+      RevertLoopEnd(LoopEnd, TII);
+      return true;
+    }
     return false;
+  }
 
   MRI->constrainRegClass(StartReg, &ARM::GPRlrRegClass);
   MRI->constrainRegClass(PhiReg, &ARM::GPRlrRegClass);
@@ -281,14 +434,19 @@ bool MVETPAndVPTOptimisations::ConvertTailPredLoop(MachineLoop *ML,
   MachineInstr *LoopEnd, *LoopPhi, *LoopStart, *LoopDec;
   if (!findLoopComponents(ML, MRI, LoopStart, LoopPhi, LoopDec, LoopEnd))
     return false;
-  if (LoopDec != LoopEnd)
+  if (LoopDec != LoopEnd || (LoopStart->getOpcode() != ARM::t2DoLoopStart &&
+                             LoopStart->getOpcode() != ARM::t2WhileLoopStartLR))
     return false;
 
   SmallVector<MachineInstr *, 4> VCTPs;
-  for (MachineBasicBlock *BB : ML->blocks())
+  SmallVector<MachineInstr *, 4> MVEInstrs;
+  for (MachineBasicBlock *BB : ML->blocks()) {
     for (MachineInstr &MI : *BB)
       if (isVCTP(&MI))
         VCTPs.push_back(&MI);
+      else if (findFirstVPTPredOperandIdx(MI) != -1)
+        MVEInstrs.push_back(&MI);
+  }
 
   if (VCTPs.empty()) {
     LLVM_DEBUG(dbgs() << "  no VCTPs\n");
@@ -346,16 +504,30 @@ bool MVETPAndVPTOptimisations::ConvertTailPredLoop(MachineLoop *ML,
       return false;
     }
 
-  MachineInstrBuilder MI = BuildMI(*MBB, InsertPt, LoopStart->getDebugLoc(),
-                                   TII->get(ARM::t2DoLoopStartTP))
-                               .add(LoopStart->getOperand(0))
-                               .add(LoopStart->getOperand(1))
-                               .addReg(CountReg);
-  (void)MI;
+  unsigned NewOpc = LoopStart->getOpcode() == ARM::t2DoLoopStart
+                        ? ARM::t2DoLoopStartTP
+                        : ARM::t2WhileLoopStartTP;
+  MachineInstrBuilder MI =
+      BuildMI(*MBB, InsertPt, LoopStart->getDebugLoc(), TII->get(NewOpc))
+          .add(LoopStart->getOperand(0))
+          .add(LoopStart->getOperand(1))
+          .addReg(CountReg);
+  if (NewOpc == ARM::t2WhileLoopStartTP)
+    MI.add(LoopStart->getOperand(2));
   LLVM_DEBUG(dbgs() << "Replacing " << *LoopStart << "  with "
                     << *MI.getInstr());
   MRI->constrainRegClass(CountReg, &ARM::rGPRRegClass);
   LoopStart->eraseFromParent();
+
+  if (SetLRPredicate) {
+    // Each instruction in the loop needs to be using LR as the predicate from
+    // the Phi as the predicate.
+    Register LR = LoopPhi->getOperand(0).getReg();
+    for (MachineInstr *MI : MVEInstrs) {
+      int Idx = findFirstVPTPredOperandIdx(*MI);
+      MI->getOperand(Idx + 2).setReg(LR);
+    }
+  }
 
   return true;
 }
@@ -838,6 +1010,7 @@ bool MVETPAndVPTOptimisations::ConvertVPSEL(MachineBasicBlock &MBB) {
             .add(MI.getOperand(1))
             .addImm(ARMVCC::Then)
             .add(MI.getOperand(4))
+            .add(MI.getOperand(5))
             .add(MI.getOperand(2));
     // Silence unused variable warning in release builds.
     (void)MIBuilder;
@@ -850,6 +1023,21 @@ bool MVETPAndVPTOptimisations::ConvertVPSEL(MachineBasicBlock &MBB) {
     DeadInstruction->eraseFromParent();
 
   return !DeadInstructions.empty();
+}
+
+// Add a registry allocation hint for t2DoLoopStart to hint it towards LR, as
+// the instruction may be removable as a noop.
+bool MVETPAndVPTOptimisations::HintDoLoopStartReg(MachineBasicBlock &MBB) {
+  bool Changed = false;
+  for (MachineInstr &MI : MBB.instrs()) {
+    if (MI.getOpcode() != ARM::t2DoLoopStart)
+      continue;
+    Register R = MI.getOperand(1).getReg();
+    MachineFunction *MF = MI.getParent()->getParent();
+    MF->getRegInfo().setRegAllocationHint(R, ARMRI::RegLR, 0);
+    Changed = true;
+  }
+  return Changed;
 }
 
 bool MVETPAndVPTOptimisations::runOnMachineFunction(MachineFunction &Fn) {
@@ -869,11 +1057,13 @@ bool MVETPAndVPTOptimisations::runOnMachineFunction(MachineFunction &Fn) {
 
   bool Modified = false;
   for (MachineLoop *ML : MLI->getBase().getLoopsInPreorder()) {
+    Modified |= LowerWhileLoopStart(ML);
     Modified |= MergeLoopEnd(ML);
     Modified |= ConvertTailPredLoop(ML, DT);
   }
 
   for (MachineBasicBlock &MBB : Fn) {
+    Modified |= HintDoLoopStartReg(MBB);
     Modified |= ReplaceConstByVPNOTs(MBB, DT);
     Modified |= ReplaceVCMPsByVPNOTs(MBB);
     Modified |= ReduceOldVCCRValueUses(MBB);

@@ -23,8 +23,8 @@
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetMachine.h"
 #include <cstdlib>
 
@@ -87,7 +87,8 @@ void PPCSubtarget::initializeEnvironment() {
   HasP9Vector = false;
   HasP9Altivec = false;
   HasMMA = false;
-  HasROPProtection = false;
+  HasROPProtect = false;
+  HasPrivileged = false;
   HasP10Vector = false;
   HasPrefixInstrs = false;
   HasPCRelativeMemops = false;
@@ -118,6 +119,7 @@ void PPCSubtarget::initializeEnvironment() {
   HasICBT = false;
   HasInvariantFunctionDescriptors = false;
   HasPartwordAtomics = false;
+  HasQuadwordAtomics = false;
   HasDirectMove = false;
   HasHTM = false;
   HasFloat128 = false;
@@ -125,6 +127,17 @@ void PPCSubtarget::initializeEnvironment() {
   HasStoreFusion = false;
   HasAddiLoadFusion = false;
   HasAddisLoadFusion = false;
+  HasArithAddFusion = false;
+  HasAddLogicalFusion = false;
+  HasLogicalAddFusion = false;
+  HasLogicalFusion = false;
+  HasSha3Fusion = false;
+  HasCompareFusion = false;
+  HasWideImmFusion = false;
+  HasZeroMoveFusion = false;
+  HasBack2BackFusion = false;
+  IsISA2_06 = false;
+  IsISA2_07 = false;
   IsISA3_0 = false;
   IsISA3_1 = false;
   UseLongCalls = false;
@@ -182,9 +195,7 @@ void PPCSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
   StackAlignment = getPlatformStackAlignment();
 
   // Determine endianness.
-  // FIXME: Part of the TargetMachine.
-  IsLittleEndian = (TargetTriple.getArch() == Triple::ppc64le ||
-                    TargetTriple.getArch() == Triple::ppcle);
+  IsLittleEndian = TM.isLittleEndian();
 }
 
 bool PPCSubtarget::enableMachineScheduler() const { return true; }

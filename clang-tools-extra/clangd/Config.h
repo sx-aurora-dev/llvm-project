@@ -70,7 +70,7 @@ struct Config {
   enum class BackgroundPolicy { Build, Skip };
   /// Describes an external index configuration.
   struct ExternalIndexSpec {
-    enum { File, Server } Kind;
+    enum { None, File, Server } Kind = None;
     /// This is one of:
     /// - Address of a clangd-index-server, in the form of "ip:port".
     /// - Absolute path to an index produced by clangd-indexer.
@@ -83,9 +83,10 @@ struct Config {
   struct {
     /// Whether this TU should be indexed.
     BackgroundPolicy Background = BackgroundPolicy::Build;
-    llvm::Optional<ExternalIndexSpec> External;
+    ExternalIndexSpec External;
   } Index;
 
+  enum UnusedIncludesPolicy { Strict, None };
   /// Controls warnings and errors when parsing code.
   struct {
     bool SuppressAll = false;
@@ -97,6 +98,8 @@ struct Config {
       std::string Checks;
       llvm::StringMap<std::string> CheckOptions;
     } ClangTidy;
+
+    UnusedIncludesPolicy UnusedIncludes = None;
   } Diagnostics;
 
   /// Style of the codebase.
@@ -106,6 +109,28 @@ struct Config {
     // ::). All nested namespaces are affected as well.
     std::vector<std::string> FullyQualifiedNamespaces;
   } Style;
+
+  /// Configures code completion feature.
+  struct {
+    /// Whether code completion includes results that are not visible in current
+    /// scopes.
+    bool AllScopes = true;
+  } Completion;
+
+  /// Configures hover feature.
+  struct {
+    /// Whether hover show a.k.a type.
+    bool ShowAKA = false;
+  } Hover;
+
+  struct {
+    /// If false, inlay hints are completely disabled.
+    bool Enabled = true;
+
+    // Whether specific categories of hints are enabled.
+    bool Parameters = true;
+    bool DeducedTypes = true;
+  } InlayHints;
 };
 
 } // namespace clangd

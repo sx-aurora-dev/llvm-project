@@ -63,10 +63,10 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   static bool makeVectorOpsExpensive();
 
   bool enableVPU() const {
-    return !makeVectorOpsExpensive() && getST()->enableVPU();
+    return getST()->enableVPU();
   }
   bool hasPackedMode() const {
-    return !makeVectorOpsExpensive() && getST()->hasPackedMode();
+    return getST()->hasPackedMode();
   }
 
   static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
@@ -118,22 +118,30 @@ public:
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool VectorRegs = (ClassID == 1);
-    if ((simd() || enableVPU()) && VectorRegs) {
+    if (!makeVectorOpsExpensive() && (simd() || enableVPU()) && VectorRegs) {
       return 64;
     }
 
     return 0;
   }
 
-  unsigned getRegisterBitWidth(bool Vector) const {
-    if ((simd() || enableVPU()) && Vector) {
-      return 256 * 64;
+  TypeSize getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
+    switch (K) {
+    case TargetTransformInfo::RGK_Scalar:
+      return TypeSize::getFixed(64);
+    case TargetTransformInfo::RGK_FixedWidthVector:
+      // TODO report vregs once vector isel is stable.
+      return makeVectorOpsExpensive() ? TypeSize::getFixed(0)
+                                      : TypeSize::getFixed(256 * 64);
+    case TargetTransformInfo::RGK_ScalableVector:
+      return TypeSize::getScalable(0);
     }
-    return 0;
+
+    llvm_unreachable("Unsupported register kind");
   }
 
   unsigned getMinVectorRegisterBitWidth() const {
-    return (simd() || enableVPU()) ? 256 * 64 : 0;
+    return !makeVectorOpsExpensive() && (simd() || enableVPU()) ? 256 * 64 : 0;
   }
 
   static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
@@ -160,7 +168,7 @@ public:
     // check element sizes for vregs
     if (ElemTy.isIntegerTy()) {
       unsigned ScaBits = ElemTy.getScalarSizeInBits();
-      return ScaBits == 32 || ScaBits == 64;
+      return ScaBits == 1 || ScaBits == 32 || ScaBits == 64;
     }
     if (ElemTy.isPointerTy()) {
       return true;
@@ -223,6 +231,9 @@ public:
 
   bool supportsEfficientVectorElementLoadStore() { return false; }
 
+  // Following implementation conflicts with dd2dbf7.
+  // Also following code seems incorrect.  Therefore, removing them.
+#if 0
   unsigned getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
                                     bool Insert, bool Extract) const {
     auto VecTy = dyn_cast<FixedVectorType>(Ty);
@@ -244,6 +255,7 @@ public:
   unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args, ArrayRef<Type *> Tys) const {
     return Args.size() * getVF(Tys);
   }
+#endif
 
   unsigned getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                            unsigned AddressSpace,
@@ -265,14 +277,15 @@ public:
   getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                         unsigned AddressSpace,
                         TargetTransformInfo::TargetCostKind CostKind) const {
-    if (isa<FixedVectorType>(Src) && !isVectorRegisterType(*Src))
+    if (isa<FixedVectorType>(Src) &&
+        (!isVectorRegisterType(*Src)))
       return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;
   }
 
   bool haveFastSqrt(Type *Ty) {
     // float, double or a vector thereof
-    return Ty->isFPOrFPVectorTy() &&
+    return Ty->isFPOrFPVectorTy() && !makeVectorOpsExpensive() &&
            (isVectorLaneType(*Ty) || isVectorRegisterType(*Ty));
   }
   /// } Heuristics
@@ -280,12 +293,21 @@ public:
   /// LLVM-VP Support
   /// {
 
-  /// \returns True if the vector length parameter should be folded into the
-  /// vector mask.
-  bool
-  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
-    return false; // FIXME (return true for masking operations)
+  bool supportsScalableVectors() const { return false; }
+
+  bool hasActiveVectorLength(unsigned Opcode, Type *DataType,
+                             Align Alignment) const { return true; }
+
+  TargetTransformInfo::VPLegalization
+  getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
+    using VPTransform = TargetTransformInfo::VPLegalization;
+    auto &PI = cast<PredicatedInstruction>(VPI);
+    return TargetTransformInfo::VPLegalization(
+        /* EVLParamStrategy */ VPTransform::Legal,
+        /* OperatorStrategy */ supportsVPOperation(PI) ? VPTransform::Legal
+                                                       : VPTransform::Convert);
   }
+
 
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
@@ -306,7 +328,7 @@ public:
       return false;
 
     // Bail on yet-unimplemented reductions
-    if (VPI->isReductionOp()) {
+    if (isa<VPReductionIntrinsic>(VPI)) {
       auto FPRed = dyn_cast<FPMathOperator>(VPI);
       bool Unordered = FPRed ? VPI->getFastMathFlags().allowReassoc() : true;
       return isSupportedReduction(VPI->getIntrinsicID(), Unordered);
@@ -369,7 +391,18 @@ public:
   }
 
   void getUnrollingPreferences(Loop *L, ScalarEvolution &,
-                               TargetTransformInfo::UnrollingPreferences &UP);
+                               TargetTransformInfo::UnrollingPreferences &UP,
+                               OptimizationRemarkEmitter *ORE);
+
+  bool shouldBuildRelLookupTables() const {
+    // NEC nld doesn't support relative lookup tables.  It shows following
+    // errors.  So, we disable it at the moment.
+    //   /opt/nec/ve/bin/nld: src/CMakeFiles/cxxabi_shared.dir/cxa_demangle.cpp
+    //   .o(.rodata+0x17b4): reloc against `.L.str.376': error 2
+    //   /opt/nec/ve/bin/nld: final link failed: Nonrepresentable section on
+    //   output
+    return false;
+  }
 };
 
 } // namespace llvm

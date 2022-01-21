@@ -19,7 +19,8 @@
 
 namespace mlir {
 
-class Identifier;
+class Location;
+class WalkResult;
 
 //===----------------------------------------------------------------------===//
 // LocationAttr
@@ -30,6 +31,9 @@ class Identifier;
 class LocationAttr : public Attribute {
 public:
   using Attribute::Attribute;
+
+  /// Walk all of the locations nested under, and including, the current.
+  WalkResult walk(function_ref<WalkResult(Location)> walkFn);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast.
   static bool classof(Attribute attr);
@@ -93,7 +97,7 @@ inline ::llvm::hash_code hash_value(Location arg) {
   return hash_value(arg.impl);
 }
 
-} // end namespace mlir
+} // namespace mlir
 
 //===----------------------------------------------------------------------===//
 // Tablegen Attribute Declarations

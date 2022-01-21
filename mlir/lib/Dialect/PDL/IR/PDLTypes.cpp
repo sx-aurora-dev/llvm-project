@@ -26,14 +26,20 @@ using namespace mlir::pdl;
 // PDLDialect
 //===----------------------------------------------------------------------===//
 
-static Type parsePDLType(DialectAsmParser &parser) {
+void PDLDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "mlir/Dialect/PDL/IR/PDLOpsTypes.cpp.inc"
+      >();
+}
+
+static Type parsePDLType(AsmParser &parser) {
   StringRef typeTag;
   if (parser.parseKeyword(&typeTag))
     return Type();
   {
     Type genType;
-    auto parseResult = generatedTypeParser(parser.getBuilder().getContext(),
-                                           parser, typeTag, genType);
+    auto parseResult = generatedTypeParser(parser, typeTag, genType);
     if (parseResult.hasValue())
       return genType;
   }
@@ -68,7 +74,7 @@ bool PDLType::classof(Type type) {
 // RangeType
 //===----------------------------------------------------------------------===//
 
-Type RangeType::parse(MLIRContext *context, DialectAsmParser &parser) {
+Type RangeType::parse(AsmParser &parser) {
   if (parser.parseLess())
     return Type();
 
@@ -86,8 +92,8 @@ Type RangeType::parse(MLIRContext *context, DialectAsmParser &parser) {
   return RangeType::get(elementType);
 }
 
-void RangeType::print(DialectAsmPrinter &printer) const {
-  printer << "range<";
+void RangeType::print(AsmPrinter &printer) const {
+  printer << "<";
   (void)generatedTypePrinter(getElementType(), printer);
   printer << ">";
 }

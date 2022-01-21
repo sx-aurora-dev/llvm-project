@@ -1,4 +1,4 @@
-//===-- M68kMCCodeEmitter.cpp - Convert M68k code emitter ---*- C++ -*-===//
+//===-- M68kMCCodeEmitter.cpp - Convert M68k code emitter -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,6 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/M68kMCCodeEmitter.h"
 #include "MCTargetDesc/M68kBaseInfo.h"
 #include "MCTargetDesc/M68kFixupKinds.h"
 #include "MCTargetDesc/M68kMCTargetDesc.h"
@@ -26,13 +27,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/raw_ostream.h"
-
-namespace llvm {
-namespace M68k {
-// Forward declarations
-const uint8_t *getMCInstrBeads(unsigned);
-} // end namespace M68k
-} // end namespace llvm
 
 using namespace llvm;
 
@@ -127,6 +121,7 @@ unsigned M68kMCCodeEmitter::encodeReg(unsigned ThisByte, uint8_t Bead,
     Reg = false;
     DA = true;
     break;
+  case M68kBeads::DReg:
   case M68kBeads::Reg:
     Reg = true;
     DA = false;
@@ -162,13 +157,13 @@ unsigned M68kMCCodeEmitter::encodeReg(unsigned ThisByte, uint8_t Bead,
   unsigned Written = 0;
   if (Reg) {
     uint32_t Val = RI->getEncodingValue(RegNum);
-    Buffer |= Val << Offset;
+    Buffer |= (Val & 7) << Offset;
     Offset += 3;
     Written += 3;
   }
 
   if (DA) {
-    Buffer |= (char)M68kII::isAddressRegister(RegNum) << Offset;
+    Buffer |= (uint64_t)M68kII::isAddressRegister(RegNum) << Offset;
     Written++;
   }
 
@@ -179,13 +174,9 @@ static unsigned EmitConstant(uint64_t Val, unsigned Size, unsigned Pad,
                              uint64_t &Buffer, unsigned Offset) {
   assert(Size + Offset <= 64 && isUIntN(Size, Val) && "Value does not fit");
 
-  // Pad the instruction with zeros if any
-  // FIXME Emit zeros in the padding, since there might be trash in the buffer.
-  Size += Pad;
-
   // Writing Value in host's endianness
-  Buffer |= Val << Offset;
-  return Size;
+  Buffer |= (Val & ((1ULL << Size) - 1)) << Offset;
+  return Size + Pad;
 }
 
 unsigned M68kMCCodeEmitter::encodeImm(unsigned ThisByte, uint8_t Bead,
@@ -316,8 +307,7 @@ unsigned M68kMCCodeEmitter::encodeImm(unsigned ThisByte, uint8_t Bead,
     return Size;
   }
 
-  return EmitConstant(Imm & (UINT64_MAX >> (64 - Size)), Size, Pad, Buffer,
-                      Offset);
+  return EmitConstant(Imm & ((1ULL << Size) - 1), Size, Pad, Buffer, Offset);
 }
 
 #include "M68kGenMCCodeBeads.inc"
@@ -362,6 +352,7 @@ void M68kMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
       break;
     case M68kBeads::DAReg:
     case M68kBeads::DA:
+    case M68kBeads::DReg:
     case M68kBeads::Reg:
       Offset +=
           encodeReg(ThisByte, Bead, MI, Desc, Buffer, Offset, Fixups, STI);

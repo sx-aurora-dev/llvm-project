@@ -344,6 +344,12 @@ class TypeSourceInfo;
     Import(ExprWithCleanups::CleanupObject From);
 
     /// Import the given type from the "from" context into the "to"
+    /// context.
+    ///
+    /// \returns The equivalent type in the "to" context, or the import error.
+    llvm::Expected<const Type *> Import(const Type *FromT);
+
+    /// Import the given qualified type from the "from" context into the "to"
     /// context. A null type is imported as a null type (no error).
     ///
     /// \returns The equivalent type in the "to" context, or the import error.
@@ -372,6 +378,9 @@ class TypeSourceInfo;
     llvm::Expected<const Decl *> Import(const Decl *FromD) {
       return Import(const_cast<Decl *>(FromD));
     }
+
+    llvm::Expected<InheritedConstructor>
+    Import(const InheritedConstructor &From);
 
     /// Return the copy of the given declaration in the "to" context if
     /// it has already been imported from the "from" context.  Otherwise return

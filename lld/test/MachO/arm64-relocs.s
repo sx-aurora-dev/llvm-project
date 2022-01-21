@@ -1,7 +1,9 @@
-# REQUIRES: aarch64, shell
+# REQUIRES: aarch64
 # RUN: llvm-mc -filetype=obj -triple=arm64-apple-darwin %s -o %t.o
 # RUN: %lld -dylib -arch arm64 -lSystem -o %t %t.o
-# RUN: (llvm-objdump --syms %t; llvm-objdump --macho -d --section=__const %t) | FileCheck %s
+# RUN: llvm-objdump --syms %t > %t.objdump
+# RUN: llvm-objdump --macho -d --section=__const %t >> %t.objdump
+# RUN: FileCheck %s < %t.objdump
 
 # CHECK-LABEL: SYMBOL TABLE:
 # CHECK-DAG:   [[#%x,PTR_1:]] l     O __DATA_CONST,__const _ptr_1
@@ -11,17 +13,17 @@
 
 # CHECK-LABEL: _foo:
 ## BRANCH26 relocations are 4-byte aligned, so 123 is truncated to 120
-# CHECK-NEXT:  bl	0x[[#BAR+120]]
+# CHECK-NEXT:  bl   0x[[#BAR+120]]
 ## PAGE21 relocations are aligned to 4096 bytes
-# CHECK-NEXT:  adrp	x2, [[#]] ; 0x[[#BAZ+4096-128]]
-# CHECK-NEXT:  ldr	x2, [x2, #128]
-# CHECK-NEXT:  adrp     x3, 8 ; 0x8000
-# CHECK-NEXT:  ldr      q0, [x3, #144]
+# CHECK-NEXT:  adrp x2, [[#]] ; 0x[[#BAZ+4096-128]]
+# CHECK-NEXT:  ldr  x2, [x2, #128]
+# CHECK-NEXT:  adrp x3, 8 ; 0x8000
+# CHECK-NEXT:  ldr  q0, [x3, #144]
 # CHECK-NEXT:  ret
 
 # CHECK-LABEL: Contents of (__DATA_CONST,__const) section
-# CHECK:       [[#PTR_1]]	{{0*}}[[#BAZ]]     00000000 00000000 00000000
-# CHECK:       [[#PTR_2]]	{{0*}}[[#BAZ+123]] 00000000 00000000 00000000
+# CHECK:       [[#PTR_1]]  {{0*}}[[#BAZ]]     00000000 00000000 00000000
+# CHECK:       [[#PTR_2]]  {{0*}}[[#BAZ+123]] 00000000 00000000 00000000
 
 .text
 .globl _foo, _bar, _baz, _quux

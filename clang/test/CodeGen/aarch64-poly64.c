@@ -2,7 +2,7 @@
 // RUN:  -ffp-contract=fast -disable-O0-optnone -emit-llvm -o - %s | opt -S -mem2reg \
 // RUN:  | FileCheck %s
 
-// Test new aarch64 intrinsics with poly64
+// REQUIRES: aarch64-registered-target || arm-registered-target
 
 #include <arm_neon.h>
 
@@ -600,4 +600,4 @@ poly64x2_t test_vsriq_n_p64(poly64x2_t a, poly64x2_t b) {
 
 // CHECK: attributes #0 ={{.*}}"min-legal-vector-width"="64"
 // CHECK: attributes #1 ={{.*}}"min-legal-vector-width"="128"
-// CHECK-NOT: attributes #2 ={{.*}}"min-legal-vector-width"="0"
+// CHECK: attributes #2 ={{.*}}"min-legal-vector-width"="0"

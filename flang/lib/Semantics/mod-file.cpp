@@ -54,8 +54,8 @@ static void PutEntity(
 static void PutInit(llvm::raw_ostream &, const Symbol &, const MaybeExpr &);
 static void PutInit(llvm::raw_ostream &, const MaybeIntExpr &);
 static void PutBound(llvm::raw_ostream &, const Bound &);
-static llvm::raw_ostream &PutAttrs(llvm::raw_ostream &, Attrs,
-    const MaybeExpr & = std::nullopt, std::string before = ","s,
+llvm::raw_ostream &PutAttrs(llvm::raw_ostream &, Attrs,
+    const std::string * = nullptr, std::string before = ","s,
     std::string after = ""s);
 
 static llvm::raw_ostream &PutAttr(llvm::raw_ostream &, Attr);
@@ -81,8 +81,8 @@ private:
   const Scope &scope_;
   bool isInterface_{false};
   SymbolVector need_; // symbols that are needed
-  SymbolSet needSet_; // symbols already in need_
-  SymbolSet useSet_; // use-associations that might be needed
+  UnorderedSymbolSet needSet_; // symbols already in need_
+  UnorderedSymbolSet useSet_; // use-associations that might be needed
   std::set<SourceName> imports_; // imports from host that are needed
 
   void DoSymbol(const Symbol &);
@@ -184,10 +184,24 @@ bool ModFileWriter::PutSymbols(const Scope &scope) {
   std::string buf; // stuff after CONTAINS in derived type
   llvm::raw_string_ostream typeBindings{buf};
   for (const Symbol &symbol : sorted) {
-    PutSymbol(typeBindings, symbol);
+    if (!symbol.test(Symbol::Flag::CompilerCreated)) {
+      PutSymbol(typeBindings, symbol);
+    }
   }
   for (const Symbol &symbol : uses) {
     PutUse(symbol);
+  }
+  for (const auto &set : scope.equivalenceSets()) {
+    if (!set.empty() &&
+        !set.front().symbol.test(Symbol::Flag::CompilerCreated)) {
+      char punctuation{'('};
+      decls_ << "equivalence";
+      for (const auto &object : set) {
+        decls_ << punctuation << object.AsFortran();
+        punctuation = ',';
+      }
+      decls_ << ")\n";
+    }
   }
   if (auto str{typeBindings.str()}; !str.empty()) {
     CHECK(scope.IsDerivedType());
@@ -346,7 +360,7 @@ void ModFileWriter::PutSubprogram(const Symbol &symbol) {
   if (isInterface) {
     os << (isAbstract ? "abstract " : "") << "interface\n";
   }
-  PutAttrs(os, prefixAttrs, std::nullopt, ""s, " "s);
+  PutAttrs(os, prefixAttrs, nullptr, ""s, " "s);
   os << (details.isFunction() ? "function " : "subroutine ");
   os << symbol.name() << '(';
   int n = 0;
@@ -498,7 +512,8 @@ void CollectSymbols(
   for (const auto &pair : scope.commonBlocks()) {
     sorted.push_back(*pair.second);
   }
-  std::sort(sorted.end() - commonSize, sorted.end());
+  std::sort(
+      sorted.end() - commonSize, sorted.end(), SymbolSourcePositionCompare{});
 }
 
 void PutEntity(llvm::raw_ostream &os, const Symbol &symbol) {
@@ -516,15 +531,15 @@ void PutEntity(llvm::raw_ostream &os, const Symbol &symbol) {
 }
 
 void PutShapeSpec(llvm::raw_ostream &os, const ShapeSpec &x) {
-  if (x.lbound().isAssumed()) {
-    CHECK(x.ubound().isAssumed());
-    os << "..";
+  if (x.lbound().isStar()) {
+    CHECK(x.ubound().isStar());
+    os << ".."; // assumed rank
   } else {
-    if (!x.lbound().isDeferred()) {
+    if (!x.lbound().isColon()) {
       PutBound(os, x.lbound());
     }
     os << ':';
-    if (!x.ubound().isDeferred()) {
+    if (!x.ubound().isColon()) {
       PutBound(os, x.ubound());
     }
   }
@@ -560,6 +575,9 @@ void PutObjectEntity(llvm::raw_ostream &os, const Symbol &symbol) {
 void PutProcEntity(llvm::raw_ostream &os, const Symbol &symbol) {
   if (symbol.attrs().test(Attr::INTRINSIC)) {
     os << "intrinsic::" << symbol.name() << '\n';
+    if (symbol.attrs().test(Attr::PRIVATE)) {
+      os << "private::" << symbol.name() << '\n';
+    }
     return;
   }
   const auto &details{symbol.get<ProcEntityDetails>()};
@@ -621,9 +639,9 @@ void PutInit(llvm::raw_ostream &os, const MaybeIntExpr &init) {
 }
 
 void PutBound(llvm::raw_ostream &os, const Bound &x) {
-  if (x.isAssumed()) {
+  if (x.isStar()) {
     os << '*';
-  } else if (x.isDeferred()) {
+  } else if (x.isColon()) {
     os << ':';
   } else {
     x.GetExplicit()->AsFortran(os);
@@ -635,26 +653,18 @@ void PutBound(llvm::raw_ostream &os, const Bound &x) {
 void PutEntity(llvm::raw_ostream &os, const Symbol &symbol,
     std::function<void()> writeType, Attrs attrs) {
   writeType();
-  MaybeExpr bindName;
-  std::visit(common::visitors{
-                 [&](const SubprogramDetails &x) { bindName = x.bindName(); },
-                 [&](const ObjectEntityDetails &x) { bindName = x.bindName(); },
-                 [&](const ProcEntityDetails &x) { bindName = x.bindName(); },
-                 [&](const auto &) {},
-             },
-      symbol.details());
-  PutAttrs(os, attrs, bindName);
+  PutAttrs(os, attrs, symbol.GetBindName());
   os << "::" << symbol.name();
 }
 
 // Put out each attribute to os, surrounded by `before` and `after` and
 // mapped to lower case.
 llvm::raw_ostream &PutAttrs(llvm::raw_ostream &os, Attrs attrs,
-    const MaybeExpr &bindName, std::string before, std::string after) {
+    const std::string *bindName, std::string before, std::string after) {
   attrs.set(Attr::PUBLIC, false); // no need to write PUBLIC
   attrs.set(Attr::EXTERNAL, false); // no need to write EXTERNAL
   if (bindName) {
-    bindName->AsFortran(os << before << "bind(c, name=") << ')' << after;
+    os << before << "bind(c, name=\"" << *bindName << "\")" << after;
     attrs.set(Attr::BIND_C, false);
   }
   for (std::size_t i{0}; i < Attr_enumSize; ++i) {
@@ -795,7 +805,8 @@ static bool VerifyHeader(llvm::ArrayRef<char> content) {
   return expectSum == actualSum;
 }
 
-Scope *ModFileReader::Read(const SourceName &name, Scope *ancestor) {
+Scope *ModFileReader::Read(
+    const SourceName &name, Scope *ancestor, bool silent) {
   std::string ancestorName; // empty for module
   if (ancestor) {
     if (auto *scope{ancestor->FindSubmodule(name)}) {
@@ -816,10 +827,12 @@ Scope *ModFileReader::Read(const SourceName &name, Scope *ancestor) {
   auto path{ModFileName(name, ancestorName, context_.moduleFileSuffix())};
   const auto *sourceFile{parsing.Prescan(path, options)};
   if (parsing.messages().AnyFatalError()) {
-    for (auto &msg : parsing.messages().messages()) {
-      std::string str{msg.ToString()};
-      Say(name, ancestorName, parser::MessageFixedText{str.c_str(), str.size()},
-          path);
+    if (!silent) {
+      for (auto &msg : parsing.messages().messages()) {
+        std::string str{msg.ToString()};
+        Say(name, ancestorName,
+            parser::MessageFixedText{str.c_str(), str.size()}, path);
+      }
     }
     return nullptr;
   }

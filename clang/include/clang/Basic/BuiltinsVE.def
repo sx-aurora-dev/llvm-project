@@ -13,7 +13,6 @@
 
 // The format of this database matches clang/Basic/Builtins.def.
 
-BUILTIN(__builtin_ve_vl_svob, "v", "n")
 BUILTIN(__builtin_ve_vl_pack_f32p, "ULifC*fC*", "n")
 BUILTIN(__builtin_ve_vl_pack_f32a, "ULifC*", "n")
 

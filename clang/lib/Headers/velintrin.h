@@ -59,8 +59,6 @@ enum VShuffleCodes {
 #include <velintrin_gen.h>
 #include <velintrin_approx.h>
 
-#define _vel_svob() __builtin_ve_vl_svob()
-
 // pack
 
 #define _vel_pack_f32p __builtin_ve_vl_pack_f32p

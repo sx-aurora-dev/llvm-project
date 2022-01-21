@@ -7,8 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/DebugInfo.h"
-#include "llvm/IR/DIBuilder.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/AsmParser/Parser.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
@@ -228,6 +229,37 @@ TEST(DIBuilder, CreateFortranArrayTypeWithAttributes) {
 
   // Avoid memory leak.
   DIVariable::deleteTemporary(DataLocation);
+}
+
+TEST(DIBuilder, CreateSetType) {
+  LLVMContext Ctx;
+  std::unique_ptr<Module> M(new Module("MyModule", Ctx));
+  DIBuilder DIB(*M);
+  DIScope *Scope = DISubprogram::getDistinct(
+      Ctx, nullptr, "", "", nullptr, 0, nullptr, 0, nullptr, 0, 0,
+      DINode::FlagZero, DISubprogram::SPFlagZero, nullptr);
+  DIType *Type = DIB.createBasicType("Int", 64, dwarf::DW_ATE_signed);
+  DIFile *F = DIB.createFile("main.c", "/");
+
+  DIDerivedType *SetType = DIB.createSetType(Scope, "set1", F, 1, 64, 64, Type);
+  EXPECT_TRUE(isa_and_nonnull<DIDerivedType>(SetType));
+}
+
+TEST(DIBuilder, DIEnumerator) {
+  LLVMContext Ctx;
+  std::unique_ptr<Module> M(new Module("MyModule", Ctx));
+  DIBuilder DIB(*M);
+  APSInt I1(APInt(32, 1));
+  APSInt I2(APInt(33, 1));
+
+  auto *E = DIEnumerator::get(Ctx, I1, I1.isSigned(), "name");
+  EXPECT_TRUE(E);
+
+  auto *E1 = DIEnumerator::getIfExists(Ctx, I1, I1.isSigned(), "name");
+  EXPECT_TRUE(E1);
+
+  auto *E2 = DIEnumerator::getIfExists(Ctx, I2, I1.isSigned(), "name");
+  EXPECT_FALSE(E2);
 }
 
 } // end namespace

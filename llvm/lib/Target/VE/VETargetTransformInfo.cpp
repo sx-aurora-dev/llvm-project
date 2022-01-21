@@ -30,7 +30,7 @@ cl::opt<bool>
                        cl::desc("Unroll vector loops (work in progress)"));
 
 cl::opt<bool> ExpensiveVector(
-    "ve-expensive-vector", cl::init(false),
+    "ve-expensive-vector", cl::init(true),
     cl::desc(
         "Discourage vectorization by hiding all vector registers, ops in TTI"),
     cl::NotHidden);
@@ -102,7 +102,8 @@ static unsigned ComputeUnrollFactor(Loop *L) {
 /// Unrolling {
 // Unroll inner-most vector loops
 void VETTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                             TargetTransformInfo::UnrollingPreferences &UP) {
+                             TargetTransformInfo::UnrollingPreferences &UP,
+                             OptimizationRemarkEmitter *ORE) {
   // Default settings for scalar loops
   if (!L->isInnermost() || !IsVectorLoop(L))
     return;

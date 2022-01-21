@@ -1,4 +1,4 @@
-//===-------------------------- ios.cpp -----------------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -43,7 +43,7 @@ __iostream_category::message(int ev) const
     if (ev != static_cast<int>(io_errc::stream)
 #ifdef _LIBCPP_ELAST
         && ev <= _LIBCPP_ELAST
-#endif  // _LIBCPP_ELAST
+#endif // _LIBCPP_ELAST
         )
         return __do_message::message(ev);
     return string("unspecified iostream_category error");
@@ -137,7 +137,7 @@ ios_base::getloc() const
 
 // xalloc
 #if defined(_LIBCPP_HAS_C_ATOMIC_IMP) && !defined(_LIBCPP_HAS_NO_THREADS)
-atomic<int> ios_base::__xindex_ = ATOMIC_VAR_INIT(0);
+atomic<int> ios_base::__xindex_{0};
 #else
 int ios_base::__xindex_ = 0;
 #endif
@@ -416,7 +416,7 @@ ios_base::__set_badbit_and_consider_rethrow()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     if (__exceptions_ & badbit)
         throw;
-#endif  // _LIBCPP_NO_EXCEPTIONS
+#endif // _LIBCPP_NO_EXCEPTIONS
 }
 
 void
@@ -426,7 +426,7 @@ ios_base::__set_failbit_and_consider_rethrow()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     if (__exceptions_ & failbit)
         throw;
-#endif  // _LIBCPP_NO_EXCEPTIONS
+#endif // _LIBCPP_NO_EXCEPTIONS
 }
 
 bool

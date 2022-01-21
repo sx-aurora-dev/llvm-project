@@ -158,9 +158,6 @@ define fastcc float @test_reduce_fmul_fast(<512 x float> %v, <512 x i1> %m, i32 
 define fastcc float @test_reduce_fmul_start_fast(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_start_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    or %s6, 0, %s1
@@ -194,8 +191,6 @@ define fastcc float @test_reduce_fmul_start_fast(float %s, <512 x float> %v, <51
 ; CHECK-NEXT:    vfim.s %v0, %v0, %s3
 ; CHECK-NEXT:    lvs %s1, %v0(%s1)
 ; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    or %s2, 0, %s2
-; CHECK-NEXT:    fmul.s %s1, %s1, %s2
 ; CHECK-NEXT:    fmul.s %s1, %s0, %s1
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -301,10 +296,6 @@ define fastcc float @test_reduce_fadd_start(float %s, <512 x float> %v, <512 x i
 define fastcc float @test_reduce_fadd_fast(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
@@ -337,11 +328,7 @@ define fastcc float @test_reduce_fadd_fast(<512 x float> %v, <512 x i1> %m, i32 
 define fastcc float @test_reduce_fadd_start_fast(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd_start_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    # implicit-def: $sx2
 ; CHECK-NEXT:    or %s2, 0, %s1
@@ -373,111 +360,105 @@ define fastcc float @test_reduce_fadd_start_fast(float %s, <512 x float> %v, <51
 }
 
 ;;; FMIN ;;;
-define fastcc float @test_reduce_fmin(<512 x float> %v, <512 x i1> %m, i32 %n) {
+define fastcc float @test_reduce_fmin(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmin:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    # implicit-def: $sx2
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
 ; CHECK-NEXT:    # implicit-def: $sx1
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s0
-; CHECK-NEXT:    # implicit-def: $sx0
-; CHECK-NEXT:    or %s0, 0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vfrmin.s.fst %v1, %v1, %vm3
-; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    lvs %s1, %v1(0)
 ; CHECK-NEXT:    vfrmin.s.fst %v0, %v0, %vm2
-; CHECK-NEXT:    lvs %s1, %v0(0)
-; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    lvs %s2, %v0(0)
 ; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s2
+; CHECK-NEXT:    fmin.s %s1, %s1, %s2
 ; CHECK-NEXT:    fmin.s %s1, %s0, %s1
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %r = call float @llvm.vp.reduce.fmin.v512f32(<512 x float> %v, <512 x i1> %m, i32 %n)
+  %r = call float @llvm.vp.reduce.fmin.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
 }
 
 ;;; FMAX ;;;
-define fastcc float @test_reduce_fmax(<512 x float> %v, <512 x i1> %m, i32 %n) {
+define fastcc float @test_reduce_fmax(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmax:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    # implicit-def: $sx2
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
 ; CHECK-NEXT:    # implicit-def: $sx1
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s0
-; CHECK-NEXT:    # implicit-def: $sx0
-; CHECK-NEXT:    or %s0, 0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vfrmax.s.fst %v1, %v1, %vm3
-; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    lvs %s1, %v1(0)
 ; CHECK-NEXT:    vfrmax.s.fst %v0, %v0, %vm2
-; CHECK-NEXT:    lvs %s1, %v0(0)
-; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    lvs %s2, %v0(0)
 ; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s2
+; CHECK-NEXT:    fmax.s %s1, %s1, %s2
 ; CHECK-NEXT:    fmax.s %s1, %s0, %s1
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %r = call float @llvm.vp.reduce.fmax.v512f32(<512 x float> %v, <512 x i1> %m, i32 %n)
+  %r = call float @llvm.vp.reduce.fmax.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
 }
 
 ;;; Integer ;;;
-define fastcc i32 @test_reduce_add(<512 x i32> %v, <512 x i1> %m, i32 %n) {
+define fastcc i32 @test_reduce_add(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_add:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s0
-; CHECK-NEXT:    # implicit-def: $sx0
-; CHECK-NEXT:    or %s0, 0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s2
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
+; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vshf %v1, %v0, %v0, 0
 ; CHECK-NEXT:    vsum.w.sx %v1, %v1, %vm2
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    lvs %s2, %v1(0)
+; CHECK-NEXT:    or %s2, 0, %s2
 ; CHECK-NEXT:    vsum.w.sx %v0, %v0, %vm3
-; CHECK-NEXT:    lvs %s0, %v0(0)
-; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, %s2
 ; CHECK-NEXT:    adds.w.sx %s1, %s0, %s1
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %r = call i32 @llvm.vp.reduce.add.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
+  %r = call i32 @llvm.vp.reduce.add.v512i32(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %n)
   ret i32 %r
 }
 
-define fastcc i32 @test_reduce_mul(<512 x i32> %v, <512 x i1> %m, i32 %n) {
+define fastcc i32 @test_reduce_mul(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_mul:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
@@ -21425,24 +21406,31 @@ define fastcc i32 @test_reduce_umax(<512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vmrg.w %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lvs %s0, %v0(0)
 ; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    # implicit-def: $sx2
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    cmpu.w %s1, %s0, %s3
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    cmov.w.gt %s0, %s2, %s1
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %r = call i32 @llvm.vp.reduce.umax.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
+  %r = call i32 @llvm.vp.reduce.umax.v512i32(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %n)
   ret i32 %r
 }
 
-declare float @llvm.vp.reduce.fadd.v512f32(float, <512 x float>, <512 x i1> mask, i32 vlen)
-declare float @llvm.vp.reduce.fmul.v512f32(float, <512 x float>, <512 x i1> mask, i32 vlen)
-declare float @llvm.vp.reduce.fmin.v512f32(<512 x float>, <512 x i1> mask, i32 vlen)
-declare float @llvm.vp.reduce.fmax.v512f32(<512 x float>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.add.v512i32(<512 x i32>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.mul.v512i32(<512 x i32>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.and.v512i32(<512 x i32>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.xor.v512i32(<512 x i32>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.or.v512i32(<512 x i32>, <512 x i1> mask, i32 vlen)
-declare i32 @llvm.vp.reduce.smax.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
-declare i32 @llvm.vp.reduce.smin.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
-declare i32 @llvm.vp.reduce.umax.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
-declare i32 @llvm.vp.reduce.umin.v512i32(<512 x i32> %v, <512 x i1> %m, i32 %n)
+declare float @llvm.vp.reduce.fadd.v512f32(float, <512 x float>, <512 x i1>, i32)
+declare float @llvm.vp.reduce.fmul.v512f32(float, <512 x float>, <512 x i1>, i32)
+declare float @llvm.vp.reduce.fmin.v512f32(float, <512 x float>, <512 x i1>, i32)
+declare float @llvm.vp.reduce.fmax.v512f32(float, <512 x float>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.add.v512i32(i32, <512 x i32>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.mul.v512i32(i32, <512 x i32>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.and.v512i32(i32, <512 x i32>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.xor.v512i32(i32, <512 x i32>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.or.v512i32(i32, <512 x i32>, <512 x i1>, i32)
+declare i32 @llvm.vp.reduce.smax.v512i32(i32, <512 x i32> %v, <512 x i1> %m, i32 %n)
+declare i32 @llvm.vp.reduce.smin.v512i32(i32, <512 x i32> %v, <512 x i1> %m, i32 %n)
+declare i32 @llvm.vp.reduce.umax.v512i32(i32, <512 x i32> %v, <512 x i1> %m, i32 %n)
+declare i32 @llvm.vp.reduce.umin.v512i32(i32, <512 x i32> %v, <512 x i1> %m, i32 %n)

@@ -1,7 +1,6 @@
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -w -S -o - -emit-llvm              %s | FileCheck %s -check-prefix=NO__ERRNO
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -w -S -o - -emit-llvm -fmath-errno %s | FileCheck %s -check-prefix=HAS_ERRNO
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown-gnu -w -S -o - -emit-llvm -fmath-errno %s | FileCheck %s --check-prefix=HAS_ERRNO_GNU
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown-android -w -S -o - -emit-llvm -fmath-errno %s | FileCheck %s --check-prefix=HAS_ERRNO_ANDROID
 // RUN: %clang_cc1 -triple x86_64-unknown-windows-msvc -w -S -o - -emit-llvm -fmath-errno %s | FileCheck %s --check-prefix=HAS_ERRNO_WIN
 
 // Test attributes and codegen of math builtins.
@@ -133,12 +132,12 @@ void foo(double *d, float f, float *fp, long double *l, int *i, const char *c) {
 
   __builtin_powi(f,f);        __builtin_powif(f,f);       __builtin_powil(f,f);
 
-// NO__ERRNO: declare double @llvm.powi.f64(double, i32) [[READNONE_INTRINSIC]]
-// NO__ERRNO: declare float @llvm.powi.f32(float, i32) [[READNONE_INTRINSIC]]
-// NO__ERRNO: declare x86_fp80 @llvm.powi.f80(x86_fp80, i32) [[READNONE_INTRINSIC]]
-// HAS_ERRNO: declare double @llvm.powi.f64(double, i32) [[READNONE_INTRINSIC]]
-// HAS_ERRNO: declare float @llvm.powi.f32(float, i32) [[READNONE_INTRINSIC]]
-// HAS_ERRNO: declare x86_fp80 @llvm.powi.f80(x86_fp80, i32) [[READNONE_INTRINSIC]]
+// NO__ERRNO: declare double @llvm.powi.f64.i32(double, i32) [[READNONE_INTRINSIC]]
+// NO__ERRNO: declare float @llvm.powi.f32.i32(float, i32) [[READNONE_INTRINSIC]]
+// NO__ERRNO: declare x86_fp80 @llvm.powi.f80.i32(x86_fp80, i32) [[READNONE_INTRINSIC]]
+// HAS_ERRNO: declare double @llvm.powi.f64.i32(double, i32) [[READNONE_INTRINSIC]]
+// HAS_ERRNO: declare float @llvm.powi.f32.i32(float, i32) [[READNONE_INTRINSIC]]
+// HAS_ERRNO: declare x86_fp80 @llvm.powi.f80.i32(x86_fp80, i32) [[READNONE_INTRINSIC]]
 
   /* math */
   __builtin_acos(f);       __builtin_acosf(f);      __builtin_acosl(f); __builtin_acosf128(f);
@@ -344,10 +343,6 @@ __builtin_fma(f,f,f);        __builtin_fmaf(f,f,f);       __builtin_fmal(f,f,f);
 // HAS_ERRNO_GNU: declare double @llvm.fma.f64(double, double, double) [[READNONE_INTRINSIC:#[0-9]+]]
 // HAS_ERRNO_GNU: declare float @llvm.fma.f32(float, float, float) [[READNONE_INTRINSIC]]
 // HAS_ERRNO_GNU: declare x86_fp80 @llvm.fma.f80(x86_fp80, x86_fp80, x86_fp80) [[READNONE_INTRINSIC]]
-
-// HAS_ERRNO_ANDROID: declare double @llvm.fma.f64(double, double, double) [[READNONE_INTRINSIC:#[0-9]+]]
-// HAS_ERRNO_ANDROID: declare float @llvm.fma.f32(float, float, float) [[READNONE_INTRINSIC]]
-// HAS_ERRNO_ANDROID: declare x86_fp80 @llvm.fma.f80(x86_fp80, x86_fp80, x86_fp80) [[READNONE_INTRINSIC]]
 
 // HAS_ERRNO_WIN: declare double @llvm.fma.f64(double, double, double) [[READNONE_INTRINSIC:#[0-9]+]]
 // HAS_ERRNO_WIN: declare float @llvm.fma.f32(float, float, float) [[READNONE_INTRINSIC]]
@@ -696,6 +691,5 @@ __builtin_trunc(f);      __builtin_truncf(f);     __builtin_truncl(f); __builtin
 // HAS_ERRNO: attributes [[READNONE]] = { {{.*}}readnone{{.*}} }
 
 // HAS_ERRNO_GNU: attributes [[READNONE_INTRINSIC]] = { {{.*}}readnone{{.*}} }
-// HAS_ERRNO_ANDROID: attributes [[READNONE_INTRINSIC]] = { {{.*}}readnone{{.*}} }
 // HAS_ERRNO_WIN: attributes [[READNONE_INTRINSIC]] = { {{.*}}readnone{{.*}} }
 

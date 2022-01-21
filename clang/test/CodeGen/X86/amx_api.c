@@ -39,6 +39,14 @@ void test_tile_loadd(short row, short col) {
   __tile_loadd(&a, buf, STRIDE);
 }
 
+void test_tile_stream_loadd(short row, short col) {
+  //CHECK-LABEL: @test_tile_stream_loadd
+  //CHECK: call x86_amx @llvm.x86.tileloaddt164.internal
+  //CHECK-NEXT: {{%.*}} = bitcast x86_amx {{%.*}} to <256 x i32>
+  __tile1024i a = {row, col};
+  __tile_stream_loadd(&a, buf, STRIDE);
+}
+
 void test_tile_dpbssd(__tile1024i a, __tile1024i b, __tile1024i c) {
   //CHECK-LABEL: @test_tile_dpbssd
   //CHECK: call x86_amx @llvm.x86.tdpbssd.internal
@@ -81,9 +89,9 @@ void test_tile_zero(__tile1024i c) {
   __tile_zero(&c);
 }
 
-void test_tile_tdpbf16ps(__tile1024i a, __tile1024i b, __tile1024i c) {
-  //CHECK-LABEL: @test_tile_tdpbf16ps
+void test_tile_dpbf16ps(__tile1024i a, __tile1024i b, __tile1024i c) {
+  //CHECK-LABEL: @test_tile_dpbf16ps
   //CHECK: call x86_amx @llvm.x86.tdpbf16ps.internal
   //CHECK-NEXT: {{%.*}} = bitcast x86_amx {{%.*}} to <256 x i32>
-  __tile_tdpbf16ps(&a, b, c);
+  __tile_dpbf16ps(&a, b, c);
 }

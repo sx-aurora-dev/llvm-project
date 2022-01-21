@@ -32,16 +32,22 @@ void Flang::AddFortranDialectOptions(const ArgList &Args,
                 options::OPT_fxor_operator, options::OPT_fno_xor_operator,
                 options::OPT_falternative_parameter_statement,
                 options::OPT_fdefault_real_8, options::OPT_fdefault_integer_8,
-                options::OPT_fdefault_double_8, options::OPT_flarge_sizes});
+                options::OPT_fdefault_double_8, options::OPT_flarge_sizes,
+                options::OPT_fno_automatic});
 }
 
 void Flang::AddPreprocessingOptions(const ArgList &Args,
                                     ArgStringList &CmdArgs) const {
-  Args.AddAllArgs(CmdArgs, {options::OPT_D, options::OPT_U, options::OPT_I});
+  Args.AddAllArgs(CmdArgs,
+                  {options::OPT_P, options::OPT_D, options::OPT_U,
+                   options::OPT_I, options::OPT_cpp, options::OPT_nocpp});
 }
 
 void Flang::AddOtherOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
-  Args.AddAllArgs(CmdArgs, options::OPT_module_dir);
+  Args.AddAllArgs(CmdArgs,
+                  {options::OPT_module_dir, options::OPT_fdebug_module_writer,
+                   options::OPT_fintrinsic_modules_path, options::OPT_pedantic,
+                   options::OPT_std_EQ, options::OPT_W_Joined});
 }
 
 void Flang::ConstructJob(Compilation &C, const JobAction &JA,

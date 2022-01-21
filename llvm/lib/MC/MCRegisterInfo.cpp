@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <cassert>
@@ -59,13 +59,10 @@ unsigned MCRegisterInfo::getSubRegIdxSize(unsigned Idx) const {
   return SubRegIdxRanges[Idx].Size;
 }
 
-Optional<unsigned> MCRegisterInfo::getSubRegIdxOffset(unsigned Idx) const {
+unsigned MCRegisterInfo::getSubRegIdxOffset(unsigned Idx) const {
   assert(Idx && Idx < getNumSubRegIndices() &&
          "This is not a subregister index");
-  uint16_t Offset = SubRegIdxRanges[Idx].Offset;
-  if (Offset == (uint16_t)-1)
-    return None;
-  return Offset;
+  return SubRegIdxRanges[Idx].Offset;
 }
 
 int MCRegisterInfo::getDwarfRegNum(MCRegister RegNum, bool isEH) const {
@@ -74,9 +71,9 @@ int MCRegisterInfo::getDwarfRegNum(MCRegister RegNum, bool isEH) const {
 
   if (!M)
     return -1;
-  DwarfLLVMRegPair Key = {RegNum, 0};
-  const DwarfLLVMRegPair *I = std::lower_bound(M, M + Size, Key);
-  if (I == M + Size || I->FromReg != RegNum)
+  DwarfLLVMRegPair Key = { RegNum, 0 };
+  const DwarfLLVMRegPair *I = std::lower_bound(M, M+Size, Key);
+  if (I == M+Size || I->FromReg != RegNum)
     return -1;
   return I->ToReg;
 }
@@ -88,8 +85,8 @@ Optional<unsigned> MCRegisterInfo::getLLVMRegNum(unsigned RegNum,
 
   if (!M)
     return None;
-  DwarfLLVMRegPair Key = {RegNum, 0};
-  const DwarfLLVMRegPair *I = std::lower_bound(M, M + Size, Key);
+  DwarfLLVMRegPair Key = { RegNum, 0 };
+  const DwarfLLVMRegPair *I = std::lower_bound(M, M+Size, Key);
   if (I != M + Size && I->FromReg == RegNum)
     return I->ToReg;
   return None;
@@ -111,8 +108,7 @@ int MCRegisterInfo::getDwarfRegNumFromDwarfEHRegNum(unsigned RegNum) const {
 
 int MCRegisterInfo::getSEHRegNum(MCRegister RegNum) const {
   const DenseMap<MCRegister, int>::const_iterator I = L2SEHRegs.find(RegNum);
-  if (I == L2SEHRegs.end())
-    return (int)RegNum;
+  if (I == L2SEHRegs.end()) return (int)RegNum;
   return I->second;
 }
 

@@ -157,8 +157,8 @@ private:
 
 } // end of anonymous namespace
 
-/// Print coverage information to output stream {@code o}.
-/// May modify the used list of files {@code Fids} by inserting new ones.
+/// Print coverage information to output stream @c o.
+/// May modify the used list of files @c Fids by inserting new ones.
 static void printCoverage(const PathDiagnostic *D,
                           unsigned InputIndentLevel,
                           SmallVectorImpl<FileID> &Fids,
@@ -484,8 +484,8 @@ void PlistPrinter::ReportPopUp(raw_ostream &o,
 // Static function definitions.
 //===----------------------------------------------------------------------===//
 
-/// Print coverage information to output stream {@code o}.
-/// May modify the used list of files {@code Fids} by inserting new ones.
+/// Print coverage information to output stream @c o.
+/// May modify the used list of files @c Fids by inserting new ones.
 static void printCoverage(const PathDiagnostic *D,
                           unsigned InputIndentLevel,
                           SmallVectorImpl<FileID> &Fids,
@@ -660,7 +660,7 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
 
   // Open the file.
   std::error_code EC;
-  llvm::raw_fd_ostream o(OutputFile, EC, llvm::sys::fs::OF_Text);
+  llvm::raw_fd_ostream o(OutputFile, EC, llvm::sys::fs::OF_TextWithCRLF);
   if (EC) {
     llvm::errs() << "warning: could not create file: " << EC.message() << '\n';
     return;

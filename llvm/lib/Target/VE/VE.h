@@ -23,7 +23,6 @@
 namespace llvm {
 class FunctionPass;
 class VETargetMachine;
-class formatted_raw_ostream;
 class AsmPrinter;
 class MCInst;
 class MachineInstr;

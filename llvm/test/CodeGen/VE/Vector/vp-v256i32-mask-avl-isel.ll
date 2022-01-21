@@ -115,21 +115,21 @@ define fastcc void @test_vp_memory(<256 x i32>* %VecPtr, <256 x i32*> %PtrVec, <
 }
 
 ; integer arith
-declare <256 x i32> @llvm.vp.add.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.sub.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.mul.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.sdiv.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.udiv.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
+declare <256 x i32> @llvm.vp.add.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.sub.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.mul.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.sdiv.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.udiv.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
 ; bit arith
-declare <256 x i32> @llvm.vp.and.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.xor.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.or.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.ashr.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.lshr.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.shl.v256i32(<256 x i32>, <256 x i32>, <256 x i1> mask, i32 vlen)
+declare <256 x i32> @llvm.vp.and.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.xor.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.or.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.ashr.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.lshr.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.shl.v256i32(<256 x i32>, <256 x i32>, <256 x i1>, i32)
 
 ; memory
-declare void @llvm.vp.store.v256i32.p0v256i32(<256 x i32>, <256 x i32>*, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.load.v256i32.p0v256i32(<256 x i32>*, <256 x i1> mask, i32 vlen)
-declare void @llvm.vp.scatter.v256i32.v256p0i32(<256 x i32>, <256 x i32*>, <256 x i1> mask, i32 vlen)
-declare <256 x i32> @llvm.vp.gather.v256i32.v256p0i32(<256 x i32*>, <256 x i1> mask, i32 vlen)
+declare void @llvm.vp.store.v256i32.p0v256i32(<256 x i32>, <256 x i32>*, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.load.v256i32.p0v256i32(<256 x i32>*, <256 x i1>, i32)
+declare void @llvm.vp.scatter.v256i32.v256p0i32(<256 x i32>, <256 x i32*>, <256 x i1>, i32)
+declare <256 x i32> @llvm.vp.gather.v256i32.v256p0i32(<256 x i32*>, <256 x i1>, i32)

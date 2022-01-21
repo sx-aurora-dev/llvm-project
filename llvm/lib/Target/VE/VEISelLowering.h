@@ -180,13 +180,51 @@ public:
     // VE uses Release consistency, so need fence for each atomics.
     return true;
   }
-  Instruction *emitLeadingFence(IRBuilder<> &Builder, Instruction *Inst,
+  Instruction *emitLeadingFence(IRBuilderBase &Builder, Instruction *Inst,
                                 AtomicOrdering Ord) const override;
-  Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
+  Instruction *emitTrailingFence(IRBuilderBase &Builder, Instruction *Inst,
                                  AtomicOrdering Ord) const override;
   TargetLoweringBase::AtomicExpansionKind
   shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
+  ISD::NodeType getExtendForAtomicOps() const override {
+    return ISD::ANY_EXTEND;
+  }
 
+  /// Custom CC Mapping {
+  using RegisterCountPair = std::pair<MVT, unsigned>;
+  // Map all vector EVTs to vector or vector mask registers.
+  MVT getRegisterTypeForCallingConv(LLVMContext &Context, CallingConv::ID CC,
+                                    EVT VT) const override {
+    auto Opt = getRegistersForCallingConv(Context, CC, VT);
+    if (!Opt.hasValue())
+      return TargetLowering::getRegisterTypeForCallingConv(Context, CC, VT);
+    return Opt->first;
+  }
+
+  unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                         CallingConv::ID CC,
+                                         EVT VT) const override {
+    auto Opt = getRegistersForCallingConv(Context, CC, VT);
+    if (!Opt.hasValue())
+      return TargetLowering::getNumRegistersForCallingConv(Context, CC, VT);
+    return Opt->second;
+  }
+
+  Optional<RegisterCountPair> getRegistersForCallingConv(LLVMContext &Context,
+                                                         CallingConv::ID CC,
+                                                         EVT VT) const;
+
+  unsigned getVectorTypeBreakdownForCallingConv(LLVMContext &Context,
+                                                CallingConv::ID CC, EVT VT,
+                                                EVT &IntermediateVT,
+                                                unsigned &NumIntermediates,
+                                                MVT &RegisterVT) const override;
+  /// } Custom CC Mapping
+
+  /// Custom Lower {
+
+  Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
+                                                 EVT VT) const override;
   const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                                           const MachineBasicBlock *MBB,
                                           unsigned uid,
@@ -344,6 +382,8 @@ public:
   /// } Packed Op Splitting
 
   /// VVP Lowering {
+  SDValue lowerReduction_VPToVVP(SDValue Op, SelectionDAG &DAG,
+                       VVPExpansionMode Mode) const;
   SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                        VVPExpansionMode Mode) const;
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,
@@ -468,7 +508,7 @@ public:
   bool mergeStoresAfterLegalization(EVT) const override { return true; }
 
   bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-                        const SelectionDAG &DAG) const override;
+                        const MachineFunction &MF) const override;
 
   MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
                                     unsigned BROpcode) const;
@@ -522,4 +562,4 @@ public:
 };
 } // namespace llvm
 
-#endif // VE_ISELLOWERING_H
+#endif // LLVM_LIB_TARGET_VE_VEISELLOWERING_H

@@ -131,7 +131,7 @@ TEST_F(LSPTest, Diagnostics) {
   EXPECT_THAT(Client.diagnostics("foo.cpp"),
               llvm::ValueIs(testing::ElementsAre(
                   DiagMessage("Cannot initialize a variable of type 'int' with "
-                              "an lvalue of type 'const char [3]'"))));
+                              "an lvalue of type 'const char[3]'"))));
 
   Client.didClose("foo.cpp");
   EXPECT_THAT(Client.diagnostics("foo.cpp"), llvm::ValueIs(testing::IsEmpty()));
@@ -365,6 +365,27 @@ TEST_F(LSPTest, FeatureModulesThreadingTest) {
   // And immediately shut down. FeatureModule destructor verifies we blocked.
 }
 
+TEST_F(LSPTest, DiagModuleTest) {
+  static constexpr llvm::StringLiteral DiagMsg = "DiagMsg";
+  class DiagModule final : public FeatureModule {
+    struct DiagHooks : public ASTListener {
+      void sawDiagnostic(const clang::Diagnostic &, clangd::Diag &D) override {
+        D.Message = DiagMsg.str();
+      }
+    };
+
+  public:
+    std::unique_ptr<ASTListener> astListeners() override {
+      return std::make_unique<DiagHooks>();
+    }
+  };
+  FeatureModules.add(std::make_unique<DiagModule>());
+
+  auto &Client = start();
+  Client.didOpen("foo.cpp", "test;");
+  EXPECT_THAT(Client.diagnostics("foo.cpp"),
+              llvm::ValueIs(testing::ElementsAre(DiagMessage(DiagMsg))));
+}
 } // namespace
 } // namespace clangd
 } // namespace clang

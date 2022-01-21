@@ -25,12 +25,11 @@
 #include <mutex>
 #include <utility>
 
-#include <assert.h>
+#include <cassert>
 #if defined(_WIN32)
 #include <process.h>
 #else
 #include <unistd.h>
-#include <pthread.h>
 #endif
 
 using namespace lldb_private;
@@ -60,17 +59,18 @@ uint32_t Log::GetFlags(llvm::raw_ostream &stream, const ChannelMap::value_type &
   bool list_categories = false;
   uint32_t flags = 0;
   for (const char *category : categories) {
-    if (llvm::StringRef("all").equals_lower(category)) {
+    if (llvm::StringRef("all").equals_insensitive(category)) {
       flags |= UINT32_MAX;
       continue;
     }
-    if (llvm::StringRef("default").equals_lower(category)) {
+    if (llvm::StringRef("default").equals_insensitive(category)) {
       flags |= entry.second.m_channel.default_flags;
       continue;
     }
-    auto cat = llvm::find_if(
-        entry.second.m_channel.categories,
-        [&](const Log::Category &c) { return c.name.equals_lower(category); });
+    auto cat = llvm::find_if(entry.second.m_channel.categories,
+                             [&](const Log::Category &c) {
+                               return c.name.equals_insensitive(category);
+                             });
     if (cat != entry.second.m_channel.categories.end()) {
       flags |= cat->flag;
       continue;
@@ -179,9 +179,6 @@ void Log::Warning(const char *format, ...) {
 }
 
 void Log::Initialize() {
-#ifdef LLVM_ON_UNIX
-  pthread_atfork(nullptr, nullptr, &Log::DisableLoggingChild);
-#endif
   InitializeLldbChannel();
 }
 
@@ -344,12 +341,4 @@ void Log::Format(llvm::StringRef file, llvm::StringRef function,
   WriteHeader(message, file, function);
   message << payload << "\n";
   WriteMessage(message.str());
-}
-
-void Log::DisableLoggingChild() {
-  // Disable logging by clearing out the atomic variable after forking -- if we
-  // forked while another thread held the channel mutex, we would deadlock when
-  // trying to write to the log.
-  for (auto &c: *g_channel_map)
-    c.second.m_channel.log_ptr.store(nullptr, std::memory_order_relaxed);
 }

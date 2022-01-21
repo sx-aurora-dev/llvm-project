@@ -14,7 +14,7 @@ define void @byref_mismatched_pointee_type1(i8* byref(i32)) {
 
 %opaque.ty = type opaque
 
-; CHECK: Attributes 'byval', 'byref', 'inalloca', and 'preallocated' do not support unsized types!
+; CHECK: Attribute 'byref' does not support unsized types!
 ; CHECK-NEXT: void (%opaque.ty*)* @byref_unsized
 define void @byref_unsized(%opaque.ty* byref(%opaque.ty)) {
   ret void
@@ -28,7 +28,7 @@ define void @byref_byval(i32* byref(i32) byval(i32)) {
 
 ; CHECK: Attributes 'byval', 'inalloca', 'preallocated', 'inreg', 'nest', 'byref', and 'sret' are incompatible!
 ; CHECK-NEXT: void (i32*)* @byref_inalloca
-define void @byref_inalloca(i32* byref(i32) inalloca) {
+define void @byref_inalloca(i32* byref(i32) inalloca(i32)) {
   ret void
 }
 

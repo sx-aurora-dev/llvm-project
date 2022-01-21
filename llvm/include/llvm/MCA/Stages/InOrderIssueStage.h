@@ -11,30 +11,52 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_MCA_IN_ORDER_ISSUE_STAGE_H
-#define LLVM_MCA_IN_ORDER_ISSUE_STAGE_H
+#ifndef LLVM_MCA_STAGES_INORDERISSUESTAGE_H
+#define LLVM_MCA_STAGES_INORDERISSUESTAGE_H
 
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/MCA/CustomBehaviour.h"
+#include "llvm/MCA/HardwareUnits/ResourceManager.h"
 #include "llvm/MCA/SourceMgr.h"
 #include "llvm/MCA/Stages/Stage.h"
 
-#include <queue>
-
 namespace llvm {
-struct MCSchedModel;
-class MCSubtargetInfo;
-
 namespace mca {
+class LSUnit;
 class RegisterFile;
-class ResourceManager;
-struct RetireControlUnit;
+
+struct StallInfo {
+  enum class StallKind {
+    DEFAULT,
+    REGISTER_DEPS,
+    DISPATCH,
+    DELAY,
+    LOAD_STORE,
+    CUSTOM_STALL
+  };
+
+  InstRef IR;
+  unsigned CyclesLeft;
+  StallKind Kind;
+
+  StallInfo() : CyclesLeft(), Kind(StallKind::DEFAULT) {}
+
+  StallKind getStallKind() const { return Kind; }
+  unsigned getCyclesLeft() const { return CyclesLeft; }
+  const InstRef &getInstruction() const { return IR; }
+  InstRef &getInstruction() { return IR; }
+
+  bool isValid() const { return (bool)IR; }
+  void clear();
+  void update(const InstRef &Inst, unsigned Cycles, StallKind SK);
+  void cycleEnd();
+};
 
 class InOrderIssueStage final : public Stage {
-  const MCSchedModel &SM;
   const MCSubtargetInfo &STI;
-  RetireControlUnit &RCU;
   RegisterFile &PRF;
-  std::unique_ptr<ResourceManager> RM;
+  ResourceManager RM;
+  CustomBehaviour &CB;
+  LSUnit &LSU;
 
   /// Instructions that were issued, but not executed yet.
   SmallVector<InstRef, 4> IssuedInst;
@@ -42,35 +64,58 @@ class InOrderIssueStage final : public Stage {
   /// Number of instructions issued in the current cycle.
   unsigned NumIssued;
 
-  /// If an instruction cannot execute due to an unmet register or resource
-  /// dependency, the it is stalled for StallCyclesLeft.
-  InstRef StalledInst;
-  unsigned StallCyclesLeft;
+  StallInfo SI;
+
+  /// Instruction that is issued in more than 1 cycle.
+  InstRef CarriedOver;
+  /// Number of CarriedOver uops left to issue.
+  unsigned CarryOver;
 
   /// Number of instructions that can be issued in the current cycle.
   unsigned Bandwidth;
 
+  /// Number of cycles (counted from the current cycle) until the last write is
+  /// committed. This is taken into account to ensure that writes commit in the
+  /// program order.
+  unsigned LastWriteBackCycle;
+
   InOrderIssueStage(const InOrderIssueStage &Other) = delete;
   InOrderIssueStage &operator=(const InOrderIssueStage &Other) = delete;
 
-  /// If IR has an unmet register or resource dependency, canExecute returns
-  /// false. StallCycles is set to the number of cycles left before the
-  /// instruction can be issued.
-  bool canExecute(const InstRef &IR, unsigned *StallCycles) const;
+  /// Returns true if IR can execute during this cycle.
+  /// In case of stall, it updates SI with information about the stalled
+  /// instruction and the stall reason.
+  bool canExecute(const InstRef &IR);
 
-  /// Issue the instruction, or update StallCycles if IR is stalled.
-  Error tryIssue(InstRef &IR, unsigned *StallCycles);
+  /// Issue the instruction, or update the StallInfo.
+  Error tryIssue(InstRef &IR);
 
   /// Update status of instructions from IssuedInst.
-  Error updateIssuedInst();
+  void updateIssuedInst();
+
+  /// Continue to issue the CarriedOver instruction.
+  void updateCarriedOver();
+
+  /// Notifies a stall event to the Stage listener. Stall information is
+  /// obtained from the internal StallInfo field.
+  void notifyStallEvent();
+
+  void notifyInstructionIssued(const InstRef &IR,
+                               ArrayRef<ResourceUse> UsedRes);
+  void notifyInstructionDispatched(const InstRef &IR, unsigned Ops,
+                                   ArrayRef<unsigned> UsedRegs);
+  void notifyInstructionExecuted(const InstRef &IR);
+  void notifyInstructionRetired(const InstRef &IR,
+                                ArrayRef<unsigned> FreedRegs);
+
+  /// Retire instruction once it is executed.
+  void retireInstruction(InstRef &IR);
 
 public:
-  InOrderIssueStage(RetireControlUnit &RCU, RegisterFile &PRF,
-                    const MCSchedModel &SM, const MCSubtargetInfo &STI)
-      : SM(SM), STI(STI), RCU(RCU), PRF(PRF),
-        RM(std::make_unique<ResourceManager>(SM)), StallCyclesLeft(0),
-        Bandwidth(0) {}
+  InOrderIssueStage(const MCSubtargetInfo &STI, RegisterFile &PRF,
+                    CustomBehaviour &CB, LSUnit &LSU);
 
+  unsigned getIssueWidth() const;
   bool isAvailable(const InstRef &) const override;
   bool hasWorkToComplete() const override;
   Error execute(InstRef &IR) override;
@@ -81,4 +126,4 @@ public:
 } // namespace mca
 } // namespace llvm
 
-#endif // LLVM_MCA_IN_ORDER_ISSUE_STAGE_H
+#endif // LLVM_MCA_STAGES_INORDERISSUESTAGE_H

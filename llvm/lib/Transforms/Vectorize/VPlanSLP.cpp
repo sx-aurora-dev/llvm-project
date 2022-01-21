@@ -35,10 +35,10 @@
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include <algorithm>
 #include <cassert>
 #include <iterator>
-#include <string>
-#include <vector>
+#include <utility>
 
 using namespace llvm;
 
@@ -349,6 +349,7 @@ SmallVector<VPlanSlp::MultiNodeOpTy, 4> VPlanSlp::reorderMultiNodeOps() {
   return FinalOrder;
 }
 
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 void VPlanSlp::dumpBundle(ArrayRef<VPValue *> Values) {
   dbgs() << " Ops: ";
   for (auto Op : Values) {
@@ -361,6 +362,7 @@ void VPlanSlp::dumpBundle(ArrayRef<VPValue *> Values) {
   }
   dbgs() << "\n";
 }
+#endif
 
 VPInstruction *VPlanSlp::buildGraph(ArrayRef<VPValue *> Values) {
   assert(!Values.empty() && "Need some operands!");
@@ -465,8 +467,9 @@ VPInstruction *VPlanSlp::buildGraph(ArrayRef<VPValue *> Values) {
     return markFailed();
 
   assert(CombinedOperands.size() > 0 && "Need more some operands");
-  auto *VPI = new VPInstruction(Opcode, CombinedOperands);
-  VPI->setUnderlyingInstr(cast<VPInstruction>(Values[0])->getUnderlyingInstr());
+  auto *Inst = cast<VPInstruction>(Values[0])->getUnderlyingInstr();
+  auto *VPI = new VPInstruction(Opcode, CombinedOperands, Inst->getDebugLoc());
+  VPI->setUnderlyingInstr(Inst);
 
   LLVM_DEBUG(dbgs() << "Create VPInstruction " << *VPI << " "
                     << *cast<VPInstruction>(Values[0]) << "\n");
