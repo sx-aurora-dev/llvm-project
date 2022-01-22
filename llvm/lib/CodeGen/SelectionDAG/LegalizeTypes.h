@@ -283,7 +283,7 @@ private:
     EVT OldVT = Op.getValueType();
     SDLoc DL(Op);
     Op = GetPromotedInteger(Op);
-    if (TLI.isSExtCheaperThanZExt(OldVT, Op.getValueType()))
+    if (TLI.isSExtCheaperThanZExt(OldVT, Op.getValueType(), Op))
       return DAG.getNode(ISD::SIGN_EXTEND_INREG, DL, Op.getValueType(), Op,
                          DAG.getValueType(OldVT));
     return DAG.getZeroExtendInReg(Op, DL, OldVT);
@@ -849,6 +849,7 @@ private:
   void SplitVecRes_FCOPYSIGN(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_LOAD(LoadSDNode *LD, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_VP_LOAD(VPLoadSDNode *LD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_MLOAD(MaskedLoadSDNode *MLD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_MGATHER(MaskedGatherSDNode *MGT, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_ScalarOp(SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -875,6 +876,7 @@ private:
   SDValue SplitVecOp_EXTRACT_VECTOR_ELT(SDNode *N);
   SDValue SplitVecOp_ExtVecInRegOp(SDNode *N);
   SDValue SplitVecOp_STORE(StoreSDNode *N, unsigned OpNo);
+  SDValue SplitVecOp_VP_STORE(VPStoreSDNode *N, unsigned OpNo);
   SDValue SplitVecOp_MSTORE(MaskedStoreSDNode *N, unsigned OpNo);
   SDValue SplitVecOp_MSCATTER(MaskedScatterSDNode *N, unsigned OpNo);
   SDValue SplitVecOp_MGATHER(MaskedGatherSDNode *MGT, unsigned OpNo);
@@ -913,6 +915,7 @@ private:
   SDValue WidenVecRes_INSERT_SUBVECTOR(SDNode *N);
   SDValue WidenVecRes_INSERT_VECTOR_ELT(SDNode* N);
   SDValue WidenVecRes_LOAD(SDNode* N);
+  SDValue WidenVecRes_VP_LOAD(VPLoadSDNode *N);
   SDValue WidenVecRes_MLOAD(MaskedLoadSDNode* N);
   SDValue WidenVecRes_MGATHER(MaskedGatherSDNode* N);
   SDValue WidenVecRes_ScalarOp(SDNode* N);
@@ -947,6 +950,7 @@ private:
   SDValue WidenVecOp_INSERT_SUBVECTOR(SDNode *N);
   SDValue WidenVecOp_EXTRACT_SUBVECTOR(SDNode *N);
   SDValue WidenVecOp_STORE(SDNode* N);
+  SDValue WidenVecOp_VP_STORE(SDNode *N, unsigned OpNo);
   SDValue WidenVecOp_MSTORE(SDNode* N, unsigned OpNo);
   SDValue WidenVecOp_MGATHER(SDNode* N, unsigned OpNo);
   SDValue WidenVecOp_MSCATTER(SDNode* N, unsigned OpNo);

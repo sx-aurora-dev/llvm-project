@@ -1027,13 +1027,11 @@ static Value *foldOperationIntoSelectOperand(Instruction &I, Value *SO,
   if (!ConstIsRHS)
     std::swap(Op0, Op1);
 
-  auto *BO = cast<BinaryOperator>(&I);
-  Value *RI = Builder.CreateBinOp(BO->getOpcode(), Op0, Op1,
-                                  SO->getName() + ".op");
-  auto *FPInst = dyn_cast<Instruction>(RI);
-  if (FPInst && isa<FPMathOperator>(FPInst))
-    FPInst->copyFastMathFlags(BO);
-  return RI;
+  Value *NewBO = Builder.CreateBinOp(cast<BinaryOperator>(&I)->getOpcode(), Op0,
+                                     Op1, SO->getName() + ".op");
+  if (auto *NewBOI = dyn_cast<Instruction>(NewBO))
+    NewBOI->copyIRFlags(&I);
+  return NewBO;
 }
 
 Instruction *InstCombinerImpl::FoldOpIntoSelect(Instruction &Op,
@@ -2018,11 +2016,12 @@ Instruction *InstCombinerImpl::visitGEPOfGEP(GetElementPtrInst &GEP,
 }
 
 Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
-  SmallVector<Value *, 8> Ops(GEP.operands());
+  Value *PtrOp = GEP.getOperand(0);
+  SmallVector<Value *, 8> Indices(GEP.indices());
   Type *GEPType = GEP.getType();
   Type *GEPEltType = GEP.getSourceElementType();
   bool IsGEPSrcEleScalable = isa<ScalableVectorType>(GEPEltType);
-  if (Value *V = SimplifyGEPInst(GEPEltType, Ops, GEP.isInBounds(),
+  if (Value *V = SimplifyGEPInst(GEPEltType, PtrOp, Indices, GEP.isInBounds(),
                                  SQ.getWithInstruction(&GEP)))
     return replaceInstUsesWith(GEP, V);
 
@@ -2044,8 +2043,6 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
     // possible (decide on canonical form for pointer broadcast), 3) exploit
     // undef elements to decrease demanded bits
   }
-
-  Value *PtrOp = GEP.getOperand(0);
 
   // Eliminate unneeded casts for indices, and replace indices which displace
   // by multiples of a zero size type with zero.
@@ -2460,10 +2457,9 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
       // `setSourceElementType()` won't actually update the type of the
       // existing GEP Value. Causing issues if this Value is accessed when
       // constructing an AddrSpaceCastInst
-      Value *NGEP =
-          GEP.isInBounds()
-              ? Builder.CreateInBoundsGEP(SrcEltType, SrcOp, {Ops[1], Ops[2]})
-              : Builder.CreateGEP(SrcEltType, SrcOp, {Ops[1], Ops[2]});
+      Value *NGEP = GEP.isInBounds()
+                        ? Builder.CreateInBoundsGEP(SrcEltType, SrcOp, Indices)
+                        : Builder.CreateGEP(SrcEltType, SrcOp, Indices);
       NGEP->takeName(&GEP);
 
       // Preserve GEP address space to satisfy users
@@ -2547,8 +2543,7 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
             DL.getTypeAllocSize(AI->getAllocatedType()).getKnownMinSize());
         if (BasePtrOffset.ule(AllocSize)) {
           return GetElementPtrInst::CreateInBounds(
-              GEP.getSourceElementType(), PtrOp, makeArrayRef(Ops).slice(1),
-              GEP.getName());
+              GEP.getSourceElementType(), PtrOp, Indices, GEP.getName());
         }
       }
     }
