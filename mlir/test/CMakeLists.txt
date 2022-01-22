@@ -68,13 +68,14 @@ configure_lit_site_cfg(
   )
 
 set(MLIR_TEST_DEPENDS
-  FileCheck count not
+  FileCheck count not split-file llc
   mlir-capi-execution-engine-test
   mlir-capi-ir-test
   mlir-capi-llvm-test
   mlir-capi-pass-test
   mlir-capi-sparse-tensor-test
   mlir-capi-quant-test
+  mlir-capi-pdl-test
   mlir-cpu-runner
   mlir-linalg-ods-yaml-gen
   mlir-lsp-server
