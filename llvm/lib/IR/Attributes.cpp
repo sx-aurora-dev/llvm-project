@@ -1548,14 +1548,6 @@ LLVM_DUMP_METHOD void AttributeList::dump() const { print(dbgs()); }
 // AttrBuilder Method Implementations
 //===----------------------------------------------------------------------===//
 
-// FIXME: Remove this ctor, use AttributeSet.
-AttrBuilder::AttrBuilder(LLVMContext &Ctx, AttributeList AL, unsigned Index)
-    : Ctx(Ctx) {
-  AttributeSet AS = AL.getAttributes(Index);
-  for (const auto &A : AS)
-    addAttribute(A);
-}
-
 AttrBuilder::AttrBuilder(LLVMContext &Ctx, AttributeSet AS) : Ctx(Ctx) {
   for (const auto &A : AS)
     addAttribute(A);
@@ -1614,11 +1606,6 @@ AttrBuilder &AttrBuilder::addAttribute(Attribute Attr) {
 
 AttrBuilder &AttrBuilder::addAttribute(StringRef A, StringRef V) {
   return addAttribute(Attribute::get(Ctx, A, V));
-}
-
-AttrBuilder &AttrBuilder::removeAttributes(AttributeList AL, uint64_t Index) {
-  remove(AttributeMask(AL.getAttributes(Index)));
-  return *this;
 }
 
 AttrBuilder &AttrBuilder::removeAttribute(Attribute::AttrKind Val) {
@@ -1813,22 +1800,6 @@ bool AttrBuilder::hasAttributes() const {
   return !Attrs.none() || !TargetDepAttrs.empty();
 }
 
-bool AttrBuilder::hasAttributes(AttributeList AL, uint64_t Index) const {
-  AttributeSet AS = AL.getAttributes(Index);
-
-  for (const auto &Attr : AS) {
-    if (Attr.isEnumAttribute() || Attr.isIntAttribute()) {
-      if (contains(Attr.getKindAsEnum()))
-        return true;
-    } else {
-      assert(Attr.isStringAttribute() && "Invalid attribute kind!");
-      return contains(Attr.getKindAsString());
-    }
-  }
-
-  return false;
-}
-
 bool AttrBuilder::hasAlignmentAttr() const {
   return getRawIntAttr(Attribute::Alignment) != 0;
 }
@@ -1921,6 +1892,12 @@ static void setOR(Function &Caller, const Function &Callee) {
 /// If the inlined function had a higher stack protection level than the
 /// calling function, then bump up the caller's stack protection level.
 static void adjustCallerSSPLevel(Function &Caller, const Function &Callee) {
+  // If the calling function has *no* stack protection level (e.g. it was built
+  // with Clang's -fno-stack-protector or no_stack_protector attribute), don't
+  // change it as that could change the program's semantics.
+  if (!Caller.hasStackProtectorFnAttr())
+    return;
+
   // If upgrading the SSP attribute, clear out the old SSP Attributes first.
   // Having multiple SSP attributes doesn't actually hurt, but it adds useless
   // clutter to the IR.

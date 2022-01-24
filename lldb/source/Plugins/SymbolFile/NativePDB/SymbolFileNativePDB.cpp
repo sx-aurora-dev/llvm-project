@@ -1448,14 +1448,17 @@ size_t SymbolFileNativePDB::ParseBlocksRecursive(Function &func) {
   // After we iterate through inline sites inside the function, we already get
   // all the info needed, removing from the map to save memory.
   std::set<uint64_t> remove_uids;
-  auto parse_inline_sites = [&](SymbolKind kind, PdbCompilandSymId id) {
-    if (kind != S_INLINESITE)
-      return false;
-    GetOrCreateBlock(id);
-    remove_uids.insert(toOpaqueUid(id));
-    return true;
+  auto parse_blocks = [&](SymbolKind kind, PdbCompilandSymId id) {
+    if (kind == S_GPROC32 || kind == S_LPROC32 || kind == S_BLOCK32 ||
+        kind == S_INLINESITE) {
+      GetOrCreateBlock(id);
+      if (kind == S_INLINESITE)
+        remove_uids.insert(toOpaqueUid(id));
+      return true;
+    }
+    return false;
   };
-  size_t count = ParseSymbolArrayInScope(func_id, parse_inline_sites);
+  size_t count = ParseSymbolArrayInScope(func_id, parse_blocks);
   for (uint64_t uid : remove_uids) {
     m_inline_sites.erase(uid);
   }

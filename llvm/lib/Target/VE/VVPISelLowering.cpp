@@ -609,7 +609,7 @@ void VETargetLowering::initVPUActions() {
   // Short vector elements (EXCLUDING masks)
   for (MVT VT : MVT::vector_valuetypes()) {
     MVT ElemVT = VT.getVectorElementType();
-    unsigned W = VT.getVectorNumElements();
+    unsigned W = VT.getVectorMinNumElements();
 
     // Use default splitting for vlens > 512
     if (W > PackedWidth)
@@ -722,7 +722,7 @@ void VETargetLowering::initVPUActions() {
     LegalizeAction Action;
     // FIXME query available vector width for this Op
     const unsigned WidthLimit = Subtarget->hasPackedMode() ? 512 : 256;
-    if (isLegalVectorVT(VT) && VT.getVectorNumElements() <= WidthLimit) {
+    if (isLegalVectorVT(VT) && VT.getVectorMinNumElements() <= WidthLimit) {
       // We perform custom widening as necessary
       Action = Custom;
     } else {
@@ -976,11 +976,11 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
     return TypeScalarizeVector;
 
   // The default action for one element vectors is to scalarize
-  if (VT.getVectorNumElements() == 1)
+  if (VT.getVectorMinNumElements() == 1)
     return TypeScalarizeVector;
 
   // Split oversized vectors
-  if (VT.getVectorNumElements() > 512)
+  if (VT.getVectorMinNumElements() > 512)
     return TypeSplitVector;
 
   // Promote short element vectors to i32

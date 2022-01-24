@@ -120,6 +120,13 @@ enum NodeType : unsigned {
   BCOMPRESSW,
   BDECOMPRESS,
   BDECOMPRESSW,
+  // The bit field place (bfp) instruction places up to XLEN/2 LSB bits from rs2
+  // into the value in rs1. The upper bits of rs2 control the length of the bit
+  // field and target position. The layout of rs2 is chosen in a way that makes
+  // it possible to construct rs2 easily using pack[h] instructions and/or
+  // andi/lui.
+  BFP,
+  BFPW,
   // Vector Extension
   // VMV_V_X_VL matches the semantics of vmv.v.x but includes an extra operand
   // for the VL value to be used for the operation.
@@ -319,7 +326,7 @@ public:
   bool isTruncateFree(Type *SrcTy, Type *DstTy) const override;
   bool isTruncateFree(EVT SrcVT, EVT DstVT) const override;
   bool isZExtFree(SDValue Val, EVT VT2) const override;
-  bool isSExtCheaperThanZExt(EVT SrcVT, EVT DstVT) const override;
+  bool isSExtCheaperThanZExt(EVT SrcVT, EVT DstVT, SDValue V) const override;
   bool isCheapToSpeculateCttz() const override;
   bool isCheapToSpeculateCtlz() const override;
   bool hasAndNotCompare(SDValue Y) const override;

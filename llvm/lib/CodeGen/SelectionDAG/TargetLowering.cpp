@@ -60,7 +60,7 @@ bool TargetLowering::isInTailCallPosition(SelectionDAG &DAG, SDNode *Node,
   // Conservatively require the attributes of the call to match those of
   // the return. Ignore following attributes because they don't affect the
   // call sequence.
-  AttrBuilder CallerAttrs(F.getContext(), F.getAttributes(), AttributeList::ReturnIndex);
+  AttrBuilder CallerAttrs(F.getContext(), F.getAttributes().getRetAttrs());
   for (const auto &Attr : {Attribute::Alignment, Attribute::Dereferenceable,
                            Attribute::DereferenceableOrNull, Attribute::NoAlias,
                            Attribute::NonNull})
@@ -3844,7 +3844,7 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
     } else if (N0.getOpcode() == ISD::SIGN_EXTEND_INREG &&
                (Cond == ISD::SETEQ || Cond == ISD::SETNE) &&
                !isSExtCheaperThanZExt(cast<VTSDNode>(N0.getOperand(1))->getVT(),
-                                      OpVT)) {
+                                      OpVT, N0.getOperand(1))) {
       EVT ExtSrcTy = cast<VTSDNode>(N0.getOperand(1))->getVT();
       unsigned ExtSrcTyBits = ExtSrcTy.getSizeInBits();
       EVT ExtDstTy = N0.getValueType();
