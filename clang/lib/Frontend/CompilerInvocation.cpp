@@ -3165,7 +3165,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     // FP contract option is used to allow fuse across statements in frontend
     // whereas respecting contract flag in backend.
     Opts.setDefaultFPContractMode(LangOptions::FPM_FastHonorPragmas);
-  } else if (Opts.CUDA) {
+  } else if (Opts.CUDA || T.getArch() == llvm::Triple::ve) {
     // Allow fuse across statements disregarding pragmas.
     Opts.setDefaultFPContractMode(LangOptions::FPM_Fast);
   }
