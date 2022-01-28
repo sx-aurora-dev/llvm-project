@@ -404,15 +404,37 @@ defm : Ternary_ShortLong<c_vvp_ffmsn,
 // TODO: vvp_ffman
 
 ///// Selection /////
-multiclass VectorSelect<ValueType DataVT> {
-    def :Pat<(DataVT (vvp_select DataVT:$vtrue, DataVT:$vfalse, v256i1:$vm, i32:$pivot)),
-                     (VMRGvvml_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
+multiclass Merge_mvv<
+    SDPatternOperator OpNode,
+    ValueType DataVT, ValueType MaskVT,
+    string OpBaseName> {
+  // Masked.
+  def : Pat<(OpNode
+                DataVT:$vtrue, DataVT:$vfalse,
+                MaskVT:$vm,
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vvml_v")
+                $vfalse, $vtrue, $vm, $avl, $vfalse)>;
 }
 
-defm : VectorSelect<v256f64>;
-defm : VectorSelect<v256i64>;
-defm : VectorSelect<v256i32>;
-defm : VectorSelect<v256f32>;
+multiclass Merge_mvv_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongDataVT, ValueType ShortDataVT,
+    string OpBaseName> {
+  defm : Merge_mvv<OpNode,
+                   LongDataVT, v256i1,
+                   OpBaseName>;
+  defm : Merge_mvv<OpNode,
+                   ShortDataVT, v256i1,
+                   OpBaseName>;
+}
+
+defm : Merge_mvv_ShortLong<vvp_select,
+                           v256f64,
+                           v256f32, "VMRG">;
+defm : Merge_mvv_ShortLong<vvp_select,
+                           v256i64,
+                           v256i32, "VMRG">;
 
 multiclass VectorSelect_Packed<ValueType PackedVT> {
     def : Pat<(PackedVT (vvp_select PackedVT:$vtrue, PackedVT:$vfalse, v512i1:$vm, i32:$pivot)),

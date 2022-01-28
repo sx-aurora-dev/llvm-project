@@ -308,7 +308,7 @@ public:
   SDValue combineEntryToken_VVP(SDNode *N, DAGCombinerInfo &DCI) const;
   // Expand SETCC operands directly used in vector arithmetic ops.
   SDValue lowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
-  SDValue expandSELECT(SDValue Op, SmallVectorImpl<SDValue> &LegalOperands,
+  SDValue expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue OnFalseV,
                        EVT LegalResVT, CustomDAG &CDAG, SDValue AVL) const;
 
   /// Custom Lower for VVP {
