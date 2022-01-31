@@ -161,40 +161,95 @@ multiclass Unary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, Val
 multiclass Binary_rv<SDPatternOperator OpNode,
     ValueType ScalarVT, ValueType DataVT,
     ValueType MaskVT, string OpBaseName> {
-  // Masked with select, broadcast.
-  def : Pat<(vvp_select (OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
-                        DataVT:$vfalse,
-                        MaskVT:$mask,
-                        i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvml_v") ScalarVT:$sx, $vy, $mask, $avl, $vfalse)>;
+  // Masked with passthru, broadcast.
+  def : Pat<(vvp_select
+                (OpNode
+                    (any_broadcast ScalarVT:$sx),
+                    DataVT:$vy,
+                    (MaskVT srcvalue),
+                    (i32 srcvalue)),
+                DataVT:$vfalse,
+                MaskVT:$mask,
+                i32:$pivot),
+            (!cast<Instruction>(OpBaseName#"rvml_v")
+                ScalarVT:$sx,
+                $vy,
+                $mask,
+                $pivot,
+                $vfalse)>;
+
   // Unmasked, broadcast.
-  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvl") ScalarVT:$sx, $vy, $avl)>;
+  def : Pat<(OpNode
+                (any_broadcast ScalarVT:$sx), DataVT:$vy,
+                (MaskVT true_mask),
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvl")
+                ScalarVT:$sx, $vy, $avl)>;
   // Masked, broadcast.
-  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvml") ScalarVT:$sx, $vy, $mask, $avl)>;
+  def : Pat<(OpNode
+                (any_broadcast ScalarVT:$sx), DataVT:$vy,
+                MaskVT:$mask,
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvml")
+                ScalarVT:$sx, $vy, $mask, $avl)>;
 }
 
 multiclass Binary_vr<SDPatternOperator OpNode,
     ValueType ScalarVT, ValueType DataVT,
     ValueType MaskVT, string OpBaseName> {
-  // Masked with select, broadcast.
-  def : Pat<(vvp_select (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT srcvalue), (i32 srcvalue)),
-                        DataVT:$vfalse,
-                        MaskVT:$mask,
-                        i32:$avl),
-            (!cast<Instruction>(OpBaseName#"vrml_v") $vx, ScalarVT:$sy, $mask, $avl, $vfalse)>;
+  // Masked with passthru, broadcast.
+  def : Pat<(vvp_select
+                (OpNode
+                    DataVT:$vx,
+                    (any_broadcast ScalarVT:$sy),
+                    (MaskVT srcvalue),
+                    (i32 srcvalue)),
+                DataVT:$vfalse,
+                MaskVT:$mask,
+                i32:$pivot),
+            (!cast<Instruction>(OpBaseName#"vrml_v")
+                $vx,
+                ScalarVT:$sy,
+                $mask,
+                $pivot,
+                $vfalse)>;
+
   // Unmasked, broadcast.
-  def : Pat<(OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"vrl") $vx, ScalarVT:$sy, $avl)>;
+  def : Pat<(OpNode
+                DataVT:$vx, (any_broadcast ScalarVT:$sy),
+                (MaskVT true_mask),
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vrl")
+                $vx, ScalarVT:$sy, $avl)>;
   // Masked, broadcast.
-  def : Pat<(OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"vrml") $vx, ScalarVT:$sy, $mask, $avl)>;
+  def : Pat<(OpNode
+                DataVT:$vx, (any_broadcast ScalarVT:$sy),
+                MaskVT:$mask,
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vrml")
+                $vx, ScalarVT:$sy, $mask, $avl)>;
 }
 
 multiclass Binary_vv<SDPatternOperator OpNode,
     ValueType DataVT,
     ValueType MaskVT, string OpBaseName> {
+  // Masked with passthru, broadcast.
+  def : Pat<(vvp_select
+                (OpNode
+                    DataVT:$vx,
+                    DataVT:$vy,
+                    (MaskVT srcvalue),
+                    (i32 srcvalue)),
+                DataVT:$vfalse,
+                MaskVT:$mask,
+                i32:$pivot),
+            (!cast<Instruction>(OpBaseName#"vvml_v")
+                $vx,
+                $vy,
+                $mask,
+                $pivot,
+                $vfalse)>;
+
   // Masked with select.
   def : Pat<(vvp_select (OpNode DataVT:$vx, DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -203,12 +258,20 @@ multiclass Binary_vv<SDPatternOperator OpNode,
             (!cast<Instruction>(OpBaseName#"vvml_v") $vx, $vy, $mask, $avl, $vfalse)>;
 
   // Unmasked.
-  def : Pat<(OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"vvl") $vx, $vy, $avl)>;
+  def : Pat<(OpNode
+                DataVT:$vx, DataVT:$vy,
+                (MaskVT true_mask),
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vvl")
+                $vx, $vy, $avl)>;
 
   // Masked.
-  def : Pat<(OpNode DataVT:$vx, DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"vvml") $vx, $vy, $mask, $avl)>;
+  def : Pat<(OpNode
+                DataVT:$vx, DataVT:$vy,
+                MaskVT:$mask,
+                i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vvml")
+                $vx, $vy, $mask, $avl)>;
 }
 
 // Binary operators that support broadcasts only on RHS.
