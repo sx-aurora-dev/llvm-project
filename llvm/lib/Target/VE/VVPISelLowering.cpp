@@ -1022,16 +1022,11 @@ SDValue VETargetLowering::lowerVVP_TRUNCATE(SDValue Op,
   return Op.getOperand(0);
 }
 
-SDValue VETargetLowering::expandSELECT(SDValue Op,
-                                       SmallVectorImpl<SDValue> &LegalOperands,
+SDValue VETargetLowering::expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue OnFalseV,
                                        EVT LegalResVT, CustomDAG &CDAG,
                                        SDValue AVL) const {
-  SDValue MaskV = LegalOperands[0];
-  SDValue OnTrueV = LegalOperands[1];
-  SDValue OnFalseV = LegalOperands[2];
-
   // Expand vNi1 selects into a boolean expression
-  if (isMaskType(Op.getValueType())) {
+  if (isMaskType(LegalResVT)) {
     auto NotMaskV = CDAG.createNot(MaskV, LegalResVT);
 
     return CDAG.getNode(
@@ -1542,6 +1537,51 @@ SDValue VETargetLowering::splitVectorArithmetic(SDValue Op,
   return CDAG.createPack(MVT::v512i1, LoRes, HiRes, AVL);
 }
 
+SDValue getSelectMask(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case ISD::VSELECT:
+  case ISD::SELECT:
+  case ISD::VP_SELECT:
+  case ISD::VP_MERGE:
+    return Op->getOperand(0);
+  case VEISD::VVP_SELECT:
+    return Op->getOperand(2);
+  default:
+    break;
+  }
+  return SDValue();
+}
+
+SDValue getSelectOnTrueVal(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case ISD::VSELECT:
+  case ISD::SELECT:
+  case ISD::VP_SELECT:
+  case ISD::VP_MERGE:
+    return Op->getOperand(1);
+  case VEISD::VVP_SELECT:
+    return Op->getOperand(0);
+  default:
+    break;
+  }
+  return SDValue();
+}
+
+SDValue getSelectOnFalseVal(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case ISD::VSELECT:
+  case ISD::SELECT:
+  case ISD::VP_SELECT:
+  case ISD::VP_MERGE:
+    return Op->getOperand(2);
+  case VEISD::VVP_SELECT:
+    return Op->getOperand(1);
+  default:
+    break;
+  }
+  return SDValue();
+}
+
 SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
                                      VVPExpansionMode Mode) const {
 
@@ -1669,7 +1709,11 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
                            MaskingArgs.Mask, MaskingArgs.AVL});
     }
     case VEISD::VVP_SELECT: {
-      return expandSELECT(Op, LegalOperands, ResVecTy, CDAG, MaskingArgs.AVL);
+      SDValue CondMask = getSelectMask(Op);
+      SDValue OnTrue = getSelectOnTrueVal(Op);
+      SDValue OnFalse = getSelectOnFalseVal(Op);
+      return expandSELECT(CondMask, OnTrue, OnFalse, ResVecTy, CDAG,
+                          MaskingArgs.AVL);
     }
     default:
       llvm_unreachable("Unexpected ternary operator!");
@@ -2101,7 +2145,11 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
     OpVec.push_back(Op->getOperand(1));
     OpVec.push_back(Mask);
     OpVec.push_back(AVL);
-
+  } else if (*VVPOC == VEISD::VVP_SELECT) {
+    OpVec.push_back(getSelectOnTrueVal(Op));
+    OpVec.push_back(getSelectOnFalseVal(Op));
+    OpVec.push_back(Mask);
+    OpVec.push_back(AVL);
   } else {
     // Default.
     unsigned NumOps = Op.getNumOperands();
