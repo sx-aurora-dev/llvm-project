@@ -37,7 +37,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 
-#include "CustomDAG.h"
+#include "VECustomDAG.h"
 #include "ShuffleSynthesis.h"
 
 #ifdef DEBUG_TYPE
@@ -202,7 +202,7 @@ static EVT getMemoryDataVT(SDValue Op) {
   abort();
 }
 
-static SDValue getLoadStoreStride(SDValue Op, CustomDAG &CDAG) {
+static SDValue getLoadStoreStride(SDValue Op, VECustomDAG &CDAG) {
   if (Op->getOpcode() == VEISD::VVP_STORE) {
     return Op->getOperand(3);
   }
@@ -247,14 +247,14 @@ static SDValue getStoredValue(SDValue Op) {
 /// } Load & Store Properties
 
 static SDValue getSplitPtrOffset(SDValue Ptr, SDValue ByteStride, PackElem Part,
-                                 CustomDAG &CDAG) {
+                                 VECustomDAG &CDAG) {
   // High starts at base ptr but has more significant bits in the 64bit vector
   // element.
   if (Part == PackElem::Hi)
     return Ptr;
   return CDAG.getNode(ISD::ADD, MVT::i64, {Ptr, ByteStride});
 }
-static SDValue getSplitPtrStride(SDValue PackStride, CustomDAG &CDAG) {
+static SDValue getSplitPtrStride(SDValue PackStride, VECustomDAG &CDAG) {
   if (auto ConstBytes = dyn_cast<ConstantSDNode>(PackStride))
     return CDAG.getConstant(2 * ConstBytes->getSExtValue(), MVT::i64);
   return CDAG.getNode(ISD::SHL, MVT::i64,
@@ -390,7 +390,7 @@ static SDValue getNodePassthru(SDValue Op) {
 }
 
 SDValue
-VETargetLowering::computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+VETargetLowering::computeGatherScatterAddress(VECustomDAG &CDAG, SDValue BasePtr,
                                               SDValue Scale, SDValue Index,
                                               SDValue Mask, SDValue AVL) const {
   EVT IndexVT = Index.getValueType();
@@ -873,7 +873,7 @@ SDNode *
 VETargetLowering::widenInternalVectorOperation(SDNode *N,
                                                SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "::widenInternalVectorOp: "; N->dump(&DAG););
-  CustomDAG CDAG(*this, DAG, N);
+  VECustomDAG CDAG(*this, DAG, N);
 
   unsigned NumResults = N->getNumValues();
   assert(NumResults > 0);
@@ -1023,7 +1023,7 @@ SDValue VETargetLowering::lowerVVP_TRUNCATE(SDValue Op,
 }
 
 SDValue VETargetLowering::expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue OnFalseV,
-                                       EVT LegalResVT, CustomDAG &CDAG,
+                                       EVT LegalResVT, VECustomDAG &CDAG,
                                        SDValue AVL) const {
   // Expand vNi1 selects into a boolean expression
   if (isMaskType(LegalResVT)) {
@@ -1069,7 +1069,7 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
   bool NeededExpansion = false;
 
   auto MaskPos = getMaskPos(Op.getOpcode());
-  CustomDAG CDAG(*this, DAG, dl);
+  VECustomDAG CDAG(*this, DAG, dl);
 
   // Identify AVL
   SDValue AVL = getNodeAVL(Op);
@@ -1137,7 +1137,7 @@ VETargetLowering::lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
 
   EVT ResTy = Op.getValueType();
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   EVT NativeResTy = CDAG.legalizeVectorType(Op, Mode);
 
   // FIXME
@@ -1185,7 +1185,7 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   auto VVPOC = *getVVPOpcode(Op.getOpcode());
   assert((VVPOC == VEISD::VVP_LOAD) || (VVPOC == VEISD::VVP_STORE));
 
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
 
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
@@ -1282,7 +1282,7 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
+SDValue VETargetLowering::legalizePackedAVL(SDValue Op, VECustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "::legalizePackedAVL\n";);
   // Only required for VEC and VVP ops.
   if (!isVVPOrVEC(Op->getOpcode()))
@@ -1324,7 +1324,7 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
 
 SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
                                         VVPExpansionMode Mode) const {
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
 
   LLVM_DEBUG(dbgs() << "::splitVectorOp: "; CDAG.print(dbgs(), Op) << "\n");
   auto OcOpt = getVVPOpcode(Op.getOpcode());
@@ -1427,7 +1427,7 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
+VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
   Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
   if (!VecVTOpt.hasValue() || !VecVTOpt.getValue().isVector()) {
@@ -1523,7 +1523,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
 SDValue VETargetLowering::splitVectorArithmetic(SDValue Op,
                                                 SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "::splitMaskArithmetic\n");
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   SDValue AVL = CDAG.getConstEVL(Op.getValueType().getVectorNumElements());
   SDValue A = Op->getOperand(0);
   SDValue B = Op->getOperand(1);
@@ -1613,7 +1613,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return lowerVPToVVP(Op, DAG, Mode);
 
   ///// Decide for a vector width /////
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
   if (!WidenInfo.isValid()) {
@@ -1741,7 +1741,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 }
 
 SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
-                                                      CustomDAG &CDAG) const {
+                                                      VECustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "Legalize this VVP LOAD, STORE\n");
 
   EVT DataVT = *getIdiomaticType(Op.getNode());
@@ -1808,7 +1808,7 @@ SDValue VETargetLowering::legalizeVM_POPCOUNT(SDValue Op,
   if (!isPackedType(Mask.getValueType()))
     return Op;
 
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   SDValue LoMask = CDAG.createUnpack(MVT::v256i1, Mask, PackElem::Lo, AVL);
   SDValue LoCount = CDAG.createMaskPopcount(LoMask, AVL);
   SDValue HiMask = CDAG.createUnpack(MVT::v256i1, Mask, PackElem::Hi, AVL);
@@ -1830,7 +1830,7 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   EVT OpVecTy = OpVecTyOpt.getValue();
 
   // Check how this should be handled.
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo =
       pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
   unsigned VVPOpc = Op->getOpcode();
@@ -1860,7 +1860,7 @@ SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
 
   LLVM_DEBUG(dbgs() << "::splitGatherScatter\n";);
 
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
 
   SDValue PackAVL = getNodeAVL(Op);
   SDValue Chain = getNodeChain(Op);
@@ -1961,7 +1961,7 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
                                             VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "::lowerVVP_MGATHER_MSCATTER\n";);
 
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   auto MemN = cast<MemSDNode>(Op.getNode());
   EVT OldDataVT = MemN->getMemoryVT();
   EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
@@ -2020,7 +2020,7 @@ VETargetLowering::lowerVVP_EXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   auto BaseIdxN = Op.getOperand(1);
 
   assert(isa<ConstantSDNode>(BaseIdxN) && "TODO dynamic extract");
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   EVT LegalVecTy = CDAG.legalizeVectorType(Op, Mode);
 
   int64_t ShiftVal = cast<ConstantSDNode>(BaseIdxN)->getSExtValue();
@@ -2040,7 +2040,7 @@ SDValue VETargetLowering::lowerReduction_VPToVVP(SDValue Op, SelectionDAG &DAG,
   LLVM_DEBUG(dbgs() << "::lowerReduction_VPToVVP\n");
 
   // Check whether this should be Widened to VVP
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
   if (!WidenInfo.isValid()) {
@@ -2115,7 +2115,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
 
 
   // Check whether this should be Widened to VVP
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
   if (!WidenInfo.isValid()) {
@@ -2182,7 +2182,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
                                                 VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD/MSTORE to VVP\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
 
   auto VVPOpc = *getVVPOpcode(Op->getOpcode());
   const bool IsLoad = (VVPOpc == VEISD::VVP_LOAD);
@@ -2278,7 +2278,7 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
     // FIXME: Need to translate index!
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
-    CustomDAG CDAG(*this, DAG, Op);
+    VECustomDAG CDAG(*this, DAG, Op);
     return CDAG.createInsertMask(ActualMaskV, ElemV, IndexV);
   }
 
@@ -2290,7 +2290,7 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     }
     uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
     auto Part = getPartForLane(ConstIdx);
-    CustomDAG CDAG(*this, DAG, Op);
+    VECustomDAG CDAG(*this, DAG, Op);
 
     // Meaningful AVL, unused in codegen.
     SDValue AVL = CDAG.getConstEVL(256);
@@ -2336,7 +2336,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
 
     const unsigned SXRegSize = 64;
 
-    CustomDAG CDAG(*this, DAG, Op);
+    VECustomDAG CDAG(*this, DAG, Op);
 
     // determine the adjusted extraction index
     SDValue AdjIndexV = IndexV;
@@ -2369,7 +2369,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     }
     uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
     auto Part = getPartForLane(ConstIdx);
-    CustomDAG CDAG(*this, DAG, Op);
+    VECustomDAG CDAG(*this, DAG, Op);
 
     // Meaningful AVL, unused in codegen.
     SDValue AVL = CDAG.getConstEVL(256);
@@ -2391,7 +2391,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
 }
 
 SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
-                                         CustomDAG &CDAG) const {
+                                         VECustomDAG &CDAG) const {
   if (isMaskType(LegalResVT)) {
     MaskShuffleAnalysis MSA(MV, CDAG);
     return MSA.synthesize(CDAG, LegalResVT);
@@ -2403,7 +2403,7 @@ SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
   return SDValue();
 }
 
-SDValue VETargetLowering::splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
+SDValue VETargetLowering::splitVectorShuffle(SDValue Op, VECustomDAG &CDAG,
                                              VVPExpansionMode Mode) const {
   EVT LegalResVT = CDAG.legalizeVectorType(Op, Mode);
   SplitView Split = requestSplitView(Op.getNode(), CDAG);
@@ -2425,7 +2425,7 @@ SDValue VETargetLowering::splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
 
 SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
                                                VVPExpansionMode Mode) const {
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
 
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
 
@@ -2562,7 +2562,7 @@ SDValue VETargetLowering::lowerVVP_CONCAT_VECTOR(SDValue Op,
   }
 
   // Interleave the subregisteres
-  CustomDAG CDAG(*this, DAG, Op);
+  VECustomDAG CDAG(*this, DAG, Op);
   auto LoInsert = CDAG.getTargetInsertSubreg(
       VE::sub_vm_lo, VT, CDAG.getImplicitDef(VT), Op->getOperand(0));
   return CDAG.getTargetInsertSubreg(VE::sub_vm_hi, VT, LoInsert,

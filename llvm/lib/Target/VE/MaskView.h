@@ -6,7 +6,7 @@
 
 namespace llvm {
 
-struct CustomDAG;
+struct VECustomDAG;
 
 struct ElemSelect {
   SDValue V;          // the value that is chosen
@@ -79,7 +79,7 @@ struct SplitView {
   bool isValid() const { return LoView && HiView; }
 };
 
-SplitView requestSplitView(SDNode *N, CustomDAG &CDAG);
+SplitView requestSplitView(SDNode *N, VECustomDAG &CDAG);
 
 MaskView *requestMaskView(SDNode *N);
 

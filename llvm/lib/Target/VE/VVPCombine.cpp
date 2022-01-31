@@ -25,7 +25,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 
-#include "CustomDAG.h"
+#include "VECustomDAG.h"
 
 #ifdef DEBUG_TYPE
 #undef DEBUG_TYPE
@@ -170,7 +170,7 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs(), &DCI.DAG);
              dbgs() << "\n";);
 
-  CustomDAG CDAG(*this, DCI.DAG, N);
+  VECustomDAG CDAG(*this, DCI.DAG, N);
   bool RootIsPackLegalized = isPackLegalizedInternalNode(N);
   SDNodeFlags Flags = N->getFlags();
   switch (N->getOpcode()) {
@@ -306,7 +306,7 @@ static SDValue match_UnpackBroadcastRepl(SDValue N, SDValue &AVL) {
   return UnpackedBroadcastV;
 }
 
-SDValue combineUnpackLoHi(CustomDAG &CDAG, SDValue N) {
+SDValue combineUnpackLoHi(VECustomDAG &CDAG, SDValue N) {
   PackElem UnpackElem;
   SDValue PackedV = match_UnpackLoHi(N, UnpackElem);
   if (!PackedV)
@@ -318,7 +318,7 @@ SDValue combineUnpackLoHi(CustomDAG &CDAG, SDValue N) {
 
 SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart,
                                 EVT DestVT, SDValue UnpackAVL,
-                                const CustomDAG &CDAG) {
+                                const VECustomDAG &CDAG) {
   LLVM_DEBUG(dbgs() << "Online combiningUnpackLoHi from ";
              CDAG.print(dbgs(), PackedVec) << "\n";);
   // Replace vec_unpack(vec_broadcast(repl_X(V)) with
@@ -352,7 +352,7 @@ SDValue VETargetLowering::combinePacking(SDNode *N,
 
   LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG);
              dbgs() << "\n";);
-  CustomDAG CDAG(*this, DCI.DAG, N);
+  VECustomDAG CDAG(*this, DCI.DAG, N);
   switch (N->getOpcode()) {
   case VEISD::VEC_UNPACK_HI:
   case VEISD::VEC_UNPACK_LO: {
@@ -408,7 +408,7 @@ SDValue VETargetLowering::combineCopyFromRegVVP(SDNode *N,
   SDValue LoVal, HiVal;
 
   // Expand to V64 CopyFromReg.
-  CustomDAG CDAG(*this, DCI.DAG, N);
+  VECustomDAG CDAG(*this, DCI.DAG, N);
   for (auto Part : {PackElem::Lo, PackElem::Hi}) {
     unsigned SubRegIdx = getOverPackedSubRegIdx(Part);
     // auto SrcPartReg = TRI->getSubReg(SrcPhysReg, SubRegIdx);
@@ -463,7 +463,7 @@ SDValue VETargetLowering::combineCopyToRegVVP(SDNode *N,
   auto *TRI = Subtarget->getRegisterInfo();
 
   // Expand to V64 CopyToReg.
-  CustomDAG CDAG(*this, DCI.DAG, N);
+  VECustomDAG CDAG(*this, DCI.DAG, N);
   for (auto Part : {PackElem::Lo, PackElem::Hi}) {
     unsigned SubRegIdx = getOverPackedSubRegIdx(Part);
     auto DestPartReg = TRI->getSubReg(DestPhysReg, SubRegIdx);

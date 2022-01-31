@@ -1,4 +1,4 @@
-#include "CustomDAG.h"
+#include "VECustomDAG.h"
 #include "MaskView.h"
 
 #define DEBUG_TYPE "ve-maskview"
@@ -98,7 +98,7 @@ struct ExtractSubvectorView : public MaskView {
   virtual SDNode *getNode() const override { return EVN.getNode(); }
 };
 
-static SplitView splitBuildVector(BuildVectorSDNode &BVN, CustomDAG &CDAG) {
+static SplitView splitBuildVector(BuildVectorSDNode &BVN, VECustomDAG &CDAG) {
   std::vector<SDValue> Inputs[2];
 
   for (unsigned Idx = 0; Idx < BVN.getNumOperands(); ++Idx) {
@@ -163,7 +163,7 @@ struct SynthShuffle : public MaskView {
   virtual unsigned getNumElements() const override { return Mask.size(); }
 };
 
-static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, CustomDAG &CDAG) {
+static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, VECustomDAG &CDAG) {
   EVT OrigVT = SVN.getValueType(0);
   EVT LegalResVT = CDAG.legalizeVectorType(SDValue(&SVN, 0),
                                            VVPExpansionMode::ToNativeWidth);
@@ -231,7 +231,7 @@ static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, CustomDAG &CDAG) {
   return Split;
 }
 
-SplitView requestSplitView(SDNode *N, CustomDAG &CDAG) {
+SplitView requestSplitView(SDNode *N, VECustomDAG &CDAG) {
   auto BVN = dyn_cast<BuildVectorSDNode>(N);
   if (BVN)
     return splitBuildVector(*BVN, CDAG);

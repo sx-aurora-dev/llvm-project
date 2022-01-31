@@ -21,7 +21,7 @@
 
 namespace llvm {
 class VESubtarget;
-struct CustomDAG;
+struct VECustomDAG;
 struct MaskView;
 
 namespace VEISD {
@@ -309,7 +309,7 @@ public:
   // Expand SETCC operands directly used in vector arithmetic ops.
   SDValue lowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue OnFalseV,
-                       EVT LegalResVT, CustomDAG &CDAG, SDValue AVL) const;
+                       EVT LegalResVT, VECustomDAG &CDAG, SDValue AVL) const;
 
   /// Custom Lower for VVP {
   SDValue LowerOperation_VVP(SDValue Op, SelectionDAG &DAG) const;
@@ -339,7 +339,7 @@ public:
 
   EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,
                          VVPExpansionMode) const override;
-  VVPWideningInfo pickResultType(CustomDAG &CDAG, SDValue Op,
+  VVPWideningInfo pickResultType(VECustomDAG &CDAG, SDValue Op,
                                  VVPExpansionMode Mode) const;
 
   LegalizeTypeAction getPreferredVectorAction(MVT VT) const override;
@@ -371,12 +371,12 @@ public:
   /// } Custom Inserter
 
   /// Packed Op Splitting {
-  SDValue synthesizeView(MaskView &MV, EVT LegalResVT, CustomDAG &CDAG) const;
-  SDValue splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
+  SDValue synthesizeView(MaskView &MV, EVT LegalResVT, VECustomDAG &CDAG) const;
+  SDValue splitVectorShuffle(SDValue Op, VECustomDAG &CDAG,
                              VVPExpansionMode Mode) const;
   SDValue splitVectorOp(SDValue Op, SelectionDAG &DAG,
                         VVPExpansionMode Mode) const;
-  SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+  SDValue computeGatherScatterAddress(VECustomDAG &CDAG, SDValue BasePtr,
                                            SDValue Scale, SDValue Index,
                                            SDValue Mask, SDValue AVL) const;
   SDValue splitGatherScatter(SDValue Op, SelectionDAG &DAG,
@@ -401,10 +401,10 @@ public:
 
   // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and
   // VEC only).
-  SDValue legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const;
+  SDValue legalizePackedAVL(SDValue Op, VECustomDAG &CDAG) const;
 
   // Packed splitting, packed-mode AVL/mask legalization.
-  SDValue legalizeInternalLoadStoreOp(SDValue Op, CustomDAG &CDAG) const;
+  SDValue legalizeInternalLoadStoreOp(SDValue Op, VECustomDAG &CDAG) const;
   SDValue legalizeInternalVectorOp(SDValue Op, SelectionDAG &DAG) const;
   SDValue legalizeVM_POPCOUNT(SDValue Op, SelectionDAG &DAG) const;
   /// } VVPLowering

@@ -13,7 +13,7 @@
 #ifndef LLVM_LIB_TARGET_VE_SHUFFLESYNTHESIS_H
 #define LLVM_LIB_TARGET_VE_SHUFFLESYNTHESIS_H
 
-#include "CustomDAG.h"
+#include "VECustomDAG.h"
 #include "MaskView.h"
 #include "VE.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
@@ -116,17 +116,17 @@ struct MaskShuffleAnalysis {
 
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
-  MaskShuffleAnalysis(MaskView& MV, CustomDAG &CDAG);
+  MaskShuffleAnalysis(MaskView& MV, VECustomDAG &CDAG);
 
   // Synthesize \p BitSelect, merging the result into \p Passthru
   SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,
-                     CustomDAG &CDAG) const;
+                     VECustomDAG &CDAG) const;
 
   // Check whether the constant background of the result consists only of `1` bits (or undef)
   bool analyzeVectorSources(bool & AllTrue) const;
 
   // materialize the code to synthesize this operation
-  SDValue synthesize(CustomDAG &CDAG, EVT LegalMaskVT);
+  SDValue synthesize(VECustomDAG &CDAG, EVT LegalMaskVT);
 };
 
 enum IterControl {
@@ -184,7 +184,7 @@ struct PartialShuffleState {
 struct AbstractShuffleOp {
   virtual ~AbstractShuffleOp() {}
 
-  virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
+  virtual SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
                              SDValue PartialV) = 0;
   virtual void print(raw_ostream &out) const = 0;
 };
@@ -247,7 +247,7 @@ public:
   raw_ostream &print(raw_ostream &out) const;
 
   /// Synthesize the code planned in the analyze stage
-  SDValue synthesize(CustomDAG &CDAG, EVT LegalResultVT);
+  SDValue synthesize(VECustomDAG &CDAG, EVT LegalResultVT);
 };
 
 } // namespace llvm
