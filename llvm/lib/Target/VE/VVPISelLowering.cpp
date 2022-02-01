@@ -401,7 +401,7 @@ VETargetLowering::computeGatherScatterAddress(VECustomDAG &CDAG, SDValue BasePtr
   if (!Scale || isOneConstant(Scale)) {
     ScaledIndex = Index;
   } else {
-    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
+    SDValue ScaleBroadcast = CDAG.getBroadcast(IndexVT, Scale, AVL);
     ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
                                {Index, ScaleBroadcast, Mask, AVL});
     if (SplitOps)
@@ -414,7 +414,7 @@ VETargetLowering::computeGatherScatterAddress(VECustomDAG &CDAG, SDValue BasePtr
     return ScaledIndex;
   }
   // re-constitute pointer vector (basePtr + index * scale)
-  SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
+  SDValue BaseBroadcast = CDAG.getBroadcast(IndexVT, BasePtr, AVL);
   auto ResPtr = CDAG.getNode(VEISD::VVP_ADD, IndexVT,
                              {BaseBroadcast, ScaledIndex, Mask, AVL});
   if (!SplitOps)
@@ -1043,7 +1043,7 @@ SDValue VETargetLowering::expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue O
       CDAG.getVectorVT(MVT::i1, LegalResVT.getVectorNumElements());
 
   if (!MaskV.getValueType().isVector()) {
-    CondVecV = CDAG.createBroadcast(LegalMaskVT, MaskV, AVL);
+    CondVecV = CDAG.getBroadcast(LegalMaskVT, MaskV, AVL);
     CondVecV = CDAG.createMaskCast(CondVecV, AVL);
   } else {
     CondVecV = MaskV;
@@ -1102,12 +1102,12 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
     // materialize an integer expansion
     // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
     auto ConstZero = CDAG.getConstant(0, ElemTy);
-    auto ZeroBroadcast = CDAG.createBroadcast(Ty, ConstZero, AVL);
+    auto ZeroBroadcast = CDAG.getBroadcast(Ty, ConstZero, AVL);
     if (!PackLegalized)
       Created.push_back(ZeroBroadcast);
 
     auto ConstOne = CDAG.getConstant(1, ElemTy);
-    auto OneBroadcast = CDAG.createBroadcast(Ty, ConstOne, AVL);
+    auto OneBroadcast = CDAG.getBroadcast(Ty, ConstOne, AVL);
     if (!PackLegalized)
       Created.push_back(OneBroadcast);
 
@@ -1144,7 +1144,7 @@ VETargetLowering::lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   SDValue AVL = CDAG.getConstEVL(
       *minVectorLength(ResTy.getVectorNumElements(), VecLenHint));
 
-  return CDAG.createBroadcast(NativeResTy, Op.getOperand(0), AVL);
+  return CDAG.getBroadcast(NativeResTy, Op.getOperand(0), AVL);
 }
 
 TargetLowering::LegalizeAction

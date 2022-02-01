@@ -25,7 +25,6 @@
 
 namespace llvm {
 
-
 /// Packing {
 
 bool isPackedMaskType(EVT SomeVT) {
@@ -888,7 +887,7 @@ static SDValue foldUnpackFromBroadcast(SDValue Vec, PackElem Part, EVT DestVT,
 
   // Fold unpack from an overpacked or mask broadcast.
   if (isOverPackedType(Vec.getValueType()) || isMaskType(Vec.getValueType()))
-    return CDAG.createBroadcast(DestVT, Scalar, AVL);
+    return CDAG.getBroadcast(DestVT, Scalar, AVL);
 
   // Fold unpack from broadcast from replication.
   if (SDValue Simplified = combineUnpackLoHi(Vec, Part, DestVT, AVL, CDAG))
@@ -919,7 +918,7 @@ SDValue VECustomDAG::createSwap(EVT DestVT, SDValue V, SDValue AVL) const {
   return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V, AVL);
 }
 
-SDValue VECustomDAG::createBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
+SDValue VECustomDAG::getBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
 
   // Pick VL
   if (!AVL) {
@@ -965,7 +964,7 @@ SDValue VECustomDAG::createBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
   SDValue BCVec =
       DAG.getNode(VEISD::VEC_BROADCAST, DL, CmpVecTy, {CmpElem, AVL});
   SDValue ZeroVec =
-      createBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, AVL);
+      getBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, AVL);
 
   MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
 
@@ -1410,4 +1409,5 @@ raw_ostream &VECustomDAG::print(raw_ostream &Out, SDValue V) const {
 }
 
 /// } class VECustomDAG
+
 } // namespace llvm

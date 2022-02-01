@@ -337,7 +337,7 @@ SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart,
   match_ReplLoHi(ReplV, ReplPart);
   if (UsedDestPart != ReplPart) return SDValue();
 
-  return CDAG.createBroadcast(DestVT, ReplV->getOperand(0), AVL);
+  return CDAG.getBroadcast(DestVT, ReplV->getOperand(0), AVL);
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N,
