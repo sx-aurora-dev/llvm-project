@@ -784,11 +784,23 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
           llvm::Triple TT(Val);
           std::string NormalizedName = TT.normalize();
 
-          // Always use the 've-linux' triple for OpenMP offloading
-          // FIXME: In clean code, ToolChains would do this normalization themselves
-          if (TT.getArch() == llvm::Triple::ve) {
-            TT.setOS(llvm::Triple::Linux);
+          // We want to expand the shortened versions of the triples passed in to
+          // the values used for the bitcode libraries for convenience.
+          if (TT.getVendor() == llvm::Triple::UnknownVendor ||
+              TT.getOS() == llvm::Triple::UnknownOS) {
+            if (TT.getArch() == llvm::Triple::nvptx)
+              TT = llvm::Triple("nvptx-nvidia-cuda");
+            else if (TT.getArch() == llvm::Triple::nvptx64)
+              TT = llvm::Triple("nvptx64-nvidia-cuda");
+            else if (TT.getArch() == llvm::Triple::amdgcn)
+              TT = llvm::Triple("amdgcn-amd-amdhsa");
           }
+
+          // Always use the 've-linux' triple for OpenMP offloading
+          // FIXME: In clean code, ToolChains would do this normalization
+          // themselves
+          if (TT.getArch() == llvm::Triple::ve)
+            TT.setOS(llvm::Triple::Linux);
 
           // Make sure we don't have a duplicate triple.
           auto Duplicate = FoundNormalizedTriples.find(NormalizedName);

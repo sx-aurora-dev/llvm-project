@@ -89,6 +89,9 @@ template <class T> uint64_t CommonArchiveMemberHeader<T>::getOffset() const {
   return reinterpret_cast<const char *>(ArMemHdr) - Parent->getData().data();
 }
 
+template class object::CommonArchiveMemberHeader<UnixArMemHdrType>;
+template class object::CommonArchiveMemberHeader<BigArMemHdrType>;
+
 ArchiveMemberHeader::ArchiveMemberHeader(const Archive *Parent,
                                          const char *RawHeaderPtr,
                                          uint64_t Size, Error *Err)

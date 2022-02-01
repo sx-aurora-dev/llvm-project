@@ -32,6 +32,7 @@
 #include "llvm/IR/Statepoint.h"
 
 #include "llvm/Support/raw_ostream.h"
+#include <map>
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -176,6 +177,18 @@ int llvm::Intrinsic::lookupLLVMIntrinsicByName(ArrayRef<const char *> NameTable,
       (Name.startswith(NameFound) && Name[NameFound.size()] == '.'))
     return LastLow - NameTable.begin();
   return -1;
+}
+
+ConstantInt *InstrProfInstBase::getNumCounters() const {
+  if (InstrProfValueProfileInst::classof(this))
+    llvm_unreachable("InstrProfValueProfileInst does not have counters!");
+  return cast<ConstantInt>(const_cast<Value *>(getArgOperand(2)));
+}
+
+ConstantInt *InstrProfInstBase::getIndex() const {
+  if (InstrProfValueProfileInst::classof(this))
+    llvm_unreachable("Please use InstrProfValueProfileInst::getIndex()");
+  return cast<ConstantInt>(const_cast<Value *>(getArgOperand(3)));
 }
 
 Value *InstrProfIncrementInst::getStep() const {
