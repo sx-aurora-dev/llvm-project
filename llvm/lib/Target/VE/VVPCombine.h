@@ -14,18 +14,19 @@
 #ifndef LLVM_LIB_TARGET_VE_VVPCOMBINE_H
 #define LLVM_LIB_TARGET_VE_VVPCOMBINE_H
 
+#include "VECustomDAG.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "CustomDAG.h"
 
 namespace llvm {
-  SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem);
+SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem);
 
-  // Simplify unpack.
-  SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N);
-  SDValue combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT DestVT, SDValue AVL, const CustomDAG &CDAG);
+// Simplify unpack.
+SDValue combineUnpackLoHi(VECustomDAG &CDAG, SDNode *N);
+SDValue combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT DestVT,
+                          SDValue AVL, const VECustomDAG &CDAG);
 
-  bool match_FPOne(SDValue V);
-  SDValue getSplatValue(SDNode *N);
+bool match_FPOne(SDValue V);
+SDValue getSplatValue(SDNode *N);
 
 } // namespace llvm
 

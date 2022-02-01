@@ -21,7 +21,7 @@ protected:
   ElemSelect ZeroInsert;
 
 public:
-  ZeroDefaultingView(MaskView &BaseMV, CustomDAG &CDAG)
+  ZeroDefaultingView(MaskView &BaseMV, VECustomDAG &CDAG)
       : BaseMV(BaseMV), ConstZeroV(CDAG.getConstant(0, MVT::i32)),
         ZeroInsert(ConstZeroV) {}
 };
@@ -30,7 +30,7 @@ public:
 // or vector registers
 class VRegView final : public ZeroDefaultingView {
 public:
-  VRegView(CustomDAG &CDAG, MaskView &BitMV)
+  VRegView(VECustomDAG &CDAG, MaskView &BitMV)
       : ZeroDefaultingView(BitMV, CDAG) {}
 
   ~VRegView() {}
@@ -74,7 +74,7 @@ public:
 
 class BitMaskView final : public ZeroDefaultingView {
 public:
-  BitMaskView(MaskView &BitMV, CustomDAG &CDAG)
+  BitMaskView(MaskView &BitMV, VECustomDAG &CDAG)
       : ZeroDefaultingView(BitMV, CDAG) {}
   ~BitMaskView() {}
 
@@ -231,7 +231,7 @@ static bool AnalyzeReversal(BitMaskView &BitMV, unsigned DestPartBase,
 
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
-MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
+MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, VECustomDAG &CDAG)
     : MV(MV) {
   // This view only reflects insertions of actual i1 bits (from other mask
   // registers, or MVT::i32 constants). Insertion of SX register will be masked out.
@@ -290,7 +290,7 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
 }
 
 SDValue MaskShuffleAnalysis::synthesize(SDValue Passthru, BitSelect &BSel,
-                                        SDValue SXV, CustomDAG &CDAG) const {
+                                        SDValue SXV, VECustomDAG &CDAG) const {
   const uint64_t AllSetMask = (uint64_t)-1;
 
   // match full register copies
@@ -353,7 +353,7 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
 }
 
 // materialize the code to synthesize this operation
-SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
+SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
   Packing PackFlag =
       isPackedType(LegalMaskVT) ? Packing::Dense : Packing::Normal;
 
@@ -504,7 +504,7 @@ struct ScalarTransferOp final : public AbstractShuffleOp {
   virtual ~ScalarTransferOp() {}
 
   // transfer all insert positions to their destination
-  virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
+  virtual SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
                              SDValue PartialV) override {
     SDValue AccuV = PartialV;
 
@@ -584,7 +584,7 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
   unsigned getAVL() const { return DestStartPos + SubVectorLength; }
 
   // transfer all insert positions to their destination
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
     // noop VMV
     if (ShiftAmount == 0 && PartialV->isUndef())
       return SrcVector;
@@ -737,7 +737,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
   }
 
   // transfer all insert positions to their destination
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
     EVT LegalResVT =
         PartialV.getValueType(); // LegalizeVectorType(Op.getValueType(),
                                  // Op, DAG, Mode);
@@ -902,7 +902,7 @@ struct BroadcastOp final : public AbstractShuffleOp {
 
   ~BroadcastOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
     SDValue ScalarSrcV;
     if (SourceElem.isElemInsert()) {
       ScalarSrcV = SourceElem.V;
@@ -996,7 +996,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
   ConstantElemOp(Constant *VecConstant) : VecConstant(VecConstant) {}
   ~ConstantElemOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
     EVT LegalResVT = PartialV.getValueType();
     const EVT PtrVT = MVT::i64;
     // const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
@@ -1113,7 +1113,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
 
   ~GatherShuffleOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
     // Spill the requires elements of \p SrcVectorV to the stack
     EVT LegalizedSrcVT =
         CDAG.legalizeVectorType(SrcVectorV, VVPExpansionMode::ToNextWidth);
@@ -1326,7 +1326,7 @@ raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
   return out;
 }
 
-SDValue ShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalResultVT) {
+SDValue ShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalResultVT) {
   LLVM_DEBUG(dbgs() << "Synthesized shuffle sequence:\n"; print(dbgs()));
 
   SDValue AccuV = CDAG.getUndef(LegalResultVT);

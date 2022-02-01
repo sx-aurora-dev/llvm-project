@@ -11,7 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CustomDAG.h"
+#include "VECustomDAG.h"
+#include "VEISelLowering.h"
 #include "MCTargetDesc/VEMCExpr.h"
 #include "VEISelLowering.h"
 #include "VEInstrBuilder.h"
@@ -188,7 +189,7 @@ SDValue VETargetLowering::LowerFormalArguments(
 
         SDValue ArgLo = DAG.getCopyFromReg(Chain, DL, VRegLo, PartVT);
         SDValue ArgHi = DAG.getCopyFromReg(Chain, DL, VRegHi, PartVT);
-        CustomDAG CDAG(*this, DAG, DL);
+        VECustomDAG CDAG(*this, DAG, DL);
         Arg = CDAG.createPack(ValVT, ArgLo, ArgHi,
                               CDAG.getConstEVL(StandardVectorWidth));
 

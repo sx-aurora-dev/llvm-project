@@ -15,11 +15,11 @@ tablegen(LLVM VEGenCallingConv.inc -gen-callingconv)
 add_public_tablegen_target(VECommonTableGen)
 
 add_llvm_target(VECodeGen
-  CustomDAG.cpp
   LVLGen.cpp
   MaskView.cpp
   ShuffleSynthesis.cpp
   VEAsmPrinter.cpp
+  VECustomDAG.cpp
   VEFrameLowering.cpp
   VEISelDAGToDAG.cpp
   VEISelLowering.cpp

@@ -1,4 +1,4 @@
-//===-- CustomDAG.h - VE Custom DAG Nodes ------------*- C++ -*-===//
+//===-- VECustomDAG.h - VE Custom DAG Nodes ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_VE_CUSTOMDAG_H
-#define LLVM_LIB_TARGET_VE_CUSTOMDAG_H
+#ifndef LLVM_LIB_TARGET_VE_VECUSTOMDAG_H
+#define LLVM_LIB_TARGET_VE_VECUSTOMDAG_H
 
 #include "VE.h"
 #include "VEISelLowering.h"
@@ -196,20 +196,20 @@ SDValue getUnpackAVL(SDValue N);
 /// } Packing
 
 /// Helper class for short hand custom node creation ///
-struct CustomDAG {
+struct VECustomDAG {
   const VELoweringInfo &VLI;
   SelectionDAG &DAG;
   SDLoc DL;
 
   SelectionDAG *getDAG() const { return &DAG; }
 
-  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDLoc DL)
+  VECustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDLoc DL)
       : VLI(VLI), DAG(DAG), DL(DL) {}
 
-  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDValue WhereOp)
+  VECustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDValue WhereOp)
       : VLI(VLI), DAG(DAG), DL(WhereOp) {}
 
-  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, const SDNode *WhereN)
+  VECustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, const SDNode *WhereN)
       : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
   SDValue createSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
@@ -484,4 +484,4 @@ struct CustomDAG {
 
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_VE_CUSTOMDAG_H
+#endif // LLVM_LIB_TARGET_VE_VECUSTOMDAG_H
