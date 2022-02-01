@@ -32,6 +32,7 @@
 #include "llvm/IR/Statepoint.h"
 
 #include "llvm/Support/raw_ostream.h"
+#include <map>
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
