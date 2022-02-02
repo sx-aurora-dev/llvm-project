@@ -100,15 +100,59 @@ define double @test8() {
 
 
 ; i128 load.
-define i128 @test9() {
-; LE-LABEL: @test9(
+define i128 @test_i128() {
+; LE-LABEL: @test_i128(
 ; LE-NEXT:    ret i128 2071796475790618158476296315
 ;
-; BE-LABEL: @test9(
+; BE-LABEL: @test_i128(
 ; BE-NEXT:    ret i128 2268949521066387161080
 ;
   %r = load i128, i128* bitcast({i64, i64}* @g3 to i128*)
   ret i128 %r
+}
+
+define fp128 @test_fp128() {
+; LE-LABEL: @test_fp128(
+; LE-NEXT:    ret fp128 0xL000000000000007B0000000006B1BFF8
+;
+; BE-LABEL: @test_fp128(
+; BE-NEXT:    ret fp128 0xL0000000006B1BFF8000000000000007B
+;
+  %r = load fp128, fp128* bitcast({i64, i64}* @g3 to fp128*)
+  ret fp128 %r
+}
+
+define ppc_fp128 @test_ppc_fp128() {
+; LE-LABEL: @test_ppc_fp128(
+; LE-NEXT:    ret ppc_fp128 bitcast (i128 2071796475790618158476296315 to ppc_fp128)
+;
+; BE-LABEL: @test_ppc_fp128(
+; BE-NEXT:    ret ppc_fp128 bitcast (i128 2268949521066387161080 to ppc_fp128)
+;
+  %r = load ppc_fp128, ppc_fp128* bitcast({i64, i64}* @g3 to ppc_fp128*)
+  ret ppc_fp128 %r
+}
+
+define x86_fp80 @test_x86_fp80() {
+; LE-LABEL: @test_x86_fp80(
+; LE-NEXT:    ret x86_fp80 0xKFFFF000000000000007B
+;
+; BE-LABEL: @test_x86_fp80(
+; BE-NEXT:    ret x86_fp80 0xK000000000000007B0000
+;
+  %r = load x86_fp80, x86_fp80* bitcast({i64, i64}* @g3 to x86_fp80*)
+  ret x86_fp80 %r
+}
+
+define bfloat @test_bfloat() {
+; LE-LABEL: @test_bfloat(
+; LE-NEXT:    ret bfloat 0xR007B
+;
+; BE-LABEL: @test_bfloat(
+; BE-NEXT:    ret bfloat 0xR0000
+;
+  %r = load bfloat, bfloat* bitcast({i64, i64}* @g3 to bfloat*)
+  ret bfloat %r
 }
 
 ; vector load.

@@ -521,12 +521,13 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
         ISD::VP_SHL,         ISD::VP_REDUCE_ADD,  ISD::VP_REDUCE_AND,
         ISD::VP_REDUCE_OR,   ISD::VP_REDUCE_XOR,  ISD::VP_REDUCE_SMAX,
         ISD::VP_REDUCE_SMIN, ISD::VP_REDUCE_UMAX, ISD::VP_REDUCE_UMIN,
-        ISD::VP_SELECT};
+        ISD::VP_MERGE,       ISD::VP_SELECT};
 
     static const unsigned FloatingPointVPOps[] = {
         ISD::VP_FADD,        ISD::VP_FSUB,        ISD::VP_FMUL,
         ISD::VP_FDIV,        ISD::VP_REDUCE_FADD, ISD::VP_REDUCE_SEQ_FADD,
-        ISD::VP_REDUCE_FMIN, ISD::VP_REDUCE_FMAX, ISD::VP_SELECT};
+        ISD::VP_REDUCE_FMIN, ISD::VP_REDUCE_FMAX, ISD::VP_MERGE,
+        ISD::VP_SELECT};
 
     if (!Subtarget.is64Bit()) {
       // We must custom-lower certain vXi64 operations on RV32 due to the vector
@@ -1025,9 +1026,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::BITCAST, MVT::i16, Custom);
       setOperationAction(ISD::BITCAST, MVT::i32, Custom);
       setOperationAction(ISD::BITCAST, MVT::i64, Custom);
-      setOperationAction(ISD::BITCAST, MVT::f16, Custom);
-      setOperationAction(ISD::BITCAST, MVT::f32, Custom);
-      setOperationAction(ISD::BITCAST, MVT::f64, Custom);
+      if (Subtarget.hasStdExtZfh())
+        setOperationAction(ISD::BITCAST, MVT::f16, Custom);
+      if (Subtarget.hasStdExtF())
+        setOperationAction(ISD::BITCAST, MVT::f32, Custom);
+      if (Subtarget.hasStdExtD())
+        setOperationAction(ISD::BITCAST, MVT::f64, Custom);
     }
   }
 
@@ -1259,6 +1263,30 @@ bool RISCVTargetLowering::shouldSinkOperands(
       if (auto *II = dyn_cast<IntrinsicInst>(I)) {
         switch (II->getIntrinsicID()) {
         case Intrinsic::fma:
+          return Operand == 0 || Operand == 1;
+        // FIXME: Our patterns can only match vx/vf instructions when the splat
+        // it on the RHS, because TableGen doesn't recognize our VP operations
+        // as commutative.
+        case Intrinsic::vp_add:
+        case Intrinsic::vp_mul:
+        case Intrinsic::vp_and:
+        case Intrinsic::vp_or:
+        case Intrinsic::vp_xor:
+        case Intrinsic::vp_fadd:
+        case Intrinsic::vp_fmul:
+        case Intrinsic::vp_shl:
+        case Intrinsic::vp_lshr:
+        case Intrinsic::vp_ashr:
+        case Intrinsic::vp_udiv:
+        case Intrinsic::vp_sdiv:
+        case Intrinsic::vp_urem:
+        case Intrinsic::vp_srem:
+          return Operand == 1;
+        // ... with the exception of vp.sub/vp.fsub/vp.fdiv, which have
+        // explicit patterns for both LHS and RHS (as 'vr' versions).
+        case Intrinsic::vp_sub:
+        case Intrinsic::vp_fsub:
+        case Intrinsic::vp_fdiv:
           return Operand == 0 || Operand == 1;
         default:
           return false;
@@ -3414,6 +3442,8 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     return lowerSET_ROUNDING(Op, DAG);
   case ISD::VP_SELECT:
     return lowerVPOp(Op, DAG, RISCVISD::VSELECT_VL);
+  case ISD::VP_MERGE:
+    return lowerVPOp(Op, DAG, RISCVISD::VP_MERGE_VL);
   case ISD::VP_ADD:
     return lowerVPOp(Op, DAG, RISCVISD::ADD_VL);
   case ISD::VP_SUB:
@@ -7218,9 +7248,14 @@ static SDValue performANY_EXTENDCombine(SDNode *N,
 
 // Try to form VWMUL or VWMULU.
 // FIXME: Support VWMULSU.
-static SDValue combineMUL_VLToVWMUL(SDNode *N, SDValue Op0, SDValue Op1,
-                                    SelectionDAG &DAG) {
+static SDValue combineMUL_VLToVWMUL_VL(SDNode *N, SelectionDAG &DAG,
+                                       bool Commute) {
   assert(N->getOpcode() == RISCVISD::MUL_VL && "Unexpected opcode");
+  SDValue Op0 = N->getOperand(0);
+  SDValue Op1 = N->getOperand(1);
+  if (Commute)
+    std::swap(Op0, Op1);
+
   bool IsSignExt = Op0.getOpcode() == RISCVISD::VSEXT_VL;
   bool IsZeroExt = Op0.getOpcode() == RISCVISD::VZEXT_VL;
   if ((!IsSignExt && !IsZeroExt) || !Op0.hasOneUse())
@@ -7863,15 +7898,11 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     }
     break;
   }
-  case RISCVISD::MUL_VL: {
-    SDValue Op0 = N->getOperand(0);
-    SDValue Op1 = N->getOperand(1);
-    if (SDValue V = combineMUL_VLToVWMUL(N, Op0, Op1, DAG))
+  case RISCVISD::MUL_VL:
+    if (SDValue V = combineMUL_VLToVWMUL_VL(N, DAG, /*Commute*/ false))
       return V;
-    if (SDValue V = combineMUL_VLToVWMUL(N, Op1, Op0, DAG))
-      return V;
-    return SDValue();
-  }
+    // Mul is commutative.
+    return combineMUL_VLToVWMUL_VL(N, DAG, /*Commute*/ true);
   case ISD::STORE: {
     auto *Store = cast<StoreSDNode>(N);
     SDValue Val = Store->getValue();
@@ -10059,6 +10090,7 @@ const char *RISCVTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(VWADDU_VL)
   NODE_NAME_CASE(SETCC_VL)
   NODE_NAME_CASE(VSELECT_VL)
+  NODE_NAME_CASE(VP_MERGE_VL)
   NODE_NAME_CASE(VMAND_VL)
   NODE_NAME_CASE(VMOR_VL)
   NODE_NAME_CASE(VMXOR_VL)

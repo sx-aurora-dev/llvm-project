@@ -69,7 +69,7 @@ namespace PatternMatch {
 /// results if the users specified it is safe to use.
 struct InstrInfoQuery {
   InstrInfoQuery(bool UMD) : UseInstrInfo(UMD) {}
-  InstrInfoQuery() : UseInstrInfo(true) {}
+  InstrInfoQuery() = default;
   bool UseInstrInfo = true;
 
   MDNode *getMetadata(const Instruction *I, unsigned KindID) const {
