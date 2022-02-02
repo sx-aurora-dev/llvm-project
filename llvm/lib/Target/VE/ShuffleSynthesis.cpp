@@ -769,7 +769,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       LLVM_DEBUG(dbgs() << "::Broadcast\n");
       SDValue ScaVal = MV.getSourceElem(FirstDef).V;
       LLVM_DEBUG(ScaVal->dump());
-      return CDAG.createBroadcast(LegalResVT, ScaVal, AVL);
+      return CDAG.getBroadcast(LegalResVT, ScaVal, AVL);
     }
 
     case BVKind::Seq: {
@@ -782,7 +782,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
         return SeqV;
       }
 
-      SDValue StrideV = CDAG.createBroadcast(
+      SDValue StrideV = CDAG.getBroadcast(
           LegalResVT, CDAG.getConstant(Stride, ElemTy), AVL);
       SDValue ret = CDAG.getNode(VEISD::VVP_MUL, LegalResVT,
                                  {SeqV, StrideV, TrueMask, AVL});
@@ -797,7 +797,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
       // constant == VSEQ % blockLength
       SDValue sequence = CDAG.createSeq(LegalResVT, AVL);
-      SDValue modulobroadcast = CDAG.createBroadcast(
+      SDValue modulobroadcast = CDAG.getBroadcast(
           LegalResVT, CDAG.getConstant(BlockLength - 1, ElemTy),
           AVL);
 
@@ -818,7 +818,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       // constant == VSEQ >> log2(blockLength)
       int64_t blockLengthLog = log2(BlockLength);
       SDValue sequence = CDAG.createSeq(LegalResVT, AVL);
-      SDValue shiftbroadcast = CDAG.createBroadcast(
+      SDValue shiftbroadcast = CDAG.getBroadcast(
           LegalResVT, CDAG.getConstant(blockLengthLog, ElemTy), AVL);
 
       SDValue shift =
@@ -915,7 +915,7 @@ struct BroadcastOp final : public AbstractShuffleOp {
 
     const SDValue PivotV = CDAG.getConstEVL(MaxAVL);
     SDValue BlendMaskV = CDAG.createConstMask(NumElems, TargetLanes);
-    SDValue BroadcastV = CDAG.createBroadcast(VecTy, ScalarSrcV, PivotV);
+    SDValue BroadcastV = CDAG.getBroadcast(VecTy, ScalarSrcV, PivotV);
     return CDAG.createSelect(VecTy, BroadcastV, PartialV, BlendMaskV, PivotV);
   }
 
@@ -1173,7 +1173,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     }
 
     SDValue MaxVLV = CDAG.getConstEVL(MaxVL);
-    SDValue BasePtrV = CDAG.createBroadcast(PtrVecVT, VecSlotPtr);
+    SDValue BasePtrV = CDAG.getBroadcast(PtrVecVT, VecSlotPtr);
     SDValue OffsetV = CDAG.getNode(
         ISD::BUILD_VECTOR, PtrVecVT,
         GatherOffsets); // TODO directly call into constant vector generation

@@ -246,8 +246,7 @@ struct VECustomDAG {
   SDValue foldAndUnpackMask(SDValue MaskVector, SDValue Mask, PackElem Part,
                             SDValue AVL) const;
   /// } Mask Insert/Extract
-
-  SDValue createBroadcast(EVT ResTy, SDValue S, SDValue AVL = SDValue()) const;
+  SDValue getBroadcast(EVT ResultVT, SDValue Scalar, SDValue AVL = SDValue()) const;
 
   // Extract an SX register from a mask
   SDValue createMaskExtract(SDValue MaskV, SDValue Idx) const;
