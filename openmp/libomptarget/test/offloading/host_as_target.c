@@ -5,11 +5,11 @@
 //   default device data are affected by the specified transfers.
 // - Works whether it's specified directly or as the default device.
 
-// RUN: %libomptarget-compile-run-and-check-aarch64-unknown-linux-gnu
-// RUN: %libomptarget-compile-run-and-check-powerpc64-ibm-linux-gnu
-// RUN: %libomptarget-compile-run-and-check-powerpc64le-ibm-linux-gnu
-// RUN: %libomptarget-compile-run-and-check-x86_64-pc-linux-gnu
-// RUN: %libomptarget-compile-run-and-check-nvptx64-nvidia-cuda
+// RUN: %libomptarget-compile-run-and-check-generic
+
+// amdgpu does not have a working printf definition
+// XFAIL: amdgcn-amd-amdhsa
+// XFAIL: amdgcn-amd-amdhsa-newRTL
 
 #include <stdio.h>
 #include <omp.h>
@@ -55,8 +55,8 @@ int main(void) {
   printf("omp_is_initial_device() = %d\n", omp_is_initial_device());
   CHECK_DATA();
 
-  // Check that __kmpc_push_target_tripcount doesn't fail.  I'm not sure how to
-  // check that it actually pushes to the initial device.
+  // Check that __kmpc_push_target_tripcount_mapper doesn't fail. I'm not sure
+  // how to check that it actually pushes to the initial device.
   #pragma omp target teams device(DevInit) num_teams(1)
   #pragma omp distribute
   for (int i = 0; i < 2; ++i)
@@ -112,8 +112,8 @@ int main(void) {
   printf("omp_is_initial_device() = %d\n", omp_is_initial_device());
   CHECK_DATA();
 
-  // Check that __kmpc_push_target_tripcount doesn't fail.  I'm not sure how to
-  // check that it actually pushes to the initial device.
+  // Check that __kmpc_push_target_tripcount_mapper doesn't fail. I'm not sure
+  // how to check that it actually pushes to the initial device.
   #pragma omp target teams num_teams(1)
   #pragma omp distribute
   for (int i = 0; i < 2; ++i)

@@ -598,9 +598,9 @@ ds_swizzle_b32 v8, v2 offset:swizzle(BROADCAST,1,0)
 //==============================================================================
 // image address size does not match dim and a16
 
-image_load v[0:3], v[0:1], s[0:7] dmask:0xf dim:SQ_RSRC_IMG_1D
+image_load v[0:3], v[0:1], s[0:7] dmask:0xf dim:SQ_RSRC_IMG_3D
 // CHECK: error: image address size does not match dim and a16
-// CHECK-NEXT:{{^}}image_load v[0:3], v[0:1], s[0:7] dmask:0xf dim:SQ_RSRC_IMG_1D
+// CHECK-NEXT:{{^}}image_load v[0:3], v[0:1], s[0:7] dmask:0xf dim:SQ_RSRC_IMG_3D
 // CHECK-NEXT:{{^}}^
 
 //==============================================================================
@@ -935,20 +935,43 @@ v_ceil_f32 v0, --1
 // CHECK-NEXT:{{^}}               ^
 
 //==============================================================================
-// invalid use of lds_direct
-
-v_ashrrev_i16 v0, lds_direct, v0
-// CHECK: error: invalid use of lds_direct
-// CHECK-NEXT:{{^}}v_ashrrev_i16 v0, lds_direct, v0
-// CHECK-NEXT:{{^}}                  ^
-
-//==============================================================================
 // lane id must be in the interval [0,group size - 1]
 
 ds_swizzle_b32 v8, v2 offset:swizzle(BROADCAST,2,-1)
 // CHECK: error: lane id must be in the interval [0,group size - 1]
 // CHECK-NEXT:{{^}}ds_swizzle_b32 v8, v2 offset:swizzle(BROADCAST,2,-1)
 // CHECK-NEXT:{{^}}                                                 ^
+
+//==============================================================================
+// lds_direct cannot be used with this instruction
+
+v_ashrrev_i16 v0, lds_direct, v0
+// CHECK: error: lds_direct cannot be used with this instruction
+// CHECK-NEXT:{{^}}v_ashrrev_i16 v0, lds_direct, v0
+// CHECK-NEXT:{{^}}                  ^
+
+v_ashrrev_i16 v0, v1, lds_direct
+// CHECK: error: lds_direct cannot be used with this instruction
+// CHECK-NEXT:{{^}}v_ashrrev_i16 v0, v1, lds_direct
+// CHECK-NEXT:{{^}}                      ^
+
+v_mov_b32_sdwa v1, src_lds_direct dst_sel:DWORD
+// CHECK: error: lds_direct cannot be used with this instruction
+// CHECK-NEXT:{{^}}v_mov_b32_sdwa v1, src_lds_direct dst_sel:DWORD
+// CHECK-NEXT:{{^}}                   ^
+
+v_add_f32_sdwa v5, v1, lds_direct dst_sel:DWORD
+// CHECK: error: lds_direct cannot be used with this instruction
+// CHECK-NEXT:{{^}}v_add_f32_sdwa v5, v1, lds_direct dst_sel:DWORD
+// CHECK-NEXT:{{^}}                       ^
+
+//==============================================================================
+// lds_direct may be used as src0 only
+
+v_add_f32 v5, v1, lds_direct
+// CHECK: error: lds_direct may be used as src0 only
+// CHECK-NEXT:{{^}}v_add_f32 v5, v1, lds_direct
+// CHECK-NEXT:{{^}}                  ^
 
 //==============================================================================
 // message does not support operations

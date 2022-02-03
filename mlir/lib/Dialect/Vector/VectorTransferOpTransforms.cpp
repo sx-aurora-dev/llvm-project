@@ -10,12 +10,14 @@
 // transfer_write ops.
 //
 //===----------------------------------------------------------------------===//
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Dialect/Vector/VectorTransforms.h"
 #include "mlir/Dialect/Vector/VectorUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dominance.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 
@@ -34,33 +36,13 @@ static Operation *findAncestorOpInRegion(Region *region, Operation *op) {
   return op;
 }
 
-/// Return true if the transfer_write fully writes the data accessed by the
-/// transfer_read.
-static bool transferEncompasses(vector::TransferWriteOp defWrite,
-                                vector::TransferReadOp read) {
-  return !defWrite.hasMaskedDim() && defWrite.indices() == read.indices() &&
-         defWrite.getVectorType() == read.getVectorType() &&
-         defWrite.permutation_map() == read.permutation_map();
-}
-
-/// Return true if the write op fully over-write the priorWrite transfer_write
-/// op.
-static bool transferEncompasses(vector::TransferWriteOp write,
-                                vector::TransferWriteOp priorWrite) {
-  return priorWrite.indices() == write.indices() &&
-         priorWrite.getVectorType() == write.getVectorType() &&
-         priorWrite.permutation_map() == write.permutation_map();
-}
-
 namespace {
 
 class TransferOptimization {
 public:
   TransferOptimization(FuncOp func) : dominators(func), postDominators(func) {}
   void deadStoreOp(vector::TransferWriteOp);
-  void deadStoreOpTensor(vector::TransferWriteOp);
   void storeToLoadForwarding(vector::TransferReadOp);
-  void storeToLoadForwardingTensor(vector::TransferReadOp);
   void removeDeadOp() {
     for (Operation *op : opToErase)
       op->erase();
@@ -119,7 +101,7 @@ void TransferOptimization::deadStoreOp(vector::TransferWriteOp write) {
       continue;
     if (auto nextWrite = dyn_cast<vector::TransferWriteOp>(user)) {
       // Check candidate that can override the store.
-      if (transferEncompasses(nextWrite, write) &&
+      if (checkSameValueWAW(nextWrite, write) &&
           postDominators.postDominates(nextWrite, write)) {
         if (firstOverwriteCandidate == nullptr ||
             postDominators.postDominates(firstOverwriteCandidate, nextWrite))
@@ -175,7 +157,7 @@ void TransferOptimization::deadStoreOp(vector::TransferWriteOp write) {
 /// potentially aliasing ops that may reach the transfer_read are post-dominated
 /// by the transfer_write.
 void TransferOptimization::storeToLoadForwarding(vector::TransferReadOp read) {
-  if (read.hasMaskedDim())
+  if (read.hasOutOfBoundsDim())
     return;
   LLVM_DEBUG(DBGS() << "Candidate for Forwarding: " << *read.getOperation()
                     << "\n");
@@ -191,8 +173,7 @@ void TransferOptimization::storeToLoadForwarding(vector::TransferReadOp read) {
               cast<VectorTransferOpInterface>(write.getOperation()),
               cast<VectorTransferOpInterface>(read.getOperation())))
         continue;
-      if (dominators.dominates(write, read) &&
-          transferEncompasses(write, read)) {
+      if (dominators.dominates(write, read) && checkSameValueRAW(write, read)) {
         if (lastwrite == nullptr || dominators.dominates(lastwrite, write))
           lastwrite = write;
         else
@@ -230,43 +211,254 @@ void TransferOptimization::storeToLoadForwarding(vector::TransferReadOp read) {
   opToErase.push_back(read.getOperation());
 }
 
-/// Walk up the SSA links, if any write gets fully overwritten we can skip it.
-/// If it has no more uses it becomes dead.
-void TransferOptimization::deadStoreOpTensor(vector::TransferWriteOp write) {
-  auto defWrite = write.source().getDefiningOp<vector::TransferWriteOp>();
-  while (defWrite) {
-    if (transferEncompasses(write, defWrite)) {
-      write.sourceMutable().assign(defWrite.source());
-      if (defWrite->use_empty())
-        opToErase.push_back(defWrite.getOperation());
-      return;
-    }
-    if (!isDisjointTransferIndices(
-            cast<VectorTransferOpInterface>(defWrite.getOperation()),
-            cast<VectorTransferOpInterface>(write.getOperation())))
-      break;
-    defWrite = defWrite.source().getDefiningOp<vector::TransferWriteOp>();
-  }
+/// Drops unit dimensions from the input MemRefType.
+static MemRefType dropUnitDims(MemRefType inputType, ArrayRef<int64_t> offsets,
+                               ArrayRef<int64_t> sizes,
+                               ArrayRef<int64_t> strides) {
+  Type rankReducedType = memref::SubViewOp::inferRankReducedResultType(
+      0, inputType, offsets, sizes, strides);
+  return canonicalizeStridedLayout(rankReducedType.cast<MemRefType>());
 }
 
-/// Walk up the SSA links, if any write fully match the written vector we can
-/// replace the read by the vector. The read becomes dead and can be removed.
-void TransferOptimization::storeToLoadForwardingTensor(
-    vector::TransferReadOp read) {
-  auto defWrite = read.source().getDefiningOp<vector::TransferWriteOp>();
-  while (defWrite) {
-    if (transferEncompasses(defWrite, read)) {
-      read.replaceAllUsesWith(defWrite.vector());
-      opToErase.push_back(read.getOperation());
-      return;
-    }
-    if (!isDisjointTransferIndices(
-            cast<VectorTransferOpInterface>(defWrite.getOperation()),
-            cast<VectorTransferOpInterface>(read.getOperation())))
-      break;
-    defWrite = defWrite.source().getDefiningOp<vector::TransferWriteOp>();
-  }
+/// Creates a rank-reducing memref.subview op that drops unit dims from its
+/// input. Or just returns the input if it was already without unit dims.
+static Value rankReducingSubviewDroppingUnitDims(PatternRewriter &rewriter,
+                                                 mlir::Location loc,
+                                                 Value input) {
+  MemRefType inputType = input.getType().cast<MemRefType>();
+  assert(inputType.hasStaticShape());
+  SmallVector<int64_t> subViewOffsets(inputType.getRank(), 0);
+  SmallVector<int64_t> subViewStrides(inputType.getRank(), 1);
+  ArrayRef<int64_t> subViewSizes = inputType.getShape();
+  MemRefType resultType =
+      dropUnitDims(inputType, subViewOffsets, subViewSizes, subViewStrides);
+  if (canonicalizeStridedLayout(resultType) ==
+      canonicalizeStridedLayout(inputType))
+    return input;
+  return rewriter.create<memref::SubViewOp>(
+      loc, resultType, input, subViewOffsets, subViewSizes, subViewStrides);
 }
+
+/// Returns the number of dims that aren't unit dims.
+static int getReducedRank(ArrayRef<int64_t> shape) {
+  return llvm::count_if(shape, [](int64_t dimSize) { return dimSize != 1; });
+}
+
+/// Returns true if all values are `arith.constant 0 : index`
+static bool isZero(Value v) {
+  auto cst = v.getDefiningOp<arith::ConstantIndexOp>();
+  return cst && cst.value() == 0;
+}
+
+/// Rewrites vector.transfer_read ops where the source has unit dims, by
+/// inserting a memref.subview dropping those unit dims.
+class TransferReadDropUnitDimsPattern
+    : public OpRewritePattern<vector::TransferReadOp> {
+  using OpRewritePattern<vector::TransferReadOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::TransferReadOp transferReadOp,
+                                PatternRewriter &rewriter) const override {
+    auto loc = transferReadOp.getLoc();
+    Value vector = transferReadOp.vector();
+    VectorType vectorType = vector.getType().cast<VectorType>();
+    Value source = transferReadOp.source();
+    MemRefType sourceType = source.getType().dyn_cast<MemRefType>();
+    // TODO: support tensor types.
+    if (!sourceType || !sourceType.hasStaticShape())
+      return failure();
+    if (sourceType.getNumElements() != vectorType.getNumElements())
+      return failure();
+    // TODO: generalize this pattern, relax the requirements here.
+    if (transferReadOp.hasOutOfBoundsDim())
+      return failure();
+    if (!transferReadOp.permutation_map().isMinorIdentity())
+      return failure();
+    int reducedRank = getReducedRank(sourceType.getShape());
+    if (reducedRank == sourceType.getRank())
+      return failure(); // The source shape can't be further reduced.
+    if (reducedRank != vectorType.getRank())
+      return failure(); // This pattern requires the vector shape to match the
+                        // reduced source shape.
+    if (llvm::any_of(transferReadOp.indices(),
+                     [](Value v) { return !isZero(v); }))
+      return failure();
+    Value reducedShapeSource =
+        rankReducingSubviewDroppingUnitDims(rewriter, loc, source);
+    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    SmallVector<Value> zeros(reducedRank, c0);
+    auto identityMap = rewriter.getMultiDimIdentityMap(reducedRank);
+    rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
+        transferReadOp, vectorType, reducedShapeSource, zeros, identityMap);
+    return success();
+  }
+};
+
+/// Rewrites vector.transfer_write ops where the "source" (i.e. destination) has
+/// unit dims, by inserting a memref.subview dropping those unit dims.
+class TransferWriteDropUnitDimsPattern
+    : public OpRewritePattern<vector::TransferWriteOp> {
+  using OpRewritePattern<vector::TransferWriteOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::TransferWriteOp transferWriteOp,
+                                PatternRewriter &rewriter) const override {
+    auto loc = transferWriteOp.getLoc();
+    Value vector = transferWriteOp.vector();
+    VectorType vectorType = vector.getType().cast<VectorType>();
+    Value source = transferWriteOp.source();
+    MemRefType sourceType = source.getType().dyn_cast<MemRefType>();
+    // TODO: support tensor type.
+    if (!sourceType || !sourceType.hasStaticShape())
+      return failure();
+    if (sourceType.getNumElements() != vectorType.getNumElements())
+      return failure();
+    // TODO: generalize this pattern, relax the requirements here.
+    if (transferWriteOp.hasOutOfBoundsDim())
+      return failure();
+    if (!transferWriteOp.permutation_map().isMinorIdentity())
+      return failure();
+    int reducedRank = getReducedRank(sourceType.getShape());
+    if (reducedRank == sourceType.getRank())
+      return failure(); // The source shape can't be further reduced.
+    if (reducedRank != vectorType.getRank())
+      return failure(); // This pattern requires the vector shape to match the
+                        // reduced source shape.
+    if (llvm::any_of(transferWriteOp.indices(),
+                     [](Value v) { return !isZero(v); }))
+      return failure();
+    Value reducedShapeSource =
+        rankReducingSubviewDroppingUnitDims(rewriter, loc, source);
+    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    SmallVector<Value> zeros(reducedRank, c0);
+    auto identityMap = rewriter.getMultiDimIdentityMap(reducedRank);
+    rewriter.replaceOpWithNewOp<vector::TransferWriteOp>(
+        transferWriteOp, vector, reducedShapeSource, zeros, identityMap);
+    return success();
+  }
+};
+
+/// Creates a memref.collapse_shape collapsing all of the dimensions of the
+/// input into a 1D shape.
+// TODO: move helper function
+static Value collapseContiguousRowMajorMemRefTo1D(PatternRewriter &rewriter,
+                                                  mlir::Location loc,
+                                                  Value input) {
+  Value rankReducedInput =
+      rankReducingSubviewDroppingUnitDims(rewriter, loc, input);
+  ShapedType rankReducedInputType =
+      rankReducedInput.getType().cast<ShapedType>();
+  if (rankReducedInputType.getRank() == 1)
+    return rankReducedInput;
+  ReassociationIndices indices;
+  for (int i = 0; i < rankReducedInputType.getRank(); ++i)
+    indices.push_back(i);
+  return rewriter.create<memref::CollapseShapeOp>(
+      loc, rankReducedInput, std::array<ReassociationIndices, 1>{indices});
+}
+
+/// Rewrites contiguous row-major vector.transfer_read ops by inserting
+/// memref.collapse_shape on the source so that the resulting
+/// vector.transfer_read has a 1D source. Requires the source shape to be
+/// already reduced i.e. without unit dims.
+class FlattenContiguousRowMajorTransferReadPattern
+    : public OpRewritePattern<vector::TransferReadOp> {
+  using OpRewritePattern<vector::TransferReadOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::TransferReadOp transferReadOp,
+                                PatternRewriter &rewriter) const override {
+    auto loc = transferReadOp.getLoc();
+    Value vector = transferReadOp.vector();
+    VectorType vectorType = vector.getType().cast<VectorType>();
+    Value source = transferReadOp.source();
+    MemRefType sourceType = source.getType().dyn_cast<MemRefType>();
+    // Contiguity check is valid on tensors only.
+    if (!sourceType)
+      return failure();
+    if (vectorType.getRank() == 1 && sourceType.getRank() == 1)
+      // Already 1D, nothing to do.
+      return failure();
+    if (!isStaticShapeAndContiguousRowMajor(sourceType))
+      return failure();
+    if (getReducedRank(sourceType.getShape()) != sourceType.getRank())
+      // This pattern requires the source to already be rank-reduced.
+      return failure();
+    if (sourceType.getNumElements() != vectorType.getNumElements())
+      return failure();
+    // TODO: generalize this pattern, relax the requirements here.
+    if (transferReadOp.hasOutOfBoundsDim())
+      return failure();
+    if (!transferReadOp.permutation_map().isMinorIdentity())
+      return failure();
+    if (transferReadOp.mask())
+      return failure();
+    if (llvm::any_of(transferReadOp.indices(),
+                     [](Value v) { return !isZero(v); }))
+      return failure();
+    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    auto identityMap1D = rewriter.getMultiDimIdentityMap(1);
+    VectorType vectorType1d = VectorType::get({sourceType.getNumElements()},
+                                              sourceType.getElementType());
+    Value source1d =
+        collapseContiguousRowMajorMemRefTo1D(rewriter, loc, source);
+    Value read1d = rewriter.create<vector::TransferReadOp>(
+        loc, vectorType1d, source1d, ValueRange{c0}, identityMap1D);
+    rewriter.replaceOpWithNewOp<vector::ShapeCastOp>(
+        transferReadOp, vector.getType().cast<VectorType>(), read1d);
+    return success();
+  }
+};
+
+/// Rewrites contiguous row-major vector.transfer_write ops by inserting
+/// memref.collapse_shape on the source so that the resulting
+/// vector.transfer_write has a 1D source. Requires the source shape to be
+/// already reduced i.e. without unit dims.
+class FlattenContiguousRowMajorTransferWritePattern
+    : public OpRewritePattern<vector::TransferWriteOp> {
+  using OpRewritePattern<vector::TransferWriteOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::TransferWriteOp transferWriteOp,
+                                PatternRewriter &rewriter) const override {
+    auto loc = transferWriteOp.getLoc();
+    Value vector = transferWriteOp.vector();
+    VectorType vectorType = vector.getType().cast<VectorType>();
+    Value source = transferWriteOp.source();
+    MemRefType sourceType = source.getType().dyn_cast<MemRefType>();
+    // Contiguity check is valid on tensors only.
+    if (!sourceType)
+      return failure();
+    if (vectorType.getRank() == 1 && sourceType.getRank() == 1)
+      // Already 1D, nothing to do.
+      return failure();
+    if (!isStaticShapeAndContiguousRowMajor(sourceType))
+      return failure();
+    if (getReducedRank(sourceType.getShape()) != sourceType.getRank())
+      // This pattern requires the source to already be rank-reduced.
+      return failure();
+    if (sourceType.getNumElements() != vectorType.getNumElements())
+      return failure();
+    // TODO: generalize this pattern, relax the requirements here.
+    if (transferWriteOp.hasOutOfBoundsDim())
+      return failure();
+    if (!transferWriteOp.permutation_map().isMinorIdentity())
+      return failure();
+    if (transferWriteOp.mask())
+      return failure();
+    if (llvm::any_of(transferWriteOp.indices(),
+                     [](Value v) { return !isZero(v); }))
+      return failure();
+    Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    auto identityMap1D = rewriter.getMultiDimIdentityMap(1);
+    VectorType vectorType1d = VectorType::get({sourceType.getNumElements()},
+                                              sourceType.getElementType());
+    Value source1d =
+        collapseContiguousRowMajorMemRefTo1D(rewriter, loc, source);
+    Value vector1d =
+        rewriter.create<vector::ShapeCastOp>(loc, vectorType1d, vector);
+    rewriter.create<vector::TransferWriteOp>(loc, vector1d, source1d,
+                                             ValueRange{c0}, identityMap1D);
+    rewriter.eraseOp(transferWriteOp);
+    return success();
+  }
+};
 
 } // namespace
 
@@ -277,15 +469,27 @@ void mlir::vector::transferOpflowOpt(FuncOp func) {
   func.walk([&](vector::TransferReadOp read) {
     if (read.getShapedType().isa<MemRefType>())
       opt.storeToLoadForwarding(read);
-    else
-      opt.storeToLoadForwardingTensor(read);
   });
   opt.removeDeadOp();
   func.walk([&](vector::TransferWriteOp write) {
     if (write.getShapedType().isa<MemRefType>())
       opt.deadStoreOp(write);
-    else
-      opt.deadStoreOpTensor(write);
   });
   opt.removeDeadOp();
+}
+
+void mlir::vector::populateVectorTransferDropUnitDimsPatterns(
+    RewritePatternSet &patterns) {
+  patterns
+      .add<TransferReadDropUnitDimsPattern, TransferWriteDropUnitDimsPattern>(
+          patterns.getContext());
+  populateShapeCastFoldingPatterns(patterns);
+}
+
+void mlir::vector::populateFlattenVectorTransferPatterns(
+    RewritePatternSet &patterns) {
+  patterns.add<FlattenContiguousRowMajorTransferReadPattern,
+               FlattenContiguousRowMajorTransferWritePattern>(
+      patterns.getContext());
+  populateShapeCastFoldingPatterns(patterns);
 }

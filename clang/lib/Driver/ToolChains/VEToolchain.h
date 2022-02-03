@@ -28,7 +28,6 @@ protected:
 public:
   bool IsIntegratedAssemblerDefault() const override { return true; }
   bool isPICDefault() const override;
-  bool isPIEDefault() const override;
   bool isPICDefaultForced() const override;
   bool SupportsProfiling() const override;
   bool hasBlocksRuntime() const override;
@@ -47,9 +46,6 @@ public:
 
   llvm::ExceptionHandling
   GetExceptionModel(const llvm::opt::ArgList &Args) const override;
-
-  Optional<std::string> getRuntimePath() const override;
-  Optional<std::string> getCXXStdlibPath() const override;
 
   CXXStdlibType
   GetCXXStdlibType(const llvm::opt::ArgList &Args) const override {

@@ -9,12 +9,12 @@ vldr d0, [r1]
 
 # CHECK:      Iterations:        1
 # CHECK-NEXT: Instructions:      3
-# CHECK-NEXT: Total Cycles:      7
+# CHECK-NEXT: Total Cycles:      6
 # CHECK-NEXT: Total uOps:        3
 
 # CHECK:      Dispatch Width:    2
-# CHECK-NEXT: uOps Per Cycle:    0.43
-# CHECK-NEXT: IPC:               0.43
+# CHECK-NEXT: uOps Per Cycle:    0.50
+# CHECK-NEXT: IPC:               0.50
 # CHECK-NEXT: Block RThroughput: 1.5
 
 # CHECK:      Instruction Info:
@@ -34,33 +34,33 @@ vldr d0, [r1]
 # CHECK-NEXT: [0.0] - M7UnitALU
 # CHECK-NEXT: [0.1] - M7UnitALU
 # CHECK-NEXT: [1]   - M7UnitBranch
-# CHECK-NEXT: [2.0] - M7UnitLoad
-# CHECK-NEXT: [2.1] - M7UnitLoad
-# CHECK-NEXT: [3]   - M7UnitMAC
-# CHECK-NEXT: [4]   - M7UnitSIMD
-# CHECK-NEXT: [5]   - M7UnitShift1
-# CHECK-NEXT: [6]   - M7UnitShift2
-# CHECK-NEXT: [7]   - M7UnitStore
-# CHECK-NEXT: [8]   - M7UnitVFP
-# CHECK-NEXT: [9.0] - M7UnitVPort
-# CHECK-NEXT: [9.1] - M7UnitVPort
+# CHECK-NEXT: [2]   - M7UnitLoadH
+# CHECK-NEXT: [3]   - M7UnitLoadL
+# CHECK-NEXT: [4]   - M7UnitMAC
+# CHECK-NEXT: [5]   - M7UnitSIMD
+# CHECK-NEXT: [6]   - M7UnitShift1
+# CHECK-NEXT: [7]   - M7UnitShift2
+# CHECK-NEXT: [8]   - M7UnitStore
+# CHECK-NEXT: [9]   - M7UnitVFP
+# CHECK-NEXT: [10]  - M7UnitVPortH
+# CHECK-NEXT: [11]  - M7UnitVPortL
 
 # CHECK:      Resource pressure per iteration:
-# CHECK-NEXT: [0.0]  [0.1]  [1]    [2.0]  [2.1]  [3]    [4]    [5]    [6]    [7]    [8]    [9.0]  [9.1]
-# CHECK-NEXT: 1.00   1.00    -      -     1.00    -      -      -      -      -      -      -     2.00
+# CHECK-NEXT: [0.0]  [0.1]  [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]    [10]   [11]
+# CHECK-NEXT: 1.00   1.00    -     1.00   1.00    -      -      -      -      -      -     1.00   1.00
 
 # CHECK:      Resource pressure by instruction:
-# CHECK-NEXT: [0.0]  [0.1]  [1]    [2.0]  [2.1]  [3]    [4]    [5]    [6]    [7]    [8]    [9.0]  [9.1]  Instructions:
+# CHECK-NEXT: [0.0]  [0.1]  [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]    [10]   [11]   Instructions:
 # CHECK-NEXT:  -     1.00    -      -      -      -      -      -      -      -      -      -      -     add.w	r1, r1, #1
 # CHECK-NEXT: 1.00    -      -      -      -      -      -      -      -      -      -      -      -     add.w	r1, r1, #2
-# CHECK-NEXT:  -      -      -      -     1.00    -      -      -      -      -      -      -     2.00   vldr	d0, [r1]
+# CHECK-NEXT:  -      -      -     1.00   1.00    -      -      -      -      -      -     1.00   1.00   vldr	d0, [r1]
 
 # CHECK:      Timeline view:
-# CHECK-NEXT: Index     0123456
+# CHECK-NEXT: Index     012345
 
-# CHECK:      [0,0]     DER  ..   add.w	r1, r1, #1
-# CHECK-NEXT: [0,1]     .DER ..   add.w	r1, r1, #2
-# CHECK-NEXT: [0,2]     .  DeER   vldr	d0, [r1]
+# CHECK:      [0,0]     DE   .   add.w	r1, r1, #1
+# CHECK-NEXT: [0,1]     .DE  .   add.w	r1, r1, #2
+# CHECK-NEXT: [0,2]     .  DeE   vldr	d0, [r1]
 
 # CHECK:      Average Wait times (based on the timeline view):
 # CHECK-NEXT: [0]: Executions

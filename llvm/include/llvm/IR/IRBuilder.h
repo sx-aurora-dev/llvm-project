@@ -317,7 +317,7 @@ public:
   /// Set the exception handling to be used with constrained floating point
   void setDefaultConstrainedExcept(fp::ExceptionBehavior NewExcept) {
 #ifndef NDEBUG
-    Optional<StringRef> ExceptStr = ExceptionBehaviorToStr(NewExcept);
+    Optional<StringRef> ExceptStr = convertExceptionBehaviorToStr(NewExcept);
     assert(ExceptStr.hasValue() && "Garbage strict exception behavior!");
 #endif
     DefaultConstrainedExcept = NewExcept;
@@ -326,7 +326,7 @@ public:
   /// Set the rounding mode handling to be used with constrained floating point
   void setDefaultConstrainedRounding(RoundingMode NewRounding) {
 #ifndef NDEBUG
-    Optional<StringRef> RoundingStr = RoundingModeToStr(NewRounding);
+    Optional<StringRef> RoundingStr = convertRoundingModeToStr(NewRounding);
     assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
 #endif
     DefaultConstrainedRounding = NewRounding;
@@ -352,7 +352,7 @@ public:
   }
 
   void setConstrainedFPCallAttr(CallBase *I) {
-    I->addAttribute(AttributeList::FunctionIndex, Attribute::StrictFP);
+    I->addFnAttr(Attribute::StrictFP);
   }
 
   void setDefaultOperandBundles(ArrayRef<OperandBundleDef> OpBundles) {
@@ -648,8 +648,11 @@ public:
                                  TBAAStructTag, ScopeTag, NoAliasTag);
   }
 
-  CallInst *CreateMemCpyInline(Value *Dst, MaybeAlign DstAlign, Value *Src,
-                               MaybeAlign SrcAlign, Value *Size);
+  CallInst *
+  CreateMemCpyInline(Value *Dst, MaybeAlign DstAlign, Value *Src,
+                     MaybeAlign SrcAlign, Value *Size, bool IsVolatile = false,
+                     MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr,
+                     MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr);
 
   /// Create and insert an element unordered-atomic memcpy between the
   /// specified pointers.
@@ -695,12 +698,16 @@ public:
       MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr,
       MDNode *NoAliasTag = nullptr);
 
-  /// Create a vector fadd reduction intrinsic of the source vector.
-  /// The first parameter is a scalar accumulator value for ordered reductions.
+  /// Create a sequential vector fadd reduction intrinsic of the source vector.
+  /// The first parameter is a scalar accumulator value. An unordered reduction
+  /// can be created by adding the reassoc fast-math flag to the resulting
+  /// sequential reduction.
   CallInst *CreateFAddReduce(Value *Acc, Value *Src);
 
-  /// Create a vector fmul reduction intrinsic of the source vector.
-  /// The first parameter is a scalar accumulator value for ordered reductions.
+  /// Create a sequential vector fmul reduction intrinsic of the source vector.
+  /// The first parameter is a scalar accumulator value. An unordered reduction
+  /// can be created by adding the reassoc fast-math flag to the resulting
+  /// sequential reduction.
   CallInst *CreateFMulReduce(Value *Acc, Value *Src);
 
   /// Create a vector int add reduction intrinsic of the source vector.
@@ -750,7 +757,7 @@ public:
   CallInst *CreateInvariantStart(Value *Ptr, ConstantInt *Size = nullptr);
 
   /// Create a call to Masked Load intrinsic
-  CallInst *CreateMaskedLoad(Value *Ptr, Align Alignment, Value *Mask,
+  CallInst *CreateMaskedLoad(Type *Ty, Value *Ptr, Align Alignment, Value *Mask,
                              Value *PassThru = nullptr, const Twine &Name = "");
 
   /// Create a call to Masked Store intrinsic
@@ -758,7 +765,7 @@ public:
                               Value *Mask);
 
   /// Create a call to Masked Gather intrinsic
-  CallInst *CreateMaskedGather(Value *Ptrs, Align Alignment,
+  CallInst *CreateMaskedGather(Type *Ty, Value *Ptrs, Align Alignment,
                                Value *Mask = nullptr, Value *PassThru = nullptr,
                                const Twine &Name = "");
 
@@ -776,9 +783,10 @@ public:
 
 
   /// Call an arithmetic VP intrinsic.
-  Instruction *CreateVectorPredicatedInst(unsigned OC, ArrayRef<Value *>,
-                             Instruction *FMFSource = nullptr,
-                             const Twine &Name = "");
+  Instruction *CreateVectorPredicatedInst(unsigned OC, Type *ReturnTy,
+                                          ArrayRef<Value *>,
+                                          Instruction *FMFSource = nullptr,
+                                          const Twine &Name = "");
 
   /// Call an comparison VP intrinsic.
   Instruction *CreateVectorPredicatedCmp(CmpInst::Predicate Pred,
@@ -869,9 +877,20 @@ public:
                              Type *ResultType,
                              const Twine &Name = "");
 
+  /// Create a call to the experimental.gc.pointer.base intrinsic to get the
+  /// base pointer for the specified derived pointer.
+  CallInst *CreateGCGetPointerBase(Value *DerivedPtr, const Twine &Name = "");
+
+  /// Create a call to the experimental.gc.get.pointer.offset intrinsic to get
+  /// the offset of the specified derived pointer from its base.
+  CallInst *CreateGCGetPointerOffset(Value *DerivedPtr, const Twine &Name = "");
+
   /// Create a call to llvm.vscale, multiplied by \p Scaling. The type of VScale
   /// will be the same type as that of \p Scaling.
   Value *CreateVScale(Constant *Scaling, const Twine &Name = "");
+
+  /// Creates a vector of type \p DstType with the linear sequence <0, 1, ...>
+  Value *CreateStepVector(Type *DstType, const Twine &Name = "");
 
   /// Create a call to intrinsic \p ID with 1 operand which is mangled on its
   /// type.
@@ -911,6 +930,13 @@ public:
   /// Create call to the maximum intrinsic.
   CallInst *CreateMaximum(Value *LHS, Value *RHS, const Twine &Name = "") {
     return CreateBinaryIntrinsic(Intrinsic::maximum, LHS, RHS, nullptr, Name);
+  }
+
+  /// Create a call to the arithmetic_fence intrinsic.
+  CallInst *CreateArithmeticFence(Value *Val, Type *DstType,
+                                  const Twine &Name = "") {
+    return CreateIntrinsic(Intrinsic::arithmetic_fence, DstType, Val, nullptr,
+                           Name);
   }
 
   /// Create a call to the experimental.vector.extract intrinsic.
@@ -1170,7 +1196,7 @@ private:
     if (Rounding.hasValue())
       UseRounding = Rounding.getValue();
 
-    Optional<StringRef> RoundingStr = RoundingModeToStr(UseRounding);
+    Optional<StringRef> RoundingStr = convertRoundingModeToStr(UseRounding);
     assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
     auto *RoundingMDS = MDString::get(Context, RoundingStr.getValue());
 
@@ -1201,9 +1227,8 @@ private:
 public:
   Value *CreateAdd(Value *LHS, Value *RHS, const Twine &Name = "",
                    bool HasNUW = false, bool HasNSW = false) {
-    if (auto *LC = dyn_cast<Constant>(LHS))
-      if (auto *RC = dyn_cast<Constant>(RHS))
-        return Insert(Folder.CreateAdd(LC, RC, HasNUW, HasNSW), Name);
+    if (auto *V = Folder.FoldAdd(LHS, RHS, HasNUW, HasNSW))
+      return V;
     return CreateInsertNUWNSWBinOp(Instruction::Add, LHS, RHS, Name,
                                    HasNUW, HasNSW);
   }
@@ -1376,12 +1401,8 @@ public:
   }
 
   Value *CreateOr(Value *LHS, Value *RHS, const Twine &Name = "") {
-    if (auto *RC = dyn_cast<Constant>(RHS)) {
-      if (RC->isNullValue())
-        return LHS;  // LHS | 0 -> LHS
-      if (auto *LC = dyn_cast<Constant>(LHS))
-        return Insert(Folder.CreateOr(LC, RC), Name);
-    }
+    if (auto *V = Folder.FoldOr(LHS, RHS))
+      return V;
     return Insert(BinaryOperator::CreateOr(LHS, RHS), Name);
   }
 
@@ -1561,6 +1582,15 @@ public:
                         Cond2, Name);
   }
 
+  // NOTE: this is sequential, non-commutative, ordered reduction!
+  Value *CreateLogicalOr(ArrayRef<Value *> Ops) {
+    assert(!Ops.empty());
+    Value *Accum = Ops[0];
+    for (unsigned i = 1; i < Ops.size(); i++)
+      Accum = CreateLogicalOr(Accum, Ops[i]);
+    return Accum;
+  }
+
   CallInst *CreateConstrainedFPBinOp(
       Intrinsic::ID ID, Value *L, Value *R, Instruction *FMFSource = nullptr,
       const Twine &Name = "", MDNode *FPMathTag = nullptr,
@@ -1660,22 +1690,6 @@ public:
     return CreateAlignedLoad(Ty, Ptr, MaybeAlign(), isVolatile, Name);
   }
 
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateLoad(Value *Ptr, const char *Name) {
-    return CreateLoad(Ptr->getType()->getPointerElementType(), Ptr, Name);
-  }
-
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateLoad(Value *Ptr, const Twine &Name = "") {
-    return CreateLoad(Ptr->getType()->getPointerElementType(), Ptr, Name);
-  }
-
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateLoad(Value *Ptr, bool isVolatile, const Twine &Name = "") {
-    return CreateLoad(Ptr->getType()->getPointerElementType(), Ptr, isVolatile,
-                      Name);
-  }
-
   StoreInst *CreateStore(Value *Val, Value *Ptr, bool isVolatile = false) {
     return CreateAlignedStore(Val, Ptr, MaybeAlign(), isVolatile);
   }
@@ -1697,24 +1711,6 @@ public:
       Align = DL.getABITypeAlign(Ty);
     }
     return Insert(new LoadInst(Ty, Ptr, Twine(), isVolatile, *Align), Name);
-  }
-
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateAlignedLoad(Value *Ptr, MaybeAlign Align, const char *Name) {
-    return CreateAlignedLoad(Ptr->getType()->getPointerElementType(), Ptr,
-                             Align, Name);
-  }
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateAlignedLoad(Value *Ptr, MaybeAlign Align,
-                              const Twine &Name = "") {
-    return CreateAlignedLoad(Ptr->getType()->getPointerElementType(), Ptr,
-                             Align, Name);
-  }
-  // Deprecated [opaque pointer types]
-  LoadInst *CreateAlignedLoad(Value *Ptr, MaybeAlign Align, bool isVolatile,
-                              const Twine &Name = "") {
-    return CreateAlignedLoad(Ptr->getType()->getPointerElementType(), Ptr,
-                             Align, isVolatile, Name);
   }
 
   StoreInst *CreateAlignedStore(Value *Val, Value *Ptr, MaybeAlign Align,
@@ -1757,74 +1753,39 @@ public:
     return Insert(new AtomicRMWInst(Op, Ptr, Val, *Align, Ordering, SSID));
   }
 
-  Value *CreateGEP(Value *Ptr, ArrayRef<Value *> IdxList,
-                   const Twine &Name = "") {
-    return CreateGEP(nullptr, Ptr, IdxList, Name);
-  }
-
   Value *CreateGEP(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList,
                    const Twine &Name = "") {
-    if (auto *PC = dyn_cast<Constant>(Ptr)) {
-      // Every index must be constant.
-      size_t i, e;
-      for (i = 0, e = IdxList.size(); i != e; ++i)
-        if (!isa<Constant>(IdxList[i]))
-          break;
-      if (i == e)
-        return Insert(Folder.CreateGetElementPtr(Ty, PC, IdxList), Name);
-    }
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, IdxList, /*IsInBounds=*/false))
+      return V;
     return Insert(GetElementPtrInst::Create(Ty, Ptr, IdxList), Name);
-  }
-
-  Value *CreateInBoundsGEP(Value *Ptr, ArrayRef<Value *> IdxList,
-                           const Twine &Name = "") {
-    return CreateInBoundsGEP(nullptr, Ptr, IdxList, Name);
   }
 
   Value *CreateInBoundsGEP(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList,
                            const Twine &Name = "") {
-    if (auto *PC = dyn_cast<Constant>(Ptr)) {
-      // Every index must be constant.
-      size_t i, e;
-      for (i = 0, e = IdxList.size(); i != e; ++i)
-        if (!isa<Constant>(IdxList[i]))
-          break;
-      if (i == e)
-        return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, IdxList),
-                      Name);
-    }
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, IdxList, /*IsInBounds=*/true))
+      return V;
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, IdxList), Name);
   }
 
-  Value *CreateGEP(Value *Ptr, Value *Idx, const Twine &Name = "") {
-    return CreateGEP(nullptr, Ptr, Idx, Name);
-  }
-
   Value *CreateGEP(Type *Ty, Value *Ptr, Value *Idx, const Twine &Name = "") {
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      if (auto *IC = dyn_cast<Constant>(Idx))
-        return Insert(Folder.CreateGetElementPtr(Ty, PC, IC), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, {Idx}, /*IsInBounds=*/false))
+      return V;
     return Insert(GetElementPtrInst::Create(Ty, Ptr, Idx), Name);
   }
 
   Value *CreateInBoundsGEP(Type *Ty, Value *Ptr, Value *Idx,
                            const Twine &Name = "") {
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      if (auto *IC = dyn_cast<Constant>(Idx))
-        return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, IC), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, {Idx}, /*IsInBounds=*/true))
+      return V;
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idx), Name);
-  }
-
-  Value *CreateConstGEP1_32(Value *Ptr, unsigned Idx0, const Twine &Name = "") {
-    return CreateConstGEP1_32(nullptr, Ptr, Idx0, Name);
   }
 
   Value *CreateConstGEP1_32(Type *Ty, Value *Ptr, unsigned Idx0,
                             const Twine &Name = "") {
     Value *Idx = ConstantInt::get(Type::getInt32Ty(Context), Idx0);
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateGetElementPtr(Ty, PC, Idx), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idx, /*IsInBounds=*/false))
+      return V;
 
     return Insert(GetElementPtrInst::Create(Ty, Ptr, Idx), Name);
   }
@@ -1833,8 +1794,8 @@ public:
                                     const Twine &Name = "") {
     Value *Idx = ConstantInt::get(Type::getInt32Ty(Context), Idx0);
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, Idx), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idx, /*IsInBounds=*/true))
+      return V;
 
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idx), Name);
   }
@@ -1846,8 +1807,8 @@ public:
       ConstantInt::get(Type::getInt32Ty(Context), Idx1)
     };
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateGetElementPtr(Ty, PC, Idxs), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idxs, /*IsInBounds=*/false))
+      return V;
 
     return Insert(GetElementPtrInst::Create(Ty, Ptr, Idxs), Name);
   }
@@ -1859,8 +1820,8 @@ public:
       ConstantInt::get(Type::getInt32Ty(Context), Idx1)
     };
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, Idxs), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idxs, /*IsInBounds=*/true))
+      return V;
 
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idxs), Name);
   }
@@ -1869,29 +1830,20 @@ public:
                             const Twine &Name = "") {
     Value *Idx = ConstantInt::get(Type::getInt64Ty(Context), Idx0);
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateGetElementPtr(Ty, PC, Idx), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idx, /*IsInBounds=*/false))
+      return V;
 
     return Insert(GetElementPtrInst::Create(Ty, Ptr, Idx), Name);
-  }
-
-  Value *CreateConstGEP1_64(Value *Ptr, uint64_t Idx0, const Twine &Name = "") {
-    return CreateConstGEP1_64(nullptr, Ptr, Idx0, Name);
   }
 
   Value *CreateConstInBoundsGEP1_64(Type *Ty, Value *Ptr, uint64_t Idx0,
                                     const Twine &Name = "") {
     Value *Idx = ConstantInt::get(Type::getInt64Ty(Context), Idx0);
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, Idx), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idx, /*IsInBounds=*/true))
+      return V;
 
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idx), Name);
-  }
-
-  Value *CreateConstInBoundsGEP1_64(Value *Ptr, uint64_t Idx0,
-                                    const Twine &Name = "") {
-    return CreateConstInBoundsGEP1_64(nullptr, Ptr, Idx0, Name);
   }
 
   Value *CreateConstGEP2_64(Type *Ty, Value *Ptr, uint64_t Idx0, uint64_t Idx1,
@@ -1901,15 +1853,10 @@ public:
       ConstantInt::get(Type::getInt64Ty(Context), Idx1)
     };
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateGetElementPtr(Ty, PC, Idxs), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idxs, /*IsInBounds=*/false))
+      return V;
 
     return Insert(GetElementPtrInst::Create(Ty, Ptr, Idxs), Name);
-  }
-
-  Value *CreateConstGEP2_64(Value *Ptr, uint64_t Idx0, uint64_t Idx1,
-                            const Twine &Name = "") {
-    return CreateConstGEP2_64(nullptr, Ptr, Idx0, Idx1, Name);
   }
 
   Value *CreateConstInBoundsGEP2_64(Type *Ty, Value *Ptr, uint64_t Idx0,
@@ -1919,24 +1866,15 @@ public:
       ConstantInt::get(Type::getInt64Ty(Context), Idx1)
     };
 
-    if (auto *PC = dyn_cast<Constant>(Ptr))
-      return Insert(Folder.CreateInBoundsGetElementPtr(Ty, PC, Idxs), Name);
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, Idxs, /*IsInBounds=*/true))
+      return V;
 
     return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idxs), Name);
-  }
-
-  Value *CreateConstInBoundsGEP2_64(Value *Ptr, uint64_t Idx0, uint64_t Idx1,
-                                    const Twine &Name = "") {
-    return CreateConstInBoundsGEP2_64(nullptr, Ptr, Idx0, Idx1, Name);
   }
 
   Value *CreateStructGEP(Type *Ty, Value *Ptr, unsigned Idx,
                          const Twine &Name = "") {
     return CreateConstInBoundsGEP2_32(Ty, Ptr, 0, Idx, Name);
-  }
-
-  Value *CreateStructGEP(Value *Ptr, unsigned Idx, const Twine &Name = "") {
-    return CreateConstInBoundsGEP2_32(nullptr, Ptr, 0, Idx, Name);
   }
 
   /// Same as CreateGlobalString, but return a pointer with "i8*" type
@@ -2280,9 +2218,8 @@ public:
 
   Value *CreateICmp(CmpInst::Predicate P, Value *LHS, Value *RHS,
                     const Twine &Name = "") {
-    if (auto *LC = dyn_cast<Constant>(LHS))
-      if (auto *RC = dyn_cast<Constant>(RHS))
-        return Insert(Folder.CreateICmp(P, LC, RC), Name);
+    if (auto *V = Folder.FoldICmp(P, LHS, RHS))
+      return V;
     return Insert(new ICmpInst(P, LHS, RHS), Name);
   }
 
@@ -2392,6 +2329,16 @@ public:
     return CreateExtractElement(Vec, getInt64(Idx), Name);
   }
 
+  Value *CreateInsertElement(Type *VecTy, Value *NewElt, Value *Idx,
+                             const Twine &Name = "") {
+    return CreateInsertElement(PoisonValue::get(VecTy), NewElt, Idx, Name);
+  }
+
+  Value *CreateInsertElement(Type *VecTy, Value *NewElt, uint64_t Idx,
+                             const Twine &Name = "") {
+    return CreateInsertElement(PoisonValue::get(VecTy), NewElt, Idx, Name);
+  }
+
   Value *CreateInsertElement(Value *Vec, Value *NewElt, Value *Idx,
                              const Twine &Name = "") {
     if (auto *VC = dyn_cast<Constant>(Vec))
@@ -2497,6 +2444,19 @@ public:
   /// different from pointer to i8, it's casted to pointer to i8 in the same
   /// address space before call and casted back to Ptr type after call.
   Value *CreateStripInvariantGroup(Value *Ptr);
+
+  /// Return a vector value that contains the vector V reversed
+  Value *CreateVectorReverse(Value *V, const Twine &Name = "");
+
+  /// Return a vector splice intrinsic if using scalable vectors, otherwise
+  /// return a shufflevector. If the immediate is positive, a vector is
+  /// extracted from concat(V1, V2), starting at Imm. If the immediate
+  /// is negative, we extract -Imm elements from V1 and the remaining
+  /// elements from V2. Imm is a signed integer in the range
+  /// -VL <= Imm < VL (where VL is the runtime vector length of the
+  /// source/result vector)
+  Value *CreateVectorSplice(Value *V1, Value *V2, int64_t Imm,
+                            const Twine &Name = "");
 
   /// Return a vector value that contains \arg V broadcasted to \p
   /// NumElts elements.

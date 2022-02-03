@@ -24,6 +24,13 @@ Options
    `if` statement, etc.) which contributes to that complexity. See also the
    examples below. Default is `true`.
 
+.. option:: IgnoreMacros
+
+   If set to `true`, the check will ignore code inside macros. Note, that also
+   any macro arguments are ignored, even if they should count to the complexity.
+   As this might change in the future, this option isn't guaranteed to be
+   forward-compatible. Default is `false`.
+
 Building blocks
 ---------------
 
@@ -60,8 +67,8 @@ The following structures increase the function's Cognitive Complexity metric
 Nesting level
 ^^^^^^^^^^^^^
 
-While by itself the nesting level not change the function's Cognitive Complexity
-metric, it is tracked, and is used by the next, third building block.
+While by itself the nesting level does not change the function's Cognitive
+Complexity metric, it is tracked, and is used by the next, third building block.
 The following structures increase the nesting level (by `1`):
 
 * Conditional operators:

@@ -17,7 +17,6 @@
 #include "clang/Index/IndexingOptions.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/VirtualFileSystem.h"
@@ -552,8 +551,9 @@ TEST_F(SymbolCollectorTest, ObjCSymbols) {
   EXPECT_THAT(Symbols,
               UnorderedElementsAre(
                   QName("Person"), QName("Person::someMethodName:lastName:"),
-                  QName("MyCategory"), QName("Person::someMethodName2:"),
-                  QName("MyProtocol"), QName("MyProtocol::someMethodName3:")));
+                  AllOf(QName("MyCategory"), ForCodeCompletion(false)),
+                  QName("Person::someMethodName2:"), QName("MyProtocol"),
+                  QName("MyProtocol::someMethodName3:")));
 }
 
 TEST_F(SymbolCollectorTest, ObjCPropertyImpl) {
@@ -810,8 +810,7 @@ TEST_F(SymbolCollectorTest, RefContainers) {
   };
   EXPECT_EQ(Container("ref1a"),
             findSymbol(Symbols, "f2").ID); // function body (call)
-  // FIXME: This is wrongly contained by fptr and not f2.
-  EXPECT_NE(Container("ref1b"),
+  EXPECT_EQ(Container("ref1b"),
             findSymbol(Symbols, "f2").ID); // function body (address-of)
   EXPECT_EQ(Container("ref2"),
             findSymbol(Symbols, "v1").ID); // variable initializer
@@ -1463,9 +1462,6 @@ TEST_F(SymbolCollectorTest, CanonicalSTLHeader) {
       }
       )cpp",
       /*Main=*/"");
-  for (const auto &S : Symbols)
-    llvm::errs() << S.Scope << S.Name << " in " << S.IncludeHeaders.size()
-                 << "\n";
   EXPECT_THAT(
       Symbols,
       UnorderedElementsAre(
@@ -1850,6 +1846,22 @@ TEST_F(SymbolCollectorTest, NoCrashOnObjCMethodCStyleParam) {
   // We mostly care about not crashing.
   EXPECT_THAT(TU.headerSymbols(),
               UnorderedElementsAre(QName("Foo"), QName("Foo::fun:")));
+}
+
+TEST_F(SymbolCollectorTest, Reserved) {
+  const char *Header = R"cpp(
+    void __foo();
+    namespace _X { int secret; }
+  )cpp";
+
+  CollectorOpts.CollectReserved = true;
+  runSymbolCollector("", Header);
+  EXPECT_THAT(Symbols, UnorderedElementsAre(QName("__foo"), QName("_X"),
+                                            QName("_X::secret")));
+
+  CollectorOpts.CollectReserved = false;
+  runSymbolCollector("", Header); //
+  EXPECT_THAT(Symbols, IsEmpty());
 }
 
 } // namespace

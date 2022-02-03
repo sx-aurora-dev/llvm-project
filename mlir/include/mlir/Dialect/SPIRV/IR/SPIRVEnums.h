@@ -13,6 +13,7 @@
 #ifndef MLIR_DIALECT_SPIRV_IR_SPIRVENUMS_H_
 #define MLIR_DIALECT_SPIRV_IR_SPIRVENUMS_H_
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/StringRef.h"
@@ -51,7 +52,7 @@ ArrayRef<Capability> getDirectImpliedCapabilities(Capability cap);
 /// third one will also be returned.
 SmallVector<Capability, 0> getRecursiveImpliedCapabilities(Capability cap);
 
-} // end namespace spirv
-} // end namespace mlir
+} // namespace spirv
+} // namespace mlir
 
 #endif // MLIR_DIALECT_SPIRV_IR_SPIRVENUMS_H_

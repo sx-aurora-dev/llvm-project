@@ -492,9 +492,11 @@ template <typename ResultT, typename ArgT,
 VariantMatcher
 variadicMatcherDescriptor(StringRef MatcherName, SourceRange NameRange,
                           ArrayRef<ParserValue> Args, Diagnostics *Error) {
-  ArgT **InnerArgs = new ArgT *[Args.size()]();
+  SmallVector<ArgT *, 8> InnerArgsPtr;
+  InnerArgsPtr.resize_for_overwrite(Args.size());
+  SmallVector<ArgT, 8> InnerArgs;
+  InnerArgs.reserve(Args.size());
 
-  bool HasError = false;
   for (size_t i = 0, e = Args.size(); i != e; ++i) {
     using ArgTraits = ArgTypeTraits<ArgT>;
 
@@ -503,8 +505,7 @@ variadicMatcherDescriptor(StringRef MatcherName, SourceRange NameRange,
     if (!ArgTraits::hasCorrectType(Value)) {
       Error->addError(Arg.Range, Error->ET_RegistryWrongArgType)
           << (i + 1) << ArgTraits::getKind().asString() << Value.getTypeAsString();
-      HasError = true;
-      break;
+      return {};
     }
     if (!ArgTraits::hasCorrectValue(Value)) {
       if (llvm::Optional<std::string> BestGuess =
@@ -521,24 +522,13 @@ variadicMatcherDescriptor(StringRef MatcherName, SourceRange NameRange,
             << (i + 1) << ArgTraits::getKind().asString()
             << Value.getTypeAsString();
       }
-      HasError = true;
-      break;
+      return {};
     }
-
-    InnerArgs[i] = new ArgT(ArgTraits::get(Value));
+    assert(InnerArgs.size() < InnerArgs.capacity());
+    InnerArgs.emplace_back(ArgTraits::get(Value));
+    InnerArgsPtr[i] = &InnerArgs[i];
   }
-
-  VariantMatcher Out;
-  if (!HasError) {
-    Out = outvalueToVariantMatcher(Func(llvm::makeArrayRef(InnerArgs,
-                                                           Args.size())));
-  }
-
-  for (size_t i = 0, e = Args.size(); i != e; ++i) {
-    delete InnerArgs[i];
-  }
-  delete[] InnerArgs;
-  return Out;
+  return outvalueToVariantMatcher(Func(InnerArgsPtr));
 }
 
 /// Matcher descriptor for variadic functions.
@@ -1046,7 +1036,6 @@ public:
   void getArgKinds(ASTNodeKind ThisKind, unsigned,
                    std::vector<ArgKind> &ArgKinds) const override {
     ArgKinds.push_back(ArgKind::MakeNodeArg(ThisKind));
-    return;
   }
   bool isConvertibleTo(ASTNodeKind Kind, unsigned *Specificity = nullptr,
                        ASTNodeKind *LeastDerivedKind = nullptr) const override {
@@ -1178,4 +1167,4 @@ std::unique_ptr<MatcherDescriptor> makeMatcherAutoMarshall(
 } // namespace ast_matchers
 } // namespace clang
 
-#endif // LLVM_CLANG_AST_MATCHERS_DYNAMIC_MARSHALLERS_H
+#endif // LLVM_CLANG_LIB_ASTMATCHERS_DYNAMIC_MARSHALLERS_H

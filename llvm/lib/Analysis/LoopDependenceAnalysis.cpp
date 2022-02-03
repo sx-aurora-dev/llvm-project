@@ -14,6 +14,7 @@
 #include "llvm/Analysis/LoopDependenceAnalysis.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/Delinearization.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -915,7 +916,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   if (!AccessExpr)
     return false;
 
-  SE.delinearize(AccessExpr, Subscripts, Sizes, SE.getElementSize(Inst));
+  delinearize(SE, AccessExpr, Subscripts, Sizes, SE.getElementSize(Inst));
 
   if (Subscripts.size() == 0 || Sizes.size() == 0 ||
       Subscripts.size() != Sizes.size()) {

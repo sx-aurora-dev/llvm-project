@@ -38,10 +38,10 @@ private:
 
 public:
   VEMachineFunctionInfo()
-      : GlobalBaseReg(), VectorLengthReg(0), VarArgsFrameOffset(0),
+      : VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
   explicit VEMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(), VectorLengthReg(0), VarArgsFrameOffset(0),
+      : VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
 
   Register getGlobalBaseReg() const { return GlobalBaseReg; }

@@ -8,6 +8,12 @@
 
 // UNSUPPORTED: c++03
 
+// XFAIL: LIBCXX-AIX-FIXME
+
+// The string reported on errors changed, which makes those tests fail when run
+// against already-released libc++'s.
+// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.15
+
 // <filesystem>
 
 // class directory_entry
@@ -123,7 +129,9 @@ TEST_CASE(error_reporting) {
   const path sym_out_of_dir = env.create_symlink("dir/file", "sym");
   const path sym_in_dir = env.create_symlink("file2", "dir/sym2");
 
+#ifndef TEST_WIN_NO_FILESYSTEM_PERMS_NONE
   const perms old_perms = status(dir).permissions();
+#endif
 
   // test a file which doesn't exist
   {
@@ -167,6 +175,9 @@ TEST_CASE(error_reporting) {
                              "directory_entry::hard_link_count");
     TEST_CHECK_THROW_RESULT(filesystem_error, Checker, ent.hard_link_count());
   }
+  // Windows doesn't support setting perms::none to trigger failures
+  // reading directories.
+#ifndef TEST_WIN_NO_FILESYSTEM_PERMS_NONE
   // test a file w/o appropriate permissions.
   {
     directory_entry ent;
@@ -244,6 +255,7 @@ TEST_CASE(error_reporting) {
     TEST_CHECK(!ec);
     TEST_CHECK_NO_THROW(ent.hard_link_count());
   }
+#endif
 }
 
 TEST_SUITE_END()

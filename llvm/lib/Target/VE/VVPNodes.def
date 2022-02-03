@@ -1,5 +1,20 @@
+//===-- VVPNodes.def - Lists & properties of VE Vector Predication Nodes --===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines all VVP_* SDNodes and their properties
+//
+//===----------------------------------------------------------------------===//
+
+/// HANDLE_VP_TO_VVP(VPOPC, VVPOPC)
+/// \p  VPOPC is the VP_* SDNode opcode.
+/// \p  VVPOPC is the VVP_* SDNode opcode.
 #ifndef HANDLE_VP_TO_VVP
-#define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD)
+#define HANDLE_VP_TO_VVP(VPOPC, VVPOPC)
 #endif
 
 // Register a new VVP Opcode.
@@ -48,10 +63,13 @@
 #define HANDLE_VVP_REDUCE_TO_SCALAR(VVP_RED_ISD, REDUCE_ISD)
 #endif
 
+/// ADD_VVP_OP(VVPNAME,SDNAME)
+/// \p VVPName is a VVP SDNode operator.
+/// \p SDNAME is the generic SD opcode corresponding to \p VVPName.
 #ifndef ADD_VVP_OP
-#define ADD_VVP_OP(X,Y) \
+#define ADD_VVP_OP(X, Y) \
 REGISTER_VVP_OP(X) \
-MAP_VVP_OP(X,Y)
+MAP_VVP_OP(X, Y)
 #endif
 
 #ifndef ADD_TERNARY_VVP_OP
@@ -60,6 +78,9 @@ REGISTER_TERNARY_VVP_OP(X) \
 MAP_VVP_OP(X,Y)
 #endif
 
+/// ADD_BINARY_VVP_OP(VVPNAME,SDNAME)
+/// \p VVPName is a VVP Binary operator.
+/// \p SDNAME is the generic SD opcode corresponding to \p VVPName.
 #ifndef ADD_BINARY_VVP_OP
 #define ADD_BINARY_VVP_OP(X,Y) \
 REGISTER_BINARY_VVP_OP(X) \
@@ -111,8 +132,8 @@ ADD_BINARY_VVP_OP(VVP_AND,AND) HANDLE_VP_TO_VVP(VP_AND, VVP_AND) REGISTER_PACKED
 ADD_BINARY_VVP_OP(VVP_OR,OR)   HANDLE_VP_TO_VVP(VP_OR, VVP_OR)   REGISTER_PACKED(VVP_OR)
 ADD_BINARY_VVP_OP(VVP_XOR,XOR) HANDLE_VP_TO_VVP(VP_XOR, VVP_XOR) REGISTER_PACKED(VVP_XOR)
 
-ADD_BINARY_VVP_OP(VVP_SRL,SRL) HANDLE_VP_TO_VVP(VP_SRL, VVP_SRL) REGISTER_PACKED(VVP_SRL)
-ADD_BINARY_VVP_OP(VVP_SRA,SRA) HANDLE_VP_TO_VVP(VP_SRA, VVP_SRA) REGISTER_PACKED(VVP_SRA)
+ADD_BINARY_VVP_OP(VVP_SRL,SRL) HANDLE_VP_TO_VVP(VP_LSHR, VVP_SRL) REGISTER_PACKED(VVP_SRL)
+ADD_BINARY_VVP_OP(VVP_SRA,SRA) HANDLE_VP_TO_VVP(VP_ASHR, VVP_SRA) REGISTER_PACKED(VVP_SRA)
 ADD_BINARY_VVP_OP(VVP_SHL,SHL) HANDLE_VP_TO_VVP(VP_SHL, VVP_SHL) REGISTER_PACKED(VVP_SHL)
 
 // Fused ops

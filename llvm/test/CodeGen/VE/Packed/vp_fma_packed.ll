@@ -3,20 +3,6 @@
 
 ;;; 512 x float
 
-define fastcc <512 x float> @test_vp_ffma_vvv_512f32_aavl(<512 x float> %i0, <512 x float> %i1, <512 x float> %i2, <512 x i1> %m, i32 %n) {
-; CHECK-LABEL: test_vp_ffma_vvv_512f32_aavl:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvfmad %v0, %v2, %v0, %v1
-; CHECK-NEXT:    b.l.t (, %s10)
-  %mul = call contract <512 x float> @llvm.vp.fmul.v512f32(<512 x float> %i0, <512 x float> %i1, <512 x i1> %m, i32 align 2 %n)
-  %fma = call contract <512 x float> @llvm.vp.fadd.v512f32(<512 x float> %mul, <512 x float> %i2, <512 x i1> %m, i32 align 2 %n)
-  ret <512 x float> %fma
-}
-
 define fastcc <512 x float> @test_vp_ffma_vvv_512f32(<512 x float> %i0, <512 x float> %i1, <512 x float> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffma_vvv_512f32:
 ; CHECK:       # %bb.0:

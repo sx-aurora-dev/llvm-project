@@ -1,4 +1,4 @@
-//===-- M68kISelLowering.h - M68k DAG Lowering Interface ----*- C++ -*-===//
+//===-- M68kISelLowering.h - M68k DAG Lowering Interface --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -156,9 +156,23 @@ public:
                                              unsigned JTI,
                                              MCContext &Ctx) const override;
 
+  ConstraintType getConstraintType(StringRef ConstraintStr) const override;
+
+  std::pair<unsigned, const TargetRegisterClass *>
+  getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
+                               StringRef Constraint, MVT VT) const override;
+
+  // Lower operand with C_Immediate and C_Other constraint type
+  void LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint,
+                                    std::vector<SDValue> &Ops,
+                                    SelectionDAG &DAG) const override;
+
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *MBB) const override;
+
+  CCAssignFn *getCCAssignFn(CallingConv::ID CC, bool Return,
+                            bool IsVarArg) const;
 
 private:
   unsigned GetAlignedArgumentStackSize(unsigned StackSize,
@@ -262,4 +276,4 @@ private:
 };
 } // namespace llvm
 
-#endif // M68kISELLOWERING_H
+#endif // LLVM_LIB_TARGET_M68K_M68KISELLOWERING_H

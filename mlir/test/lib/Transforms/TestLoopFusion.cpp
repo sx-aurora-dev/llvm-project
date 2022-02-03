@@ -42,10 +42,14 @@ static llvm::cl::opt<bool> clTestLoopFusionTransformation(
 namespace {
 
 struct TestLoopFusion : public PassWrapper<TestLoopFusion, FunctionPass> {
+  StringRef getArgument() const final { return "test-loop-fusion"; }
+  StringRef getDescription() const final {
+    return "Tests loop fusion utility functions.";
+  }
   void runOnFunction() override;
 };
 
-} // end anonymous namespace
+} // namespace
 
 // Run fusion dependence check on 'loops[i]' and 'loops[j]' at loop depths
 // in range ['loopDepth' + 1, 'maxLoopDepth'].
@@ -99,10 +103,11 @@ static std::string getSliceStr(const mlir::ComputationSliceState &sliceUnion) {
   return os.str();
 }
 
-// Computes fusion slice union on 'loops[i]' and 'loops[j]' at loop depths
-// in range ['loopDepth' + 1, 'maxLoopDepth'].
-// Emits a string representation of the slice union as a remark on 'loops[j]'.
-// Returns false as IR is not transformed.
+/// Computes fusion slice union on 'loops[i]' and 'loops[j]' at loop depths
+/// in range ['loopDepth' + 1, 'maxLoopDepth'].
+/// Emits a string representation of the slice union as a remark on 'loops[j]'
+/// and marks this as incorrect slice if the slice is invalid. Returns false as
+/// IR is not transformed.
 static bool testSliceComputation(AffineForOp forOpA, AffineForOp forOpB,
                                  unsigned i, unsigned j, unsigned loopDepth,
                                  unsigned maxLoopDepth) {
@@ -111,6 +116,10 @@ static bool testSliceComputation(AffineForOp forOpA, AffineForOp forOpB,
     FusionResult result = mlir::canFuseLoops(forOpA, forOpB, d, &sliceUnion);
     if (result.value == FusionResult::Success) {
       forOpB->emitRemark("slice (")
+          << " src loop: " << i << ", dst loop: " << j << ", depth: " << d
+          << " : " << getSliceStr(sliceUnion) << ")";
+    } else if (result.value == FusionResult::FailIncorrectSlice) {
+      forOpB->emitRemark("Incorrect slice (")
           << " src loop: " << i << ", dst loop: " << j << ", depth: " << d
           << " : " << getSliceStr(sliceUnion) << ")";
     }
@@ -147,7 +156,7 @@ using LoopFunc = function_ref<bool(AffineForOp, AffineForOp, unsigned, unsigned,
 // If 'return_on_change' is true, returns on first invocation of 'fn' which
 // returns true.
 static bool iterateLoops(ArrayRef<SmallVector<AffineForOp, 2>> depthToLoops,
-                         LoopFunc fn, bool return_on_change = false) {
+                         LoopFunc fn, bool returnOnChange = false) {
   bool changed = false;
   for (unsigned loopDepth = 0, end = depthToLoops.size(); loopDepth < end;
        ++loopDepth) {
@@ -158,7 +167,7 @@ static bool iterateLoops(ArrayRef<SmallVector<AffineForOp, 2>> depthToLoops,
         if (j != k)
           changed |=
               fn(loops[j], loops[k], j, k, loopDepth, depthToLoops.size());
-        if (changed && return_on_change)
+        if (changed && returnOnChange)
           return true;
       }
     }
@@ -177,7 +186,7 @@ void TestLoopFusion::runOnFunction() {
 
       // Try to fuse all combinations of src/dst loop nests in 'depthToLoops'.
     } while (iterateLoops(depthToLoops, testLoopFusionTransformation,
-                          /*return_on_change=*/true));
+                          /*returnOnChange=*/true));
     return;
   }
 
@@ -193,9 +202,6 @@ void TestLoopFusion::runOnFunction() {
 
 namespace mlir {
 namespace test {
-void registerTestLoopFusion() {
-  PassRegistration<TestLoopFusion>("test-loop-fusion",
-                                   "Tests loop fusion utility functions.");
-}
+void registerTestLoopFusion() { PassRegistration<TestLoopFusion>(); }
 } // namespace test
 } // namespace mlir

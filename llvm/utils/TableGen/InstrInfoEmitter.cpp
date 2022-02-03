@@ -494,8 +494,8 @@ void InstrInfoEmitter::emitLogicalOperandSizeMappings(
     }
     OS << "  static const unsigned SizeMap[][" << LogicalOpListSize
        << "] = {\n";
-    for (int r = 0, rs = LogicalOpSizeList.size(); r < rs; ++r) {
-      const auto &Row = *LogicalOpSizeList[r];
+    for (auto &R : LogicalOpSizeList) {
+      const auto &Row = *R;
       OS << "   {";
       int i;
       for (i = 0; i < static_cast<int>(Row.size()); ++i) {
@@ -863,13 +863,13 @@ void InstrInfoEmitter::run(raw_ostream &OS) {
 
   OS << "#ifdef GET_INSTRINFO_HELPER_DECLS\n";
   OS << "#undef GET_INSTRINFO_HELPER_DECLS\n\n";
-  emitTIIHelperMethods(OS, TargetName, /* ExpandDefintion = */false);
+  emitTIIHelperMethods(OS, TargetName, /* ExpandDefinition = */ false);
   OS << "\n";
   OS << "#endif // GET_INSTRINFO_HELPER_DECLS\n\n";
 
   OS << "#ifdef GET_INSTRINFO_HELPERS\n";
   OS << "#undef GET_INSTRINFO_HELPERS\n\n";
-  emitTIIHelperMethods(OS, TargetName, /* ExpandDefintion = */true);
+  emitTIIHelperMethods(OS, TargetName, /* ExpandDefinition = */ true);
   OS << "#endif // GET_INSTRINFO_HELPERS\n\n";
 
   OS << "#ifdef GET_INSTRINFO_CTOR_DTOR\n";

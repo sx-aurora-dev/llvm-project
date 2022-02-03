@@ -1,4 +1,4 @@
-//===-- M68kMachineFunctionInfo.h - M68k private data ---------*- C++ -*-=//
+//===-- M68kMachineFunctionInfo.h - M68k private data -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -68,7 +68,6 @@ class M68kMachineFunctionInfo : public MachineFunctionInfo {
   unsigned ArgumentStackSize = 0;
 
 public:
-  M68kMachineFunctionInfo() = default;
   explicit M68kMachineFunctionInfo(MachineFunction &MF) : MF(MF) {}
 
   bool getRestoreBasePointer() const { return RestoreBasePointerOffset != 0; }
@@ -112,4 +111,4 @@ private:
 
 } // end of namespace llvm
 
-#endif // M68K_MACHINE_FUNCTION_INFO_H
+#endif // LLVM_LIB_TARGET_M68K_M68KMACHINEFUNCTION_H

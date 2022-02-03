@@ -78,11 +78,12 @@ public:
   unsigned getOpcode() const {
     auto *VPInst = dyn_cast<VPIntrinsic>(this);
 
-    if (!VPInst) {
+    if (!VPInst)
       return cast<Instruction>(this)->getOpcode();
-    }
 
-    return VPInst->getFunctionalOpcode();
+    auto OC = VPInst->getFunctionalOpcode();
+
+    return OC ? *OC : (unsigned) Instruction::Call;
   }
 
   bool isVectorReduction() const;
@@ -113,7 +114,8 @@ public:
     // Conceal the fp operation if it has non-default rounding mode or exception
     // behavior
     if (VPInst && !VPInst->isConstrainedOp()) {
-      return VPInst->getFunctionalOpcode();
+      auto OC = VPInst->getFunctionalOpcode();
+      return OC ? *OC : (unsigned) Instruction::Call;
     }
 
     if (const Instruction *I = dyn_cast<Instruction>(this))
@@ -291,7 +293,10 @@ public:
     if (isa<ICmpInst>(I))
       return true;
     auto VPInst = dyn_cast<VPIntrinsic>(I);
-    return VPInst && VPInst->getFunctionalOpcode() == Instruction::ICmp;
+    if (!VPInst)
+      return false;
+    auto OC = VPInst->getFunctionalOpcode();
+    return OC && (*OC == Instruction::ICmp);
   }
   static bool classof(const ConstantExpr *CE) {
     return CE->getOpcode() == Instruction::ICmp;
@@ -329,7 +334,10 @@ public:
     if (isa<FCmpInst>(I))
       return true;
     auto VPInst = dyn_cast<VPIntrinsic>(I);
-    return VPInst && VPInst->getFunctionalOpcode() == Instruction::FCmp;
+    if (!VPInst)
+      return false;
+    auto OC = VPInst->getFunctionalOpcode();
+    return OC && (*OC == Instruction::FCmp);
   }
   static bool classof(const ConstantExpr *CE) {
     return CE->getOpcode() == Instruction::FCmp;
@@ -366,7 +374,10 @@ public:
     if (isa<SelectInst>(I))
       return true;
     auto VPInst = dyn_cast<VPIntrinsic>(I);
-    return VPInst && VPInst->getFunctionalOpcode() == Instruction::Select;
+    if (!VPInst)
+      return false;
+    auto OC = VPInst->getFunctionalOpcode();
+    return OC && (*OC == Instruction::Select);
   }
   static bool classof(const ConstantExpr *CE) {
     return CE->getOpcode() == Instruction::Select;

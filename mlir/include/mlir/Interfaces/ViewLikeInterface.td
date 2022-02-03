@@ -66,7 +66,7 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
   let cppNamespace = "::mlir";
 
   let methods = [
-    InterfaceMethod<
+    StaticInterfaceMethod<
       /*desc=*/[{
         Return the number of leading operands before the `offsets`, `sizes` and
         and `strides` operands.
@@ -165,16 +165,8 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
       /*args=*/(ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-        unsigned numDynamic = 0;
-        unsigned count = $_op.static_offsets().size();
-        for (unsigned idx = 0; idx < count; ++idx) {
-          if (isDynamicOffset(idx))
-            res.push_back($_op.offsets()[numDynamic++]);
-          else
-            res.push_back($_op.static_offsets()[idx]);
-        }
-        return res;
+        return ::mlir::getMixedOffsets($_op, $_op.static_offsets(),
+                                       $_op.offsets());
       }]
     >,
     InterfaceMethod<
@@ -186,16 +178,7 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
       /*args=*/(ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-        unsigned numDynamic = 0;
-        unsigned count = $_op.static_sizes().size();
-        for (unsigned idx = 0; idx < count; ++idx) {
-          if (isDynamicSize(idx))
-            res.push_back($_op.sizes()[numDynamic++]);
-          else
-            res.push_back($_op.static_sizes()[idx]);
-        }
-        return res;
+        return ::mlir::getMixedSizes($_op, $_op.static_sizes(), $_op.sizes());
       }]
     >,
     InterfaceMethod<
@@ -207,16 +190,8 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
       /*args=*/(ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        ::mlir::SmallVector<::mlir::OpFoldResult, 4> res;
-        unsigned numDynamic = 0;
-        unsigned count = $_op.static_strides().size();
-        for (unsigned idx = 0; idx < count; ++idx) {
-          if (isDynamicStride(idx))
-            res.push_back($_op.strides()[numDynamic++]);
-          else
-            res.push_back($_op.static_strides()[idx]);
-        }
-        return res;
+        return ::mlir::getMixedStrides($_op, $_op.static_strides(),
+                                       $_op.strides());
       }]
     >,
 
@@ -419,6 +394,47 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
         return $_op.getOperand(getIndexOfDynamicStride(idx));
       }]
     >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Return true if all `other`'s offsets, sizes and strides are the same.
+        Takes a custom `cmp` comparison function on OpFoldResult to avoid taking
+        a dialect dependence.
+      }],
+      /*retTy=*/"bool",
+      /*methodName=*/"isSameAs",
+      /*args=*/(ins "::mlir::OffsetSizeAndStrideOpInterface":$other,
+                   "::llvm::function_ref<bool(::mlir::OpFoldResult, ::mlir::OpFoldResult)>":$cmp),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::mlir::detail::sameOffsetsSizesAndStrides(
+          ::mlir::cast<::mlir::OffsetSizeAndStrideOpInterface>(
+            $_op.getOperation()), other, cmp);
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{ Return true if all strides are guaranteed to be 1. }],
+      /*retTy=*/"bool",
+      /*methodName=*/"hasUnitStride",
+      /*args=*/(ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::llvm::all_of(getMixedStrides(), [](::mlir::OpFoldResult ofr) {
+          return ::mlir::getConstantIntValue(ofr) == static_cast<int64_t>(1);
+        });
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{ Return true if all offsets are guaranteed to be 0. }],
+      /*retTy=*/"bool",
+      /*methodName=*/"hasZeroOffset",
+      /*args=*/(ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return ::llvm::all_of(getMixedOffsets(), [](::mlir::OpFoldResult ofr) {
+          return ::mlir::getConstantIntValue(ofr) == static_cast<int64_t>(0);
+        });
+      }]
+    >,
   ];
 
   let extraClassDeclaration = [{
@@ -442,10 +458,24 @@ def OffsetSizeAndStrideOpInterface : OpInterface<"OffsetSizeAndStrideOpInterface
         ::mlir::OpTrait::AttrSizedOperandSegments<void>::getOperandSegmentSizeAttr()};
       return names;
    }
+   /// Assume target is a shaped type and offsets/sizes/strides are vectors of
+   /// the same length and lower than target's rank.
+   /// Complete missing dims `i` with offset=0, size=dim(target, i), stride=1
+   /// until all vectors have size rank. The commpletion occurs for the most
+   /// minor dimensions (i.e. fastest varying).
+   /// Take a `createDim` lambda that knows how to build the size of a
+   /// particular dimension of `target` (to avoid dialect dependencies).
+   static void expandToRank(
+     Value target,
+     SmallVector<OpFoldResult> &offsets,
+     SmallVector<OpFoldResult> &sizes,
+     SmallVector<OpFoldResult> &strides,
+     llvm::function_ref<OpFoldResult(Value, int64_t)> createDim);
   }];
 
   let verify = [{
-    return ::mlir::verify(::mlir::cast<::mlir::OffsetSizeAndStrideOpInterface>($_op));
+    return ::mlir::detail::verifyOffsetSizeAndStrideOp(
+        ::mlir::cast<::mlir::OffsetSizeAndStrideOpInterface>($_op));
   }];
 }
 

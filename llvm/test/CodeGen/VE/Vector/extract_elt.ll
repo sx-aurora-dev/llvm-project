@@ -103,38 +103,8 @@ define fastcc i32 @extract_ri8_v256i32(<256 x i32> %v) {
   ret i32 %ret
 }
 
-define fastcc float @extract_ri17_v512f32(<512 x float> %v) {
-; CHECK-LABEL: extract_ri17_v512f32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lvs %s0, %v0(8)
-; CHECK-NEXT:    sll %s0, %s0, 32
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = extractelement <512 x float> %v, i32 17
-  ret float %ret
-}
-
-define fastcc float @extract_ri372_v512f32(<512 x float> %v) {
-; CHECK-LABEL: extract_ri372_v512f32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 186
-; CHECK-NEXT:    lvs %s0, %v0(%s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = extractelement <512 x float> %v, i32 372
-  ret float %ret
-}
-
-define fastcc i32 @extract_ri17_v512i32(<512 x i32> %v) {
-; CHECK-LABEL: extract_ri17_v512i32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lvs %s0, %v0(8)
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = extractelement <512 x i32> %v, i32 17
-  ret i32 %ret
-}
-
-define fastcc i32 @extract_ri372_v512i32(<512 x i32> %v) {
-; CHECK-LABEL: extract_ri372_v512i32:
+define fastcc i32 @extract_ri_v512i32(<512 x i32> %v) {
+; CHECK-LABEL: extract_ri_v512i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 186
 ; CHECK-NEXT:    lvs %s0, %v0(%s0)
@@ -243,6 +213,8 @@ define fastcc float @extract_ri_v512f32(<512 x float> %v) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 186
 ; CHECK-NEXT:    lvs %s0, %v0(%s0)
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = extractelement <512 x float> %v, i32 372
   ret float %ret

@@ -71,17 +71,38 @@ class PythonDictionary;
 class PythonInteger;
 class PythonException;
 
+class GIL {
+public:
+  GIL() {
+    m_state = PyGILState_Ensure();
+    assert(!PyErr_Occurred());
+  }
+  ~GIL() { PyGILState_Release(m_state); }
+
+protected:
+  PyGILState_STATE m_state;
+};
+
 class StructuredPythonObject : public StructuredData::Generic {
 public:
   StructuredPythonObject() : StructuredData::Generic() {}
 
   StructuredPythonObject(void *obj) : StructuredData::Generic(obj) {
+    assert(PyGILState_Check());
     Py_XINCREF(GetValue());
   }
 
   ~StructuredPythonObject() override {
-    if (Py_IsInitialized())
-      Py_XDECREF(GetValue());
+    if (Py_IsInitialized()) {
+      if (_Py_IsFinalizing()) {
+        // Leak GetValue() rather than crashing the process.
+        // https://docs.python.org/3/c-api/init.html#c.PyGILState_Ensure
+      } else {
+        PyGILState_STATE state = PyGILState_Ensure();
+        Py_XDECREF(GetValue());
+        PyGILState_Release(state);
+      }
+    }
     SetValue(nullptr);
   }
 
@@ -229,7 +250,7 @@ struct PythonFormat<
 
 class PythonObject {
 public:
-  PythonObject() : m_py_obj(nullptr) {}
+  PythonObject() = default;
 
   PythonObject(PyRefType type, PyObject *py_obj) {
     m_py_obj = py_obj;
@@ -252,8 +273,16 @@ public:
   ~PythonObject() { Reset(); }
 
   void Reset() {
-    if (m_py_obj && Py_IsInitialized())
-      Py_DECREF(m_py_obj);
+    if (m_py_obj && Py_IsInitialized()) {
+      if (_Py_IsFinalizing()) {
+        // Leak m_py_obj rather than crashing the process.
+        // https://docs.python.org/3/c-api/init.html#c.PyGILState_Ensure
+      } else {
+        PyGILState_STATE state = PyGILState_Ensure();
+        Py_DECREF(m_py_obj);
+        PyGILState_Release(state);
+      }
+    }
     m_py_obj = nullptr;
   }
 
@@ -378,7 +407,7 @@ public:
   }
 
 protected:
-  PyObject *m_py_obj;
+  PyObject *m_py_obj = nullptr;
 };
 
 
@@ -421,7 +450,7 @@ public:
       Py_DECREF(py_obj);
   }
 
-  TypedPythonObject() {}
+  TypedPythonObject() = default;
 };
 
 class PythonBytes : public TypedPythonObject<PythonBytes> {

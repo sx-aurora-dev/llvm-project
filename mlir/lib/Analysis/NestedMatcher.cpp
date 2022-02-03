@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include "mlir/Analysis/NestedMatcher.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -39,14 +41,37 @@ llvm::BumpPtrAllocator *&NestedPattern::allocator() {
   return allocator;
 }
 
+void NestedPattern::copyNestedToThis(ArrayRef<NestedPattern> nested) {
+  if (nested.empty())
+    return;
+
+  auto *newNested = allocator()->Allocate<NestedPattern>(nested.size());
+  std::uninitialized_copy(nested.begin(), nested.end(), newNested);
+  nestedPatterns = ArrayRef<NestedPattern>(newNested, nested.size());
+}
+
+void NestedPattern::freeNested() {
+  for (const auto &p : nestedPatterns)
+    p.~NestedPattern();
+}
+
 NestedPattern::NestedPattern(ArrayRef<NestedPattern> nested,
                              FilterFunctionType filter)
-    : nestedPatterns(), filter(filter), skip(nullptr) {
-  if (!nested.empty()) {
-    auto *newNested = allocator()->Allocate<NestedPattern>(nested.size());
-    std::uninitialized_copy(nested.begin(), nested.end(), newNested);
-    nestedPatterns = ArrayRef<NestedPattern>(newNested, nested.size());
-  }
+    : nestedPatterns(), filter(std::move(filter)), skip(nullptr) {
+  copyNestedToThis(nested);
+}
+
+NestedPattern::NestedPattern(const NestedPattern &other)
+    : nestedPatterns(), filter(other.filter), skip(other.skip) {
+  copyNestedToThis(other.nestedPatterns);
+}
+
+NestedPattern &NestedPattern::operator=(const NestedPattern &other) {
+  freeNested();
+  filter = other.filter;
+  skip = other.skip;
+  copyNestedToThis(other.nestedPatterns);
+  return *this;
 }
 
 unsigned NestedPattern::getDepth() const {
@@ -109,13 +134,13 @@ namespace mlir {
 namespace matcher {
 
 NestedPattern Op(FilterFunctionType filter) {
-  return NestedPattern({}, filter);
+  return NestedPattern({}, std::move(filter));
 }
 
-NestedPattern If(NestedPattern child) {
+NestedPattern If(const NestedPattern &child) {
   return NestedPattern(child, isAffineIfOp);
 }
-NestedPattern If(FilterFunctionType filter, NestedPattern child) {
+NestedPattern If(const FilterFunctionType &filter, const NestedPattern &child) {
   return NestedPattern(child, [filter](Operation &op) {
     return isAffineIfOp(op) && filter(op);
   });
@@ -123,23 +148,26 @@ NestedPattern If(FilterFunctionType filter, NestedPattern child) {
 NestedPattern If(ArrayRef<NestedPattern> nested) {
   return NestedPattern(nested, isAffineIfOp);
 }
-NestedPattern If(FilterFunctionType filter, ArrayRef<NestedPattern> nested) {
+NestedPattern If(const FilterFunctionType &filter,
+                 ArrayRef<NestedPattern> nested) {
   return NestedPattern(nested, [filter](Operation &op) {
     return isAffineIfOp(op) && filter(op);
   });
 }
 
-NestedPattern For(NestedPattern child) {
+NestedPattern For(const NestedPattern &child) {
   return NestedPattern(child, isAffineForOp);
 }
-NestedPattern For(FilterFunctionType filter, NestedPattern child) {
+NestedPattern For(const FilterFunctionType &filter,
+                  const NestedPattern &child) {
   return NestedPattern(
       child, [=](Operation &op) { return isAffineForOp(op) && filter(op); });
 }
 NestedPattern For(ArrayRef<NestedPattern> nested) {
   return NestedPattern(nested, isAffineForOp);
 }
-NestedPattern For(FilterFunctionType filter, ArrayRef<NestedPattern> nested) {
+NestedPattern For(const FilterFunctionType &filter,
+                  ArrayRef<NestedPattern> nested) {
   return NestedPattern(
       nested, [=](Operation &op) { return isAffineForOp(op) && filter(op); });
 }
@@ -148,5 +176,5 @@ bool isLoadOrStore(Operation &op) {
   return isa<AffineLoadOp, AffineStoreOp>(op);
 }
 
-} // end namespace matcher
-} // end namespace mlir
+} // namespace matcher
+} // namespace mlir

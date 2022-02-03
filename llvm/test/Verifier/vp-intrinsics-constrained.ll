@@ -11,6 +11,6 @@ define void @test_vp_rounding(<8 x double> %f0, <8 x double> %f1, <8 x double> %
   ret void
 }
 
-declare <8 x double> @llvm.vp.fadd.v8f64(<8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
+declare <8 x double> @llvm.vp.fadd.v8f64(<8 x double>, <8 x double>, <8 x i1>, i32)
 
 attributes #0 = { strictfp }

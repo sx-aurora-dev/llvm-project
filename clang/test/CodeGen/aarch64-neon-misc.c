@@ -2,7 +2,7 @@
 // RUN:  -disable-O0-optnone -fallow-half-arguments-and-returns -emit-llvm -o - %s \
 // RUN: | opt -S -mem2reg | FileCheck %s
 
-// Test new aarch64 intrinsics and types
+// REQUIRES: aarch64-registered-target || arm-registered-target
 
 #include <arm_neon.h>
 
@@ -1766,42 +1766,42 @@ poly8x16_t test_vmvnq_p8(poly8x16_t a) {
 }
 
 // CHECK-LABEL: @test_vrbit_s8(
-// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.aarch64.neon.rbit.v8i8(<8 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.bitreverse.v8i8(<8 x i8> %a)
 // CHECK:   ret <8 x i8> [[VRBIT_I]]
 int8x8_t test_vrbit_s8(int8x8_t a) {
   return vrbit_s8(a);
 }
 
 // CHECK-LABEL: @test_vrbitq_s8(
-// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.aarch64.neon.rbit.v16i8(<16 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.bitreverse.v16i8(<16 x i8> %a)
 // CHECK:   ret <16 x i8> [[VRBIT_I]]
 int8x16_t test_vrbitq_s8(int8x16_t a) {
   return vrbitq_s8(a);
 }
 
 // CHECK-LABEL: @test_vrbit_u8(
-// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.aarch64.neon.rbit.v8i8(<8 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.bitreverse.v8i8(<8 x i8> %a)
 // CHECK:   ret <8 x i8> [[VRBIT_I]]
 uint8x8_t test_vrbit_u8(uint8x8_t a) {
   return vrbit_u8(a);
 }
 
 // CHECK-LABEL: @test_vrbitq_u8(
-// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.aarch64.neon.rbit.v16i8(<16 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.bitreverse.v16i8(<16 x i8> %a)
 // CHECK:   ret <16 x i8> [[VRBIT_I]]
 uint8x16_t test_vrbitq_u8(uint8x16_t a) {
   return vrbitq_u8(a);
 }
 
 // CHECK-LABEL: @test_vrbit_p8(
-// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.aarch64.neon.rbit.v8i8(<8 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <8 x i8> @llvm.bitreverse.v8i8(<8 x i8> %a)
 // CHECK:   ret <8 x i8> [[VRBIT_I]]
 poly8x8_t test_vrbit_p8(poly8x8_t a) {
   return vrbit_p8(a);
 }
 
 // CHECK-LABEL: @test_vrbitq_p8(
-// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.aarch64.neon.rbit.v16i8(<16 x i8> %a)
+// CHECK:   [[VRBIT_I:%.*]] = call <16 x i8> @llvm.bitreverse.v16i8(<16 x i8> %a)
 // CHECK:   ret <16 x i8> [[VRBIT_I]]
 poly8x16_t test_vrbitq_p8(poly8x16_t a) {
   return vrbitq_p8(a);
@@ -2287,7 +2287,7 @@ float64x2_t test_vcvt_high_f64_f32(float32x4_t a) {
 
 // CHECK-LABEL: @test_vrndnq_f64(
 // CHECK:   [[TMP0:%.*]] = bitcast <2 x double> %a to <16 x i8>
-// CHECK:   [[VRNDN1_I:%.*]] = call <2 x double> @llvm.aarch64.neon.frintn.v2f64(<2 x double> %a)
+// CHECK:   [[VRNDN1_I:%.*]] = call <2 x double> @llvm.roundeven.v2f64(<2 x double> %a)
 // CHECK:   ret <2 x double> [[VRNDN1_I]]
 float64x2_t test_vrndnq_f64(float64x2_t a) {
   return vrndnq_f64(a);

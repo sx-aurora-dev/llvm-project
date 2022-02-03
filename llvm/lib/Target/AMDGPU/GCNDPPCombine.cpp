@@ -54,21 +54,20 @@ namespace {
 class GCNDPPCombine : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   const SIInstrInfo *TII;
+  const GCNSubtarget *ST;
 
   using RegSubRegPair = TargetInstrInfo::RegSubRegPair;
 
   MachineOperand *getOldOpndValue(MachineOperand &OldOpnd) const;
 
-  MachineInstr *createDPPInst(MachineInstr &OrigMI,
-                              MachineInstr &MovMI,
+  MachineInstr *createDPPInst(MachineInstr &OrigMI, MachineInstr &MovMI,
                               RegSubRegPair CombOldVGPR,
-                              MachineOperand *OldOpnd,
-                              bool CombBCZ) const;
+                              MachineOperand *OldOpnd, bool CombBCZ,
+                              bool IsShrinkable) const;
 
-  MachineInstr *createDPPInst(MachineInstr &OrigMI,
-                              MachineInstr &MovMI,
-                              RegSubRegPair CombOldVGPR,
-                              bool CombBCZ) const;
+  MachineInstr *createDPPInst(MachineInstr &OrigMI, MachineInstr &MovMI,
+                              RegSubRegPair CombOldVGPR, bool CombBCZ,
+                              bool IsShrinkable) const;
 
   bool hasNoImmOrEqual(MachineInstr &MI,
                        unsigned OpndName,
@@ -99,7 +98,8 @@ public:
   }
 
 private:
-  int getDPPOp(unsigned Op) const;
+  int getDPPOp(unsigned Op, bool IsShrinkable) const;
+  bool isShrinkable(MachineInstr &MI) const;
 };
 
 } // end anonymous namespace
@@ -114,11 +114,40 @@ FunctionPass *llvm::createGCNDPPCombinePass() {
   return new GCNDPPCombine();
 }
 
-int GCNDPPCombine::getDPPOp(unsigned Op) const {
+bool GCNDPPCombine::isShrinkable(MachineInstr &MI) const {
+  unsigned Op = MI.getOpcode();
+  if (!TII->isVOP3(Op)) {
+    return false;
+  }
+  if (!TII->hasVALU32BitEncoding(Op)) {
+    LLVM_DEBUG(dbgs() << "  Inst hasn't e32 equivalent\n");
+    return false;
+  }
+  if (const auto *SDst = TII->getNamedOperand(MI, AMDGPU::OpName::sdst)) {
+    // Give up if there are any uses of the carry-out from instructions like
+    // V_ADD_CO_U32. The shrunken form of the instruction would write it to vcc
+    // instead of to a virtual register.
+    if (!MRI->use_nodbg_empty(SDst->getReg()))
+      return false;
+  }
+  // check if other than abs|neg modifiers are set (opsel for example)
+  const int64_t Mask = ~(SISrcMods::ABS | SISrcMods::NEG);
+  if (!hasNoImmOrEqual(MI, AMDGPU::OpName::src0_modifiers, 0, Mask) ||
+      !hasNoImmOrEqual(MI, AMDGPU::OpName::src1_modifiers, 0, Mask) ||
+      !hasNoImmOrEqual(MI, AMDGPU::OpName::clamp, 0) ||
+      !hasNoImmOrEqual(MI, AMDGPU::OpName::omod, 0)) {
+    LLVM_DEBUG(dbgs() << "  Inst has non-default modifiers\n");
+    return false;
+  }
+  return true;
+}
+
+int GCNDPPCombine::getDPPOp(unsigned Op, bool IsShrinkable) const {
   auto DPP32 = AMDGPU::getDPPOp32(Op);
-  if (DPP32 == -1) {
+  if (IsShrinkable) {
+    assert(DPP32 == -1);
     auto E32 = AMDGPU::getVOPe32(Op);
-    DPP32 = (E32 == -1)? -1 : AMDGPU::getDPPOp32(E32);
+    DPP32 = (E32 == -1) ? -1 : AMDGPU::getDPPOp32(E32);
   }
   return (DPP32 == -1 || TII->pseudoToMCOpcode(DPP32) == -1) ? -1 : DPP32;
 }
@@ -151,12 +180,13 @@ MachineOperand *GCNDPPCombine::getOldOpndValue(MachineOperand &OldOpnd) const {
 MachineInstr *GCNDPPCombine::createDPPInst(MachineInstr &OrigMI,
                                            MachineInstr &MovMI,
                                            RegSubRegPair CombOldVGPR,
-                                           bool CombBCZ) const {
+                                           bool CombBCZ,
+                                           bool IsShrinkable) const {
   assert(MovMI.getOpcode() == AMDGPU::V_MOV_B32_dpp ||
          MovMI.getOpcode() == AMDGPU::V_MOV_B64_DPP_PSEUDO);
 
   auto OrigOp = OrigMI.getOpcode();
-  auto DPPOp = getDPPOp(OrigOp);
+  auto DPPOp = getDPPOp(OrigOp, IsShrinkable);
   if (DPPOp == -1) {
     LLVM_DEBUG(dbgs() << "  failed: no DPP opcode\n");
     return nullptr;
@@ -314,11 +344,9 @@ static bool isIdentityValue(unsigned OrigMIOp, MachineOperand *OldOpnd) {
   return false;
 }
 
-MachineInstr *GCNDPPCombine::createDPPInst(MachineInstr &OrigMI,
-                                           MachineInstr &MovMI,
-                                           RegSubRegPair CombOldVGPR,
-                                           MachineOperand *OldOpndValue,
-                                           bool CombBCZ) const {
+MachineInstr *GCNDPPCombine::createDPPInst(
+    MachineInstr &OrigMI, MachineInstr &MovMI, RegSubRegPair CombOldVGPR,
+    MachineOperand *OldOpndValue, bool CombBCZ, bool IsShrinkable) const {
   assert(CombOldVGPR.Reg);
   if (!CombBCZ && OldOpndValue && OldOpndValue->isImm()) {
     auto *Src1 = TII->getNamedOperand(OrigMI, AMDGPU::OpName::src1);
@@ -338,7 +366,7 @@ MachineInstr *GCNDPPCombine::createDPPInst(MachineInstr &OrigMI,
       return nullptr;
     }
   }
-  return createDPPInst(OrigMI, MovMI, CombOldVGPR, CombBCZ);
+  return createDPPInst(OrigMI, MovMI, CombOldVGPR, CombBCZ, IsShrinkable);
 }
 
 // returns true if MI doesn't have OpndName immediate operand or the
@@ -503,21 +531,8 @@ bool GCNDPPCombine::combineDPPMov(MachineInstr &MovMI) const {
       continue;
     }
 
-    if (TII->isVOP3(OrigOp)) {
-      if (!TII->hasVALU32BitEncoding(OrigOp)) {
-        LLVM_DEBUG(dbgs() << "  failed: VOP3 hasn't e32 equivalent\n");
-        break;
-      }
-      // check if other than abs|neg modifiers are set (opsel for example)
-      const int64_t Mask = ~(SISrcMods::ABS | SISrcMods::NEG);
-      if (!hasNoImmOrEqual(OrigMI, AMDGPU::OpName::src0_modifiers, 0, Mask) ||
-          !hasNoImmOrEqual(OrigMI, AMDGPU::OpName::src1_modifiers, 0, Mask) ||
-          !hasNoImmOrEqual(OrigMI, AMDGPU::OpName::clamp, 0) ||
-          !hasNoImmOrEqual(OrigMI, AMDGPU::OpName::omod, 0)) {
-        LLVM_DEBUG(dbgs() << "  failed: VOP3 has non-default modifiers\n");
-        break;
-      }
-    } else if (!TII->isVOP1(OrigOp) && !TII->isVOP2(OrigOp)) {
+    bool IsShrinkable = isShrinkable(OrigMI);
+    if (!(IsShrinkable || TII->isVOP1(OrigOp) || TII->isVOP2(OrigOp))) {
       LLVM_DEBUG(dbgs() << "  failed: not VOP1/2/3\n");
       break;
     }
@@ -542,7 +557,7 @@ bool GCNDPPCombine::combineDPPMov(MachineInstr &MovMI) const {
     LLVM_DEBUG(dbgs() << "  combining: " << OrigMI);
     if (Use == Src0) {
       if (auto *DPPInst = createDPPInst(OrigMI, MovMI, CombOldVGPR,
-                                        OldOpndValue, CombBCZ)) {
+                                        OldOpndValue, CombBCZ, IsShrinkable)) {
         DPPMIs.push_back(DPPInst);
         Rollback = false;
       }
@@ -553,8 +568,9 @@ bool GCNDPPCombine::combineDPPMov(MachineInstr &MovMI) const {
       BB->insert(OrigMI, NewMI);
       if (TII->commuteInstruction(*NewMI)) {
         LLVM_DEBUG(dbgs() << "  commuted:  " << *NewMI);
-        if (auto *DPPInst = createDPPInst(*NewMI, MovMI, CombOldVGPR,
-                                          OldOpndValue, CombBCZ)) {
+        if (auto *DPPInst =
+                createDPPInst(*NewMI, MovMI, CombOldVGPR, OldOpndValue, CombBCZ,
+                              IsShrinkable)) {
           DPPMIs.push_back(DPPInst);
           Rollback = false;
         }
@@ -587,22 +603,21 @@ bool GCNDPPCombine::combineDPPMov(MachineInstr &MovMI) const {
 }
 
 bool GCNDPPCombine::runOnMachineFunction(MachineFunction &MF) {
-  auto &ST = MF.getSubtarget<GCNSubtarget>();
-  if (!ST.hasDPP() || skipFunction(MF.getFunction()))
+  ST = &MF.getSubtarget<GCNSubtarget>();
+  if (!ST->hasDPP() || skipFunction(MF.getFunction()))
     return false;
 
   MRI = &MF.getRegInfo();
-  TII = ST.getInstrInfo();
+  TII = ST->getInstrInfo();
 
   bool Changed = false;
   for (auto &MBB : MF) {
-    for (auto I = MBB.rbegin(), E = MBB.rend(); I != E;) {
-      auto &MI = *I++;
+    for (MachineInstr &MI : llvm::make_early_inc_range(llvm::reverse(MBB))) {
       if (MI.getOpcode() == AMDGPU::V_MOV_B32_dpp && combineDPPMov(MI)) {
         Changed = true;
         ++NumDPPMovsCombined;
       } else if (MI.getOpcode() == AMDGPU::V_MOV_B64_DPP_PSEUDO) {
-        if (ST.has64BitDPP() && combineDPPMov(MI)) {
+        if (ST->has64BitDPP() && combineDPPMov(MI)) {
           Changed = true;
           ++NumDPPMovsCombined;
         } else {

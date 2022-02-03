@@ -176,7 +176,7 @@ struct LTOCodeGenerator {
   /// created using the \p AddStream callback. Returns true on success.
   ///
   /// Calls \a verifyMergedModuleOnce().
-  bool compileOptimized(lto::AddStreamFn AddStream, unsigned ParallelismLevel);
+  bool compileOptimized(AddStreamFn AddStream, unsigned ParallelismLevel);
 
   /// Enable the Freestanding mode: indicate that the optimizer should not
   /// assume builtins are present on the target.
@@ -240,5 +240,9 @@ private:
 
   lto::Config Config;
 };
+
+/// A convenience function that calls cl::ParseCommandLineOptions on the given
+/// set of options.
+void parseCommandLineOptions(std::vector<std::string> &Options);
 }
 #endif

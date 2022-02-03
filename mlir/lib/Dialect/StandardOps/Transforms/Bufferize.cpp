@@ -10,76 +10,62 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Transforms/Bufferize.h"
+#include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
 #include "PassDetail.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/Transforms/Passes.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 
 namespace {
-class BufferizeDimOp : public OpConversionPattern<DimOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(DimOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    DimOp::Adaptor adaptor(operands);
-    rewriter.replaceOpWithNewOp<DimOp>(op, adaptor.memrefOrTensor(),
-                                       adaptor.index());
-    return success();
-  }
-};
-} // namespace
-
-namespace {
 class BufferizeSelectOp : public OpConversionPattern<SelectOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(SelectOp op, ArrayRef<Value> operands,
+  matchAndRewrite(SelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!op.condition().getType().isa<IntegerType>())
+    if (!op.getCondition().getType().isa<IntegerType>())
       return rewriter.notifyMatchFailure(op, "requires scalar condition");
 
-    SelectOp::Adaptor adaptor(operands);
-    rewriter.replaceOpWithNewOp<SelectOp>(
-        op, adaptor.condition(), adaptor.true_value(), adaptor.false_value());
+    rewriter.replaceOpWithNewOp<SelectOp>(op, adaptor.getCondition(),
+                                          adaptor.getTrueValue(),
+                                          adaptor.getFalseValue());
     return success();
   }
 };
 } // namespace
 
-void mlir::populateStdBufferizePatterns(MLIRContext *context,
-                                        BufferizeTypeConverter &typeConverter,
-                                        OwningRewritePatternList &patterns) {
-  patterns.insert<BufferizeDimOp, BufferizeSelectOp>(typeConverter, context);
+void mlir::populateStdBufferizePatterns(
+    bufferization::BufferizeTypeConverter &typeConverter,
+    RewritePatternSet &patterns) {
+  patterns.add<BufferizeSelectOp>(typeConverter, patterns.getContext());
 }
 
 namespace {
 struct StdBufferizePass : public StdBufferizeBase<StdBufferizePass> {
   void runOnFunction() override {
     auto *context = &getContext();
-    BufferizeTypeConverter typeConverter;
-    OwningRewritePatternList patterns;
+    bufferization::BufferizeTypeConverter typeConverter;
+    RewritePatternSet patterns(context);
     ConversionTarget target(*context);
 
-    target.addLegalDialect<StandardOpsDialect>();
-    target.addLegalDialect<scf::SCFDialect>();
+    target.addLegalDialect<scf::SCFDialect, StandardOpsDialect,
+                           memref::MemRefDialect>();
 
-    populateStdBufferizePatterns(context, typeConverter, patterns);
+    populateStdBufferizePatterns(typeConverter, patterns);
     // We only bufferize the case of tensor selected type and scalar condition,
     // as that boils down to a select over memref descriptors (don't need to
     // touch the data).
     target.addDynamicallyLegalOp<SelectOp>([&](SelectOp op) {
       return typeConverter.isLegal(op.getType()) ||
-             !op.condition().getType().isa<IntegerType>();
+             !op.getCondition().getType().isa<IntegerType>();
     });
-    target.addDynamicallyLegalOp<DimOp>(
-        [&](DimOp op) { return typeConverter.isLegal(op); });
     if (failed(
             applyPartialConversion(getFunction(), target, std::move(patterns))))
       signalPassFailure();

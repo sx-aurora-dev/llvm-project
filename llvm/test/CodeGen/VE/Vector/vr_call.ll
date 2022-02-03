@@ -66,7 +66,7 @@ define fastcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <256 x i3
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s11, -6384(, %s11)
+; CHECK-NEXT:    lea %s11, -4336(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB3_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -80,11 +80,7 @@ define fastcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <256 x i3
 ; CHECK-NEXT:  .LBB3_2:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, -2048(, %s9)
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vst %v18, 8, %s0 # 2048-byte Folded Spill
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, -6144(, %s9)
+; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vst %v18, 16, %s0
 ; CHECK-NEXT:    lea %s0, 8(, %s0)
@@ -109,15 +105,11 @@ define fastcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <256 x i3
 ; CHECK-NEXT:    vor %v1, (0)1, %v18
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, -6144(, %s9)
+; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vld %v18, 16, %s0
 ; CHECK-NEXT:    lea %s0, 8(, %s0)
 ; CHECK-NEXT:    vld %v19, 16, %s0 # 4096-byte Folded Reload
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, -2048(, %s9)
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vld %v18, 8, %s0 # 2048-byte Folded Reload
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
 ; CHECK-NEXT:    ld %s10, 8(, %s11)

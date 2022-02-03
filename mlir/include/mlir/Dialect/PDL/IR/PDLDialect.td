@@ -35,8 +35,8 @@ def PDL_Dialect : Dialect {
     a `pdl.rewrite` that either dispatches to an external rewriter or contains
     a region for the rewrite specified via `pdl`. The types of values in `pdl`
     are handle types to MLIR C++ types, with `!pdl.attribute`, `!pdl.operation`,
-    and `!pdl.type` directly mapping to `mlir::Attribute`, `mlir::Operation*`,
-    and `mlir::Value` respectively.
+    `!pdl.value`, and `!pdl.type` directly mapping to `mlir::Attribute`,
+    `mlir::Operation*`, `mlir::Value`, and `mlir::Type` respectively.
 
     An example pattern is shown below:
 
@@ -48,7 +48,7 @@ def PDL_Dialect : Dialect {
 
       %resultType = pdl.type
       %inputOperand = pdl.operand
-      %root, %results = pdl.operation "foo.op"(%inputOperand) -> %resultType
+      %root = pdl.operation "foo.op"(%inputOperand) -> %resultType
       pdl.rewrite %root {
         pdl.replace %root with (%inputOperand)
       }
@@ -64,6 +64,9 @@ def PDL_Dialect : Dialect {
 
   let name = "pdl";
   let cppNamespace = "::mlir::pdl";
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // MLIR_DIALECT_PDL_IR_PDLDIALECT

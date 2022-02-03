@@ -22,14 +22,17 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/Stmt.h"
+#include "clang/Basic/CharInfo.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Tooling/Syntax/Tokens.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/JSON.h"
 #include <algorithm>
 
 namespace clang {
@@ -156,13 +159,17 @@ llvm::DenseSet<const NamedDecl *> locateDeclAt(ParsedAST &AST,
   return Result;
 }
 
-// By default, we exclude C++ standard symbols and protobuf symbols as rename
-// these symbols would change system/generated files which are unlikely to be
-// modified.
+// By default, we exclude symbols from system headers and protobuf symbols as
+// renaming these symbols would change system/generated files which are unlikely
+// to be good candidates for modification.
 bool isExcluded(const NamedDecl &RenameDecl) {
-  if (isProtoFile(RenameDecl.getLocation(),
-                  RenameDecl.getASTContext().getSourceManager()))
+  const auto &SM = RenameDecl.getASTContext().getSourceManager();
+  if (SM.isInSystemHeader(RenameDecl.getLocation()))
     return true;
+  if (isProtoFile(RenameDecl.getLocation(), SM))
+    return true;
+  // FIXME: Remove this std symbol list, as they should be covered by the
+  // above isInSystemHeader check.
   static const auto *StdSymbols = new llvm::DenseSet<llvm::StringRef>({
 #define SYMBOL(Name, NameSpace, Header) {#NameSpace #Name},
 #include "StdSymbolMap.inc"
@@ -178,8 +185,7 @@ enum class ReasonToReject {
   UnsupportedSymbol,
   AmbiguousSymbol,
 
-  // name validation.
-  RenameToKeywords,
+  // name validation. FIXME: reconcile with InvalidName
   SameName,
 };
 
@@ -241,8 +247,6 @@ llvm::Error makeError(ReasonToReject Reason) {
       return "symbol is not a supported kind (e.g. namespace, macro)";
     case ReasonToReject::AmbiguousSymbol:
       return "there are multiple symbols at the given location";
-    case ReasonToReject::RenameToKeywords:
-      return "the chosen name is a keyword";
     case ReasonToReject::SameName:
       return "new name is the same as the old name";
     }
@@ -437,6 +441,7 @@ struct InvalidName {
   enum Kind {
     Keywords,
     Conflict,
+    BadIdentifier,
   };
   Kind K;
   std::string Details;
@@ -447,22 +452,43 @@ std::string toString(InvalidName::Kind K) {
     return "Keywords";
   case InvalidName::Conflict:
     return "Conflict";
+  case InvalidName::BadIdentifier:
+    return "BadIdentifier";
   }
   llvm_unreachable("unhandled InvalidName kind");
 }
 
 llvm::Error makeError(InvalidName Reason) {
-  auto Message = [](InvalidName Reason) {
+  auto Message = [](const InvalidName &Reason) {
     switch (Reason.K) {
     case InvalidName::Keywords:
       return llvm::formatv("the chosen name \"{0}\" is a keyword",
                            Reason.Details);
     case InvalidName::Conflict:
       return llvm::formatv("conflict with the symbol in {0}", Reason.Details);
+    case InvalidName::BadIdentifier:
+      return llvm::formatv("the chosen name \"{0}\" is not a valid identifier",
+                           Reason.Details);
     }
     llvm_unreachable("unhandled InvalidName kind");
   };
   return error("invalid name: {0}", Message(Reason));
+}
+
+static bool mayBeValidIdentifier(llvm::StringRef Ident) {
+  assert(llvm::json::isUTF8(Ident));
+  if (Ident.empty())
+    return false;
+  // We don't check all the rules for non-ascii characters (most are allowed).
+  bool AllowDollar = true; // lenient
+  if (llvm::isASCII(Ident.front()) &&
+      !isAsciiIdentifierStart(Ident.front(), AllowDollar))
+    return false;
+  for (char C : Ident) {
+    if (llvm::isASCII(C) && !isAsciiIdentifierContinue(C, AllowDollar))
+      return false;
+  }
+  return true;
 }
 
 // Check if we can rename the given RenameDecl into NewName.
@@ -476,6 +502,8 @@ llvm::Optional<InvalidName> checkName(const NamedDecl &RenameDecl,
   llvm::Optional<InvalidName> Result;
   if (isKeyword(NewName, ASTCtx.getLangOpts()))
     Result = InvalidName{InvalidName::Keywords, NewName.str()};
+  else if (!mayBeValidIdentifier(NewName))
+    Result = InvalidName{InvalidName::BadIdentifier, NewName.str()};
   else {
     // Name conflict detection.
     // Function conflicts are subtle (overloading), so ignore them.
@@ -709,7 +737,7 @@ llvm::Expected<RenameResult> rename(const RenameInputs &RInputs) {
     return makeError(ReasonToReject::SameName);
   auto Invalid = checkName(RenameDecl, RInputs.NewName);
   if (Invalid)
-    return makeError(*Invalid);
+    return makeError(std::move(*Invalid));
 
   auto Reject = renameable(RenameDecl, RInputs.MainFilePath, RInputs.Index);
   if (Reject)
@@ -727,6 +755,26 @@ llvm::Expected<RenameResult> rename(const RenameInputs &RInputs) {
   auto MainFileRenameEdit = renameWithinFile(AST, RenameDecl, RInputs.NewName);
   if (!MainFileRenameEdit)
     return MainFileRenameEdit.takeError();
+
+  // Check the rename-triggering location is actually being renamed.
+  // This is a robustness check to avoid surprising rename results -- if the
+  // the triggering location is not actually the name of the node we identified
+  // (e.g. for broken code), then rename is likely not what users expect, so we
+  // reject this kind of rename.
+  auto StartOffset = positionToOffset(MainFileCode, CurrentIdentifier.start);
+  auto EndOffset = positionToOffset(MainFileCode, CurrentIdentifier.end);
+  if (!StartOffset)
+    return StartOffset.takeError();
+  if (!EndOffset)
+    return EndOffset.takeError();
+  if (llvm::find_if(
+          *MainFileRenameEdit,
+          [&StartOffset, &EndOffset](const clang::tooling::Replacement &R) {
+            return R.getOffset() == *StartOffset &&
+                   R.getLength() == *EndOffset - *StartOffset;
+          }) == MainFileRenameEdit->end()) {
+    return makeError(ReasonToReject::NoSymbolFound);
+  }
   RenameResult Result;
   Result.Target = CurrentIdentifier;
   Edit MainFileEdits = Edit(MainFileCode, std::move(*MainFileRenameEdit));
@@ -862,7 +910,7 @@ llvm::Optional<std::vector<Range>> getMappedRanges(ArrayRef<Range> Indexed,
 
   std::vector<size_t> Best;
   size_t BestCost = std::numeric_limits<size_t>::max();
-  bool HasMultiple = 0;
+  bool HasMultiple = false;
   std::vector<size_t> ResultStorage;
   int Fuel = 10000;
   findNearMiss(ResultStorage, Indexed, Lexed, 0, Fuel,
