@@ -164,7 +164,7 @@ defm : narrow_dce<v512i32>;
 ///// vec_broadcast /////
 
 multiclass vbrd_elem32<ValueType v32, ValueType s32, SDPatternOperator ImmOp,
-                       SDNodeXForm ImmCast, SDNodeXForm SuperRegCast> {
+                       SDNodeXForm ImmCast, OutPatFrag SuperRegCast> {
   // VBRDil
   def : Pat<(v32 (vec_broadcast (s32 ImmOp:$sy), i32:$vl)),
             (VBRDil (ImmCast $sy), i32:$vl)>;
@@ -186,8 +186,8 @@ multiclass vbrd_elem64<ValueType v64, ValueType s64,
 }
 
 multiclass extract_insert_elem32<ValueType v32, ValueType s32,
-                                 SDNodeXForm SubRegCast,
-                                 SDNodeXForm SuperRegCast> {
+                                 OutPatFrag SubRegCast,
+                                 OutPatFrag SuperRegCast> {
   // LVSvi
   def: Pat<(s32 (extractelt v32:$vec, uimm7:$idx)),
            (SubRegCast (LVSvi v32:$vec, (ULO7 $idx)))>;
@@ -221,7 +221,7 @@ multiclass extract_insert_elem64<ValueType v64, ValueType s64> {
 
 multiclass patterns_elem32<ValueType v32, ValueType s32,
                            SDPatternOperator ImmOp, SDNodeXForm ImmCast,
-                           SDNodeXForm SubRegCast, SDNodeXForm SuperRegCast> {
+                           OutPatFrag SubRegCast, OutPatFrag SuperRegCast> {
   defm : vbrd_elem32<v32, s32, ImmOp, ImmCast, SuperRegCast>;
   defm : extract_insert_elem32<v32, s32, SubRegCast, SuperRegCast>;
 }

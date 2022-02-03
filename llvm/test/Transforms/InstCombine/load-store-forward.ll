@@ -2,15 +2,14 @@
 ; RUN: opt -S -instcombine < %s | FileCheck %s --check-prefixes=CHECK,LITTLE
 ; RUN: opt -S -instcombine -data-layout="E" < %s | FileCheck %s --check-prefixes=CHECK,BIG
 
-; Some cases where store to load forwarding is principally possible,
-; but is non-trivial.
-
 define i8 @load_smaller_int(i16* %p) {
-; CHECK-LABEL: @load_smaller_int(
-; CHECK-NEXT:    store i16 258, i16* [[P:%.*]], align 2
-; CHECK-NEXT:    [[P2:%.*]] = bitcast i16* [[P]] to i8*
-; CHECK-NEXT:    [[LOAD:%.*]] = load i8, i8* [[P2]], align 1
-; CHECK-NEXT:    ret i8 [[LOAD]]
+; LITTLE-LABEL: @load_smaller_int(
+; LITTLE-NEXT:    store i16 258, i16* [[P:%.*]], align 2
+; LITTLE-NEXT:    ret i8 2
+;
+; BIG-LABEL: @load_smaller_int(
+; BIG-NEXT:    store i16 258, i16* [[P:%.*]], align 2
+; BIG-NEXT:    ret i8 1
 ;
   store i16 258, i16* %p
   %p2 = bitcast i16* %p to i8*
@@ -18,16 +17,54 @@ define i8 @load_smaller_int(i16* %p) {
   ret i8 %load
 }
 
+; This case can *not* be forwarded, as we only see part of the stored value.
+define i32 @load_larger_int(i16* %p) {
+; CHECK-LABEL: @load_larger_int(
+; CHECK-NEXT:    store i16 258, i16* [[P:%.*]], align 2
+; CHECK-NEXT:    [[P2:%.*]] = bitcast i16* [[P]] to i32*
+; CHECK-NEXT:    [[LOAD:%.*]] = load i32, i32* [[P2]], align 4
+; CHECK-NEXT:    ret i32 [[LOAD]]
+;
+  store i16 258, i16* %p
+  %p2 = bitcast i16* %p to i32*
+  %load = load i32, i32* %p2
+  ret i32 %load
+}
+
 define i32 @vec_store_load_first(i32* %p) {
 ; CHECK-LABEL: @vec_store_load_first(
 ; CHECK-NEXT:    [[P2:%.*]] = bitcast i32* [[P:%.*]] to <2 x i32>*
 ; CHECK-NEXT:    store <2 x i32> <i32 1, i32 2>, <2 x i32>* [[P2]], align 8
-; CHECK-NEXT:    [[LOAD:%.*]] = load i32, i32* [[P]], align 4
-; CHECK-NEXT:    ret i32 [[LOAD]]
+; CHECK-NEXT:    ret i32 1
 ;
   %p2 = bitcast i32* %p to <2 x i32>*
   store <2 x i32> <i32 1, i32 2>, <2 x i32>* %p2
   %load = load i32, i32* %p
+  ret i32 %load
+}
+
+define i17 @vec_store_load_first_odd_size(i17* %p) {
+; CHECK-LABEL: @vec_store_load_first_odd_size(
+; CHECK-NEXT:    [[P2:%.*]] = bitcast i17* [[P:%.*]] to <2 x i17>*
+; CHECK-NEXT:    store <2 x i17> <i17 1, i17 2>, <2 x i17>* [[P2]], align 8
+; CHECK-NEXT:    ret i17 1
+;
+  %p2 = bitcast i17* %p to <2 x i17>*
+  store <2 x i17> <i17 1, i17 2>, <2 x i17>* %p2
+  %load = load i17, i17* %p
+  ret i17 %load
+}
+
+define i32 @vec_store_load_first_constexpr(i32* %p) {
+; CHECK-LABEL: @vec_store_load_first_constexpr(
+; CHECK-NEXT:    [[P2:%.*]] = bitcast i32* [[P:%.*]] to <2 x i32>*
+; CHECK-NEXT:    store <2 x i32> bitcast (i64 ptrtoint (i32 (i32*)* @vec_store_load_first to i64) to <2 x i32>), <2 x i32>* [[P2]], align 8
+; CHECK-NEXT:    [[LOAD:%.*]] = load i32, i32* [[P]], align 4
+; CHECK-NEXT:    ret i32 [[LOAD]]
+;
+  %p2 = bitcast i32* %p to <2 x i32>*
+  store <2 x i32> bitcast (i64 ptrtoint (i32 (i32*)* @vec_store_load_first to i64) to <2 x i32>), <2 x i32>* %p2, align 8
+  %load = load i32, i32* %p, align 4
   ret i32 %load
 }
 

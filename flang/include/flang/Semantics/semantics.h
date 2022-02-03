@@ -75,8 +75,12 @@ public:
     return defaultKinds_.doublePrecisionKind();
   }
   int quadPrecisionKind() const { return defaultKinds_.quadPrecisionKind(); }
-  bool IsEnabled(common::LanguageFeature) const;
-  bool ShouldWarn(common::LanguageFeature) const;
+  bool IsEnabled(common::LanguageFeature feature) const {
+    return languageFeatures_.IsEnabled(feature);
+  }
+  bool ShouldWarn(common::LanguageFeature feature) const {
+    return languageFeatures_.ShouldWarn(feature);
+  }
   const std::optional<parser::CharBlock> &location() const { return location_; }
   const std::vector<std::string> &searchDirectories() const {
     return searchDirectories_;
@@ -173,6 +177,14 @@ public:
   SymbolVector GetIndexVars(IndexVarKind);
   SourceName SaveTempName(std::string &&);
   SourceName GetTempName(const Scope &);
+  static bool IsTempName(const std::string &);
+
+  // Locate and process the contents of a built-in module on demand
+  Scope *GetBuiltinModule(const char *name);
+
+  // Defines builtinsScope_ from the __Fortran_builtins module
+  void UseFortranBuiltinsModule();
+  const Scope *GetBuiltinsScope() const { return builtinsScope_; }
 
 private:
   void CheckIndexVarRedefine(
@@ -198,18 +210,19 @@ private:
     parser::CharBlock location;
     IndexVarKind kind;
   };
-  std::map<SymbolRef, const IndexVarInfo> activeIndexVars_;
-  SymbolSet errorSymbols_;
+  std::map<SymbolRef, const IndexVarInfo, SymbolAddressCompare>
+      activeIndexVars_;
+  UnorderedSymbolSet errorSymbols_;
   std::set<std::string> tempNames_;
+  const Scope *builtinsScope_{nullptr}; // module __Fortran_builtins
 };
 
 class Semantics {
 public:
   explicit Semantics(SemanticsContext &context, parser::Program &program,
-      parser::CharBlock charBlock, bool debugModuleWriter = false)
+      bool debugModuleWriter = false)
       : context_{context}, program_{program} {
     context.set_debugModuleWriter(debugModuleWriter);
-    context.globalScope().AddSourceRange(charBlock);
   }
 
   SemanticsContext &context() const { return context_; }

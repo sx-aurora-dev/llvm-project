@@ -1,4 +1,4 @@
-//===-- M68kMCTargetDesc.cpp - M68k Target Descriptions -----*- C++ -*-===//
+//===-- M68kMCTargetDesc.cpp - M68k Target Descriptions ---------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,10 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "M68kMCTargetDesc.h"
-
-#include "M68kMCAsmInfo.h"
-
 #include "M68kInstPrinter.h"
+#include "M68kMCAsmInfo.h"
+#include "TargetInfo/M68kTargetInfo.h"
 
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCInstPrinter.h"
@@ -24,10 +23,10 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MachineLocation.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
 
@@ -107,8 +106,8 @@ static MCInstPrinter *createM68kMCInstPrinter(const Triple &T,
   return new M68kInstPrinter(MAI, MII, MRI);
 }
 
-extern "C" void LLVMInitializeM68kTargetMC() {
-  Target &T = TheM68kTarget;
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeM68kTargetMC() {
+  Target &T = getTheM68kTarget();
 
   // Register the MC asm info.
   RegisterMCAsmInfoFn X(T, createM68kMCAsmInfo);

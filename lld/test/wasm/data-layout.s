@@ -1,12 +1,12 @@
 # RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown %p/Inputs/hello.s -o %t.hello32.o
 # RUN: llvm-mc -filetype=obj -triple=wasm32-unknown-unknown %s -o %t32.o
 # RUN: wasm-ld -m wasm32 -no-gc-sections --export=__data_end --export=__heap_base --allow-undefined --no-entry -o %t32.wasm %t32.o %t.hello32.o
-# RUN: obj2yaml %t32.wasm | FileCheck --check-prefixes CHECK,CHK32 %s
+# RUN: obj2yaml %t32.wasm | FileCheck -DPTR=I32 %s
 #
 # RUN: llvm-mc -filetype=obj -triple=wasm64-unknown-unknown %p/Inputs/hello.s -o %t.hello64.o
 # RUN: llvm-mc -filetype=obj -triple=wasm64-unknown-unknown %s -o %t64.o
 # RUN: wasm-ld -m wasm64 -no-gc-sections --export=__data_end --export=__heap_base --allow-undefined --no-entry -o %t64.wasm %t64.o %t.hello64.o
-# RUN: obj2yaml %t64.wasm | FileCheck --check-prefixes CHECK,CHK64 %s
+# RUN: obj2yaml %t64.wasm | FileCheck --check-prefixes CHECK,CHK64 -DPTR=I64 %s
 
         .section .data.foo,"",@
         .globl  foo
@@ -55,28 +55,26 @@ local_struct_internal_ptr:
 # CHECK:        - Type:            MEMORY
 # CHECK-NEXT:     Memories:
 # CHK64-NEXT:       - Flags:           [ IS_64 ]
-# CHECK-NEXT:         Initial:         0x2
+# CHECK-NEXT:         Minimum:         0x2
 # CHECK-NEXT:   - Type:            GLOBAL
 # CHECK-NEXT:     Globals:
 # CHECK-NEXT:       - Index:           0
-# CHK32-NEXT:         Type:            I32
-# CHK64-NEXT:         Type:            I64
+# CHECK-NEXT:         Type:            [[PTR]]
 # CHECK-NEXT:         Mutable:         true
 # CHECK-NEXT:         InitExpr:
-# CHK32-NEXT:           Opcode:          I32_CONST
-# CHK64-NEXT:           Opcode:          I64_CONST
+# CHECK-NEXT:           Opcode:          [[PTR]]_CONST
 # CHECK-NEXT:           Value:           66624
 # CHECK-NEXT:       - Index:           1
-# CHECK-NEXT:         Type:            I32
+# CHECK-NEXT:         Type:            [[PTR]]
 # CHECK-NEXT:         Mutable:         false
 # CHECK-NEXT:         InitExpr:
-# CHECK-NEXT:           Opcode:          I32_CONST
+# CHECK-NEXT:           Opcode:          [[PTR]]_CONST
 # CHECK-NEXT:           Value:           1080
 # CHECK-NEXT:       - Index:           2
-# CHECK-NEXT:         Type:            I32
+# CHECK-NEXT:         Type:            [[PTR]]
 # CHECK-NEXT:         Mutable:         false
 # CHECK-NEXT:         InitExpr:
-# CHECK-NEXT:           Opcode:          I32_CONST
+# CHECK-NEXT:           Opcode:          [[PTR]]_CONST
 # CHECK-NEXT:           Value:           66624
 
 # CHECK:        - Type:            DATA
@@ -84,15 +82,13 @@ local_struct_internal_ptr:
 # CHECK-NEXT:       - SectionOffset:   7
 # CHECK-NEXT:         InitFlags:       0
 # CHECK-NEXT:         Offset:
-# CHK32-NEXT:           Opcode:          I32_CONST
-# CHK64-NEXT:           Opcode:          I64_CONST
+# CHECK-NEXT:           Opcode:          [[PTR]]_CONST
 # CHECK-NEXT:           Value:           1024
 # CHECK-NEXT:         Content:         68656C6C6F0A00
 # CHECK-NEXT:       - SectionOffset:   20
 # CHECK-NEXT:         InitFlags:       0
 # CHECK-NEXT:         Offset:
-# CHK32-NEXT:           Opcode:          I32_CONST
-# CHK64-NEXT:           Opcode:          I64_CONST
+# CHECK-NEXT:           Opcode:          [[PTR]]_CONST
 # CHECK-NEXT:           Value:           1040
 
 
@@ -104,7 +100,7 @@ local_struct_internal_ptr:
 # CHECK-MAX:        - Type:            MEMORY
 # CHECK-MAX-NEXT:     Memories:
 # CHECK-MAX-NEXT:       - Flags:           [ HAS_MAX ]
-# CHECK-MAX-NEXT:         Initial:         0x2
+# CHECK-MAX-NEXT:         Minimum:         0x2
 # CHECK-MAX-NEXT:         Maximum:         0x2
 
 # RUN: wasm-ld -no-gc-sections --allow-undefined --no-entry --shared-memory \
@@ -115,7 +111,7 @@ local_struct_internal_ptr:
 # CHECK-SHARED:        - Type:            MEMORY
 # CHECK-SHARED-NEXT:     Memories:
 # CHECK-SHARED-NEXT:       - Flags:           [ HAS_MAX, IS_SHARED ]
-# CHECK-SHARED-NEXT:         Initial:         0x2
+# CHECK-SHARED-NEXT:         Minimum:         0x2
 # CHECK-SHARED-NEXT:         Maximum:         0x2
 
 # XUN: wasm-ld --relocatable -o %t_reloc.wasm %t32.o %t.hello32.o

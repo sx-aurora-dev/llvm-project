@@ -1247,3 +1247,11 @@
 #define _vel_pcvm_sml __builtin_ve_vl_pcvm_sml
 #define _vel_lzvm_sml __builtin_ve_vl_lzvm_sml
 #define _vel_tovm_sml __builtin_ve_vl_tovm_sml
+#define _vel_lcr_sss __builtin_ve_vl_lcr_sss
+#define _vel_scr_sss __builtin_ve_vl_scr_sss
+#define _vel_tscr_ssss __builtin_ve_vl_tscr_ssss
+#define _vel_fidcr_sss __builtin_ve_vl_fidcr_sss
+#define _vel_fencei __builtin_ve_vl_fencei
+#define _vel_fencem_s __builtin_ve_vl_fencem_s
+#define _vel_fencec_s __builtin_ve_vl_fencec_s
+#define _vel_svob __builtin_ve_vl_svob

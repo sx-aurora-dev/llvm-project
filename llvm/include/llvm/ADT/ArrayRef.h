@@ -141,7 +141,7 @@ namespace llvm {
     template <typename U, typename A>
     ArrayRef(const std::vector<U *, A> &Vec,
              std::enable_if_t<std::is_convertible<U *const *, T const *>::value>
-                 * = 0)
+                 * = nullptr)
         : Data(Vec.data()), Length(Vec.size()) {}
 
     /// @}
@@ -568,6 +568,35 @@ namespace llvm {
   template <typename T> hash_code hash_value(ArrayRef<T> S) {
     return hash_combine_range(S.begin(), S.end());
   }
+
+  // Provide DenseMapInfo for ArrayRefs.
+  template <typename T> struct DenseMapInfo<ArrayRef<T>, void> {
+    static inline ArrayRef<T> getEmptyKey() {
+      return ArrayRef<T>(
+          reinterpret_cast<const T *>(~static_cast<uintptr_t>(0)), size_t(0));
+    }
+
+    static inline ArrayRef<T> getTombstoneKey() {
+      return ArrayRef<T>(
+          reinterpret_cast<const T *>(~static_cast<uintptr_t>(1)), size_t(0));
+    }
+
+    static unsigned getHashValue(ArrayRef<T> Val) {
+      assert(Val.data() != getEmptyKey().data() &&
+             "Cannot hash the empty key!");
+      assert(Val.data() != getTombstoneKey().data() &&
+             "Cannot hash the tombstone key!");
+      return (unsigned)(hash_value(Val));
+    }
+
+    static bool isEqual(ArrayRef<T> LHS, ArrayRef<T> RHS) {
+      if (RHS.data() == getEmptyKey().data())
+        return LHS.data() == getEmptyKey().data();
+      if (RHS.data() == getTombstoneKey().data())
+        return LHS.data() == getTombstoneKey().data();
+      return LHS == RHS;
+    }
+  };
 
 } // end namespace llvm
 

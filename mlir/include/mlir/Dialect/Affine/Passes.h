@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_DIALECT_AFFINE_TRANSFORMS_PASSES_H
-#define MLIR_DIALECT_AFFINE_TRANSFORMS_PASSES_H
+#ifndef MLIR_DIALECT_AFFINE_PASSES_H
+#define MLIR_DIALECT_AFFINE_PASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <limits>
@@ -47,6 +47,11 @@ std::unique_ptr<OperationPass<FuncOp>> createAffineDataCopyGenerationPass(
     uint64_t fastMemCapacityBytes = std::numeric_limits<uint64_t>::max());
 /// Overload relying on pass options for initialization.
 std::unique_ptr<OperationPass<FuncOp>> createAffineDataCopyGenerationPass();
+
+/// Creates a pass to replace affine memref accesses by scalars using store to
+/// load forwarding and redundant load elimination; consequently also eliminate
+/// dead allocs.
+std::unique_ptr<FunctionPass> createAffineScalarReplacementPass();
 
 /// Creates a pass to perform tiling on loop nests.
 std::unique_ptr<OperationPass<FuncOp>>
@@ -86,6 +91,6 @@ std::unique_ptr<OperationPass<FuncOp>> createSuperVectorizePass();
 #define GEN_PASS_REGISTRATION
 #include "mlir/Dialect/Affine/Passes.h.inc"
 
-} // end namespace mlir
+} // namespace mlir
 
-#endif // MLIR_DIALECT_AFFINE_RANSFORMS_PASSES_H
+#endif // MLIR_DIALECT_AFFINE_PASSES_H

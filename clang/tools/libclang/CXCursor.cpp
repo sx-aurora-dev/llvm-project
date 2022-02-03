@@ -336,6 +336,7 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ObjCBoxedExprClass:
   case Stmt::ObjCSubscriptRefExprClass:
   case Stmt::RecoveryExprClass:
+  case Stmt::SYCLUniqueStableNameExprClass:
     K = CXCursor_UnexposedExpr;
     break;
 
@@ -642,6 +643,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPCanonicalLoopClass:
     K = CXCursor_OMPCanonicalLoop;
     break;
+  case Stmt::OMPMetaDirectiveClass:
+    K = CXCursor_OMPMetaDirective;
+    break;
   case Stmt::OMPParallelDirectiveClass:
     K = CXCursor_OMPParallelDirective;
     break;
@@ -650,6 +654,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     break;
   case Stmt::OMPTileDirectiveClass:
     K = CXCursor_OMPTileDirective;
+    break;
+  case Stmt::OMPUnrollDirectiveClass:
+    K = CXCursor_OMPUnrollDirective;
     break;
   case Stmt::OMPForDirectiveClass:
     K = CXCursor_OMPForDirective;
@@ -806,6 +813,18 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     break;
   case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
     K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
+    break;
+  case Stmt::OMPInteropDirectiveClass:
+    K = CXCursor_OMPInteropDirective;
+    break;
+  case Stmt::OMPDispatchDirectiveClass:
+    K = CXCursor_OMPDispatchDirective;
+    break;
+  case Stmt::OMPMaskedDirectiveClass:
+    K = CXCursor_OMPMaskedDirective;
+    break;
+  case Stmt::OMPGenericLoopDirectiveClass:
+    K = CXCursor_OMPGenericLoopDirective;
     break;
   case Stmt::BuiltinBitCastExprClass:
     K = CXCursor_BuiltinBitCastExpr;
@@ -1692,7 +1711,7 @@ CXType clang_Cursor_getReceiverType(CXCursor C) {
     ME = dyn_cast_or_null<MemberExpr>(CE->getCallee());
 
   if (ME) {
-    if (dyn_cast_or_null<CXXMethodDecl>(ME->getMemberDecl())) {
+    if (isa_and_nonnull<CXXMethodDecl>(ME->getMemberDecl())) {
       auto receiverTy = ME->getBase()->IgnoreImpCasts()->getType();
       return cxtype::MakeCXType(receiverTy, TU);
     }

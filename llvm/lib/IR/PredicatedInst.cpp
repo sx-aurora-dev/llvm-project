@@ -32,9 +32,8 @@ void PredicatedOperator::copyIRFlags(const Value *V, bool IncludeWrapFlags) {
 bool
 PredicatedInstruction::isVectorReduction() const {
   auto VPI = dyn_cast<VPIntrinsic>(this);
-  if (VPI) {
-    return VPI->isReductionOp();
-  }
+  if (VPI)
+    return isa<VPReductionIntrinsic>(VPI);
   auto II = dyn_cast<IntrinsicInst>(this);
   if (!II) return false;
 
@@ -64,7 +63,7 @@ Instruction *PredicatedUnaryOperator::Create(
     Value *V, const Twine &Name, BasicBlock *InsertAtEnd,
     Instruction *InsertBefore) {
   assert(!(InsertAtEnd && InsertBefore));
-  auto VPID = VPIntrinsic::GetForOpcode(Opc);
+  auto VPID = VPIntrinsic::getForOpcode(Opc);
 
   // Default Code Path
   if ((!Mod || (!Mask && !VectorLen)) || VPID == Intrinsic::not_intrinsic) {
@@ -80,7 +79,7 @@ Instruction *PredicatedUnaryOperator::Create(
   // Fetch the VP intrinsic
   auto &VecTy = cast<VectorType>(*V->getType());
   auto *VPFunc =
-      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V}, &VecTy);
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, &VecTy, {V});
 
   // Encode default environment fp behavior
 
@@ -124,7 +123,7 @@ Instruction *PredicatedBinaryOperator::Create(
     Value *V1, Value *V2, const Twine &Name, BasicBlock *InsertAtEnd,
     Instruction *InsertBefore) {
   assert(!(InsertAtEnd && InsertBefore));
-  auto VPID = VPIntrinsic::GetForOpcode(Opc);
+  auto VPID = VPIntrinsic::getForOpcode(Opc);
 
   // Default Code Path
   if ((!Mod || (!Mask && !VectorLen)) || VPID == Intrinsic::not_intrinsic) {
@@ -140,7 +139,7 @@ Instruction *PredicatedBinaryOperator::Create(
   // Fetch the VP intrinsic
   auto &VecTy = cast<VectorType>(*V1->getType());
   auto *VPFunc =
-      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V1, V2}, &VecTy);
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, &VecTy, {V1, V2});
 
   // Encode default environment fp behavior
 

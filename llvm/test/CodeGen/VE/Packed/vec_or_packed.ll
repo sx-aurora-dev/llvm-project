@@ -27,18 +27,9 @@ define fastcc <2 x i64> @vec_or_v2f64(<2 x i64> %a, <2 x i64> %b) {
 define fastcc <3 x i64> @vec_or_v3f64(<3 x i64> %a, <3 x i64> %b) {
 ; CHECK-LABEL: vec_or_v3f64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lsv %v0(0), %s3
-; CHECK-NEXT:    lsv %v0(1), %s4
-; CHECK-NEXT:    lsv %v0(2), %s5
-; CHECK-NEXT:    lsv %v1(0), %s0
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    lsv %v1(2), %s2
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vor %v0, %v1, %v0
-; CHECK-NEXT:    lvs %s0, %v0(0)
-; CHECK-NEXT:    lvs %s1, %v0(1)
-; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    vor %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = or <3 x i64> %a, %b
   ret <3 x i64> %r
@@ -198,24 +189,9 @@ define fastcc <2 x i32> @vec_or_v2f32(<2 x i32> %a, <2 x i32> %b) {
 define fastcc <3 x i32> @vec_or_v3f32(<3 x i32> %a, <3 x i32> %b) {
 ; CHECK-LABEL: vec_or_v3f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lsv %v0(0), %s3
-; CHECK-NEXT:    lsv %v0(1), %s4
-; CHECK-NEXT:    and %s3, %s5, (32)0
-; CHECK-NEXT:    lsv %v0(2), %s3
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lsv %v1(0), %s0
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    and %s0, %s2, (32)0
-; CHECK-NEXT:    lsv %v1(2), %s0
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvor.lo %v0, %v1, %v0
-; CHECK-NEXT:    lvs %s0, %v0(0)
-; CHECK-NEXT:    lvs %s1, %v0(1)
-; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    pvor.lo %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = or <3 x i32> %a, %b
   ret <3 x i32> %r

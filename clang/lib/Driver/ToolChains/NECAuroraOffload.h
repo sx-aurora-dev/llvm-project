@@ -101,7 +101,6 @@ public:
   bool useIntegratedAs() const override { return true; }
   bool isCrossCompiling() const override { return true; }
   bool isPICDefault() const override { return false; }
-  bool isPIEDefault() const override { return false; }
   bool isPICDefaultForced() const override { return false; }
   bool SupportsProfiling() const override { return false; }
   bool IsMathErrnoDefault() const override { return false; }

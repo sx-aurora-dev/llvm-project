@@ -1,4 +1,4 @@
-//===-- M68kMCAsmInfo.cpp - M68k Asm Properties -------------*- C++ -*-===//
+//===-- M68kMCAsmInfo.cpp - M68k Asm Properties -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -31,5 +31,6 @@ M68kELFMCAsmInfo::M68kELFMCAsmInfo(const Triple &T) {
   // Exceptions handling
   ExceptionsType = ExceptionHandling::DwarfCFI;
 
+  UseMotorolaIntegers = true;
   CommentString = ";";
 }

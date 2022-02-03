@@ -138,14 +138,14 @@ private:
 
 public:
   IntOrString() : IntOrString(RCInt(0)) {}
-  IntOrString(uint32_t Value) : Data(Value), IsInt(1) {}
-  IntOrString(RCInt Value) : Data(Value), IsInt(1) {}
-  IntOrString(StringRef Value) : Data(Value), IsInt(0) {}
+  IntOrString(uint32_t Value) : Data(Value), IsInt(true) {}
+  IntOrString(RCInt Value) : Data(Value), IsInt(true) {}
+  IntOrString(StringRef Value) : Data(Value), IsInt(false) {}
   IntOrString(const RCToken &Token)
       : Data(Token), IsInt(Token.kind() == RCToken::Kind::Int) {}
 
   bool equalsLower(const char *Str) {
-    return !IsInt && Data.String.equals_lower(Str);
+    return !IsInt && Data.String.equals_insensitive(Str);
   }
 
   bool isInt() const { return IsInt; }

@@ -11,6 +11,10 @@
 
 #include <map>
 #include <vector>
+#include <string>
+#include <llvm/ADT/StringRef.h>
+#include <clang/AST/TypeLoc.h>
+#include <clang/AST/Stmt.h>
 
 namespace clang {
 class Expr;
@@ -71,7 +75,9 @@ public:
   /// Construct a shape for a constant array dimension.
   TargetRegionVariableShape(const clang::ConstantArrayType *Array)
       : Kind(ShapeKind::ConstantArray) {
-    ConstantDimensionExpr = Array->getSize().toString(10, false);
+    llvm::SmallString<128> Buffer;
+    Array->getSize().toString(Buffer, false, false);
+    ConstantDimensionExpr = (std::string) Buffer;
   }
 };
 

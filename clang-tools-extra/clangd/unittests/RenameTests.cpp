@@ -844,7 +844,7 @@ TEST(RenameTest, Renameable) {
     const char *Code;
     const char* ErrorMessage; // null if no error
     bool IsHeaderFile;
-    llvm::StringRef NewName = "DummyName";
+    llvm::StringRef NewName = "MockName";
   };
   const bool HeaderFile = true;
   Case Cases[] = {
@@ -1060,6 +1060,11 @@ TEST(RenameTest, Renameable) {
       )cpp",
        "conflict", !HeaderFile, "Conflict"},
 
+      {R"cpp(
+        int V^ar;
+      )cpp",
+       "\"const\" is a keyword", !HeaderFile, "const"},
+
       {R"cpp(// Trying to rename into the same name, SameName == SameName.
         void func() {
           int S^ameName;
@@ -1071,6 +1076,13 @@ TEST(RenameTest, Renameable) {
         struct B : priv^ate A {};
       )cpp",
        "Cannot rename symbol: there is no symbol at the given location", false},
+      {R"cpp(// Ensure it doesn't associate base specifier with base name.
+        /*error-ok*/
+        struct A {
+          A() : inva^lid(0) {}
+        };
+      )cpp",
+       "no symbol", false},
   };
 
   for (const auto& Case : Cases) {
@@ -1186,6 +1198,29 @@ TEST(RenameTest, MainFileReferencesOnly) {
             expectedResult(Code, NewName));
 }
 
+TEST(RenameTest, NoRenameOnSymbolsFromSystemHeaders) {
+  // filter out references not from main file.
+  llvm::StringRef Test =
+      R"cpp(
+        #include <system>
+        SystemSym^bol abc;
+        )cpp";
+
+  Annotations Code(Test);
+  auto TU = TestTU::withCode(Code.code());
+  TU.AdditionalFiles["system"] = R"cpp(
+    class SystemSymbol {};
+    )cpp";
+  TU.ExtraArgs = {"-isystem", testRoot()};
+  auto AST = TU.build();
+  llvm::StringRef NewName = "abcde";
+
+  auto Results = rename({Code.point(), NewName, AST, testPath(TU.Filename)});
+  EXPECT_FALSE(Results) << "expected rename returned an error: " << Code.code();
+  auto ActualMessage = llvm::toString(Results.takeError());
+  EXPECT_THAT(ActualMessage, testing::HasSubstr("not a supported kind"));
+}
+
 TEST(RenameTest, ProtobufSymbolIsExcluded) {
   Annotations Code("Prot^obuf buf;");
   auto TU = TestTU::withCode(Code.code());
@@ -1240,6 +1275,21 @@ TEST(RenameTest, PrepareRename) {
               testing::HasSubstr("keyword"));
   EXPECT_THAT(Tracer.takeMetric("rename_name_invalid", "Keywords"),
               ElementsAre(1));
+
+  for (std::string BadIdent : {"foo!bar", "123foo", "😀@"}) {
+    Results = runPrepareRename(Server, FooCCPath, FooCC.point(),
+                               /*NewName=*/BadIdent, {});
+    EXPECT_FALSE(Results);
+    EXPECT_THAT(llvm::toString(Results.takeError()),
+                testing::HasSubstr("identifier"));
+    EXPECT_THAT(Tracer.takeMetric("rename_name_invalid", "BadIdentifier"),
+                ElementsAre(1));
+  }
+  for (std::string GoodIdent : {"fooBar", "__foo$", "😀"}) {
+    Results = runPrepareRename(Server, FooCCPath, FooCC.point(),
+                               /*NewName=*/GoodIdent, {});
+    EXPECT_TRUE(bool(Results));
+  }
 }
 
 TEST(CrossFileRenameTests, DirtyBuffer) {

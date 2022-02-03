@@ -20,5 +20,5 @@ define fastcc <512 x float> @vec_frsqrt_v512f32(<512 x float> %x, <512 x i1> %M,
   ret <512 x float> %d
 }
 
-declare <512 x float> @llvm.vp.fdiv.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.sqrt.v512f32(<512 x float>, <512 x i1> mask, i32 vlen)
+declare <512 x float> @llvm.vp.fdiv.v512f32(<512 x float>, <512 x float>, <512 x i1> , i32 )
+declare <512 x float> @llvm.vp.sqrt.v512f32(<512 x float>, <512 x i1> , i32 )

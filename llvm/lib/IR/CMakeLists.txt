@@ -5,6 +5,7 @@ add_llvm_component_library(LLVMCore
   Attributes.cpp
   AutoUpgrade.cpp
   BasicBlock.cpp
+  BuiltinGCs.cpp
   Comdat.cpp
   ConstantFold.cpp
   ConstantRange.cpp
@@ -21,10 +22,12 @@ add_llvm_component_library(LLVMCore
   Dominators.cpp
   FPEnv.cpp
   Function.cpp
+  GCStrategy.cpp
   GVMaterializer.cpp
   Globals.cpp
   IRBuilder.cpp
   IRPrintingPasses.cpp
+  SSAContext.cpp
   InlineAsm.cpp
   Instruction.cpp
   Instructions.cpp
@@ -61,6 +64,7 @@ add_llvm_component_library(LLVMCore
   Value.cpp
   ValueSymbolTable.cpp
   Verifier.cpp
+
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/IR
 

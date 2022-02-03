@@ -102,13 +102,13 @@ define fastcc void @test_vp_fmin_fmax(<512 x float>* %O1, <512 x float>* %O2, <5
 ; }
 
 ; fp arithmetic
-declare <512 x float> @llvm.vp.fadd.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.fsub.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.fmul.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.fdiv.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.fma.v512f32(<512 x float>, <512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
+declare <512 x float> @llvm.vp.fadd.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.fsub.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.fmul.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.fdiv.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.fma.v512f32(<512 x float>, <512 x float>, <512 x float>, <512 x i1>, i32)
 ; TODO
-; declare <512 x float> @llvm.vp.frem.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-; declare <512 x float> @llvm.vp.fneg.v512f32(<512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.minnum.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.maxnum.v512f32(<512 x float>, <512 x float>, <512 x i1> mask, i32 vlen)
+; declare <512 x float> @llvm.vp.frem.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+; declare <512 x float> @llvm.vp.fneg.v512f32(<512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.minnum.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+declare <512 x float> @llvm.vp.maxnum.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)

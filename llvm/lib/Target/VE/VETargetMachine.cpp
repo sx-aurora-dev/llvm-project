@@ -17,7 +17,7 @@
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Support/TargetRegistry.h"
+#include "llvm/MC/TargetRegistry.h"
 
 using namespace llvm;
 
@@ -87,6 +87,8 @@ VETargetMachine::VETargetMachine(const Target &T, const Triple &TT,
                         getEffectiveCodeModel(CM, CodeModel::Small), OL),
       TLOF(createTLOF()),
       Subtarget(TT, std::string(CPU), std::string(FS), *this) {
+  // FIXME: Issue FastISel in packed mode. Disabling it for now.
+  setFastISel(false);
   initAsmInfo();
 }
 
@@ -124,6 +126,8 @@ void VEPassConfig::addIRPasses() {
 }
 
 bool VEPassConfig::addInstSelector() {
+  getVETargetMachine().setFastISel(false);
+  getVETargetMachine().setGlobalISel(false);
   addPass(createVEISelDag(getVETargetMachine()));
   return false;
 }

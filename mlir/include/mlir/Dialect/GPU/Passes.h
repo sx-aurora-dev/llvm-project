@@ -25,19 +25,18 @@ class Module;
 namespace mlir {
 /// Replaces `gpu.launch` with `gpu.launch_func` by moving the region into
 /// a separate kernel function.
-std::unique_ptr<OperationPass<ModuleOp>> createGpuKernelOutliningPass();
+std::unique_ptr<OperationPass<ModuleOp>>
+createGpuKernelOutliningPass(StringRef dataLayoutStr = StringRef());
 
 /// Rewrites a function region so that GPU ops execute asynchronously.
 std::unique_ptr<OperationPass<FuncOp>> createGpuAsyncRegionPass();
 
 /// Collect a set of patterns to rewrite all-reduce ops within the GPU dialect.
-void populateGpuAllReducePatterns(MLIRContext *context,
-                                  OwningRewritePatternList &patterns);
+void populateGpuAllReducePatterns(RewritePatternSet &patterns);
 
 /// Collect all patterns to rewrite ops within the GPU dialect.
-inline void populateGpuRewritePatterns(MLIRContext *context,
-                                       OwningRewritePatternList &patterns) {
-  populateGpuAllReducePatterns(context, patterns);
+inline void populateGpuRewritePatterns(RewritePatternSet &patterns) {
+  populateGpuAllReducePatterns(patterns);
 }
 
 namespace gpu {
@@ -53,15 +52,27 @@ public:
 
   void runOnOperation() final;
 
+protected:
+  void getDependentDialects(DialectRegistry &registry) const override;
+
+  /// Hook allowing the application of optimizations before codegen
+  /// By default, does nothing
+  virtual LogicalResult optimizeLlvm(llvm::Module &llvmModule,
+                                     llvm::TargetMachine &targetMachine);
+
+  /// Translates the 'getOperation()' result to an LLVM module.
+  virtual std::unique_ptr<llvm::Module>
+  translateToLLVMIR(llvm::LLVMContext &llvmContext);
+
 private:
-  // Creates the LLVM target machine to generate the ISA.
+  /// Creates the LLVM target machine to generate the ISA.
   std::unique_ptr<llvm::TargetMachine> createTargetMachine();
 
-  // Translates the 'getOperation()' result to an LLVM module.
-  virtual std::unique_ptr<llvm::Module>
-  translateToLLVMIR(llvm::LLVMContext &llvmContext) = 0;
+  /// Translates the module to ISA
+  Optional<std::string> translateToISA(llvm::Module &llvmModule,
+                                       llvm::TargetMachine &targetMachine);
 
-  // Serializes the target ISA to binary form.
+  /// Serializes the target ISA to binary form.
   virtual std::unique_ptr<std::vector<char>>
   serializeISA(const std::string &isa) = 0;
 
@@ -82,6 +93,14 @@ protected:
 //===----------------------------------------------------------------------===//
 // Registration
 //===----------------------------------------------------------------------===//
+
+/// Register pass to serialize GPU kernel functions to a CUBIN binary
+/// annotation.
+void registerGpuSerializeToCubinPass();
+
+/// Register pass to serialize GPU kernel functions to a HSAco binary
+/// annotation.
+void registerGpuSerializeToHsacoPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

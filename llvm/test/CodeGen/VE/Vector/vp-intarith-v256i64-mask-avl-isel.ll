@@ -105,17 +105,17 @@ define fastcc void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x 
 
 
 ; integer arith
-declare <256 x i64> @llvm.vp.add.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.sub.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.mul.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.sdiv.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.udiv.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-; declare <256 x i64> @llvm.vp.srem.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen) ; TODO
-; declare <256 x i64> @llvm.vp.urem.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen) ; TODO
+declare <256 x i64> @llvm.vp.add.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.sub.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.mul.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.sdiv.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.udiv.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+; declare <256 x i64> @llvm.vp.srem.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32) ; TODO
+; declare <256 x i64> @llvm.vp.urem.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32) ; TODO
 ; bit arith
-declare <256 x i64> @llvm.vp.and.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.xor.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.or.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.ashr.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.lshr.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
-declare <256 x i64> @llvm.vp.shl.v256i64(<256 x i64>, <256 x i64>, <256 x i1> mask, i32 vlen)
+declare <256 x i64> @llvm.vp.and.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.xor.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.or.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.ashr.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.lshr.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)
+declare <256 x i64> @llvm.vp.shl.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)

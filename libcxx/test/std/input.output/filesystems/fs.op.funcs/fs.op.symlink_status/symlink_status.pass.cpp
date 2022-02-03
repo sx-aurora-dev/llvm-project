@@ -8,6 +8,8 @@
 
 // UNSUPPORTED: c++03
 
+// XFAIL: LIBCXX-AIX-FIXME
+
 // <filesystem>
 
 // file_status symlink_status(const path& p);
@@ -53,6 +55,12 @@ TEST_CASE(test_symlink_status_not_found)
     }
 }
 
+// Windows doesn't support setting perms::none to trigger failures
+// reading directories. Imaginary files under GetWindowsInaccessibleDir()
+// produce no_such_file_or_directory, not the error codes this test checks
+// for. Finally, status() for a too long file name doesn't return errors
+// on windows.
+#ifndef TEST_WIN_NO_FILESYSTEM_PERMS_NONE
 TEST_CASE(test_symlink_status_cannot_resolve)
 {
     scoped_test_env env;
@@ -103,6 +111,7 @@ TEST_CASE(test_symlink_status_cannot_resolve)
         TEST_CHECK(st.permissions() != perms::unknown);
     }
 }
+#endif
 
 
 TEST_CASE(symlink_status_file_types_test)

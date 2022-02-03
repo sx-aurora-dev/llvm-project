@@ -1,7 +1,20 @@
-// Conversion operators
-// def f32_to_i64 : OutPatFrag<(ops node:$val), (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)>;
-// def i32_to_i64 : OutPatFrag<(ops node:$val), (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32)>;
-// def idcast : OutPatFrag<(ops node:$val), (COPY $val)>;
+//===----------- VVPInstrPatternsVec.td - VVP_* SDNode patterns -----------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file describes how VVP_* SDNodes are lowered to machine instructions.
+//
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+//
+// VVP SDNode definitions.
+//
+//===----------------------------------------------------------------------===//
 
 
 // Vector Gather and scatter
@@ -34,7 +47,7 @@ defm : VectorScatter<v256f32, v256i64, v256i1, "VSCU">;
 defm : VectorScatter<v256i32, v256i64, v256i1, "VSCL">;
 
 // Vector Load and Store
-multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode GTWithMask, SDNode LDNoMask> {
+multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string GTWithMask, string LDNoMask> {
   // Unmasked (imm stride).
   def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(LDNoMask#"irl") (LO7 $stride), $addr, $avl)>;
@@ -57,7 +70,7 @@ multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNod
               $avl)>;
 }
 
-multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode LDNoMask, SDNode STNoMask> {
+multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string LDNoMask, SDNode STNoMask> {
   // Unmasked (imm stride).
   def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(LDNoMask#"irl") (LO7 $stride), $addr, $avl)>;
@@ -88,7 +101,7 @@ defm : VectorLoad<v256i32, i64, v256i1, "VGTLZX", "VLDLZX">;
 // defm : VectorLoadStore_Packed<v512i32, i64, v512i1, "VLD", "VST">;
 // defm : VectorLoadStore_Packed<v512f32, i64, v512i1, "VLD", "VST">;
 
-multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode STWithMask, SDNode STNoMask> {
+multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string STWithMask, string STNoMask> {
   // Unmasked (imm stride).
   def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl),
             (!cast<Instruction>(STNoMask#"irvl") (LO7 $stride), $addr, $val, $avl)>;
@@ -142,7 +155,12 @@ multiclass Unary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, Val
 
 
 
-multiclass Binary_rv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+
+// Expand both 64bit and 32 bit variant (256 elements)
+
+multiclass Binary_rv<SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT,
+    ValueType MaskVT, string OpBaseName> {
   // Masked with select, broadcast.
   def : Pat<(vvp_select (OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -157,7 +175,9 @@ multiclass Binary_rv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType Dat
             (!cast<Instruction>(OpBaseName#"rvml") ScalarVT:$sx, $vy, $mask, $avl)>;
 }
 
-multiclass Binary_vr<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Binary_vr<SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT,
+    ValueType MaskVT, string OpBaseName> {
   // Masked with select, broadcast.
   def : Pat<(vvp_select (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -172,7 +192,9 @@ multiclass Binary_vr<SDPatternOperator OpNode, ValueType ScalarVT, ValueType Dat
             (!cast<Instruction>(OpBaseName#"vrml") $vx, ScalarVT:$sy, $mask, $avl)>;
 }
 
-multiclass Binary_vv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Binary_vv<SDPatternOperator OpNode,
+    ValueType DataVT,
+    ValueType MaskVT, string OpBaseName> {
   // Masked with select.
   def : Pat<(vvp_select (OpNode DataVT:$vx, DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -190,37 +212,60 @@ multiclass Binary_vv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType Dat
 }
 
 // Binary operators that support broadcasts only on RHS.
-multiclass Binary_vr_vv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Binary_vr_vv<
+    SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT, ValueType MaskVT,
+    string OpBaseName> {
   defm : Binary_vr<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-  defm : Binary_vv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-}
-multiclass Binary_vr_vv_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : Binary_vr_vv<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : Binary_vr_vv<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
+  defm : Binary_vv<OpNode, DataVT, MaskVT, OpBaseName>;
 }
 
 // Binary operators that support broadcasts only on LHS.
-multiclass Binary_rv_vv<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Binary_rv_vv<
+    SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT, ValueType MaskVT,
+    string OpBaseName> {
   defm : Binary_rv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-  defm : Binary_vv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
-}
-multiclass Binary_rv_vv_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : Binary_rv_vv<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : Binary_rv_vv<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
+  defm : Binary_vv<OpNode, DataVT, MaskVT, OpBaseName>;
 }
 
-// Binary operators that support broadcasts on LHS and RHS.
-multiclass Binary_all<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Binary_rv_vr_vv<
+    SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT, ValueType MaskVT,
+    string OpBaseName> {
   defm : Binary_rv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
   defm : Binary_vr_vv<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
 }
-multiclass Binary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : Binary_all<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : Binary_all<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
+
+// Expand both 64bit and 32 bit variant (256 elements)
+multiclass Binary_rv_vv_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
+    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Binary_rv_vv<OpNode,
+                      LongScalarVT, LongDataVT, v256i1,
+                      LongOpBaseName>;
+  defm : Binary_rv_vv<OpNode,
+                      ShortScalarVT, ShortDataVT, v256i1,
+                      ShortOpBaseName>;
 }
 
+multiclass Binary_vr_vv_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
+    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Binary_vr_vv<OpNode,
+                      LongScalarVT, LongDataVT, v256i1,
+                      LongOpBaseName>;
+  defm : Binary_vr_vv<OpNode,
+                      ShortScalarVT, ShortDataVT, v256i1,
+                      ShortOpBaseName>;
+}
 
-multiclass Ternary<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Ternary<
+    SDPatternOperator OpNode,
+    ValueType ScalarVT, ValueType DataVT,
+    ValueType MaskVT, string OpBaseName> {
   //// Mask + vvp_select /////
   // with mask, broadcast first
   def : Pat<(vvp_select 
@@ -266,7 +311,10 @@ multiclass Ternary<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataV
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
-multiclass Ternary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+multiclass Ternary_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
+    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
   defm : Ternary<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
   defm : Ternary<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
@@ -275,36 +323,85 @@ multiclass Ternary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, V
 // Integer arithmetic (256 elements)
 defm : Unary_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
 
-defm : Binary_rv_vv_ShortLong<c_vvp_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
+multiclass Binary_rv_vr_vv_ShortLong<
+    SDPatternOperator OpNode,
+    ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName,
+    ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Binary_rv_vr_vv<OpNode,
+                      LongScalarVT, LongDataVT, v256i1,
+                      LongOpBaseName>;
+  defm : Binary_rv_vr_vv<OpNode,
+                      ShortScalarVT, ShortDataVT, v256i1,
+                      ShortOpBaseName>;
+}
 
-defm : Binary_rv_vv_ShortLong<vvp_sub,  i64, v256i64, "VSUBSL", i32, v256i32, "VSUBSWSX">;
-defm : Binary_rv_vv_ShortLong<c_vvp_mul, i64, v256i64, "VMULSL", i32, v256i32, "VMULSWSX">;
-defm : Binary_ShortLong<vvp_sdiv, i64, v256i64, "VDIVSL", i32, v256i32, "VDIVSWSX">;
-defm : Binary_ShortLong<vvp_udiv, i64, v256i64, "VDIVUL", i32, v256i32, "VDIVUW">;
+defm : Binary_rv_vv_ShortLong<c_vvp_add,
+                              i64, v256i64, "VADDSL",
+                              i32, v256i32, "VADDSWSX">;
+defm : Binary_rv_vv_ShortLong<vvp_sub,
+                              i64, v256i64, "VSUBSL",
+                              i32, v256i32, "VSUBSWSX">;
+defm : Binary_rv_vv_ShortLong<c_vvp_mul,
+                              i64, v256i64, "VMULSL",
+                              i32, v256i32, "VMULSWSX">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_sdiv,
+                              i64, v256i64, "VDIVSL",
+                              i32, v256i32, "VDIVSWSX">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_udiv,
+                              i64, v256i64, "VDIVUL",
+                              i32, v256i32, "VDIVUW">;
+defm : Binary_rv_vv_ShortLong<c_vvp_and,
+                              i64, v256i64, "VAND",
+                              i32, v256i32, "PVANDLO">;
+defm : Binary_rv_vv_ShortLong<c_vvp_or,
+                              i64, v256i64, "VOR",
+                              i32, v256i32, "PVORLO">;
+defm : Binary_rv_vv_ShortLong<c_vvp_xor,
+                              i64, v256i64, "VXOR",
+                              i32, v256i32, "PVXORLO">;
 
-defm : Binary_vr_vv_ShortLong<vvp_srl, i64, v256i64, "VSRL",  i32, v256i32, "PVSRLLO">;
-defm : Binary_vr_vv_ShortLong<vvp_sra, i64, v256i64, "VSRAL", i32, v256i32, "PVSRALO">;
-defm : Binary_vr_vv_ShortLong<vvp_shl, i64, v256i64, "VSLL",  i32, v256i32, "PVSLLLO">;
-
-defm : Binary_rv_vv_ShortLong<c_vvp_and, i64, v256i64, "VAND", i32, v256i32, "PVANDLO">;
-defm : Binary_rv_vv_ShortLong<c_vvp_xor, i64, v256i64, "VXOR", i32, v256i32, "PVXORLO">;
-defm : Binary_rv_vv_ShortLong<c_vvp_or,  i64, v256i64, "VOR",  i32, v256i32, "PVORLO">;
+defm : Binary_vr_vv_ShortLong<vvp_shl,
+                              i64, v256i64, "VSLL",
+                              i32, v256i32, "PVSLLLO">;
+defm : Binary_vr_vv_ShortLong<vvp_sra,
+                              i64, v256i64, "VSRAL",
+                              i32, v256i32, "PVSRALO">;
+defm : Binary_vr_vv_ShortLong<vvp_srl,
+                              i64, v256i64, "VSRL",
+                              i32, v256i32, "PVSRLLO">;
 
 // Floating-point arithmetic (256 elements)
-defm : Unary_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
-defm : Unary_ShortLong<vvp_frsqrt, f64, v256f64, "VRSQRTD", f32, v256f32, "VRSQRTS">; 
-defm : Unary_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
-defm : Binary_rv_vv_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
-defm : Binary_rv_vv_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
-defm : Binary_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS">;
+defm : Unary_ShortLong<vvp_frcp,
+                       f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_frsqrt,
+                       f64, v256f64, "VRSQRTD", f32, v256f32, "VRSQRTS">; 
+defm : Unary_ShortLong<vvp_fsqrt,
+                       f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
+defm : Binary_rv_vv_ShortLong<c_vvp_fadd,
+                              f64, v256f64, "VFADDD",
+                              f32, v256f32, "PVFADDUP">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmul,
+                              f64, v256f64, "VFMULD",
+                              f32, v256f32, "PVFMULUP">;
+defm : Binary_rv_vv_ShortLong<vvp_fsub,
+                              f64, v256f64, "VFSUBD",
+                              f32, v256f32, "PVFSUBUP">;
+defm : Binary_rv_vr_vv_ShortLong<vvp_fdiv,
+                              f64, v256f64, "VFDIVD",
+                              f32, v256f32, "VFDIVS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fminnum,
+                              f64, v256f64, "VFMIND",
+                              f32, v256f32, "VFMINS">;
+defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum,
+                              f64, v256f64, "VFMAXD",
+                              f32, v256f32, "VFMAXS">;
 
-defm : Binary_rv_vv_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
-defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
-
-defm : Ternary_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
-defm : Ternary_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
-defm : Ternary_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffma,
+                         f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : Ternary_ShortLong<c_vvp_ffms,
+                         f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffmsn,
+                         f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
 // TODO: vvp_ffman
 
 ///// Selection /////
@@ -343,7 +440,7 @@ multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string
                     (!cast<Instruction>(FmkBaseName#"v"#MaskTag#"l") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vm, $vl)>;
 }
 
-multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
+multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDNodeXForm CCConv>
   : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
 
 // SETCC (256)
@@ -412,7 +509,7 @@ multiclass conv_x_to_y_rd<SDPatternOperator MatchOp, ValueType MaskVT, ValueType
                     (!cast<Instruction>(ConvBaseName#"v"#MaskToken#"l_v") RDFlag, $vx, $vm, $vl, (SrcVT (IMPLICIT_DEF)))>;
 }
 
-multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="m"> {
+multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, ValueType IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="m"> {
  defm : conv_x_to_y<vvp_sint_to_fp, MaskVT, FPVT, IVT, ConvBaseName#FPTag#ITag, MaskToken>;
  defm : conv_x_to_y_rd<vvp_fp_to_sint, MaskVT, IVT, FPVT, ConvBaseName#ITag#FPTag#IExtTag, MaskToken, RDFlag>;
 }
@@ -554,7 +651,7 @@ defm: Reduce_FMinMax<v256f32,I64,f32,"SFST">;
 
 
 /// reduce AND/OR/XOR/ADD {
-multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResRC, ValueType ResVT, string VVPRedOp, string RedInstName> {
+multiclass Reduce_GenericInt<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VVPRedOp, string RedInstName> {
   // Unmasked.
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VVPRedOp) VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
              (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(RedInstName#"vl") $vx, $vl), 0), ResRC)>;

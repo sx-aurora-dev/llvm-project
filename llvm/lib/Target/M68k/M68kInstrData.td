@@ -1,4 +1,4 @@
-//== M68kInstrData.td - M68k Data Movement Instructions -*- tablegen --===//
+//===-- M68kInstrData.td - M68k Data Movement Instructions -*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -588,10 +588,10 @@ def POP32r : MxPseudo<(outs XR32:$reg), (ins)>;
 
 let Defs = [CCR] in {
 class MxPseudoMove_RR<MxType DST, MxType SRC, list<dag> PAT = []>
-    : MxPseudo<(outs DST.ROp:$dst), (ins SRC.ROp:$src), "", PAT>;
+    : MxPseudo<(outs DST.ROp:$dst), (ins SRC.ROp:$src), PAT>;
 
 class MxPseudoMove_RM<MxType DST, MxOperand SRCOpd, list<dag> PAT = []>
-    : MxPseudo<(outs DST.ROp:$dst), (ins SRCOpd:$src), "", PAT>;
+    : MxPseudo<(outs DST.ROp:$dst), (ins SRCOpd:$src), PAT>;
 }
 
 /// This group of Pseudos is analogues to the real x86 extending moves, but

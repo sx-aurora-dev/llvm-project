@@ -21,8 +21,14 @@
 ///// V(E) - VP internal nodes
 // fp node types
 
-def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vvp_fadd, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
+// BinaryFPOp(x,y,mask,vl)
+def SDTFPBinOpVVP : SDTypeProfile<1, 4, [      // vvp_fadd, etc.
+  SDTCisSameAs<0, 1>,
+  SDTCisSameAs<0, 2>,
+  SDTCisFP<0>,
+  SDTCisInt<3>,
+  SDTCisSameNumEltsAs<0, 3>,
+  IsVLVT<4>
 ]>;
 
 def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [  // vvp_ffma
@@ -32,10 +38,6 @@ def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [  // vvp_ffma
 // int node types
 def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
-]>;
-
-def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
-  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
 // Special case (VX, VY, SX)
@@ -62,9 +64,9 @@ def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
   SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3> 
 ]>;
 
-// select (OnTrue, OnFalse, SelMask, OpThreshold)
+// select (OnTrue, OnFalse, CondMask, VLen)
 def SDTSelectVVP : SDTypeProfile<1, 4, [       // vp_select
-  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 3>, SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>, IsVLVT<4>
+  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 3>, SDTCisSameAs<0,1>, SDTCisSameAs<1, 2>, IsVLVT<4>
 ]>;
 
 // setcc (lhs, rhs, cc, mask, vl)
@@ -132,18 +134,18 @@ def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMay
 
 // int
 def vvp_and    : SDNode<"VEISD::VVP_AND",  SDTIntBinOpVVP>;
-def vvp_or     : SDNode<"VEISD::VVP_OR",  SDTIntBinOpVVP>;
+def vvp_or     : SDNode<"VEISD::VVP_OR",   SDTIntBinOpVVP>;
 def vvp_xor    : SDNode<"VEISD::VVP_XOR",  SDTIntBinOpVVP>;
 
 def vvp_add    : SDNode<"VEISD::VVP_ADD",  SDTIntBinOpVVP>;
 def vvp_sub    : SDNode<"VEISD::VVP_SUB",  SDTIntBinOpVVP>;
 def vvp_mul    : SDNode<"VEISD::VVP_MUL",  SDTIntBinOpVVP>;
-def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV",  SDTIntBinOpVVP>;
-def vvp_udiv   : SDNode<"VEISD::VVP_UDIV",  SDTIntBinOpVVP>;
+def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV", SDTIntBinOpVVP>;
+def vvp_udiv   : SDNode<"VEISD::VVP_UDIV", SDTIntBinOpVVP>;
 
-def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntShiftOpVVP>;
-def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntShiftOpVVP>;
-def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
+def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntBinOpVVP>;
+def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntBinOpVVP>;
+def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntBinOpVVP>;
 
 // fused
 def vvp_sfa    : SDNode<"VEISD::VVP_ADD",  SDTSFAOpVVP>;
@@ -161,7 +163,7 @@ def vvp_ffms    : SDNode<"VEISD::VVP_FFMS",  SDTFPTernaryOpVVP>; // (y*z) - x
 def vvp_ffmsn    : SDNode<"VEISD::VVP_FFMSN",  SDTFPTernaryOpVVP>; // (x - (y*z))
 // def vvp_ffman    : SDNode<"VEISD::VVP_FFMAN",  SDTFPTernaryOpVVP>; // -((y*z) + x)
 
-// select (OnT,OnF,SelM,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
+// select (SelM,OnT,OnF,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
 def vvp_select : SDNode<"VEISD::VVP_SELECT", SDTSelectVVP>;      
 
 // setcc (lhs, rhs, cc, mask, vl)
@@ -212,10 +214,12 @@ def vvp_reduce_umax         : SDNode<"VEISD::VVP_REDUCE_UMAX", SDTReduceVVP>;
 // math funcs
 def vvp_fsqrt                : SDNode<"VEISD::VVP_FSQRT", SDTFPUnaryOpVVP>;
 
+// Binary operator commutative pattern.
 class vvp_commutative<SDNode RootOp> :
-  PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
-                       [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
-                        (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
+  PatFrags<
+  (ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
+  [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
+   (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
 
 class vvp_fma_commutative<SDNode RootOp> :
   PatFrags<(ops node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),

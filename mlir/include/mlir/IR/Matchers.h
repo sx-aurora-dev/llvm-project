@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_MATCHERS_H
-#define MLIR_MATCHERS_H
+#ifndef MLIR_IR_MATCHERS_H
+#define MLIR_IR_MATCHERS_H
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
@@ -48,14 +48,22 @@ struct attr_value_binder {
   }
 };
 
+/// Check to see if the specified operation is ConstantLike.  This includes some
+/// quick filters to avoid a semi-expensive test in the common case.
+static bool isConstantLike(Operation *op) {
+  return op->getNumOperands() == 0 && op->getNumResults() == 1 &&
+         op->hasTrait<OpTrait::ConstantLike>();
+}
+
 /// The matcher that matches operations that have the `ConstantLike` trait.
 struct constant_op_matcher {
-  bool match(Operation *op) { return op->hasTrait<OpTrait::ConstantLike>(); }
+  bool match(Operation *op) { return isConstantLike(op); }
 };
 
 /// The matcher that matches operations that have the `ConstantLike` trait, and
 /// binds the folded attribute value.
-template <typename AttrT> struct constant_op_binder {
+template <typename AttrT>
+struct constant_op_binder {
   AttrT *bind_value;
 
   /// Creates a matcher instance that binds the constant attribute value to
@@ -65,7 +73,7 @@ template <typename AttrT> struct constant_op_binder {
   constant_op_binder() : bind_value(nullptr) {}
 
   bool match(Operation *op) {
-    if (!op->hasTrait<OpTrait::ConstantLike>())
+    if (!isConstantLike(op))
       return false;
 
     // Fold the constant to an attribute.
@@ -102,7 +110,7 @@ struct constant_int_op_binder {
     if (type.isa<VectorType, RankedTensorType>()) {
       if (auto splatAttr = attr.dyn_cast<SplatElementsAttr>()) {
         return attr_value_binder<IntegerAttr>(bind_value)
-            .match(splatAttr.getSplatValue());
+            .match(splatAttr.getSplatValue<Attribute>());
       }
     }
     return false;
@@ -111,7 +119,8 @@ struct constant_int_op_binder {
 
 /// The matcher that matches a given target constant scalar / vector splat /
 /// tensor splat integer value.
-template <int64_t TargetValue> struct constant_int_value_matcher {
+template <int64_t TargetValue>
+struct constant_int_value_matcher {
   bool match(Operation *op) {
     APInt value;
     return constant_int_op_binder(&value).match(op) && TargetValue == value;
@@ -120,7 +129,8 @@ template <int64_t TargetValue> struct constant_int_value_matcher {
 
 /// The matcher that matches anything except the given target constant scalar /
 /// vector splat / tensor splat integer value.
-template <int64_t TargetNotValue> struct constant_int_not_value_matcher {
+template <int64_t TargetNotValue>
+struct constant_int_not_value_matcher {
   bool match(Operation *op) {
     APInt value;
     return constant_int_op_binder(&value).match(op) && TargetNotValue != value;
@@ -128,7 +138,8 @@ template <int64_t TargetNotValue> struct constant_int_not_value_matcher {
 };
 
 /// The matcher that matches a certain kind of op.
-template <typename OpClass> struct op_matcher {
+template <typename OpClass>
+struct op_matcher {
   bool match(Operation *op) { return isa<OpClass>(op); }
 };
 
@@ -155,7 +166,7 @@ typename std::enable_if_t<
                       Operation *>::value,
     bool>
 matchOperandOrValueAtIndex(Operation *op, unsigned idx, MatcherClass &matcher) {
-  if (auto defOp = op->getOperand(idx).getDefiningOp())
+  if (auto *defOp = op->getOperand(idx).getDefiningOp())
     return matcher.match(defOp);
   return false;
 }
@@ -163,6 +174,16 @@ matchOperandOrValueAtIndex(Operation *op, unsigned idx, MatcherClass &matcher) {
 /// Terminal matcher, always returns true.
 struct AnyValueMatcher {
   bool match(Value op) const { return true; }
+};
+
+/// Terminal matcher, always returns true.
+struct AnyCapturedValueMatcher {
+  Value *what;
+  AnyCapturedValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    *what = op;
+    return true;
+  }
 };
 
 /// Binds to a specific value and matches it.
@@ -204,7 +225,7 @@ struct RecursivePatternMatcher {
   std::tuple<OperandMatchers...> operandMatchers;
 };
 
-} // end namespace detail
+} // namespace detail
 
 /// Matches a constant foldable operation.
 inline detail::constant_op_matcher m_Constant() {
@@ -224,7 +245,8 @@ inline detail::constant_int_value_matcher<1> m_One() {
 }
 
 /// Matches the given OpClass.
-template <typename OpClass> inline detail::op_matcher<OpClass> m_Op() {
+template <typename OpClass>
+inline detail::op_matcher<OpClass> m_Op() {
   return detail::op_matcher<OpClass>();
 }
 
@@ -268,9 +290,10 @@ auto m_Op(Matchers... matchers) {
 
 namespace matchers {
 inline auto m_Any() { return detail::AnyValueMatcher(); }
+inline auto m_Any(Value *val) { return detail::AnyCapturedValueMatcher(val); }
 inline auto m_Val(Value v) { return detail::PatternMatcherValue(v); }
 } // namespace matchers
 
-} // end namespace mlir
+} // namespace mlir
 
-#endif // MLIR_MATCHERS_H
+#endif // MLIR_IR_MATCHERS_H

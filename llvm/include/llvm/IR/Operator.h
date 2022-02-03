@@ -14,6 +14,7 @@
 #ifndef LLVM_IR_OPERATOR_H
 #define LLVM_IR_OPERATOR_H
 
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/Constants.h"
@@ -59,6 +60,10 @@ public:
   static bool classof(const Value *V) {
     return isa<Instruction>(V) || isa<ConstantExpr>(V);
   }
+
+  /// Return true if this operator has flags which may cause this operator
+  /// to evaluate to poison despite having non-poison inputs.
+  bool hasPoisonGeneratingFlags() const;
 };
 
 /// Utility class for integer operators which may exhibit overflow - Add, Sub,
@@ -243,7 +248,18 @@ public:
   void operator|=(const FastMathFlags &OtherFlags) {
     Flags |= OtherFlags.Flags;
   }
+  bool operator!=(const FastMathFlags &OtherFlags) const {
+    return Flags != OtherFlags.Flags;
+  }
+
+  /// Print fast-math flags to \p O.
+  void print(raw_ostream &O) const;
 };
+
+inline raw_ostream &operator<<(raw_ostream &O, FastMathFlags FMF) {
+  FMF.print(O);
+  return O;
+}
 
 /// Utility class for floating point operations which can have
 /// information about relaxed accuracy requirements attached to them.
@@ -385,8 +401,10 @@ public:
 
     // Judge based on function.
     auto *VPIntrin = dyn_cast<VPIntrinsic>(V);
-    if (VPIntrin)
-      Opcode = VPIntrin->getFunctionalOpcode();
+    if (VPIntrin) {
+      auto OCOpt = VPIntrin->getFunctionalOpcode();
+      Opcode = OCOpt ? *OCOpt : (unsigned) Instruction::Call;
+    }
 
     switch (Opcode) {
     case Instruction::FNeg:
@@ -493,6 +511,14 @@ public:
   inline op_iterator       idx_end()         { return op_end(); }
   inline const_op_iterator idx_end()   const { return op_end(); }
 
+  inline iterator_range<op_iterator> indices() {
+    return make_range(idx_begin(), idx_end());
+  }
+
+  inline iterator_range<const_op_iterator> indices() const {
+    return make_range(idx_begin(), idx_end());
+  }
+
   Value *getPointerOperand() {
     return getOperand(0);
   }
@@ -549,7 +575,7 @@ public:
   }
 
   unsigned countNonConstantIndices() const {
-    return count_if(make_range(idx_begin(), idx_end()), [](const Use& use) {
+    return count_if(indices(), [](const Use& use) {
         return !isa<ConstantInt>(*use);
       });
   }
@@ -582,6 +608,12 @@ public:
       Type *SourceType, ArrayRef<const Value *> Index, const DataLayout &DL,
       APInt &Offset,
       function_ref<bool(Value &, APInt &)> ExternalAnalysis = nullptr);
+
+  /// Collect the offset of this GEP as a map of Values to their associated
+  /// APInt multipliers, as well as a total Constant Offset.
+  bool collectOffset(const DataLayout &DL, unsigned BitWidth,
+                     MapVector<Value *, APInt> &VariableOffsets,
+                     APInt &ConstantOffset) const;
 };
 
 class PtrToIntOperator

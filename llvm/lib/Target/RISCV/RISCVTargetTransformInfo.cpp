@@ -15,8 +15,15 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscvtti"
 
-int RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
-                                TTI::TargetCostKind CostKind) {
+static cl::opt<unsigned> RVVRegisterWidthLMUL(
+    "riscv-v-register-bit-width-lmul",
+    cl::desc(
+        "The LMUL to use for getRegisterBitWidth queries. Affects LMUL used "
+        "by autovectorized code. Fractional LMULs are not supported."),
+    cl::init(1), cl::Hidden);
+
+InstructionCost RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
+                                            TTI::TargetCostKind CostKind) {
   assert(Ty->isIntegerTy() &&
          "getIntImmCost can only estimate cost of materialising integers");
 
@@ -27,13 +34,13 @@ int RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
   // Otherwise, we check how many instructions it will take to materialise.
   const DataLayout &DL = getDataLayout();
   return RISCVMatInt::getIntMatCost(Imm, DL.getTypeSizeInBits(Ty),
-                                    getST()->is64Bit());
+                                    getST()->getFeatureBits());
 }
 
-int RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
-                                    const APInt &Imm, Type *Ty,
-                                    TTI::TargetCostKind CostKind,
-                                    Instruction *Inst) {
+InstructionCost RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
+                                                const APInt &Imm, Type *Ty,
+                                                TTI::TargetCostKind CostKind,
+                                                Instruction *Inst) {
   assert(Ty->isIntegerTy() &&
          "getIntImmCost can only estimate cost of materialising integers");
 
@@ -52,8 +59,15 @@ int RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
     // split up large offsets in GEP into better parts than ConstantHoisting
     // can.
     return TTI::TCC_Free;
-  case Instruction::Add:
   case Instruction::And:
+    // zext.h
+    if (Imm == UINT64_C(0xffff) && ST->hasStdExtZbb())
+      return TTI::TCC_Free;
+    // zext.w
+    if (Imm == UINT64_C(0xffffffff) && ST->hasStdExtZbb())
+      return TTI::TCC_Free;
+    LLVM_FALLTHROUGH;
+  case Instruction::Add:
   case Instruction::Or:
   case Instruction::Xor:
   case Instruction::Mul:
@@ -88,11 +102,18 @@ int RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
   return TTI::TCC_Free;
 }
 
-int RISCVTTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
-                                      const APInt &Imm, Type *Ty,
-                                      TTI::TargetCostKind CostKind) {
+InstructionCost
+RISCVTTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
+                                  const APInt &Imm, Type *Ty,
+                                  TTI::TargetCostKind CostKind) {
   // Prevent hoisting in unknown cases.
   return TTI::TCC_Free;
+}
+
+TargetTransformInfo::PopcntSupportKind
+RISCVTTIImpl::getPopcntSupport(unsigned TyWidth) {
+  assert(isPowerOf2_32(TyWidth) && "Ty width must be power of 2");
+  return ST->hasStdExtZbb() ? TTI::PSK_FastHardware : TTI::PSK_Software;
 }
 
 bool RISCVTTIImpl::shouldExpandReduction(const IntrinsicInst *II) const {
@@ -105,18 +126,6 @@ bool RISCVTTIImpl::shouldExpandReduction(const IntrinsicInst *II) const {
   // These reductions have no equivalent in RVV
   case Intrinsic::vector_reduce_mul:
   case Intrinsic::vector_reduce_fmul:
-  // The fmin and fmax intrinsics are not currently supported due to a
-  // discrepancy between the LLVM semantics and the RVV 0.10 ISA behaviour with
-  // regards to signaling NaNs: the vector fmin/fmax reduction intrinsics match
-  // the behaviour minnum/maxnum intrinsics, whereas the vfredmin/vfredmax
-  // instructions match the vfmin/vfmax instructions which match the equivalent
-  // scalar fmin/fmax instructions as defined in 2.2 F/D/Q extension (see
-  // https://bugs.llvm.org/show_bug.cgi?id=27363).
-  // This behaviour is likely fixed in version 2.3 of the RISC-V F/D/Q
-  // extension, where fmin/fmax behave like minnum/maxnum, but until then the
-  // intrinsics are left unsupported.
-  case Intrinsic::vector_reduce_fmax:
-  case Intrinsic::vector_reduce_fmin:
     return true;
   }
 }
@@ -130,7 +139,152 @@ Optional<unsigned> RISCVTTIImpl::getMaxVScale() const {
   // know whether the LoopVectorizer is safe to do or not.
   // We only consider to use single vector register (LMUL = 1) to vectorize.
   unsigned MaxVectorSizeInBits = ST->getMaxRVVVectorSizeInBits();
-  if (ST->hasStdExtV() && MaxVectorSizeInBits != 0)
+  if (ST->hasVInstructions() && MaxVectorSizeInBits != 0)
     return MaxVectorSizeInBits / RISCV::RVVBitsPerBlock;
   return BaseT::getMaxVScale();
+}
+
+TypeSize
+RISCVTTIImpl::getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
+  unsigned LMUL = PowerOf2Floor(
+      std::max<unsigned>(std::min<unsigned>(RVVRegisterWidthLMUL, 8), 1));
+  switch (K) {
+  case TargetTransformInfo::RGK_Scalar:
+    return TypeSize::getFixed(ST->getXLen());
+  case TargetTransformInfo::RGK_FixedWidthVector:
+    return TypeSize::getFixed(
+        ST->hasVInstructions() ? LMUL * ST->getMinRVVVectorSizeInBits() : 0);
+  case TargetTransformInfo::RGK_ScalableVector:
+    return TypeSize::getScalable(
+        ST->hasVInstructions() ? LMUL * RISCV::RVVBitsPerBlock : 0);
+  }
+
+  llvm_unreachable("Unsupported register kind");
+}
+
+InstructionCost RISCVTTIImpl::getGatherScatterOpCost(
+    unsigned Opcode, Type *DataTy, const Value *Ptr, bool VariableMask,
+    Align Alignment, TTI::TargetCostKind CostKind, const Instruction *I) {
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return BaseT::getGatherScatterOpCost(Opcode, DataTy, Ptr, VariableMask,
+                                         Alignment, CostKind, I);
+
+  if ((Opcode == Instruction::Load &&
+       !isLegalMaskedGather(DataTy, Align(Alignment))) ||
+      (Opcode == Instruction::Store &&
+       !isLegalMaskedScatter(DataTy, Align(Alignment))))
+    return BaseT::getGatherScatterOpCost(Opcode, DataTy, Ptr, VariableMask,
+                                         Alignment, CostKind, I);
+
+  // FIXME: Only supporting fixed vectors for now.
+  if (!isa<FixedVectorType>(DataTy))
+    return BaseT::getGatherScatterOpCost(Opcode, DataTy, Ptr, VariableMask,
+                                         Alignment, CostKind, I);
+
+  auto *VTy = cast<FixedVectorType>(DataTy);
+  unsigned NumLoads = VTy->getNumElements();
+  InstructionCost MemOpCost =
+      getMemoryOpCost(Opcode, VTy->getElementType(), Alignment, 0, CostKind, I);
+  return NumLoads * MemOpCost;
+}
+
+void RISCVTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
+                                           TTI::UnrollingPreferences &UP,
+                                           OptimizationRemarkEmitter *ORE) {
+  // TODO: More tuning on benchmarks and metrics with changes as needed
+  //       would apply to all settings below to enable performance.
+
+  // Support explicit targets enabled for SiFive with the unrolling preferences
+  // below
+  bool UseDefaultPreferences = true;
+  if (ST->getProcFamily() == RISCVSubtarget::SiFive7)
+    UseDefaultPreferences = false;
+
+  if (UseDefaultPreferences)
+    return BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);
+
+  // Enable Upper bound unrolling universally, not dependant upon the conditions
+  // below.
+  UP.UpperBound = true;
+
+  // Disable loop unrolling for Oz and Os.
+  UP.OptSizeThreshold = 0;
+  UP.PartialOptSizeThreshold = 0;
+  if (L->getHeader()->getParent()->hasOptSize())
+    return;
+
+  SmallVector<BasicBlock *, 4> ExitingBlocks;
+  L->getExitingBlocks(ExitingBlocks);
+  LLVM_DEBUG(dbgs() << "Loop has:\n"
+                    << "Blocks: " << L->getNumBlocks() << "\n"
+                    << "Exit blocks: " << ExitingBlocks.size() << "\n");
+
+  // Only allow another exit other than the latch. This acts as an early exit
+  // as it mirrors the profitability calculation of the runtime unroller.
+  if (ExitingBlocks.size() > 2)
+    return;
+
+  // Limit the CFG of the loop body for targets with a branch predictor.
+  // Allowing 4 blocks permits if-then-else diamonds in the body.
+  if (L->getNumBlocks() > 4)
+    return;
+
+  // Don't unroll vectorized loops, including the remainder loop
+  if (getBooleanLoopAttribute(L, "llvm.loop.isvectorized"))
+    return;
+
+  // Scan the loop: don't unroll loops with calls as this could prevent
+  // inlining.
+  InstructionCost Cost = 0;
+  for (auto *BB : L->getBlocks()) {
+    for (auto &I : *BB) {
+      // Initial setting - Don't unroll loops containing vectorized
+      // instructions.
+      if (I.getType()->isVectorTy())
+        return;
+
+      if (isa<CallInst>(I) || isa<InvokeInst>(I)) {
+        if (const Function *F = cast<CallBase>(I).getCalledFunction()) {
+          if (!isLoweredToCall(F))
+            continue;
+        }
+        return;
+      }
+
+      SmallVector<const Value *> Operands(I.operand_values());
+      Cost +=
+          getUserCost(&I, Operands, TargetTransformInfo::TCK_SizeAndLatency);
+    }
+  }
+
+  LLVM_DEBUG(dbgs() << "Cost of loop: " << Cost << "\n");
+
+  UP.Partial = true;
+  UP.Runtime = true;
+  UP.UnrollRemainder = true;
+  UP.UnrollAndJam = true;
+  UP.UnrollAndJamInnerLoopThreshold = 60;
+
+  // Force unrolling small loops can be very useful because of the branch
+  // taken cost of the backedge.
+  if (Cost < 12)
+    UP.Force = true;
+}
+
+void RISCVTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
+                                         TTI::PeelingPreferences &PP) {
+  BaseT::getPeelingPreferences(L, SE, PP);
+}
+
+InstructionCost RISCVTTIImpl::getRegUsageForType(Type *Ty) {
+  TypeSize Size = Ty->getPrimitiveSizeInBits();
+  if (Ty->isVectorTy()) {
+    if (Size.isScalable() && ST->hasVInstructions())
+      return divideCeil(Size.getKnownMinValue(), RISCV::RVVBitsPerBlock);
+
+    if (ST->useRVVForFixedLengthVectors())
+      return divideCeil(Size, ST->getMinRVVVectorSizeInBits());
+  }
+
+  return BaseT::getRegUsageForType(Ty);
 }

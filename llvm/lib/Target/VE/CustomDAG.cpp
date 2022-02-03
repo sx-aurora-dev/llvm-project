@@ -25,14 +25,97 @@
 
 namespace llvm {
 
+
 /// Packing {
 
+bool isPackedMaskType(EVT SomeVT) {
+  return isPackedType(SomeVT) && isMaskType(SomeVT);
+}
 template <> Packing getPackingForMaskBits(const LaneBits MB) {
   return Packing::Normal;
 }
 template <> Packing getPackingForMaskBits(const PackedLaneBits MB) {
   return Packing::Dense;
 }
+
+PackElem getPartForLane(unsigned ElemIdx) {
+  return (ElemIdx % 2 == 0) ? PackElem::Hi : PackElem::Lo;
+}
+
+PackElem getOtherPart(PackElem Part) {
+  return Part == PackElem::Lo ? PackElem::Hi : PackElem::Lo;
+}
+
+unsigned getOverPackedSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
+}
+
+unsigned getPackedMaskSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_vm_lo : VE::sub_vm_hi;
+}
+
+MVT getMaskVT(Packing P) {
+  return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
+}
+
+PackElem getPackElemForVT(EVT VT) {
+  if (VT.isFloatingPoint())
+    return PackElem::Hi;
+  if (VT.isVector())
+    return getPackElemForVT(VT.getVectorElementType());
+  return PackElem::Lo;
+}
+
+// The subregister VT an unpack of part \p Elem from \p VT would source its
+// result from.
+MVT getUnpackSourceType(EVT VT, PackElem Elem) {
+  if (!VT.isVector())
+    return Elem == PackElem::Hi ? MVT::f32 : MVT::i32;
+
+  EVT ElemVT = VT.getVectorElementType();
+  if (isMaskType(VT))
+    return MVT::v256i1;
+  if (isOverPackedType(VT))
+    return ElemVT.isFloatingPoint() ? MVT::v256f64 : MVT::v256i64;
+  return ElemVT.isFloatingPoint() ? MVT::v256f32 : MVT::v256i32;
+}
+
+Packing getPackingForVT(EVT VT) {
+  assert(VT.isVector());
+  return isPackedType(VT) ? Packing::Dense : Packing::Normal;
+}
+
+// True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
+bool isPackingSupportOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case VEISD::VEC_UNPACK_LO:
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_PACK:
+  case VEISD::VEC_SWAP:
+    return true;
+  }
+  return false;
+}
+
+bool isUnpackOp(unsigned OPC) {
+  return (OPC == VEISD::VEC_UNPACK_LO) || (OPC == VEISD::VEC_UNPACK_HI);
+}
+
+PackElem getPartForUnpackOpcode(unsigned OPC) {
+  if (OPC == VEISD::VEC_UNPACK_LO)
+    return PackElem::Lo;
+  if (OPC == VEISD::VEC_UNPACK_HI)
+    return PackElem::Hi;
+  llvm_unreachable("Not an unpack opcode!");
+}
+
+unsigned getUnpackOpcodeForPart(PackElem Part) {
+  return (Part == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
+}
+
+SDValue getUnpackPackOperand(SDValue N) { return N->getOperand(0); }
+
+SDValue getUnpackAVL(SDValue N) { return N->getOperand(1); }
 
 /// } Packing
 
@@ -141,6 +224,26 @@ bool isVVPReductionOp(unsigned Opcode) {
     return true;
   }
   return false;
+}
+
+bool hasVVPReductionStartParam(unsigned VVPROPC) {
+  switch (VVPROPC) {
+  case VEISD::VVP_REDUCE_FADD:
+    // VFSUM
+  case VEISD::VVP_REDUCE_FMIN:
+    // VFMIN
+  case VEISD::VVP_REDUCE_FMAX:
+    // VFMAX
+  default:
+     return false;
+
+    case VEISD::VVP_REDUCE_SEQ_FADD:
+     // VFIA
+    case VEISD::VVP_REDUCE_FMUL:
+    case VEISD::VVP_REDUCE_SEQ_FMUL:
+     // VFIM
+     return true;
+  }
 }
 
 unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
@@ -264,16 +367,6 @@ Optional<int> getAVLPos(unsigned Opc) {
   return None;
 }
 
-static SDValue getLoadStoreMask(SDValue Op) {
-  if (auto *MaskedN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
-    return MaskedN->getMask();
-  }
-  if (auto *VPLoadN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
-    return VPLoadN->getMask();
-  }
-  return SDValue();
-}
-
 // Return the mask operand position for this VVP or VEC op.
 Optional<int> getMaskPos(unsigned Opc) {
   // VP opcode.
@@ -383,17 +476,43 @@ PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   }
 }
 
+PosOpt getReductionStartParamPos(unsigned OPC) {
+  if (ISD::isVPOpcode(OPC))
+    return ISD::getVPReductionStartParamPos(OPC);
+
+  switch (OPC) {
+  case VEISD::VVP_REDUCE_SEQ_FADD:
+  case VEISD::VVP_REDUCE_SEQ_FMUL:
+    return 0;
+  default:
+    return None;
+  }
+}
+
 PosOpt getVPReductionVectorParamPos(unsigned VPISD) {
   PosOpt VecPos;
   switch (VPISD) {
   default:
     break;
 #define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, ...) VecPos = VECTORPOS;
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) VecPos = VECTORPOS;
 #define END_REGISTER_VP_SDNODE(VPISD) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
   return VecPos;
+}
+
+PosOpt getVPReductionStartParamPos(unsigned VPISD) {
+  PosOpt StartPos;
+  switch (VPISD) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) StartPos = STARTPOS;
+#define END_REGISTER_VP_SDNODE(VPISD) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return StartPos;
 }
 
 PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
@@ -1225,49 +1344,83 @@ SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
 }
 
 SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
-                                          SDValue VectorV, SDValue Mask,
+                                          SDValue StartV, SDValue VectorV, SDValue Mask,
                                           SDValue AVL,
                                           SDNodeFlags Flags) const {
-  if (!isMaskType(VectorV.getValueType())) {
-    // Use sequential 'fmul' reduction.
+
+  // Optionally attach the start param with a scalar op (where it is unsupported).
+  bool scalarizeStartParam = StartV && !hasVVPReductionStartParam(VVPOpcode);
+  bool IsMaskReduction = isMaskType(VectorV.getValueType());
+  auto AttachStartValue = [&](SDValue ReductionResV) {
+    if (!scalarizeStartParam)
+      return ReductionResV;
+    auto ScalarOC = getScalarReductionOpcode(VVPOpcode, IsMaskReduction);
+    return getNode(ScalarOC, ResVT, {StartV, ReductionResV});
+  };
+
+  if (!IsMaskReduction) {
+    // Fixup: Always Use sequential 'fmul' reduction.
     if (VVPOpcode == VEISD::VVP_REDUCE_FMUL) {
       VVPOpcode = VEISD::VVP_REDUCE_SEQ_FMUL;
-      auto FloatOne = DAG.getConstantFP(
-          1.0, DL, VectorV.getValueType().getVectorElementType());
-      return getNode(VVPOpcode, ResVT, {FloatOne, VectorV, Mask, AVL}, Flags);
+      return getNode(VVPOpcode, ResVT, {StartV, VectorV, Mask, AVL}, Flags);
     }
-    return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags);
+
+    if (!scalarizeStartParam && StartV) {
+      assert(hasVVPReductionStartParam(VVPOpcode));
+      return AttachStartValue(
+          getNode(VVPOpcode, ResVT, {StartV, VectorV, Mask, AVL}, Flags));
+    } else
+      return AttachStartValue(
+          getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags));
   }
 
-  // Mask legalization using vm_popcount
-  if (!isAllTrueMask(Mask))
-    VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
-
-  auto Pop = createMaskPopcount(VectorV, AVL);
-  auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
 
   switch (VVPOpcode) {
   default:
     abort(); // TODO implement
   case VEISD::VVP_REDUCE_ADD:
   case VEISD::VVP_REDUCE_XOR: {
+    // Mask legalization using vm_popcount
+    if (!isAllTrueMask(Mask))
+      VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
+
+    auto Pop = createMaskPopcount(VectorV, AVL);
+    auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
     auto OneV = getConstant(1, MVT::i32);
-    return getNode(ISD::AND, MVT::i32, {LegalPop, OneV});
+    return AttachStartValue(getNode(ISD::AND, MVT::i32, {LegalPop, OneV}));
   }
   case VEISD::VVP_REDUCE_UMAX:
   case VEISD::VVP_REDUCE_SMIN:
   case VEISD::VVP_REDUCE_OR: {
+    // Mask legalization using vm_popcount
+    if (!isAllTrueMask(Mask))
+      VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
+
+    auto Pop = createMaskPopcount(VectorV, AVL);
+    auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
+
     // FIXME: Should be 'true' if \p Mask is all-false..
     auto ZeroV = getConstant(0, MVT::i32);
-    return getNode(ISD::SETCC, MVT::i32,
-                   {LegalPop, ZeroV, DAG.getCondCode(ISD::CondCode::SETNE)});
+    return AttachStartValue(
+        getNode(ISD::SETCC, MVT::i32,
+                {LegalPop, ZeroV, DAG.getCondCode(ISD::CondCode::SETNE)}));
   }
   case VEISD::VVP_REDUCE_UMIN:
   case VEISD::VVP_REDUCE_SMAX:
   case VEISD::VVP_REDUCE_MUL:
   case VEISD::VVP_REDUCE_AND: {
-    return getNode(ISD::SETCC, MVT::i32,
-                   {LegalPop, AVL, DAG.getCondCode(ISD::CondCode::SETEQ)});
+    // TODO: Invert and OR the mask, then compare PCVM against AVL.
+
+    // Mask legalization using vm_popcount
+    if (!isAllTrueMask(Mask))
+      VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
+
+    auto Pop = createMaskPopcount(VectorV, AVL);
+    auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
+
+    return AttachStartValue(
+        getNode(ISD::SETCC, MVT::i32,
+                {LegalPop, AVL, DAG.getCondCode(ISD::CondCode::SETEQ)}));
   }
   }
 }

@@ -18,7 +18,7 @@
 
 namespace llvm {
 
-Optional<RoundingMode> StrToRoundingMode(StringRef RoundingArg) {
+Optional<RoundingMode> convertStrToRoundingMode(StringRef RoundingArg) {
   // For dynamic rounding mode, we use round to nearest but we will set the
   // 'exact' SDNodeFlag so that the value will not be rounded.
   return StringSwitch<Optional<RoundingMode>>(RoundingArg)
@@ -31,7 +31,7 @@ Optional<RoundingMode> StrToRoundingMode(StringRef RoundingArg) {
       .Default(None);
 }
 
-Optional<StringRef> RoundingModeToStr(RoundingMode UseRounding) {
+Optional<StringRef> convertRoundingModeToStr(RoundingMode UseRounding) {
   Optional<StringRef> RoundingStr = None;
   switch (UseRounding) {
   case RoundingMode::Dynamic:
@@ -58,7 +58,8 @@ Optional<StringRef> RoundingModeToStr(RoundingMode UseRounding) {
   return RoundingStr;
 }
 
-Optional<fp::ExceptionBehavior> StrToExceptionBehavior(StringRef ExceptionArg) {
+Optional<fp::ExceptionBehavior>
+convertStrToExceptionBehavior(StringRef ExceptionArg) {
   return StringSwitch<Optional<fp::ExceptionBehavior>>(ExceptionArg)
       .Case("fpexcept.ignore", fp::ebIgnore)
       .Case("fpexcept.maytrap", fp::ebMayTrap)
@@ -66,7 +67,8 @@ Optional<fp::ExceptionBehavior> StrToExceptionBehavior(StringRef ExceptionArg) {
       .Default(None);
 }
 
-Optional<StringRef> ExceptionBehaviorToStr(fp::ExceptionBehavior UseExcept) {
+Optional<StringRef>
+convertExceptionBehaviorToStr(fp::ExceptionBehavior UseExcept) {
   Optional<StringRef> ExceptStr = None;
   switch (UseExcept) {
   case fp::ebStrict:
@@ -84,7 +86,7 @@ Optional<StringRef> ExceptionBehaviorToStr(fp::ExceptionBehavior UseExcept) {
 
 Value *GetConstrainedFPExcept(LLVMContext &Context,
                               fp::ExceptionBehavior UseExcept) {
-  Optional<StringRef> ExceptStr = ExceptionBehaviorToStr(UseExcept);
+  Optional<StringRef> ExceptStr = convertExceptionBehaviorToStr(UseExcept);
   assert(ExceptStr.hasValue() && "Garbage strict exception behavior!");
   auto *ExceptMDS = MDString::get(Context, ExceptStr.getValue());
 
@@ -93,7 +95,7 @@ Value *GetConstrainedFPExcept(LLVMContext &Context,
 
 Value *GetConstrainedFPRounding(LLVMContext &Context,
                                 RoundingMode UseRounding) {
-  Optional<StringRef> RoundingStr = RoundingModeToStr(UseRounding);
+  Optional<StringRef> RoundingStr = convertRoundingModeToStr(UseRounding);
   assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
   auto *RoundingMDS = MDString::get(Context, RoundingStr.getValue());
 

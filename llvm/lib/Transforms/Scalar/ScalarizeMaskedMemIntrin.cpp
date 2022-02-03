@@ -873,12 +873,10 @@ static bool runImpl(Function &F, const TargetTransformInfo &TTI,
   auto &DL = F.getParent()->getDataLayout();
   while (MadeChange) {
     MadeChange = false;
-    for (Function::iterator I = F.begin(); I != F.end();) {
-      BasicBlock *BB = &*I++;
+    for (BasicBlock &BB : llvm::make_early_inc_range(F)) {
       bool ModifiedDTOnIteration = false;
-      MadeChange |= optimizeBlock(*BB, ModifiedDTOnIteration, TTI, DL,
+      MadeChange |= optimizeBlock(BB, ModifiedDTOnIteration, TTI, DL,
                                   DTU.hasValue() ? DTU.getPointer() : nullptr);
-
 
       // Restart BB iteration if the dominator tree of the Function was changed
       if (ModifiedDTOnIteration)
@@ -933,7 +931,7 @@ static bool optimizeCallInst(CallInst *CI, bool &ModifiedDT,
   if (II) {
     // The scalarization code below does not work for scalable vectors.
     if (isa<ScalableVectorType>(II->getType()) ||
-        any_of(II->arg_operands(),
+        any_of(II->args(),
                [](Value *V) { return isa<ScalableVectorType>(V->getType()); }))
       return false;
 
@@ -956,23 +954,26 @@ static bool optimizeCallInst(CallInst *CI, bool &ModifiedDT,
       scalarizeMaskedStore(DL, CI, DTU, ModifiedDT);
       return true;
     case Intrinsic::masked_gather: {
-      unsigned AlignmentInt =
-          cast<ConstantInt>(CI->getArgOperand(1))->getZExtValue();
+      MaybeAlign MA =
+          cast<ConstantInt>(CI->getArgOperand(1))->getMaybeAlignValue();
       Type *LoadTy = CI->getType();
-      Align Alignment =
-          DL.getValueOrABITypeAlignment(MaybeAlign(AlignmentInt), LoadTy);
-      if (TTI.isLegalMaskedGather(LoadTy, Alignment))
+      Align Alignment = DL.getValueOrABITypeAlignment(MA,
+                                                      LoadTy->getScalarType());
+      if (TTI.isLegalMaskedGather(LoadTy, Alignment) &&
+          !TTI.forceScalarizeMaskedGather(cast<VectorType>(LoadTy), Alignment))
         return false;
       scalarizeMaskedGather(DL, CI, DTU, ModifiedDT);
       return true;
     }
     case Intrinsic::masked_scatter: {
-      unsigned AlignmentInt =
-          cast<ConstantInt>(CI->getArgOperand(2))->getZExtValue();
+      MaybeAlign MA =
+          cast<ConstantInt>(CI->getArgOperand(2))->getMaybeAlignValue();
       Type *StoreTy = CI->getArgOperand(0)->getType();
-      Align Alignment =
-          DL.getValueOrABITypeAlignment(MaybeAlign(AlignmentInt), StoreTy);
-      if (TTI.isLegalMaskedScatter(StoreTy, Alignment))
+      Align Alignment = DL.getValueOrABITypeAlignment(MA,
+                                                      StoreTy->getScalarType());
+      if (TTI.isLegalMaskedScatter(StoreTy, Alignment) &&
+          !TTI.forceScalarizeMaskedScatter(cast<VectorType>(StoreTy),
+                                           Alignment))
         return false;
       scalarizeMaskedScatter(DL, CI, DTU, ModifiedDT);
       return true;

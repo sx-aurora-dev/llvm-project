@@ -17,10 +17,8 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Target/TargetOptions.h"
-#include <vector>
 
 namespace llvm {
-class TargetMachine;
 
 enum class RunOutliner { TargetDefault, AlwaysOutline, NeverOutline };
 enum class RegAllocType { Default, Basic, Fast, Greedy, PBQP };

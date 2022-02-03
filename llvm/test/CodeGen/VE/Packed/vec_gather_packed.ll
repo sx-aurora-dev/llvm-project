@@ -185,9 +185,9 @@ define fastcc <512 x float> @vp_gather_idx_v512f32(float* %B, <512 x i64> %I, <5
   ret <512 x float> %r
 }
 
-declare <256 x double> @llvm.vp.gather.v256f64.v256p0f64(<256 x double*>, <256 x i1> mask, i32 vlen)
-declare <512 x float> @llvm.vp.gather.v512f32.v512p0f32(<512 x float*>, <512 x i1> mask, i32 vlen)
-declare <512 x double> @llvm.vp.gather.v512f64.v512p0f64(<512 x double*>, <512 x i1> mask, i32 vlen)
+declare <256 x double> @llvm.vp.gather.v256f64.v256p0f64(<256 x double*>, <256 x i1>, i32)
+declare <512 x float> @llvm.vp.gather.v512f32.v512p0f32(<512 x float*>, <512 x i1>, i32)
+declare <512 x double> @llvm.vp.gather.v512f64.v512p0f64(<512 x double*>, <512 x i1>, i32)
 
 declare <512 x float> @llvm.masked.gather.v512f32.v512p0f32(<512 x float*> %0, i32 immarg %1, <512 x i1> %2, <512 x float> %3)
 declare <512 x double> @llvm.masked.gather.v512f64.v512p0f64(<512 x double*> %0, i32 immarg %1, <512 x i1> %2, <512 x double> %3)
