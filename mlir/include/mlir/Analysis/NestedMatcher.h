@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_ANALYSIS_MLFUNCTIONMATCHER_H_
-#define MLIR_ANALYSIS_MLFUNCTIONMATCHER_H_
+#ifndef MLIR_ANALYSIS_NESTEDMATCHER_H
+#define MLIR_ANALYSIS_NESTEDMATCHER_H
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
@@ -52,7 +52,7 @@ public:
 
   explicit operator bool() { return matchedOperation != nullptr; }
 
-  Operation *getMatchedOperation() { return matchedOperation; }
+  Operation *getMatchedOperation() const { return matchedOperation; }
   ArrayRef<NestedMatch> getMatchedChildren() { return matchedChildren; }
 
 private:
@@ -65,7 +65,7 @@ private:
   NestedMatch() = default;
 
   /// Payload, holds a NestedMatch and all its children along this branch.
-  Operation *matchedOperation;
+  Operation *matchedOperation = nullptr;
   ArrayRef<NestedMatch> matchedChildren;
 };
 
@@ -93,8 +93,15 @@ class NestedPattern {
 public:
   NestedPattern(ArrayRef<NestedPattern> nested,
                 FilterFunctionType filter = defaultFilterFunction);
-  NestedPattern(const NestedPattern &) = default;
-  NestedPattern &operator=(const NestedPattern &) = default;
+  NestedPattern(const NestedPattern &other);
+  NestedPattern &operator=(const NestedPattern &other);
+
+  ~NestedPattern() {
+    // Call destructors manually, ArrayRef is non-owning so it wouldn't call
+    // them, but we should free the memory allocated by std::function outside of
+    // the arena allocator.
+    freeNested();
+  }
 
   /// Returns all the top-level matches in `func`.
   void match(FuncOp func, SmallVectorImpl<NestedMatch> *matches) {
@@ -113,6 +120,13 @@ private:
   friend class NestedPatternContext;
   friend class NestedMatch;
   friend struct State;
+
+  /// Copies the list of nested patterns to the arena allocator associated with
+  /// this pattern.
+  void copyNestedToThis(ArrayRef<NestedPattern> nested);
+
+  /// Calls destructors on nested patterns.
+  void freeNested();
 
   /// Underlying global bump allocator managed by a NestedPatternContext.
   static llvm::BumpPtrAllocator *&allocator();
@@ -166,22 +180,22 @@ public:
 namespace matcher {
 // Syntactic sugar NestedPattern builder functions.
 NestedPattern Op(FilterFunctionType filter = defaultFilterFunction);
-NestedPattern If(NestedPattern child);
-NestedPattern If(FilterFunctionType filter, NestedPattern child);
+NestedPattern If(const NestedPattern &child);
+NestedPattern If(const FilterFunctionType &filter, const NestedPattern &child);
 NestedPattern If(ArrayRef<NestedPattern> nested = {});
-NestedPattern If(FilterFunctionType filter,
+NestedPattern If(const FilterFunctionType &filter,
                  ArrayRef<NestedPattern> nested = {});
-NestedPattern For(NestedPattern child);
-NestedPattern For(FilterFunctionType filter, NestedPattern child);
+NestedPattern For(const NestedPattern &child);
+NestedPattern For(const FilterFunctionType &filter, const NestedPattern &child);
 NestedPattern For(ArrayRef<NestedPattern> nested = {});
-NestedPattern For(FilterFunctionType filter,
+NestedPattern For(const FilterFunctionType &filter,
                   ArrayRef<NestedPattern> nested = {});
 
 bool isParallelLoop(Operation &op);
 bool isReductionLoop(Operation &op);
 bool isLoadOrStore(Operation &op);
 
-} // end namespace matcher
-} // end namespace mlir
+} // namespace matcher
+} // namespace mlir
 
-#endif // MLIR_ANALYSIS_MLFUNCTIONMATCHER_H_
+#endif // MLIR_ANALYSIS_NESTEDMATCHER_H

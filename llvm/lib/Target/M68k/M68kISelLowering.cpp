@@ -1,4 +1,4 @@
-//===-- M68kISelLowering.cpp - M68k DAG Lowering Impl ------*- C++ -*--===//
+//===-- M68kISelLowering.cpp - M68k DAG Lowering Impl -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -268,7 +268,7 @@ static bool MatchingStackOffset(SDValue Arg, unsigned Offset,
 
   int FI = INT_MAX;
   if (Arg.getOpcode() == ISD::CopyFromReg) {
-    unsigned VR = cast<RegisterSDNode>(Arg.getOperand(1))->getReg();
+    Register VR = cast<RegisterSDNode>(Arg.getOperand(1))->getReg();
     if (!Register::isVirtualRegister(VR))
       return false;
     MachineInstr *Def = MRI->getVRegDef(VR);
@@ -487,7 +487,7 @@ SDValue M68kTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     report_fatal_error("M68k interrupts may not be called directly");
 
   auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
-  if (Attr.getValueAsString() == "true")
+  if (Attr.getValueAsBool())
     IsTailCall = false;
 
   // FIXME Add tailcalls support
@@ -519,9 +519,10 @@ SDValue M68kTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
-  // It is empty for LibCall
-  const Function *CalleeFunc = CLI.CB ? CLI.CB->getCalledFunction() : nullptr;
-  M68kCCState CCInfo(*CalleeFunc, CallConv, IsVarArg, MF, ArgLocs,
+  SmallVector<Type *, 4> ArgTypes;
+  for (const auto &Arg : CLI.getArgs())
+    ArgTypes.emplace_back(Arg.Ty);
+  M68kCCState CCInfo(ArgTypes, CallConv, IsVarArg, MF, ArgLocs,
                      *DAG.getContext());
   CCInfo.AnalyzeCallOperands(Outs, CC_M68k);
 
@@ -876,8 +877,10 @@ SDValue M68kTargetLowering::LowerFormalArguments(
 
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
-  M68kCCState CCInfo(MF.getFunction(), CCID, IsVarArg, MF, ArgLocs,
-                     *DAG.getContext());
+  SmallVector<Type *, 4> ArgTypes;
+  for (const Argument &Arg : MF.getFunction().args())
+    ArgTypes.emplace_back(Arg.getType());
+  M68kCCState CCInfo(ArgTypes, CCID, IsVarArg, MF, ArgLocs, *DAG.getContext());
 
   CCInfo.AnalyzeFormalArguments(Ins, CC_M68k);
 
@@ -897,7 +900,7 @@ SDValue M68kTargetLowering::LowerFormalArguments(
       else
         llvm_unreachable("Unknown argument type!");
 
-      unsigned Reg = MF.addLiveIn(VA.getLocReg(), RC);
+      Register Reg = MF.addLiveIn(VA.getLocReg(), RC);
       ArgValue = DAG.getCopyFromReg(Chain, DL, Reg, RegVT);
 
       // If this is an 8 or 16-bit value, it is really passed promoted to 32
@@ -1186,7 +1189,7 @@ bool M68kTargetLowering::IsEligibleForTailCallOptimization(
   // Can't do sibcall if stack needs to be dynamically re-aligned. PEI needs to
   // emit a special epilogue.
   const M68kRegisterInfo *RegInfo = Subtarget.getRegisterInfo();
-  if (RegInfo->needsStackRealignment(MF))
+  if (RegInfo->hasStackRealignment(MF))
     return false;
 
   // Also avoid sibcall optimization if either caller or callee uses struct
@@ -1273,7 +1276,7 @@ bool M68kTargetLowering::IsEligibleForTailCallOptimization(
         CCValAssign &VA = ArgLocs[i];
         if (!VA.isRegLoc())
           continue;
-        unsigned Reg = VA.getLocReg();
+        Register Reg = VA.getLocReg();
         switch (Reg) {
         default:
           break;
@@ -1975,7 +1978,7 @@ SDValue M68kTargetLowering::LowerSETCCCARRY(SDValue Op,
   M68k::CondCode CC = TranslateIntegerM68kCC(cast<CondCodeSDNode>(Cond)->get());
 
   EVT CarryVT = Carry.getValueType();
-  APInt NegOne = APInt::getAllOnesValue(CarryVT.getScalarSizeInBits());
+  APInt NegOne = APInt::getAllOnes(CarryVT.getScalarSizeInBits());
   Carry = DAG.getNode(M68kISD::ADD, DL, DAG.getVTList(CarryVT, MVT::i32), Carry,
                       DAG.getConstant(NegOne, DL, CarryVT));
 
@@ -2199,7 +2202,7 @@ SDValue M68kTargetLowering::LowerSELECT(SDValue Op, SelectionDAG &DAG) const {
       Op2.getOpcode() == ISD::TRUNCATE) {
     SDValue T1 = Op1.getOperand(0), T2 = Op2.getOperand(0);
     if (T1.getValueType() == T2.getValueType() &&
-        // Blacklist CopyFromReg to avoid partial register stalls.
+        // Block CopyFromReg so partial register stalls are avoided.
         T1.getOpcode() != ISD::CopyFromReg &&
         T2.getOpcode() != ISD::CopyFromReg) {
       SDVTList VTs = DAG.getVTList(T1.getValueType(), MVT::Glue);
@@ -2689,6 +2692,193 @@ const MCExpr *M68kTargetLowering::getPICJumpTableRelocBaseExpr(
   return MCSymbolRefExpr::create(MF->getJTISymbol(JTI, Ctx), Ctx);
 }
 
+M68kTargetLowering::ConstraintType
+M68kTargetLowering::getConstraintType(StringRef Constraint) const {
+  if (Constraint.size() > 0) {
+    switch (Constraint[0]) {
+    case 'a':
+    case 'd':
+      return C_RegisterClass;
+    case 'I':
+    case 'J':
+    case 'K':
+    case 'L':
+    case 'M':
+    case 'N':
+    case 'O':
+    case 'P':
+      return C_Immediate;
+    case 'C':
+      if (Constraint.size() == 2)
+        switch (Constraint[1]) {
+        case '0':
+        case 'i':
+        case 'j':
+          return C_Immediate;
+        default:
+          break;
+        }
+      break;
+    default:
+      break;
+    }
+  }
+
+  return TargetLowering::getConstraintType(Constraint);
+}
+
+void M68kTargetLowering::LowerAsmOperandForConstraint(SDValue Op,
+                                                      std::string &Constraint,
+                                                      std::vector<SDValue> &Ops,
+                                                      SelectionDAG &DAG) const {
+  SDValue Result;
+
+  if (Constraint.size() == 1) {
+    // Constant constraints
+    switch (Constraint[0]) {
+    case 'I':
+    case 'J':
+    case 'K':
+    case 'L':
+    case 'M':
+    case 'N':
+    case 'O':
+    case 'P': {
+      auto *C = dyn_cast<ConstantSDNode>(Op);
+      if (!C)
+        return;
+
+      int64_t Val = C->getSExtValue();
+      switch (Constraint[0]) {
+      case 'I': // constant integer in the range [1,8]
+        if (Val > 0 && Val <= 8)
+          break;
+        return;
+      case 'J': // constant signed 16-bit integer
+        if (isInt<16>(Val))
+          break;
+        return;
+      case 'K': // constant that is NOT in the range of [-0x80, 0x80)
+        if (Val < -0x80 || Val >= 0x80)
+          break;
+        return;
+      case 'L': // constant integer in the range [-8,-1]
+        if (Val < 0 && Val >= -8)
+          break;
+        return;
+      case 'M': // constant that is NOT in the range of [-0x100, 0x100]
+        if (Val < -0x100 || Val >= 0x100)
+          break;
+        return;
+      case 'N': // constant integer in the range [24,31]
+        if (Val >= 24 && Val <= 31)
+          break;
+        return;
+      case 'O': // constant integer 16
+        if (Val == 16)
+          break;
+        return;
+      case 'P': // constant integer in the range [8,15]
+        if (Val >= 8 && Val <= 15)
+          break;
+        return;
+      default:
+        llvm_unreachable("Unhandled constant constraint");
+      }
+
+      Result = DAG.getTargetConstant(Val, SDLoc(Op), Op.getValueType());
+      break;
+    }
+    default:
+      break;
+    }
+  }
+
+  if (Constraint.size() == 2) {
+    switch (Constraint[0]) {
+    case 'C':
+      // Constant constraints start with 'C'
+      switch (Constraint[1]) {
+      case '0':
+      case 'i':
+      case 'j': {
+        auto *C = dyn_cast<ConstantSDNode>(Op);
+        if (!C)
+          break;
+
+        int64_t Val = C->getSExtValue();
+        switch (Constraint[1]) {
+        case '0': // constant integer 0
+          if (!Val)
+            break;
+          return;
+        case 'i': // constant integer
+          break;
+        case 'j': // integer constant that doesn't fit in 16 bits
+          if (!isInt<16>(C->getSExtValue()))
+            break;
+          return;
+        default:
+          llvm_unreachable("Unhandled constant constraint");
+        }
+
+        Result = DAG.getTargetConstant(Val, SDLoc(Op), Op.getValueType());
+        break;
+      }
+      default:
+        break;
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (Result.getNode()) {
+    Ops.push_back(Result);
+    return;
+  }
+
+  TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
+}
+
+std::pair<unsigned, const TargetRegisterClass *>
+M68kTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
+                                                 StringRef Constraint,
+                                                 MVT VT) const {
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+    case 'r':
+    case 'd':
+      switch (VT.SimpleTy) {
+      case MVT::i8:
+        return std::make_pair(0U, &M68k::DR8RegClass);
+      case MVT::i16:
+        return std::make_pair(0U, &M68k::DR16RegClass);
+      case MVT::i32:
+        return std::make_pair(0U, &M68k::DR32RegClass);
+      default:
+        break;
+      }
+      break;
+    case 'a':
+      switch (VT.SimpleTy) {
+      case MVT::i16:
+        return std::make_pair(0U, &M68k::AR16RegClass);
+      case MVT::i32:
+        return std::make_pair(0U, &M68k::AR32RegClass);
+      default:
+        break;
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+}
+
 /// Determines whether the callee is required to pop its own arguments.
 /// Callee pop is necessary to support tail calls.
 bool M68k::isCalleePop(CallingConv::ID CallingConv, bool IsVarArg,
@@ -2911,9 +3101,9 @@ M68kTargetLowering::EmitLoweredSelect(MachineInstr &MI,
   // destination registers, and the registers that went into the PHI.
 
   for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; ++MIIt) {
-    unsigned DestReg = MIIt->getOperand(0).getReg();
-    unsigned Op1Reg = MIIt->getOperand(1).getReg();
-    unsigned Op2Reg = MIIt->getOperand(2).getReg();
+    Register DestReg = MIIt->getOperand(0).getReg();
+    Register Op1Reg = MIIt->getOperand(1).getReg();
+    Register Op2Reg = MIIt->getOperand(2).getReg();
 
     // If this CMOV we are generating is the opposite condition from
     // the jump we generated, then we have to swap the operands for the
@@ -3021,13 +3211,13 @@ SDValue M68kTargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
     auto &MRI = MF.getRegInfo();
     auto SPTy = getPointerTy(DAG.getDataLayout());
     auto *ARClass = getRegClassFor(SPTy);
-    unsigned Vreg = MRI.createVirtualRegister(ARClass);
+    Register Vreg = MRI.createVirtualRegister(ARClass);
     Chain = DAG.getCopyToReg(Chain, DL, Vreg, Size);
     Result = DAG.getNode(M68kISD::SEG_ALLOCA, DL, SPTy, Chain,
                          DAG.getRegister(Vreg, SPTy));
   } else {
     auto &TLI = DAG.getTargetLoweringInfo();
-    unsigned SPReg = TLI.getStackPointerRegisterToSaveRestore();
+    Register SPReg = TLI.getStackPointerRegisterToSaveRestore();
     assert(SPReg && "Target cannot require DYNAMIC_STACKALLOC expansion and"
                     " not tell us which reg is the stack pointer!");
 
@@ -3224,4 +3414,12 @@ const char *M68kTargetLowering::getTargetNodeName(unsigned Opcode) const {
   default:
     return NULL;
   }
+}
+
+CCAssignFn *M68kTargetLowering::getCCAssignFn(CallingConv::ID CC, bool Return,
+                                              bool IsVarArg) const {
+  if (Return)
+    return RetCC_M68k_C;
+  else
+    return CC_M68k_C;
 }

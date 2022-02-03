@@ -10,12 +10,12 @@ str	w0, [x21, x18, lsl #2]
 
 # CHECK:      Iterations:        2
 # CHECK-NEXT: Instructions:      12
-# CHECK-NEXT: Total Cycles:      21
+# CHECK-NEXT: Total Cycles:      17
 # CHECK-NEXT: Total uOps:        14
 
 # CHECK:      Dispatch Width:    2
-# CHECK-NEXT: uOps Per Cycle:    0.67
-# CHECK-NEXT: IPC:               0.57
+# CHECK-NEXT: uOps Per Cycle:    0.82
+# CHECK-NEXT: IPC:               0.71
 # CHECK-NEXT: Block RThroughput: 3.5
 
 # CHECK:      Instruction Info:
@@ -32,45 +32,35 @@ str	w0, [x21, x18, lsl #2]
 # CHECK-NEXT:  1      4     1.00                        madd	w0, w5, w4, w0
 # CHECK-NEXT:  1      3     0.50                        add	x3, x3, x13
 # CHECK-NEXT:  1      3     0.50                        subs	x1, x1, #1
-# CHECK-NEXT:  1      4     1.00           *            str	w0, [x21, x18, lsl #2]
+# CHECK-NEXT:  1      1     1.00           *            str	w0, [x21, x18, lsl #2]
 
 # CHECK:      Dynamic Dispatch Stall Cycles:
-# CHECK-NEXT: RAT     - Register unavailable:                      10  (47.6%)
+# CHECK-NEXT: RAT     - Register unavailable:                      8  (47.1%)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
+# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              11  (52.4%)
-# CHECK-NEXT:  1,              6  (28.6%)
-# CHECK-NEXT:  2,              4  (19.0%)
+# CHECK-NEXT:  0,              7  (41.2%)
+# CHECK-NEXT:  1,              6  (35.3%)
+# CHECK-NEXT:  2,              4  (23.5%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
 # CHECK-NEXT: [# issued], [# cycles]
-# CHECK-NEXT:  0,          11  (52.4%)
-# CHECK-NEXT:  1,          6  (28.6%)
-# CHECK-NEXT:  2,          4  (19.0%)
+# CHECK-NEXT:  0,          7  (41.2%)
+# CHECK-NEXT:  1,          6  (35.3%)
+# CHECK-NEXT:  2,          4  (23.5%)
 
 # CHECK:      Scheduler's queue usage:
 # CHECK-NEXT: No scheduler resources used.
 
-# CHECK:      Retire Control Unit - number of cycles where we saw N instructions retired:
-# CHECK-NEXT: [# retired], [# cycles]
-# CHECK-NEXT:  0,           14  (66.7%)
-# CHECK-NEXT:  1,           4  (19.0%)
-# CHECK-NEXT:  2,           1  (4.8%)
-# CHECK-NEXT:  3,           2  (9.5%)
-
-# CHECK:      Total ROB Entries:                64
-# CHECK-NEXT: Max Used ROB Entries:             6  ( 9.4% )
-# CHECK-NEXT: Average Used ROB Entries per cy:  2  ( 3.1% )
-
 # CHECK:      Register File statistics:
 # CHECK-NEXT: Total number of mappings created:    14
-# CHECK-NEXT: Max number of mappings used:         6
+# CHECK-NEXT: Max number of mappings used:         4
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - CortexA55UnitALU
@@ -100,21 +90,21 @@ str	w0, [x21, x18, lsl #2]
 # CHECK-NEXT:  -      -      -      -      -      -      -      -      -      -      -     1.00   str	w0, [x21, x18, lsl #2]
 
 # CHECK:      Timeline view:
-# CHECK-NEXT:                     0123456789
-# CHECK-NEXT: Index     0123456789          0
+# CHECK-NEXT:                     0123456
+# CHECK-NEXT: Index     0123456789
 
-# CHECK:      [0,0]     DeeER.    .    .    .   ldr	w4, [x2], #4
-# CHECK-NEXT: [0,1]     .DeeER    .    .    .   ldr	w5, [x3]
-# CHECK-NEXT: [0,2]     .   DeeeER.    .    .   madd	w0, w5, w4, w0
-# CHECK-NEXT: [0,3]     .   DeeE-R.    .    .   add	x3, x3, x13
-# CHECK-NEXT: [0,4]     .    DeeER.    .    .   subs	x1, x1, #1
-# CHECK-NEXT: [0,5]     .    . DeeeER  .    .   str	w0, [x21, x18, lsl #2]
-# CHECK-NEXT: [1,0]     .    .  DeeER  .    .   ldr	w4, [x2], #4
-# CHECK-NEXT: [1,1]     .    .   DeeER .    .   ldr	w5, [x3]
-# CHECK-NEXT: [1,2]     .    .    . DeeeER  .   madd	w0, w5, w4, w0
-# CHECK-NEXT: [1,3]     .    .    . DeeE-R  .   add	x3, x3, x13
-# CHECK-NEXT: [1,4]     .    .    .  DeeER  .   subs	x1, x1, #1
-# CHECK-NEXT: [1,5]     .    .    .    DeeeER   str	w0, [x21, x18, lsl #2]
+# CHECK:      [0,0]     DeeE .    .    ..   ldr	w4, [x2], #4
+# CHECK-NEXT: [0,1]     .DeeE.    .    ..   ldr	w5, [x3]
+# CHECK-NEXT: [0,2]     .   DeeeE .    ..   madd	w0, w5, w4, w0
+# CHECK-NEXT: [0,3]     .    DeeE .    ..   add	x3, x3, x13
+# CHECK-NEXT: [0,4]     .    DeeE .    ..   subs	x1, x1, #1
+# CHECK-NEXT: [0,5]     .    . DE .    ..   str	w0, [x21, x18, lsl #2]
+# CHECK-NEXT: [1,0]     .    .  DeeE   ..   ldr	w4, [x2], #4
+# CHECK-NEXT: [1,1]     .    .   DeeE  ..   ldr	w5, [x3]
+# CHECK-NEXT: [1,2]     .    .    . DeeeE   madd	w0, w5, w4, w0
+# CHECK-NEXT: [1,3]     .    .    .  DeeE   add	x3, x3, x13
+# CHECK-NEXT: [1,4]     .    .    .  DeeE   subs	x1, x1, #1
+# CHECK-NEXT: [1,5]     .    .    .    DE   str	w0, [x21, x18, lsl #2]
 
 # CHECK:      Average Wait times (based on the timeline view):
 # CHECK-NEXT: [0]: Executions
@@ -126,7 +116,7 @@ str	w0, [x21, x18, lsl #2]
 # CHECK-NEXT: 0.     2     0.0    0.0    0.0       ldr	w4, [x2], #4
 # CHECK-NEXT: 1.     2     0.0    0.0    0.0       ldr	w5, [x3]
 # CHECK-NEXT: 2.     2     0.0    0.0    0.0       madd	w0, w5, w4, w0
-# CHECK-NEXT: 3.     2     0.0    0.0    1.0       add	x3, x3, x13
+# CHECK-NEXT: 3.     2     0.0    0.0    0.0       add	x3, x3, x13
 # CHECK-NEXT: 4.     2     0.0    0.0    0.0       subs	x1, x1, #1
 # CHECK-NEXT: 5.     2     0.0    0.0    0.0       str	w0, [x21, x18, lsl #2]
-# CHECK-NEXT:        2     0.0    0.0    0.2       <total>
+# CHECK-NEXT:        2     0.0    0.0    0.0       <total>

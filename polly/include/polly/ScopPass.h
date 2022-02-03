@@ -162,7 +162,7 @@ class ScopPass : public RegionPass {
   Scop *S;
 
 protected:
-  explicit ScopPass(char &ID) : RegionPass(ID), S(0) {}
+  explicit ScopPass(char &ID) : RegionPass(ID), S(nullptr) {}
 
   /// runOnScop - This method must be overloaded to perform the
   /// desired Polyhedral transformation or analysis.
@@ -229,8 +229,10 @@ public:
       // therefore all analyses are preserved. However, we must still free the
       // Scop analysis results which may hold AssertingVH that cause an error
       // if its value is destroyed.
-      AM.invalidate<ScopInfoAnalysis>(F);
-      AM.invalidate<ScopAnalysis>(F);
+      PreservedAnalyses PA = PreservedAnalyses::all();
+      PA.abandon<ScopInfoAnalysis>();
+      PA.abandon<ScopAnalysis>();
+      AM.invalidate(F, PA);
       return PreservedAnalyses::all();
     }
 
@@ -253,7 +255,7 @@ public:
 
     while (!Worklist.empty()) {
       Region *R = Worklist.pop_back_val();
-      if (!SD.isMaxRegionInScop(*R, /*Verifying=*/false))
+      if (!SD.isMaxRegionInScop(*R, /*Verify=*/false))
         continue;
       Scop *scop = SI.getScop(R);
       if (!scop)

@@ -285,7 +285,7 @@ AppleObjCTrampolineHandler::AppleObjCVTables::VTableRegion::VTableRegion(
   SetUpRegion();
 }
 
-AppleObjCTrampolineHandler::~AppleObjCTrampolineHandler() {}
+AppleObjCTrampolineHandler::~AppleObjCTrampolineHandler() = default;
 
 void AppleObjCTrampolineHandler::AppleObjCVTables::VTableRegion::SetUpRegion() {
   // The header looks like:
@@ -889,8 +889,8 @@ AppleObjCTrampolineHandler::GetStepThroughDispatchPlan(Thread &thread,
   ThreadPlanSP ret_plan_sp;
   lldb::addr_t curr_pc = thread.GetRegisterContext()->GetPC();
 
-  DispatchFunction vtable_dispatch
-      = {"vtable", 0, false, false, DispatchFunction::eFixUpFixed};
+  DispatchFunction vtable_dispatch = {"vtable", false, false, false,
+                                      DispatchFunction::eFixUpFixed};
 
   // First step is to look and see if we are in one of the known ObjC
   // dispatch functions.  We've already compiled a table of same, so

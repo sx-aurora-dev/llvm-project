@@ -12,6 +12,7 @@
 #include "../clang-tidy/ClangTidyOptions.h"
 #include "CodeComplete.h"
 #include "ConfigProvider.h"
+#include "Diagnostics.h"
 #include "DraftStore.h"
 #include "FeatureModule.h"
 #include "GlobalCompilationDatabase.h"
@@ -37,9 +38,11 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include <functional>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace clang {
 namespace clangd {
@@ -64,6 +67,8 @@ public:
     virtual ~Callbacks() = default;
 
     /// Called by ClangdServer when \p Diagnostics for \p File are ready.
+    /// These pushed diagnostics might correspond to an older version of the
+    /// file, they do not interfere with "pull-based" ClangdServer::diagnostics.
     /// May be called concurrently for separate files, not for a single file.
     virtual void onDiagnosticsReady(PathRef File, llvm::StringRef Version,
                                     std::vector<Diag> Diagnostics) {}
@@ -146,6 +151,12 @@ public:
         /*RebuildRatio=*/1,
     };
 
+    /// Cancel certain requests if the file changes before they begin running.
+    /// This is useful for "transient" actions like enumerateTweaks that were
+    /// likely implicitly generated, and avoids redundant work if clients forget
+    /// to cancel. Clients that always cancel stale requests should clear this.
+    bool ImplicitCancellation = true;
+
     /// Clangd will execute compiler drivers matching one of these globs to
     /// fetch system include path.
     std::vector<std::string> QueryDriverGlobs;
@@ -154,6 +165,8 @@ public:
     bool FoldingRanges = false;
 
     FeatureModuleSet *FeatureModules = nullptr;
+    /// If true, use the dirty buffer contents when building Preambles.
+    bool UseDirtyHeaders = false;
 
     explicit operator TUScheduler::Options() const;
   };
@@ -214,7 +227,8 @@ public:
 
   /// Provide signature help for \p File at \p Pos.  This method should only be
   /// called for tracked files.
-  void signatureHelp(PathRef File, Position Pos, Callback<SignatureHelp> CB);
+  void signatureHelp(PathRef File, Position Pos, MarkupKind DocumentationFormat,
+                     Callback<SignatureHelp> CB);
 
   /// Find declaration/definition locations of symbol at a specified position.
   void locateSymbolAt(PathRef File, Position Pos,
@@ -251,6 +265,10 @@ public:
   void incomingCalls(const CallHierarchyItem &Item,
                      Callback<std::vector<CallHierarchyIncomingCall>>);
 
+  /// Resolve inlay hints for a given document.
+  void inlayHints(PathRef File, llvm::Optional<Range> RestrictRange,
+                  Callback<std::vector<InlayHint>>);
+
   /// Retrieve the top symbols from the workspace matching a query.
   void workspaceSymbols(StringRef Query, int Limit,
                         Callback<std::vector<SymbolInformation>> CB);
@@ -265,6 +283,10 @@ public:
   /// Retrieve implementations for virtual method.
   void findImplementations(PathRef File, Position Pos,
                            Callback<std::vector<LocatedSymbol>> CB);
+
+  /// Retrieve symbols for types referenced at \p Pos.
+  void findType(PathRef File, Position Pos,
+                Callback<std::vector<LocatedSymbol>> CB);
 
   /// Retrieve locations for symbol references.
   void findReferences(PathRef File, Position Pos, uint32_t Limit,
@@ -330,7 +352,8 @@ public:
                           Callback<std::vector<HighlightingToken>>);
 
   /// Describe the AST subtree for a piece of code.
-  void getAST(PathRef File, Range R, Callback<llvm::Optional<ASTNode>> CB);
+  void getAST(PathRef File, llvm::Optional<Range> R,
+              Callback<llvm::Optional<ASTNode>> CB);
 
   /// Runs an arbitrary action that has access to the AST of the specified file.
   /// The action will execute on one of ClangdServer's internal threads.
@@ -338,6 +361,14 @@ public:
   /// As with other actions, the file must have been opened.
   void customAction(PathRef File, llvm::StringRef Name,
                     Callback<InputsAndAST> Action);
+
+  /// Fetches diagnostics for current version of the \p File. This might fail if
+  /// server is busy (building a preamble) and would require a long time to
+  /// prepare diagnostics. If it fails, clients should wait for
+  /// onSemanticsMaybeChanged and then retry.
+  /// These 'pulled' diagnostics do not interfere with the diagnostics 'pushed'
+  /// to Callbacks::onDiagnosticsReady, and clients may use either or both.
+  void diagnostics(PathRef File, Callback<std::vector<Diag>> CB);
 
   /// Returns estimated memory usage and other statistics for each of the
   /// currently open files.
@@ -365,6 +396,9 @@ public:
 private:
   FeatureModuleSet *FeatureModules;
   const GlobalCompilationDatabase &CDB;
+  const ThreadsafeFS &getHeaderFS() const {
+    return UseDirtyHeaders ? *DirtyFS : TFS;
+  }
   const ThreadsafeFS &TFS;
 
   Path ResourceDir;
@@ -384,6 +418,8 @@ private:
   // When set, provides clang-tidy options for a specific file.
   TidyProviderRef ClangTidyProvider;
 
+  bool UseDirtyHeaders = false;
+
   // GUARDED_BY(CachedCompletionFuzzyFindRequestMutex)
   llvm::StringMap<llvm::Optional<FuzzyFindRequest>>
       CachedCompletionFuzzyFindRequestByFile;
@@ -391,6 +427,8 @@ private:
 
   llvm::Optional<std::string> WorkspaceRoot;
   llvm::Optional<TUScheduler> WorkScheduler;
+  // Invalidation policy used for actions that we assume are "transient".
+  TUScheduler::ASTActionInvalidation Transient;
 
   // Store of the current versions of the open documents.
   // Only written from the main thread (despite being threadsafe).

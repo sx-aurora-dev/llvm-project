@@ -9,18 +9,22 @@
 #ifndef MLIR_DIALECT_MATH_TRANSFORMS_PASSES_H_
 #define MLIR_DIALECT_MATH_TRANSFORMS_PASSES_H_
 
-#include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/Bufferize.h"
-
 namespace mlir {
 
-class OwningRewritePatternList;
+class RewritePatternSet;
 
-void populateExpandTanhPattern(OwningRewritePatternList &patterns,
-                               MLIRContext *ctx);
+void populateExpandTanhPattern(RewritePatternSet &patterns);
+
+void populateMathAlgebraicSimplificationPatterns(RewritePatternSet &patterns);
+
+struct MathPolynomialApproximationOptions {
+  // Enables the use of AVX2 intrinsics in some of the approximations.
+  bool enableAvx2 = false;
+};
 
 void populateMathPolynomialApproximationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *ctx);
+    RewritePatternSet &patterns,
+    const MathPolynomialApproximationOptions &options = {});
 
 } // namespace mlir
 

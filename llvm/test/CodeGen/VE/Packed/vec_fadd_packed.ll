@@ -189,18 +189,9 @@ define fastcc <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 define fastcc <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 ; CHECK-LABEL: vec_add_v3f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lsv %v0(0), %s3
-; CHECK-NEXT:    lsv %v0(1), %s4
-; CHECK-NEXT:    lsv %v0(2), %s5
-; CHECK-NEXT:    lsv %v1(0), %s0
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    lsv %v1(2), %s2
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvfadd.up %v0, %v1, %v0
-; CHECK-NEXT:    lvs %s0, %v0(0)
-; CHECK-NEXT:    lvs %s1, %v0(1)
-; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    pvfadd.up %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fadd <3 x float> %a, %b
   ret <3 x float> %r

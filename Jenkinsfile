@@ -6,6 +6,12 @@ pipeline {
         TOP = pwd()
         CMAKE = "cmake"
         PYTHON = "python3"
+        // Job pool
+        COMPILE_THREADS = 24
+        LINK_THREADS = 8
+        // Need to use either gcc-10 or clang to compile recent llvm
+        CC = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang"
+        CXX = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang++"
         REPO_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*\$::'").trim()
@@ -37,8 +43,11 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
-                            THREADS= cmake build
+                        make clean
+                        CC="${CC}" CXX="${CXX}" make \
+                            SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                            COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS} cmake build
                     """
                 }
             }
@@ -47,7 +56,8 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make check-clang check-llvm
+                        make COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS} check-clang check-llvm
                     """
                 }
             }
@@ -56,7 +66,9 @@ pipeline {
             steps {
                 dir('llvm-dev') {
                     sh """
-                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} THREADS=
+                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                            COMPILE_THREADS=${COMPILE_THREADS} \
+                            LINK_THREADS=${LINK_THREADS}
                     """
                 }
             }
@@ -70,7 +82,8 @@ pipeline {
                                 credentialsId: 'marukawa-token',
                                 url: "${REPO_URL}/llvm-ve-intrinsic-test.git"
                             sh """
-                                make CLANG=${TOP}/llvm-dev/install/bin/clang -j8
+                                make clean
+                                make CLANG=${TOP}/llvm-dev/install/bin/clang -j
                                 ./test.sh
                             """
                         }
@@ -82,6 +95,10 @@ pipeline {
                             git branch: 'master',
                                 credentialsId: 'marukawa-token',
                                 url: "${REPO_TOP_URL}/ve-tensorflow/vml.git"
+                            // Remove build directory to perform clean-build
+                            sh """
+                                rm -rf build
+                            """
                         }
                         dir('vml/libs/vednn') {
                             git branch: 'vml',
@@ -90,10 +107,14 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
+                                # Use sed since CMakeLists.txt does not use option command.
+                                sed -e 's:linux/libclang_rt.builtins-ve.a:ve-unknown-linux-gnu/libclang_rt.builtins.a:' -i ../CMakeLists.txt
                                 ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
+                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/14.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
-                                make -j
+                                # make -j often crash
+                                make -j${COMPILE_THREADS}
                             """
                         }
                     }

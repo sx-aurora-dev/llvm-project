@@ -8,6 +8,7 @@
 
 #include "mlir/Support/DebugCounter.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/ManagedStatic.h"
 
@@ -33,7 +34,7 @@ struct DebugCounterOptions {
       llvm::cl::desc("Print out debug counter information after all counters "
                      "have been accumulated")};
 };
-} // end anonymous namespace
+} // namespace
 
 static llvm::ManagedStatic<DebugCounterOptions> clOptions;
 

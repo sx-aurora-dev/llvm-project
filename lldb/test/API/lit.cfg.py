@@ -17,10 +17,10 @@ config.name = 'lldb-api'
 config.suffixes = ['.py']
 
 # test_source_root: The root path where tests are located.
-# test_exec_root: The root path where tests should be run.
 config.test_source_root = os.path.dirname(__file__)
-config.test_exec_root = config.test_source_root
 
+# test_exec_root: The root path where tests should be run.
+config.test_exec_root = os.path.join(config.lldb_obj_root, 'test', 'API')
 
 def mkdir_p(path):
   import errno
@@ -98,18 +98,18 @@ def delete_module_cache(path):
   This is necessary in an incremental build whenever clang changes underneath,
   so doing it once per lit.py invocation is close enough. """
   if os.path.isdir(path):
-    print("Deleting module cache at %s." % path)
+    lit_config.note("Deleting module cache at %s." % path)
     shutil.rmtree(path)
 
 if is_configured('llvm_use_sanitizer'):
   if 'Address' in config.llvm_use_sanitizer:
     config.environment['ASAN_OPTIONS'] = 'detect_stack_use_after_return=1'
-    if 'Darwin' in config.host_os and 'x86' in config.host_triple:
+    if 'Darwin' in config.host_os:
       config.environment['DYLD_INSERT_LIBRARIES'] = find_sanitizer_runtime(
           'libclang_rt.asan_osx_dynamic.dylib')
 
   if 'Thread' in config.llvm_use_sanitizer:
-    if 'Darwin' in config.host_os and 'x86' in config.host_triple:
+    if 'Darwin' in config.host_os:
       config.environment['DYLD_INSERT_LIBRARIES'] = find_sanitizer_runtime(
           'libclang_rt.tsan_osx_dynamic.dylib')
 
@@ -128,18 +128,6 @@ if is_configured('shared_libs'):
   else:
     lit_config.warning("unable to inject shared library path on '{}'".format(
         platform.system()))
-
-# Support running the test suite under the lldb-repro wrapper. This makes it
-# possible to capture a test suite run and then rerun all the test from the
-# just captured reproducer.
-lldb_repro_mode = lit_config.params.get('lldb-run-with-repro', None)
-if lldb_repro_mode:
-  lit_config.note("Running API tests in {} mode.".format(lldb_repro_mode))
-  mkdir_p(config.lldb_reproducer_directory)
-  if lldb_repro_mode == 'capture':
-    config.available_features.add('lldb-repro-capture')
-  elif lldb_repro_mode == 'replay':
-    config.available_features.add('lldb-repro-replay')
 
 lldb_use_simulator = lit_config.params.get('lldb-run-with-simulator', None)
 if lldb_use_simulator:
@@ -251,11 +239,6 @@ config.test_format = lldbtest.LLDBTest(dotest_cmd)
 if 'FREEBSD_LEGACY_PLUGIN' in os.environ:
   config.environment['FREEBSD_LEGACY_PLUGIN'] = os.environ[
       'FREEBSD_LEGACY_PLUGIN']
-
-# Propagate LLDB_CAPTURE_REPRODUCER
-if 'LLDB_CAPTURE_REPRODUCER' in os.environ:
-  config.environment['LLDB_CAPTURE_REPRODUCER'] = os.environ[
-      'LLDB_CAPTURE_REPRODUCER']
 
 # Propagate XDG_CACHE_HOME
 if 'XDG_CACHE_HOME' in os.environ:

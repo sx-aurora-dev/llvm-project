@@ -32,6 +32,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IntrinsicsVE.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
@@ -81,8 +82,6 @@ bool VETargetLowering::CanLowerReturn(
   CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
   return CCInfo.CheckReturn(Outs, RetCC);
 }
-
-static const MVT AllPackedVTs[] = {MVT::v512i32, MVT::v512f32};
 
 static const MVT WholeVectorVTs[] =
     { MVT::v512i32, MVT::v512f32,
@@ -707,10 +706,10 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
 #endif
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-                                        const SelectionDAG &DAG) const {
+                                        const MachineFunction &MF) const {
   // Do not merge to float value size (128 bytes) if no implicit
   // float attribute is set.
-  bool NoFloat = DAG.getMachineFunction().getFunction().hasFnAttribute(
+  bool NoFloat = MF.getFunction().hasFnAttribute(
       Attribute::NoImplicitFloat);
 
   if (NoFloat) {
@@ -1221,7 +1220,11 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-Instruction *VETargetLowering::emitLeadingFence(IRBuilder<> &Builder,
+/// Custom Lower {
+
+// The mappings for emitLeading/TrailingFence for VE is designed by following
+// http://www.cl.cam.ac.uk/~pes20/cpp/cpp0xmappings.html
+Instruction *VETargetLowering::emitLeadingFence(IRBuilderBase &Builder,
                                                 Instruction *Inst,
                                                 AtomicOrdering Ord) const {
   switch (Ord) {
@@ -1242,7 +1245,7 @@ Instruction *VETargetLowering::emitLeadingFence(IRBuilder<> &Builder,
   llvm_unreachable("Unknown fence ordering in emitLeadingFence");
 }
 
-Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
+Instruction *VETargetLowering::emitTrailingFence(IRBuilderBase &Builder,
                                                  Instruction *Inst,
                                                  AtomicOrdering Ord) const {
   switch (Ord) {
@@ -1999,98 +2002,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   return DefinedValues < 3;
 #endif
 }
-
-static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
-  if (!isa<BuildVectorSDNode>(N))
-    return false;
-  const auto *BVN = cast<BuildVectorSDNode>(N);
-
-  // Find first non-undef insertion.
-  unsigned Idx;
-  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      break;
-  }
-  // Catch the (hypothetical) all-undef case.
-  if (Idx == BVN->getNumOperands())
-    return false;
-  // Remember insertion.
-  UniqueIdx = Idx++;
-  // Verify that all other insertions are undef.
-  for (; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      return false;
-  }
-  return true;
-}
-
-static SDValue getSplatValue(SDNode *N) {
-  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
-    return BuildVec->getSplatValue();
-  }
-  return SDValue();
-}
-
-// SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
-//                                             SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_BUILD_VECTOR(Op, DAG);
-//   SDLoc DL(Op);
-//   unsigned NumEls = Op.getValueType().getVectorNumElements();
-//   MVT ElemVT = Op.getSimpleValueType().getVectorElementType();
-// 
-//   // If there is just one element, expand to INSERT_VECTOR_ELT.
-//   unsigned UniqueIdx;
-//   if (getUniqueInsertion(Op.getNode(), UniqueIdx)) {
-//     SDValue AccuV = DAG.getUNDEF(Op.getValueType());
-//     auto ElemV = Op->getOperand(UniqueIdx);
-//     SDValue IdxV = DAG.getConstant(UniqueIdx, DL, MVT::i64);
-//     return DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getValueType(), AccuV,
-//                        ElemV, IdxV);
-//   }
-// 
-//   // Else emit a broadcast.
-//   if (SDValue ScalarV = getSplatValue(Op.getNode())) {
-//     // lower to VEC_BROADCAST
-//     MVT LegalResVT = MVT::getVectorVT(ElemVT, 256);
-// 
-//     auto AVL = DAG.getConstant(NumEls, DL, MVT::i32);
-//     return DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalResVT, Op.getOperand(0),
-//                        AVL);
-//   }
-// 
-//   // Expand
-//   return SDValue();
-// }
-
-// SDValue VETargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
-//                                               SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-//   if (Subtarget->intrinsic())
-//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMGATHER(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-//   return SDValue();
-// }
-// 
-// SDValue VETargetLowering::lowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
-//   if (Subtarget->simd())
-//     return lowerSIMD_MLOAD(Op, DAG);
-//   return SDValue();
-// }
 
 /// } Custom Lower
 
@@ -2871,8 +2782,9 @@ static bool isMImm(SDValue V) {
       if (VT == MVT::f32) {
         // Float value places at higher bits, so ignore lower 32 bits.
         return isMImm32Val(getFpImmVal(C) >> 32);
+      } else if (VT == MVT::f64) {
+        return isMImmVal(getFpImmVal(C));
       }
-      return isMImmVal(getFpImmVal(C));
     }
   }
   return false;
@@ -3380,13 +3292,12 @@ static bool isI32Insn(const SDNode *User, const SDNode *N) {
   case ISD::CopyToReg:
     // Check all use of selections, bit operations, and copies.  If all of them
     // are safe, optimize truncate to extract_subreg.
-    for (SDNode::use_iterator UI = User->use_begin(), UE = User->use_end();
-         UI != UE; ++UI) {
-      switch ((*UI)->getOpcode()) {
+    for (const SDNode *U : User->uses()) {
+      switch (U->getOpcode()) {
       default:
         // If the use is an instruction which treats the source operand as i32,
         // it is safe to avoid truncate here.
-        if (isI32Insn(*UI, N))
+        if (isI32Insn(U, N))
           continue;
         break;
       case ISD::ANY_EXTEND:
@@ -3433,10 +3344,7 @@ SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
     return SDValue();
 
   // Check all use of this TRUNCATE.
-  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
-       ++UI) {
-    SDNode *User = *UI;
-
+  for (const SDNode *User : N->uses()) {
     // Make sure that we're not going to replace TRUNCATE for non i32
     // instructions.
     //
@@ -3875,4 +3783,202 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::VAARG:
     return lowerVAARG(Op, DAG);
   }
+}
+
+static bool isPackableElemVT(EVT VT) {
+  if (VT.isVector())
+    return false;
+  return VT.getScalarSizeInBits() <= 32;
+}
+
+static bool isVectorRegisterVT(EVT VT) {
+  if (!VT.isVector() || VT.isScalableVector())
+    return false;
+  unsigned NumElems = VT.getVectorNumElements();
+  EVT ElemVT = VT.getVectorElementType();
+
+  // Not a legal element count.
+  if ((NumElems != 256) && (NumElems != 512))
+    return false;
+
+  // Legal as both regular and packed vectors.
+  if (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32)
+    return true;
+
+  // Only legal in regular mode.
+  return NumElems == 256;
+}
+
+static TargetLoweringBase::LegalizeKind
+getPromoteElementConversion(LLVMContext &Context, EVT ElemVT,
+                            unsigned NumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  LegalizeTypeAction LTA;
+  MVT PromotedElemVT;
+  if (ElemVT.isFloatingPoint()) {
+    PromotedElemVT = MVT::f32;
+    LTA = LegalizeTypeAction::TypePromoteFloat;
+  } else {
+    assert(ElemVT.isInteger());
+    PromotedElemVT = MVT::i32;
+    LTA = LegalizeTypeAction::TypePromoteInteger;
+  }
+  return LegalizeKind(LTA, EVT::getVectorVT(Context, PromotedElemVT, NumElems));
+}
+
+static TargetLoweringBase::LegalizeKind
+getWidenVectorConversion(LLVMContext &Context, EVT ElemVT,
+                         unsigned LegalNumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  return LegalizeKind(LegalizeTypeAction::TypeWidenVector,
+                      EVT::getVectorVT(Context, ElemVT, LegalNumElems));
+}
+
+static TargetLoweringBase::LegalizeKind
+getSplitVectorConversion(LLVMContext &Context, EVT ElemVT, unsigned NumElems) {
+  using LegalizeKind = TargetLoweringBase::LegalizeKind;
+  using LegalizeTypeAction = TargetLoweringBase::LegalizeTypeAction;
+
+  return LegalizeKind(LegalizeTypeAction::TypeSplitVector,
+                      EVT::getVectorVT(Context, ElemVT, (NumElems + 1) / 2));
+}
+
+Optional<TargetLoweringBase::LegalizeKind>
+VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
+  // Do not interfere with SPU legalization.
+  if (!VT.isVector() || !Subtarget->enableVPU() ||
+      VT.getVectorNumElements() == 1)
+    return None;
+
+  EVT ElemVT = VT.getVectorElementType();
+  unsigned NumElems = VT.getVectorNumElements();
+  auto ElemBits = ElemVT.getScalarSizeInBits();
+
+  // Only use packed mode when surpassing the regular (256 elements) vector
+  // size.
+  const bool RequiresPackedRegister =
+      isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256);
+
+  // Already a legal type.
+  if (isVectorRegisterVT(VT) &&
+      (!RequiresPackedRegister || Subtarget->hasPackedMode()))
+    return None;
+
+  // Promote small elements to i/f32.
+  if (1 < ElemBits && ElemBits < 32)
+    return getPromoteElementConversion(Context, ElemVT, NumElems);
+
+  // Excessive element size.
+  if (ElemBits > 64)
+    return None; // Defer to builtin expansion for oversized vectors.
+
+  // Only use packed mode when surpassing the regular (256 elements) vector
+  // size.
+  const bool UsePackedRegister =
+      Subtarget->hasPackedMode() && RequiresPackedRegister;
+
+  // Widen to register width.
+  const unsigned RegisterNumElems = UsePackedRegister ? 512 : 256;
+  if (NumElems < RegisterNumElems)
+    return getWidenVectorConversion(Context, ElemVT, RegisterNumElems);
+
+  // Split to register width.
+  // TODO: Teach isel to split non-power-of-two vectors.
+  if (NumElems > RegisterNumElems && (NumElems % 2 == 0))
+    return getSplitVectorConversion(Context, ElemVT, NumElems);
+
+  // Type is either legal or not custom converted.
+  return None;
+}
+
+Optional<VETargetLowering::RegisterCountPair>
+VETargetLowering::getRegistersForCallingConv(LLVMContext &Context,
+                                             CallingConv::ID CC, EVT VT) const {
+  using RegisterCount = VETargetLowering::RegisterCountPair;
+  if (CC != CallingConv::Fast)
+    return None;
+  if (!VT.isVector() || VT.isScalableVector())
+    return None;
+
+  MVT RegisterVT;
+  EVT IntermediateVT;
+  unsigned NumIntermediates;
+  unsigned NumRegs = getVectorTypeBreakdownForCallingConv(
+      Context, CC, VT, IntermediateVT, NumIntermediates, RegisterVT);
+  return RegisterCount{RegisterVT, NumRegs};
+}
+
+unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
+    LLVMContext &Context, CallingConv::ID CC, EVT VT, EVT &IntermediateVT,
+    unsigned &NumIntermediates, MVT &RegisterVT) const {
+  auto DefaultImpl = [&]() {
+    return TargetLoweringBase::getVectorTypeBreakdownForCallingConv(
+        Context, CC, VT, IntermediateVT, NumIntermediates, RegisterVT);
+  };
+
+  auto ElemVT = VT.getVectorElementType();
+  unsigned NumElems = VT.isScalableVector() ? 0 : VT.getVectorNumElements();
+  const bool RequiresPackedRegister =
+      !VT.isScalableVector() &&
+      (isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256));
+
+  if (CC != CallingConv::Fast || VT.isScalableVector() ||
+      (isVectorRegisterVT(VT) &&
+       !(Subtarget->hasPackedMode() && RequiresPackedRegister)))
+    return DefaultImpl();
+
+  // fastcc - map everything to vregs.
+  auto LK = getCustomTypeConversion(Context, VT);
+  // Non-custom converted type - back to builtin logic.
+  if (!LK.hasValue())
+    return DefaultImpl();
+
+  // Compute the fixed point of the custom type conversion rules.
+  // We want to have the same vector layout inside functions as well as across
+  // function boundaries.
+
+  // IntermediateVT : used to copy the parts.
+  IntermediateVT = VT;
+  NumIntermediates = 1;
+
+  EVT NextVT;
+  do {
+    NextVT = LK->second;
+    auto LTA = LK->first;
+
+    switch (LTA) {
+    default:
+      return DefaultImpl();
+
+    case LegalizeTypeAction::TypePromoteFloat:
+    case LegalizeTypeAction::TypePromoteInteger:
+      // Promote elements across call boundaries.
+      IntermediateVT = NextVT;
+      break;
+
+    case LegalizeTypeAction::TypeWidenVector:
+      // Retain all information about the original vector length.
+      // That is, keep the IntermediateVT at the original vector length if
+      // possible
+      break;
+
+    case LegalizeTypeAction::TypeSplitVector:
+      // The last split results in the intermediate VT used for copying vectors
+      // at calls.
+      IntermediateVT = NextVT;
+      NumIntermediates *= 2;
+      break;
+    }
+
+    LK = getCustomTypeConversion(Context, NextVT);
+  } while (LK.hasValue());
+
+  RegisterVT = NextVT.getSimpleVT();
+
+  // Must converge in a valid RegisterVT.
+  return NumIntermediates;
 }

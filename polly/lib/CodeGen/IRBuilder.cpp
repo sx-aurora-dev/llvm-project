@@ -46,7 +46,15 @@ static MDNode *getID(LLVMContext &Ctx, Metadata *arg0 = nullptr,
   return ID;
 }
 
-ScopAnnotator::ScopAnnotator() : SE(nullptr), AliasScopeDomain(nullptr) {}
+ScopAnnotator::ScopAnnotator() : SE(nullptr), AliasScopeDomain(nullptr) {
+  // Push an empty staging BandAttr.
+  LoopAttrEnv.emplace_back();
+}
+
+ScopAnnotator::~ScopAnnotator() {
+  assert(LoopAttrEnv.size() == 1 && "Loop stack imbalance");
+  assert(!getStagingAttrEnv() && "Forgot to clear staging attr env");
+}
 
 void ScopAnnotator::buildAliasScopes(Scop &S) {
   SE = S.getSE();
@@ -101,6 +109,9 @@ void ScopAnnotator::pushLoop(Loop *L, bool IsParallel) {
     MDNode *AccessGroup = MDNode::getDistinct(Ctx, {});
     ParallelLoops.push_back(AccessGroup);
   }
+
+  // Open an empty BandAttr context for loops nested in this one.
+  LoopAttrEnv.emplace_back();
 }
 
 void ScopAnnotator::popLoop(bool IsParallel) {
@@ -110,6 +121,11 @@ void ScopAnnotator::popLoop(bool IsParallel) {
     assert(!ParallelLoops.empty() && "Expected a parallel loop to pop");
     ParallelLoops.pop_back();
   }
+
+  // Exit the subloop context.
+  assert(!getStagingAttrEnv() && "Forgot to clear staging attr env");
+  assert(LoopAttrEnv.size() >= 2 && "Popped too many");
+  LoopAttrEnv.pop_back();
 }
 
 void ScopAnnotator::annotateLoopLatch(BranchInst *B, Loop *L, bool IsParallel,
@@ -119,6 +135,16 @@ void ScopAnnotator::annotateLoopLatch(BranchInst *B, Loop *L, bool IsParallel,
 
   // For the LoopID self-reference.
   Args.push_back(nullptr);
+
+  // Add the user-defined loop properties to the annotation, if any. Any
+  // additional properties are appended.
+  // FIXME: What to do if these conflict?
+  MDNode *MData = nullptr;
+  if (BandAttr *AttrEnv = getActiveAttrEnv()) {
+    MData = AttrEnv->Metadata;
+    if (MData)
+      llvm::append_range(Args, drop_begin(MData->operands(), 1));
+  }
 
   if (IsLoopVectorizerDisabled) {
     MDString *PropName = MDString::get(Ctx, "llvm.loop.vectorize.enable");
@@ -134,11 +160,16 @@ void ScopAnnotator::annotateLoopLatch(BranchInst *B, Loop *L, bool IsParallel,
   }
 
   // No metadata to annotate.
-  if (Args.size() <= 1)
+  if (!MData && Args.size() <= 1)
     return;
 
-  MDNode *MData = MDNode::getDistinct(Ctx, Args);
-  MData->replaceOperandWith(0, MData);
+  // Reuse the MData node if possible, this will avoid having to create another
+  // one that cannot be merged because LoopIDs are 'distinct'. However, we have
+  // to create a new one if we add properties.
+  if (!MData || Args.size() > MData->getNumOperands()) {
+    MData = MDNode::getDistinct(Ctx, Args);
+    MData->replaceOperandWith(0, MData);
+  }
   B->setMetadata(LLVMContext::MD_loop, MData);
 }
 
@@ -153,40 +184,6 @@ static llvm::Value *getMemAccInstPointerOperand(Instruction *Inst) {
     return nullptr;
 
   return MemInst.getPointerOperand();
-}
-
-void ScopAnnotator::annotateSecondLevel(llvm::Instruction *Inst,
-                                        llvm::Value *BasePtr) {
-  Value *Ptr = getMemAccInstPointerOperand(Inst);
-  if (!Ptr)
-    return;
-
-  auto *PtrSCEV = SE->getSCEV(Ptr);
-  auto *BasePtrSCEV = SE->getPointerBase(PtrSCEV);
-
-  auto SecondLevelAliasScope = SecondLevelAliasScopeMap.lookup(PtrSCEV);
-  auto SecondLevelOtherAliasScopeList =
-      SecondLevelOtherAliasScopeListMap.lookup(PtrSCEV);
-  if (!SecondLevelAliasScope) {
-    auto AliasScope = AliasScopeMap.lookup(BasePtr);
-    if (!AliasScope)
-      return;
-    LLVMContext &Ctx = SE->getContext();
-    SecondLevelAliasScope = getID(
-        Ctx, AliasScope, MDString::get(Ctx, "second level alias metadata"));
-    SecondLevelAliasScopeMap[PtrSCEV] = SecondLevelAliasScope;
-    Metadata *Args = {SecondLevelAliasScope};
-    auto SecondLevelBasePtrAliasScopeList =
-        SecondLevelAliasScopeMap.lookup(BasePtrSCEV);
-    SecondLevelAliasScopeMap[BasePtrSCEV] = MDNode::concatenate(
-        SecondLevelBasePtrAliasScopeList, MDNode::get(Ctx, Args));
-    auto OtherAliasScopeList = OtherAliasScopeListMap.lookup(BasePtr);
-    SecondLevelOtherAliasScopeList = MDNode::concatenate(
-        OtherAliasScopeList, SecondLevelBasePtrAliasScopeList);
-    SecondLevelOtherAliasScopeListMap[PtrSCEV] = SecondLevelOtherAliasScopeList;
-  }
-  Inst->setMetadata("alias.scope", SecondLevelAliasScope);
-  Inst->setMetadata("noalias", SecondLevelOtherAliasScopeList);
 }
 
 /// Find the base pointer of an array access.
@@ -268,18 +265,6 @@ void ScopAnnotator::annotate(Instruction *Inst) {
          "BasePtr either expected in AliasScopeMap and OtherAlias...Map");
   auto *OtherAliasScopeList = OtherAliasScopeListMap[BasePtr];
 
-  if (InterIterationAliasFreeBasePtrs.count(BasePtr)) {
-    annotateSecondLevel(Inst, BasePtr);
-    return;
-  }
-
-  Inst->setMetadata("alias.scope", AliasScope);
+  Inst->setMetadata("alias.scope", MDNode::get(SE->getContext(), AliasScope));
   Inst->setMetadata("noalias", OtherAliasScopeList);
-}
-
-void ScopAnnotator::addInterIterationAliasFreeBasePtr(llvm::Value *BasePtr) {
-  if (!BasePtr)
-    return;
-
-  InterIterationAliasFreeBasePtrs.insert(BasePtr);
 }

@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
+#include "AMDGPUCombinerHelper.h"
 #include "AMDGPULegalizerInfo.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
@@ -34,10 +35,11 @@ protected:
   MachineIRBuilder &B;
   MachineFunction &MF;
   MachineRegisterInfo &MRI;
-  CombinerHelper &Helper;
+  AMDGPUCombinerHelper &Helper;
 
 public:
-  AMDGPUPreLegalizerCombinerHelper(MachineIRBuilder &B, CombinerHelper &Helper)
+  AMDGPUPreLegalizerCombinerHelper(MachineIRBuilder &B,
+                                   AMDGPUCombinerHelper &Helper)
       : B(B), MF(B.getMF()), MRI(*B.getMRI()), Helper(Helper){};
 
   struct ClampI64ToI16MatchInfo {
@@ -130,7 +132,7 @@ void AMDGPUPreLegalizerCombinerHelper::applyClampI64ToI16(
 
   assert(MI.getOpcode() != AMDGPU::G_AMDGPU_CVT_PK_I16_I32);
 
-  const LLT V2S16 = LLT::vector(2, 16);
+  const LLT V2S16 = LLT::fixed_vector(2, 16);
   auto CvtPk =
       B.buildInstr(AMDGPU::G_AMDGPU_CVT_PK_I16_I32, {V2S16},
                    {Unmerge.getReg(0), Unmerge.getReg(1)}, MI.getFlags());
@@ -143,7 +145,7 @@ void AMDGPUPreLegalizerCombinerHelper::applyClampI64ToI16(
   auto Bitcast = B.buildBitcast({S32}, CvtPk);
 
   auto Med3 = B.buildInstr(
-      AMDGPU::G_AMDGPU_MED3, {S32},
+      AMDGPU::G_AMDGPU_SMED3, {S32},
       {MinBoundaryDst.getReg(0), Bitcast.getReg(0), MaxBoundaryDst.getReg(0)},
       MI.getFlags());
 
@@ -154,12 +156,12 @@ void AMDGPUPreLegalizerCombinerHelper::applyClampI64ToI16(
 
 class AMDGPUPreLegalizerCombinerHelperState {
 protected:
-  CombinerHelper &Helper;
+  AMDGPUCombinerHelper &Helper;
   AMDGPUPreLegalizerCombinerHelper &PreLegalizerHelper;
 
 public:
   AMDGPUPreLegalizerCombinerHelperState(
-      CombinerHelper &Helper,
+      AMDGPUCombinerHelper &Helper,
       AMDGPUPreLegalizerCombinerHelper &PreLegalizerHelper)
       : Helper(Helper), PreLegalizerHelper(PreLegalizerHelper) {}
 };
@@ -196,12 +198,12 @@ public:
 bool AMDGPUPreLegalizerCombinerInfo::combine(GISelChangeObserver &Observer,
                                               MachineInstr &MI,
                                               MachineIRBuilder &B) const {
-  CombinerHelper Helper(Observer, B, KB, MDT);
+  AMDGPUCombinerHelper Helper(Observer, B, KB, MDT);
   AMDGPUPreLegalizerCombinerHelper PreLegalizerHelper(B, Helper);
   AMDGPUGenPreLegalizerCombinerHelper Generated(GeneratedRuleCfg, Helper,
                                                 PreLegalizerHelper);
 
-  if (Generated.tryCombineAll(Observer, MI, B, Helper))
+  if (Generated.tryCombineAll(Observer, MI, B))
     return true;
 
   switch (MI.getOpcode()) {
@@ -249,6 +251,9 @@ void AMDGPUPreLegalizerCombiner::getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<MachineDominatorTree>();
     AU.addPreserved<MachineDominatorTree>();
   }
+
+  AU.addRequired<GISelCSEAnalysisWrapperPass>();
+  AU.addPreserved<GISelCSEAnalysisWrapperPass>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -270,8 +275,13 @@ bool AMDGPUPreLegalizerCombiner::runOnMachineFunction(MachineFunction &MF) {
       IsOptNone ? nullptr : &getAnalysis<MachineDominatorTree>();
   AMDGPUPreLegalizerCombinerInfo PCInfo(EnableOpt, F.hasOptSize(),
                                         F.hasMinSize(), KB, MDT);
+  // Enable CSE.
+  GISelCSEAnalysisWrapper &Wrapper =
+      getAnalysis<GISelCSEAnalysisWrapperPass>().getCSEWrapper();
+  auto *CSEInfo = &Wrapper.get(TPC->getCSEConfig());
+
   Combiner C(PCInfo, TPC);
-  return C.combineMachineInstrs(MF, /*CSEInfo*/ nullptr);
+  return C.combineMachineInstrs(MF, CSEInfo);
 }
 
 char AMDGPUPreLegalizerCombiner::ID = 0;

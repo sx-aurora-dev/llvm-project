@@ -30,10 +30,6 @@ public:
     return Def->getValueAsString("clausePrefix");
   }
 
-  StringRef getIncludeHeader() const {
-    return Def->getValueAsString("includeHeader");
-  }
-
   StringRef getClauseEnumSetClass() const {
     return Def->getValueAsString("clauseEnumSetClass");
   }
@@ -156,7 +152,7 @@ public:
       }
       return C;
     });
-    N.erase(std::remove(N.begin(), N.end(), '_'), N.end());
+    llvm::erase_value(N, '_');
     return N;
   }
 

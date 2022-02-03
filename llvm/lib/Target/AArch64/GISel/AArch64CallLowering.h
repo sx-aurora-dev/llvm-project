@@ -24,9 +24,7 @@ namespace llvm {
 
 class AArch64TargetLowering;
 class CCValAssign;
-class DataLayout;
 class MachineIRBuilder;
-class MachineRegisterInfo;
 class Type;
 
 class AArch64CallLowering: public CallLowering {
@@ -37,7 +35,7 @@ public:
                    ArrayRef<Register> VRegs, FunctionLoweringInfo &FLI,
                    Register SwiftErrorVReg) const override;
 
-  bool fallBackToDAGISel(const Function &F) const override;
+  bool fallBackToDAGISel(const MachineFunction &MF) const override;
 
   bool lowerFormalArguments(MachineIRBuilder &MIRBuilder, const Function &F,
                             ArrayRef<ArrayRef<Register>> VRegs,

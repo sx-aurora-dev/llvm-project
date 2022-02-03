@@ -17,6 +17,7 @@
 #include "lldb/Target/ProcessTrace.h"
 #include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/Timer.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetSelect.h"
 
 #pragma clang diagnostic push
@@ -38,7 +39,7 @@ constexpr lldb_private::HostInfo::SharedLibraryDirectoryHelper
 
 #else
 constexpr lldb_private::HostInfo::SharedLibraryDirectoryHelper
-    *g_shlib_dir_helper = 0;
+    *g_shlib_dir_helper = nullptr;
 #endif
 
 using namespace lldb_private;
@@ -49,21 +50,21 @@ SystemInitializerFull::~SystemInitializerFull() = default;
 
 llvm::Error SystemInitializerFull::Initialize() {
   llvm::Error error = SystemInitializerCommon::Initialize();
-  if (error) {
-    // During active replay, the ::Initialize call is replayed like any other
-    // SB API call and the return value is ignored. Since we can't intercept
-    // this, we terminate here before the uninitialized debugger inevitably
-    // crashes.
-    if (repro::Reproducer::Instance().IsReplaying())
-      llvm::report_fatal_error(std::move(error));
+  if (error)
     return error;
-  }
 
   // Initialize LLVM and Clang
   llvm::InitializeAllTargets();
   llvm::InitializeAllAsmPrinters();
   llvm::InitializeAllTargetMCs();
   llvm::InitializeAllDisassemblers();
+  // Initialize the command line parser in LLVM. This usually isn't necessary
+  // as we aren't dealing with command line options here, but otherwise some
+  // other code in Clang/LLVM might be tempted to call this function from a
+  // different thread later on which won't work (as the function isn't
+  // thread-safe).
+  const char *arg0 = "lldb";
+  llvm::cl::ParseCommandLineOptions(1, &arg0);
 
 #define LLDB_PLUGIN(p) LLDB_PLUGIN_INITIALIZE(p);
 #include "Plugins/Plugins.def"

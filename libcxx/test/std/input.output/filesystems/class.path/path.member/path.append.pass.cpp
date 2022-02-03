@@ -29,6 +29,10 @@
 #include <string_view>
 #include <cassert>
 
+// On Windows, the append function converts all inputs (pointers, iterators)
+// to an intermediate path object, causing allocations in cases where no
+// allocations are done on other platforms.
+
 #include "test_macros.h"
 #include "test_iterators.h"
 #include "count_new.h"
@@ -124,7 +128,7 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
   using Ptr = CharT const*;
   using Str = std::basic_string<CharT>;
   using StrView = std::basic_string_view<CharT>;
-  using InputIter = input_iterator<Ptr>;
+  using InputIter = cpp17_input_iterator<Ptr>;
 
   const Ptr L = TC.lhs;
   Str RShort = (Ptr)TC.rhs;
@@ -141,7 +145,7 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
     path LHS(L); PathReserve(LHS, ReserveSize);
     Str  RHS(R);
     {
-      DisableAllocationGuard g;
+      TEST_NOT_WIN32(DisableAllocationGuard g);
       LHS /= RHS;
     }
     assert(PathEq(LHS, E));
@@ -151,7 +155,7 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
     path LHS(L); PathReserve(LHS, ReserveSize);
     StrView  RHS(R);
     {
-      DisableAllocationGuard g;
+      TEST_NOT_WIN32(DisableAllocationGuard g);
       LHS /= RHS;
     }
     assert(PathEq(LHS, E));
@@ -161,7 +165,7 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
     path LHS(L); PathReserve(LHS, ReserveSize);
     Ptr RHS(R);
     {
-      DisableAllocationGuard g;
+      TEST_NOT_WIN32(DisableAllocationGuard g);
       LHS /= RHS;
     }
     assert(PathEq(LHS, E));
@@ -170,8 +174,17 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
     path LHS(L); PathReserve(LHS, ReserveSize);
     Ptr RHS(R);
     {
-      DisableAllocationGuard g;
+      TEST_NOT_WIN32(DisableAllocationGuard g);
       LHS.append(RHS, StrEnd(RHS));
+    }
+    assert(PathEq(LHS, E));
+  }
+  {
+    path LHS(L); PathReserve(LHS, ReserveSize);
+    path RHS(R);
+    {
+      DisableAllocationGuard g;
+      LHS /= RHS;
     }
     assert(PathEq(LHS, E));
   }
@@ -180,13 +193,24 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
   // code_cvt conversions.
   // For "char" no allocations will be performed because no conversion is
   // required.
-  bool DisableAllocations = std::is_same<CharT, char>::value;
+  // On Windows, the append method is more complex and uses intermediate
+  // path objects, which causes extra allocations. This is checked by comparing
+  // path::value_type with "char" - on Windows, it's wchar_t.
+#if TEST_SUPPORTS_LIBRARY_INTERNAL_ALLOCATIONS
+  // Only check allocations if we can pick up allocations done within the
+  // library implementation.
+  bool ExpectNoAllocations = std::is_same<CharT, char>::value &&
+                             std::is_same<path::value_type, char>::value;
+#endif
   {
     path LHS(L); PathReserve(LHS, ReserveSize);
     InputIter RHS(R);
     {
-      RequireAllocationGuard  g; // requires 1 or more allocations occur by default
-      if (DisableAllocations) g.requireExactly(0);
+      RequireAllocationGuard g(0); // require "at least zero" allocations by default
+#if TEST_SUPPORTS_LIBRARY_INTERNAL_ALLOCATIONS
+      if (ExpectNoAllocations)
+        g.requireExactly(0);
+#endif
       LHS /= RHS;
     }
     assert(PathEq(LHS, E));
@@ -196,8 +220,11 @@ void doAppendSourceAllocTest(AppendOperatorTestcase const& TC)
     InputIter RHS(R);
     InputIter REnd(StrEnd(R));
     {
-      RequireAllocationGuard g;
-      if (DisableAllocations) g.requireExactly(0);
+      RequireAllocationGuard g(0); // require "at least zero" allocations by default
+#if TEST_SUPPORTS_LIBRARY_INTERNAL_ALLOCATIONS
+      if (ExpectNoAllocations)
+        g.requireExactly(0);
+#endif
       LHS.append(RHS, REnd);
     }
     assert(PathEq(LHS, E));
@@ -211,7 +238,7 @@ void doAppendSourceTest(AppendOperatorTestcase const& TC)
   using Ptr = CharT const*;
   using Str = std::basic_string<CharT>;
   using StrView = std::basic_string_view<CharT>;
-  using InputIter = input_iterator<Ptr>;
+  using InputIter = cpp17_input_iterator<Ptr>;
   const Ptr L = TC.lhs;
   const Ptr R = TC.rhs;
   const Ptr E = TC.expected_result();
@@ -317,7 +344,7 @@ void test_sfinae()
     static_assert(has_append<It>(), "");
   }
   {
-    using It = input_iterator<const char*>;
+    using It = cpp17_input_iterator<const char*>;
     static_assert(has_append<It>(), "");
   }
   {
@@ -328,7 +355,7 @@ void test_sfinae()
       using reference = const char&;
       using difference_type = std::ptrdiff_t;
     };
-    using It = input_iterator<const char*, Traits>;
+    using It = cpp17_input_iterator<const char*, Traits>;
     static_assert(has_append<It>(), "");
   }
   {
@@ -359,14 +386,18 @@ int main(int, char**)
       assert(&Res == &LHS);
     }
     doAppendSourceTest<char>    (TC);
+#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     doAppendSourceTest<wchar_t> (TC);
+#endif
     doAppendSourceTest<char16_t>(TC);
     doAppendSourceTest<char32_t>(TC);
   }
   for (auto const & TC : LongLHSCases) {
     (void)TC;
     LIBCPP_ONLY(doAppendSourceAllocTest<char>(TC));
+#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     LIBCPP_ONLY(doAppendSourceAllocTest<wchar_t>(TC));
+#endif
   }
   test_sfinae();
 

@@ -11,10 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/Transforms/FuncConversions.h"
 #include "mlir/Dialect/StandardOps/Transforms/Passes.h"
-#include "mlir/Transforms/Bufferize.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -22,29 +23,27 @@ using namespace mlir;
 namespace {
 struct FuncBufferizePass : public FuncBufferizeBase<FuncBufferizePass> {
   using FuncBufferizeBase<FuncBufferizePass>::FuncBufferizeBase;
-
   void runOnOperation() override {
     auto module = getOperation();
     auto *context = &getContext();
 
-    BufferizeTypeConverter typeConverter;
-    OwningRewritePatternList patterns;
+    bufferization::BufferizeTypeConverter typeConverter;
+    RewritePatternSet patterns(context);
     ConversionTarget target(*context);
 
-    populateFuncOpTypeConversionPattern(patterns, context, typeConverter);
+    populateFunctionLikeTypeConversionPattern<FuncOp>(patterns, typeConverter);
     target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       return typeConverter.isSignatureLegal(op.getType()) &&
              typeConverter.isLegal(&op.getBody());
     });
-    populateCallOpTypeConversionPattern(patterns, context, typeConverter);
+    populateCallOpTypeConversionPattern(patterns, typeConverter);
     target.addDynamicallyLegalOp<CallOp>(
         [&](CallOp op) { return typeConverter.isLegal(op); });
 
-    populateBranchOpInterfaceTypeConversionPattern(patterns, context,
-                                                   typeConverter);
-    populateReturnOpTypeConversionPattern(patterns, context, typeConverter);
-    target.addLegalOp<ModuleOp, ModuleTerminatorOp, TensorLoadOp,
-                      TensorToMemrefOp>();
+    populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
+    populateReturnOpTypeConversionPattern(patterns, typeConverter);
+    target.addLegalOp<ModuleOp, bufferization::ToTensorOp,
+                      bufferization::ToMemrefOp>();
 
     target.markUnknownOpDynamicallyLegal([&](Operation *op) {
       return isNotBranchOpInterfaceOrReturnLikeOp(op) ||

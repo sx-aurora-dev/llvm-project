@@ -15,6 +15,7 @@
 #include "llvm/Object/Error.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/MathExtras.h"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -43,7 +44,6 @@ template <class ELFT> struct Elf_Nhdr_Impl;
 template <class ELFT> class Elf_Note_Impl;
 template <class ELFT> class Elf_Note_Iterator_Impl;
 template <class ELFT> struct Elf_CGProfile_Impl;
-template <class ELFT> struct Elf_BBAddrMap_Impl;
 
 template <endianness E, bool Is64> struct ELFType {
 private:
@@ -75,7 +75,6 @@ public:
   using Note = Elf_Note_Impl<ELFType<E, Is64>>;
   using NoteIterator = Elf_Note_Iterator_Impl<ELFType<E, Is64>>;
   using CGProfile = Elf_CGProfile_Impl<ELFType<E, Is64>>;
-  using BBAddrMap = Elf_BBAddrMap_Impl<ELFType<E, Is64>>;
   using DynRange = ArrayRef<Dyn>;
   using ShdrRange = ArrayRef<Shdr>;
   using SymRange = ArrayRef<Sym>;
@@ -130,7 +129,6 @@ using ELF64BE = ELFType<support::big, true>;
   using Elf_Note = typename ELFT::Note;                                        \
   using Elf_Note_Iterator = typename ELFT::NoteIterator;                       \
   using Elf_CGProfile = typename ELFT::CGProfile;                              \
-  using Elf_BBAddrMap = typename ELFT::BBAddrMap;                              \
   using Elf_Dyn_Range = typename ELFT::DynRange;                               \
   using Elf_Shdr_Range = typename ELFT::ShdrRange;                             \
   using Elf_Sym_Range = typename ELFT::SymRange;                               \
@@ -655,9 +653,15 @@ public:
   Elf_Word getType() const { return Nhdr.n_type; }
 };
 
-template <class ELFT>
-class Elf_Note_Iterator_Impl
-    : std::iterator<std::forward_iterator_tag, Elf_Note_Impl<ELFT>> {
+template <class ELFT> class Elf_Note_Iterator_Impl {
+public:
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = Elf_Note_Impl<ELFT>;
+  using difference_type = std::ptrdiff_t;
+  using pointer = value_type *;
+  using reference = value_type &;
+
+private:
   // Nhdr being a nullptr marks the end of iteration.
   const Elf_Nhdr_Impl<ELFT> *Nhdr = nullptr;
   size_t RemainingSize = 0u;
@@ -730,8 +734,6 @@ public:
 
 template <class ELFT> struct Elf_CGProfile_Impl {
   LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
-  Elf_Word cgp_from;
-  Elf_Word cgp_to;
   Elf_Xword cgp_weight;
 };
 
@@ -792,9 +794,8 @@ template <class ELFT> struct Elf_Mips_ABIFlags {
 };
 
 // Struct representing the BBAddrMap for one function.
-template <class ELFT> struct Elf_BBAddrMap_Impl {
-  LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
-  uintX_t Addr; // Function address
+struct BBAddrMap {
+  uint64_t Addr; // Function address
   // Struct representing the BBAddrMap information for one basic block.
   struct BBEntry {
     uint32_t Offset; // Offset of basic block relative to function start.
@@ -802,13 +803,15 @@ template <class ELFT> struct Elf_BBAddrMap_Impl {
 
     // The following fields are decoded from the Metadata field. The encoding
     // happens in AsmPrinter.cpp:getBBAddrMapMetadata.
-    bool HasReturn;   // If this block ends with a return (or tail call).
-    bool HasTailCall; // If this block ends with a tail call.
-    bool IsEHPad;     // If this is an exception handling block.
+    bool HasReturn;      // If this block ends with a return (or tail call).
+    bool HasTailCall;    // If this block ends with a tail call.
+    bool IsEHPad;        // If this is an exception handling block.
+    bool CanFallThrough; // If this block can fall through to its next.
 
     BBEntry(uint32_t Offset, uint32_t Size, uint32_t Metadata)
         : Offset(Offset), Size(Size), HasReturn(Metadata & 1),
-          HasTailCall(Metadata & (1 << 1)), IsEHPad(Metadata & (1 << 2)){};
+          HasTailCall(Metadata & (1 << 1)), IsEHPad(Metadata & (1 << 2)),
+          CanFallThrough(Metadata & (1 << 3)){};
   };
   std::vector<BBEntry> BBEntries; // Basic block entries for this function.
 };

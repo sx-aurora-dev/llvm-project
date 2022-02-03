@@ -163,8 +163,10 @@ static mlir::Attribute parseFirRealAttr(FIROpsDialect *dialect,
       parser.emitError(parser.getNameLoc(), "expected real constant '>'");
       return {};
     }
-    auto bits = llvm::APInt(kind * 8, hex.drop_front(), 16);
-    value = llvm::APFloat(kindMap.getFloatSemantics(kind), bits);
+    const llvm::fltSemantics &sem = kindMap.getFloatSemantics(kind);
+    unsigned int numBits = llvm::APFloat::semanticsSizeInBits(sem);
+    auto bits = llvm::APInt(numBits, hex.drop_front(), 16);
+    value = llvm::APFloat(sem, bits);
   }
   return RealAttr::get(dialect->getContext(), {kind, value});
 }
@@ -242,4 +244,13 @@ void fir::printFirAttribute(FIROpsDialect *dialect, mlir::Attribute attr,
     // don't know how to print the attribute, so use a default
     os << "<(unknown attribute)>";
   }
+}
+
+//===----------------------------------------------------------------------===//
+// FIROpsDialect
+//===----------------------------------------------------------------------===//
+
+void FIROpsDialect::registerAttributes() {
+  addAttributes<ClosedIntervalAttr, ExactTypeAttr, LowerBoundAttr,
+                PointIntervalAttr, RealAttr, SubclassAttr, UpperBoundAttr>();
 }

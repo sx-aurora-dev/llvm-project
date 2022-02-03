@@ -1,7 +1,6 @@
-; RUN: opt -passes='loop(unswitch<nontrivial>),verify<loops>' -S < %s | FileCheck %s
-; RUN: opt -passes='loop-mssa(unswitch<nontrivial>),verify<loops>' -S < %s | FileCheck %s
-; RUN: opt -simple-loop-unswitch -enable-nontrivial-unswitch -S < %s | FileCheck %s
-; RUN: opt -simple-loop-unswitch -enable-nontrivial-unswitch -enable-mssa-loop-dependency=true -verify-memoryssa -S < %s | FileCheck %s
+; RUN: opt -passes='loop(simple-loop-unswitch<nontrivial>),verify<loops>' -S < %s | FileCheck %s
+; RUN: opt -passes='loop-mssa(simple-loop-unswitch<nontrivial>),verify<loops>' -S < %s | FileCheck %s
+; RUN: opt -simple-loop-unswitch -enable-nontrivial-unswitch -verify-memoryssa -S < %s | FileCheck %s
 
 declare i32 @a()
 declare i32 @b()
@@ -4248,7 +4247,7 @@ loop_begin:
 ; CHECK-NEXT:    %[[V2:.*]] = load i1, i1* %ptr2
 ; CHECK-NEXT:    %[[AND1:.*]] = select i1 %[[V1]], i1 true, i1 false
 ; CHECK-NEXT:    %[[AND2:.*]] = select i1 %[[AND1]], i1 true, i1 false
-; CHECK-NEXT:    br i1 %[[AND2]], label %loop_a, label %loop_b
+; CHECK-NEXT:    br i1 %[[V1]], label %loop_a, label %loop_b
 
 loop_a:
   call i32 @a()
@@ -4326,7 +4325,7 @@ loop_begin:
 ; CHECK-NEXT:    %[[V2:.*]] = load i1, i1* %ptr2
 ; CHECK-NEXT:    %[[AND1:.*]] = select i1 %[[V1]], i1 true, i1 false
 ; CHECK-NEXT:    %[[AND2:.*]] = select i1 %[[AND1]], i1 true, i1 false
-; CHECK-NEXT:    br i1 %[[AND2]], label %loop_b, label %loop_a
+; CHECK-NEXT:    br i1 %[[V1]], label %loop_b, label %loop_a
 
 loop_a:
   call i32 @a()

@@ -19,18 +19,6 @@ define fastcc <512 x float> @vec_load_v512f32(<512 x float>* %P) {
   ret <512 x float> %ret
 }
 
-define fastcc <512 x float> @vec_load_v512f32_aligned(<512 x float>* %P) {
-; CHECK-LABEL: vec_load_v512f32_aligned:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = load <512 x float>, <512 x float>* %P, align 8
-  ret <512 x float> %ret
-}
-
 
 declare <512 x float> @llvm.masked.load.v512f32.p0v512f32(<512 x float>*, i32 immarg, <512 x i1>, <512 x float>)
 
@@ -40,25 +28,10 @@ define fastcc <512 x float> @vec_mload_v512f32(<512 x float>* %P, <512 x i1> %M)
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldu %v0, 8, %s0
-; CHECK-NEXT:    lea %s0, 4(, %s0)
-; CHECK-NEXT:    vldu %v1, 8, %s0
-; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = call <512 x float> @llvm.masked.load.v512f32.p0v512f32(<512 x float>* %P, i32 4, <512 x i1> %M, <512 x float> undef)
-  ret <512 x float> %ret
-}
-
-; Function Attrs: nounwind
-define fastcc <512 x float> @vec_mload_v512f32_aligned(<512 x float>* %P, <512 x i1> %M) {
-; CHECK-LABEL: vec_mload_v512f32_aligned:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = call <512 x float> @llvm.masked.load.v512f32.p0v512f32(<512 x float>* %P, i32 8, <512 x i1> %M, <512 x float> undef)
+  %ret = call <512 x float> @llvm.masked.load.v512f32.p0v512f32(<512 x float>* %P, i32 16, <512 x i1> %M, <512 x float> undef)
   ret <512 x float> %ret
 }
 
@@ -72,30 +45,13 @@ define fastcc <512 x float> @vec_vpload_v512f32(<512 x float>* %P, <512 x i1> %M
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldu %v0, 8, %s0
-; CHECK-NEXT:    lea %s0, 4(, %s0)
-; CHECK-NEXT:    vldu %v1, 8, %s0
-; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
-; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = call <512 x float> @llvm.vp.load.v512f32.p0v512f32(<512 x float>* align(4) %P, <512 x i1> %M, i32 %avl)
-  ret <512 x float> %ret
-}
-
-
-; Function Attrs: nounwind
-define fastcc <512 x float> @vec_vpload_v512f32_aligned(<512 x float>* %P, <512 x i1> %M, i32 %avl) {
-; CHECK-LABEL: vec_vpload_v512f32_aligned:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %ret = call <512 x float> @llvm.vp.load.v512f32.p0v512f32(<512 x float>* align(8) %P, <512 x i1> %M, i32 %avl)
+  %ret = call <512 x float> @llvm.vp.load.v512f32.p0v512f32(<512 x float>* %P, <512 x i1> %M, i32 %avl)
   ret <512 x float> %ret
 }
+
 
 ;;; 512 x double
 

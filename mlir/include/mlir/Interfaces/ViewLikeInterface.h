@@ -13,6 +13,7 @@
 #ifndef MLIR_INTERFACES_VIEWLIKEINTERFACE_H_
 #define MLIR_INTERFACES_VIEWLIKEINTERFACE_H_
 
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -29,7 +30,32 @@ struct Range {
 };
 
 class OffsetSizeAndStrideOpInterface;
-LogicalResult verify(OffsetSizeAndStrideOpInterface op);
+
+/// Return a vector of all the static or dynamic offsets of the op from provided
+/// external static and dynamic offsets.
+SmallVector<OpFoldResult, 4> getMixedOffsets(OffsetSizeAndStrideOpInterface op,
+                                             ArrayAttr staticOffsets,
+                                             ValueRange offsets);
+
+/// Return a vector of all the static or dynamic sizes of the op from provided
+/// external static and dynamic sizes.
+SmallVector<OpFoldResult, 4> getMixedSizes(OffsetSizeAndStrideOpInterface op,
+                                           ArrayAttr staticSizes,
+                                           ValueRange sizes);
+
+/// Return a vector of all the static or dynamic strides of the op from provided
+/// external static and dynamic strides.
+SmallVector<OpFoldResult, 4> getMixedStrides(OffsetSizeAndStrideOpInterface op,
+                                             ArrayAttr staticStrides,
+                                             ValueRange strides);
+
+namespace detail {
+LogicalResult verifyOffsetSizeAndStrideOp(OffsetSizeAndStrideOpInterface op);
+
+bool sameOffsetsSizesAndStrides(
+    OffsetSizeAndStrideOpInterface a, OffsetSizeAndStrideOpInterface b,
+    llvm::function_ref<bool(OpFoldResult, OpFoldResult)> cmp);
+} // namespace detail
 } // namespace mlir
 
 /// Include the generated interface declarations.

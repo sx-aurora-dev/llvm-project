@@ -23,6 +23,8 @@ import sys
 import tarfile
 import tempfile
 
+from shlex import quote as cmd_quote
+
 def ssh(args, command):
     cmd = ['ssh', '-oBatchMode=yes']
     if args.extra_ssh_args is not None:
@@ -107,7 +109,7 @@ def main():
         commandLine = (pathOnRemote(x) if isTestExe(x) else x for x in commandLine)
         remoteCommands.append('cd {}'.format(tmp))
         if args.env:
-            remoteCommands.append('export {}'.format(' '.join(args.env)))
+            remoteCommands.append('export {}'.format(cmd_quote(' '.join(args.env))))
         remoteCommands.append(subprocess.list2cmdline(commandLine))
 
         # Finally, SSH to the remote host and execute all the commands.

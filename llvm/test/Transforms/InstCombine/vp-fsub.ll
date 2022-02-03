@@ -37,9 +37,9 @@ define <4 x float> @sub_sub_nsz_vp(<4 x float> %x, <4 x float> %y, <4 x float> %
 
 
 ; Function Attrs: nounwind readnone
-declare <4 x float> @llvm.vp.fadd.v4f32(<4 x float>, <4 x float>, <4 x i1> mask, i32 vlen)
+declare <4 x float> @llvm.vp.fadd.v4f32(<4 x float>, <4 x float>, <4 x i1>, i32)
 
 ; Function Attrs: nounwind readnone
-declare <4 x float> @llvm.vp.fsub.v4f32(<4 x float>, <4 x float>, <4 x i1> mask, i32 vlen)
+declare <4 x float> @llvm.vp.fsub.v4f32(<4 x float>, <4 x float>, <4 x i1>, i32)
 
 attributes #0 = { readnone }

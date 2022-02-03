@@ -146,3 +146,327 @@ define fastcc <256 x i1> @vmp_cc_bug(<256 x i1> %vm1, <256 x i1> %vm2, <512 x i1
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x i1> %vm6
 }
+
+
+;;; Non-simple vector types.
+
+;; Expect non-power-of-two vector that fit inside one vector register to be widened.
+define fastcc <17 x i64> @vreg_arg_v17i64_r1(<256 x i64> %p0, <17 x i64> %p1) {
+; CHECK-LABEL: vreg_arg_v17i64_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i64> %p1
+}
+
+define fastcc <17 x i32> @vreg_arg_v17i32_r1(<256 x i32> %p0, <17 x i32> %p1) {
+; CHECK-LABEL: vreg_arg_v17i32_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i32> %p1
+}
+
+define fastcc <17 x i1> @vm_arg_v17i1_r1(<256 x i1> %p0, <17 x i1> %p1) {
+; CHECK-LABEL: vm_arg_v17i1_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i1> %p1
+}
+
+;; Expect over-sized non-power-of-two vectors to be split(64bit elements) and widened.
+define fastcc <334 x i64> @vreg_arg_v334i64_r1(<256 x i64> %p0, <334 x i64> %p1) {
+; CHECK-LABEL: vreg_arg_v334i64_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <334 x i64> %p1
+}
+
+define fastcc <334 x i32> @vreg_arg_v334i32_r1(<256 x i32> %p0, <334 x i32> %p1) {
+; CHECK-LABEL: vreg_arg_v334i32_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <334 x i32> %p1
+}
+
+; FIXME: This test documents a bug in cc lowering:
+;        %p1 should live in 'VMP3' and there should be a copy from that to 'VMP1' here.
+define fastcc <334 x i1> @vm_arg_v334i1_r1(<256 x i1> %p0, <334 x i1> %p1) {
+; CHECK-LABEL: vm_arg_v334i1_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <334 x i1> %p1
+}
+
+;; Vectors with over-sized elements.
+; TODO: Implement custom element splitting to get this into vregs.
+define fastcc <17 x i128> @vreg_arg_v17i128_r1(<256 x i128> %p0, <17 x i128> %p1) {
+; CHECK-LABEL: vreg_arg_v17i128_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s1, 4280(, %s11)
+; CHECK-NEXT:    ld %s2, 4288(, %s11)
+; CHECK-NEXT:    ld %s3, 4296(, %s11)
+; CHECK-NEXT:    ld %s4, 4304(, %s11)
+; CHECK-NEXT:    ld %s5, 4312(, %s11)
+; CHECK-NEXT:    ld %s6, 4320(, %s11)
+; CHECK-NEXT:    ld %s7, 4328(, %s11)
+; CHECK-NEXT:    ld %s34, 4336(, %s11)
+; CHECK-NEXT:    ld %s35, 4344(, %s11)
+; CHECK-NEXT:    ld %s36, 4352(, %s11)
+; CHECK-NEXT:    ld %s37, 4360(, %s11)
+; CHECK-NEXT:    ld %s38, 4368(, %s11)
+; CHECK-NEXT:    ld %s39, 4376(, %s11)
+; CHECK-NEXT:    ld %s40, 4384(, %s11)
+; CHECK-NEXT:    ld %s41, 4392(, %s11)
+; CHECK-NEXT:    ld %s42, 4400(, %s11)
+; CHECK-NEXT:    ld %s43, 4408(, %s11)
+; CHECK-NEXT:    ld %s44, 4416(, %s11)
+; CHECK-NEXT:    ld %s45, 4424(, %s11)
+; CHECK-NEXT:    ld %s46, 4432(, %s11)
+; CHECK-NEXT:    ld %s47, 4440(, %s11)
+; CHECK-NEXT:    ld %s48, 4448(, %s11)
+; CHECK-NEXT:    ld %s49, 4456(, %s11)
+; CHECK-NEXT:    ld %s50, 4464(, %s11)
+; CHECK-NEXT:    ld %s51, 4472(, %s11)
+; CHECK-NEXT:    ld %s52, 4480(, %s11)
+; CHECK-NEXT:    ld %s53, 4488(, %s11)
+; CHECK-NEXT:    ld %s54, 4496(, %s11)
+; CHECK-NEXT:    ld %s55, 4504(, %s11)
+; CHECK-NEXT:    ld %s56, 4512(, %s11)
+; CHECK-NEXT:    ld %s57, 4544(, %s11)
+; CHECK-NEXT:    ld %s58, 4536(, %s11)
+; CHECK-NEXT:    ld %s59, 4528(, %s11)
+; CHECK-NEXT:    ld %s60, 4520(, %s11)
+; CHECK-NEXT:    st %s57, 264(, %s0)
+; CHECK-NEXT:    st %s58, 256(, %s0)
+; CHECK-NEXT:    st %s59, 248(, %s0)
+; CHECK-NEXT:    st %s60, 240(, %s0)
+; CHECK-NEXT:    st %s56, 232(, %s0)
+; CHECK-NEXT:    st %s55, 224(, %s0)
+; CHECK-NEXT:    st %s54, 216(, %s0)
+; CHECK-NEXT:    st %s53, 208(, %s0)
+; CHECK-NEXT:    st %s52, 200(, %s0)
+; CHECK-NEXT:    st %s51, 192(, %s0)
+; CHECK-NEXT:    st %s50, 184(, %s0)
+; CHECK-NEXT:    st %s49, 176(, %s0)
+; CHECK-NEXT:    st %s48, 168(, %s0)
+; CHECK-NEXT:    st %s47, 160(, %s0)
+; CHECK-NEXT:    st %s46, 152(, %s0)
+; CHECK-NEXT:    st %s45, 144(, %s0)
+; CHECK-NEXT:    st %s44, 136(, %s0)
+; CHECK-NEXT:    st %s43, 128(, %s0)
+; CHECK-NEXT:    st %s42, 120(, %s0)
+; CHECK-NEXT:    st %s41, 112(, %s0)
+; CHECK-NEXT:    st %s40, 104(, %s0)
+; CHECK-NEXT:    st %s39, 96(, %s0)
+; CHECK-NEXT:    st %s38, 88(, %s0)
+; CHECK-NEXT:    st %s37, 80(, %s0)
+; CHECK-NEXT:    st %s36, 72(, %s0)
+; CHECK-NEXT:    st %s35, 64(, %s0)
+; CHECK-NEXT:    st %s34, 56(, %s0)
+; CHECK-NEXT:    st %s7, 48(, %s0)
+; CHECK-NEXT:    st %s6, 40(, %s0)
+; CHECK-NEXT:    st %s5, 32(, %s0)
+; CHECK-NEXT:    st %s4, 24(, %s0)
+; CHECK-NEXT:    st %s3, 16(, %s0)
+; CHECK-NEXT:    st %s2, 8(, %s0)
+; CHECK-NEXT:    st %s1, (, %s0)
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i128> %p1
+}
+
+; TODO: Implement custom element splitting to get this into vregs.
+define fastcc <17 x i65> @vreg_arg_v17i65_r1(<256 x i65> %p0, <17 x i65> %p1) {
+; CHECK-LABEL: vreg_arg_v17i65_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s2, 4304(, %s11)
+; CHECK-NEXT:    ld %s3, 4320(, %s11)
+; CHECK-NEXT:    ld %s1, 4312(, %s11)
+; CHECK-NEXT:    ld %s5, 4336(, %s11)
+; CHECK-NEXT:    ld %s4, 4328(, %s11)
+; CHECK-NEXT:    ld %s7, 4352(, %s11)
+; CHECK-NEXT:    ld %s6, 4344(, %s11)
+; CHECK-NEXT:    ld %s35, 4368(, %s11)
+; CHECK-NEXT:    ld %s34, 4360(, %s11)
+; CHECK-NEXT:    ld %s37, 4384(, %s11)
+; CHECK-NEXT:    ld %s36, 4376(, %s11)
+; CHECK-NEXT:    ld %s38, 4400(, %s11)
+; CHECK-NEXT:    ld %s39, 4392(, %s11)
+; CHECK-NEXT:    ld %s40, 4416(, %s11)
+; CHECK-NEXT:    ld %s41, 4408(, %s11)
+; CHECK-NEXT:    ld %s42, 4432(, %s11)
+; CHECK-NEXT:    ld %s43, 4424(, %s11)
+; CHECK-NEXT:    ld %s44, 4448(, %s11)
+; CHECK-NEXT:    ld %s45, 4440(, %s11)
+; CHECK-NEXT:    ld %s46, 4464(, %s11)
+; CHECK-NEXT:    ld %s47, 4456(, %s11)
+; CHECK-NEXT:    ld %s48, 4480(, %s11)
+; CHECK-NEXT:    ld %s49, 4472(, %s11)
+; CHECK-NEXT:    ld %s50, 4496(, %s11)
+; CHECK-NEXT:    ld %s51, 4488(, %s11)
+; CHECK-NEXT:    ld %s52, 4512(, %s11)
+; CHECK-NEXT:    ld %s53, 4504(, %s11)
+; CHECK-NEXT:    ld %s54, 4528(, %s11)
+; CHECK-NEXT:    ld %s55, 4520(, %s11)
+; CHECK-NEXT:    ld %s56, 4280(, %s11)
+; CHECK-NEXT:    ld %s57, 4544(, %s11)
+; CHECK-NEXT:    ld %s58, 4288(, %s11)
+; CHECK-NEXT:    ld %s59, 4536(, %s11)
+; CHECK-NEXT:    ld %s60, 4296(, %s11)
+; CHECK-NEXT:    and %s57, 1, %s57
+; CHECK-NEXT:    st1b %s57, 138(, %s0)
+; CHECK-NEXT:    srl %s57, %s59, 48
+; CHECK-NEXT:    st2b %s57, 136(, %s0)
+; CHECK-NEXT:    sll %s57, %s60, 1
+; CHECK-NEXT:    and %s58, 1, %s58
+; CHECK-NEXT:    or %s57, %s58, %s57
+; CHECK-NEXT:    st %s57, 8(, %s0)
+; CHECK-NEXT:    st %s56, (, %s0)
+; CHECK-NEXT:    srl %s56, %s55, 49
+; CHECK-NEXT:    and %s54, 1, %s54
+; CHECK-NEXT:    sll %s54, %s54, 15
+; CHECK-NEXT:    or %s54, %s56, %s54
+; CHECK-NEXT:    sll %s56, %s59, 16
+; CHECK-NEXT:    or %s54, %s54, %s56
+; CHECK-NEXT:    st %s54, 128(, %s0)
+; CHECK-NEXT:    srl %s54, %s53, 50
+; CHECK-NEXT:    and %s52, 1, %s52
+; CHECK-NEXT:    sll %s52, %s52, 14
+; CHECK-NEXT:    or %s52, %s52, %s54
+; CHECK-NEXT:    sll %s54, %s55, 15
+; CHECK-NEXT:    or %s52, %s52, %s54
+; CHECK-NEXT:    st %s52, 120(, %s0)
+; CHECK-NEXT:    srl %s52, %s51, 51
+; CHECK-NEXT:    and %s50, 1, %s50
+; CHECK-NEXT:    sll %s50, %s50, 13
+; CHECK-NEXT:    or %s50, %s52, %s50
+; CHECK-NEXT:    sll %s52, %s53, 14
+; CHECK-NEXT:    or %s50, %s50, %s52
+; CHECK-NEXT:    st %s50, 112(, %s0)
+; CHECK-NEXT:    srl %s50, %s49, 52
+; CHECK-NEXT:    and %s48, 1, %s48
+; CHECK-NEXT:    sll %s48, %s48, 12
+; CHECK-NEXT:    or %s48, %s48, %s50
+; CHECK-NEXT:    sll %s50, %s51, 13
+; CHECK-NEXT:    or %s48, %s48, %s50
+; CHECK-NEXT:    st %s48, 104(, %s0)
+; CHECK-NEXT:    srl %s48, %s47, 53
+; CHECK-NEXT:    and %s46, 1, %s46
+; CHECK-NEXT:    sll %s46, %s46, 11
+; CHECK-NEXT:    or %s46, %s48, %s46
+; CHECK-NEXT:    sll %s48, %s49, 12
+; CHECK-NEXT:    or %s46, %s46, %s48
+; CHECK-NEXT:    st %s46, 96(, %s0)
+; CHECK-NEXT:    srl %s46, %s45, 54
+; CHECK-NEXT:    and %s44, 1, %s44
+; CHECK-NEXT:    sll %s44, %s44, 10
+; CHECK-NEXT:    or %s44, %s44, %s46
+; CHECK-NEXT:    sll %s46, %s47, 11
+; CHECK-NEXT:    or %s44, %s44, %s46
+; CHECK-NEXT:    st %s44, 88(, %s0)
+; CHECK-NEXT:    srl %s44, %s43, 55
+; CHECK-NEXT:    and %s42, 1, %s42
+; CHECK-NEXT:    sll %s42, %s42, 9
+; CHECK-NEXT:    or %s42, %s44, %s42
+; CHECK-NEXT:    sll %s44, %s45, 10
+; CHECK-NEXT:    or %s42, %s42, %s44
+; CHECK-NEXT:    st %s42, 80(, %s0)
+; CHECK-NEXT:    srl %s42, %s41, 56
+; CHECK-NEXT:    and %s40, 1, %s40
+; CHECK-NEXT:    sll %s40, %s40, 8
+; CHECK-NEXT:    or %s40, %s40, %s42
+; CHECK-NEXT:    sll %s42, %s43, 9
+; CHECK-NEXT:    or %s40, %s40, %s42
+; CHECK-NEXT:    st %s40, 72(, %s0)
+; CHECK-NEXT:    srl %s40, %s39, 57
+; CHECK-NEXT:    and %s38, 1, %s38
+; CHECK-NEXT:    sll %s38, %s38, 7
+; CHECK-NEXT:    or %s38, %s40, %s38
+; CHECK-NEXT:    sll %s40, %s41, 8
+; CHECK-NEXT:    or %s38, %s38, %s40
+; CHECK-NEXT:    st %s38, 64(, %s0)
+; CHECK-NEXT:    srl %s38, %s36, 58
+; CHECK-NEXT:    and %s37, 1, %s37
+; CHECK-NEXT:    sll %s37, %s37, 6
+; CHECK-NEXT:    or %s37, %s37, %s38
+; CHECK-NEXT:    sll %s38, %s39, 7
+; CHECK-NEXT:    or %s37, %s37, %s38
+; CHECK-NEXT:    st %s37, 56(, %s0)
+; CHECK-NEXT:    srl %s37, %s34, 59
+; CHECK-NEXT:    and %s35, 1, %s35
+; CHECK-NEXT:    sll %s35, %s35, 5
+; CHECK-NEXT:    or %s35, %s37, %s35
+; CHECK-NEXT:    sll %s36, %s36, 6
+; CHECK-NEXT:    or %s35, %s35, %s36
+; CHECK-NEXT:    st %s35, 48(, %s0)
+; CHECK-NEXT:    srl %s35, %s6, 60
+; CHECK-NEXT:    and %s7, 1, %s7
+; CHECK-NEXT:    sll %s7, %s7, 4
+; CHECK-NEXT:    or %s7, %s7, %s35
+; CHECK-NEXT:    sll %s34, %s34, 5
+; CHECK-NEXT:    or %s7, %s7, %s34
+; CHECK-NEXT:    st %s7, 40(, %s0)
+; CHECK-NEXT:    srl %s7, %s4, 61
+; CHECK-NEXT:    and %s5, 1, %s5
+; CHECK-NEXT:    sll %s5, %s5, 3
+; CHECK-NEXT:    or %s5, %s7, %s5
+; CHECK-NEXT:    sll %s6, %s6, 4
+; CHECK-NEXT:    or %s5, %s5, %s6
+; CHECK-NEXT:    st %s5, 32(, %s0)
+; CHECK-NEXT:    srl %s5, %s1, 62
+; CHECK-NEXT:    and %s3, 1, %s3
+; CHECK-NEXT:    sll %s3, %s3, 2
+; CHECK-NEXT:    or %s3, %s3, %s5
+; CHECK-NEXT:    sll %s4, %s4, 3
+; CHECK-NEXT:    or %s3, %s3, %s4
+; CHECK-NEXT:    st %s3, 24(, %s0)
+; CHECK-NEXT:    srl %s3, %s60, 63
+; CHECK-NEXT:    and %s2, 1, %s2
+; CHECK-NEXT:    sll %s2, %s2, 1
+; CHECK-NEXT:    or %s2, %s3, %s2
+; CHECK-NEXT:    sll %s1, %s1, 2
+; CHECK-NEXT:    or %s1, %s2, %s1
+; CHECK-NEXT:    st %s1, 16(, %s0)
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i65> %p1
+}
+
+;; Vectors with under-sized elements.
+define fastcc <17 x i16> @vreg_arg_v17i16_r1(<256 x i16> %p0, <17 x i16> %p1) {
+; CHECK-LABEL: vreg_arg_v17i16_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i16> %p1
+}
+
+define fastcc <17 x i13> @vreg_arg_v17i13_r1(<256 x i13> %p0, <17 x i13> %p1) {
+; CHECK-LABEL: vreg_arg_v17i13_r1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
+  ret <17 x i13> %p1
+}

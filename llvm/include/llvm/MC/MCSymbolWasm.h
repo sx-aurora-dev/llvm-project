@@ -26,8 +26,7 @@ class MCSymbolWasm : public MCSymbol {
   Optional<StringRef> ExportName;
   wasm::WasmSignature *Signature = nullptr;
   Optional<wasm::WasmGlobalType> GlobalType;
-  Optional<wasm::ValType> TableType;
-  Optional<wasm::WasmEventType> EventType;
+  Optional<wasm::WasmTableType> TableType;
 
   /// An expression describing how to calculate the size of a symbol. If a
   /// symbol has no size this field will be NULL.
@@ -47,7 +46,7 @@ public:
   bool isGlobal() const { return Type == wasm::WASM_SYMBOL_TYPE_GLOBAL; }
   bool isTable() const { return Type == wasm::WASM_SYMBOL_TYPE_TABLE; }
   bool isSection() const { return Type == wasm::WASM_SYMBOL_TYPE_SECTION; }
-  bool isEvent() const { return Type == wasm::WASM_SYMBOL_TYPE_EVENT; }
+  bool isTag() const { return Type == wasm::WASM_SYMBOL_TYPE_TAG; }
 
   Optional<wasm::WasmSymbolType> getType() const { return Type; }
 
@@ -65,6 +64,11 @@ public:
   }
   void setNoStrip() const {
     modifyFlags(wasm::WASM_SYMBOL_NO_STRIP, wasm::WASM_SYMBOL_NO_STRIP);
+  }
+
+  bool isTLS() const { return getFlags() & wasm::WASM_SYMBOL_TLS; }
+  void setTLS() const {
+    modifyFlags(wasm::WASM_SYMBOL_TLS, wasm::WASM_SYMBOL_TLS);
   }
 
   bool isWeak() const { return IsWeak; }
@@ -108,7 +112,7 @@ public:
 
   bool isFunctionTable() const {
     return isTable() && hasTableType() &&
-           getTableType() == wasm::ValType::FUNCREF;
+           getTableType().ElemType == wasm::WASM_TYPE_FUNCREF;
   }
   void setFunctionTable() {
     setType(wasm::WASM_SYMBOL_TYPE_TABLE);
@@ -131,17 +135,17 @@ public:
   void setGlobalType(wasm::WasmGlobalType GT) { GlobalType = GT; }
 
   bool hasTableType() const { return TableType.hasValue(); }
-  wasm::ValType getTableType() const {
+  const wasm::WasmTableType &getTableType() const {
     assert(hasTableType());
     return TableType.getValue();
   }
-  void setTableType(wasm::ValType TT) { TableType = TT; }
-
-  const wasm::WasmEventType &getEventType() const {
-    assert(EventType.hasValue());
-    return EventType.getValue();
+  void setTableType(wasm::WasmTableType TT) { TableType = TT; }
+  void setTableType(wasm::ValType VT) {
+    // Declare a table with element type VT and no limits (min size 0, no max
+    // size).
+    wasm::WasmLimits Limits = {wasm::WASM_LIMITS_FLAG_NONE, 0, 0};
+    setTableType({uint8_t(VT), Limits});
   }
-  void setEventType(wasm::WasmEventType ET) { EventType = ET; }
 };
 
 } // end namespace llvm

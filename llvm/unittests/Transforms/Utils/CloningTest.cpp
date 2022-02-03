@@ -718,10 +718,10 @@ TEST(CloneFunction, CloneEmptyFunction) {
 
 TEST(CloneFunction, CloneFunctionWithInalloca) {
   StringRef ImplAssembly = R"(
-    declare void @a(i32* inalloca)
+    declare void @a(i32* inalloca(i32))
     define void @foo() {
       %a = alloca inalloca i32
-      call void @a(i32* inalloca %a)
+      call void @a(i32* inalloca(i32) %a)
       ret void
     }
     declare void @bar()
@@ -921,6 +921,10 @@ protected:
     IBuilder.SetInsertPoint(Entry);
     IBuilder.CreateRetVoid();
 
+    auto *G =
+        Function::Create(FuncType, GlobalValue::ExternalLinkage, "g", OldM);
+    G->addMetadata(LLVMContext::MD_type, *MDNode::get(C, {}));
+
     // Finalize the debug info
     DBuilder.finalize();
   }
@@ -934,10 +938,10 @@ protected:
 
 TEST_F(CloneModule, Verify) {
   // Confirm the old module is (still) valid.
-  EXPECT_FALSE(verifyModule(*OldM));
+  EXPECT_FALSE(verifyModule(*OldM, &errs()));
 
   // Check the new module.
-  EXPECT_FALSE(verifyModule(*NewM));
+  EXPECT_FALSE(verifyModule(*NewM, &errs()));
 }
 
 TEST_F(CloneModule, OldModuleUnchanged) {
@@ -953,6 +957,11 @@ TEST_F(CloneModule, Subprogram) {
   EXPECT_EQ(SP->getName(), "f");
   EXPECT_EQ(SP->getFile()->getFilename(), "filename.c");
   EXPECT_EQ(SP->getLine(), (unsigned)4);
+}
+
+TEST_F(CloneModule, FunctionDeclarationMetadata) {
+  Function *NewF = NewM->getFunction("g");
+  EXPECT_NE(nullptr, NewF->getMetadata(LLVMContext::MD_type));
 }
 
 TEST_F(CloneModule, GlobalMetadata) {

@@ -122,7 +122,10 @@ private:
 
   void addSCCDefUsersToVALUWorklist(MachineOperand &Op,
                                     MachineInstr &SCCDefInst,
-                                    SetVectorType &Worklist) const;
+                                    SetVectorType &Worklist,
+                                    Register NewCond = Register()) const;
+  void addSCCDefsToVALUWorklist(MachineOperand &Op,
+                                SetVectorType &Worklist) const;
 
   const TargetRegisterClass *
   getDestEquivalentVGPRClass(const MachineInstr &Inst) const;
@@ -159,8 +162,7 @@ public:
     // MO_REL32_HI -> symbol@rel32@hi -> R_AMDGPU_REL32_HI.
     MO_REL32_HI = 5,
 
-    MO_LONG_BRANCH_FORWARD = 6,
-    MO_LONG_BRANCH_BACKWARD = 7,
+    MO_FAR_BRANCH_OFFSET = 6,
 
     MO_ABS32_LO = 8,
     MO_ABS32_HI = 9,
@@ -178,6 +180,8 @@ public:
 
   bool isReallyTriviallyReMaterializable(const MachineInstr &MI,
                                          AAResults *AA) const override;
+
+  bool isIgnorableUse(const MachineOperand &MO) const override;
 
   bool areLoadsFromSameBasePtr(SDNode *Load1, SDNode *Load2,
                                int64_t &Offset1,
@@ -268,11 +272,10 @@ public:
 
   MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
 
-  unsigned insertIndirectBranch(MachineBasicBlock &MBB,
-                                MachineBasicBlock &NewDestBB,
-                                const DebugLoc &DL,
-                                int64_t BrOffset,
-                                RegScavenger *RS = nullptr) const override;
+  void insertIndirectBranch(MachineBasicBlock &MBB,
+                            MachineBasicBlock &NewDestBB,
+                            MachineBasicBlock &RestoreBB, const DebugLoc &DL,
+                            int64_t BrOffset, RegScavenger *RS) const override;
 
   bool analyzeBranchImpl(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator I,
@@ -312,6 +315,14 @@ public:
                           Register DstReg, ArrayRef<MachineOperand> Cond,
                           Register TrueReg, Register FalseReg) const;
 
+  bool analyzeCompare(const MachineInstr &MI, Register &SrcReg,
+                      Register &SrcReg2, int64_t &CmpMask,
+                      int64_t &CmpValue) const override;
+
+  bool optimizeCompareInstr(MachineInstr &CmpInstr, Register SrcReg,
+                            Register SrcReg2, int64_t CmpMask, int64_t CmpValue,
+                            const MachineRegisterInfo *MRI) const override;
+
   unsigned getAddressSpaceForPseudoSourceKind(
              unsigned Kind) const override;
 
@@ -319,16 +330,15 @@ public:
   areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
                                   const MachineInstr &MIb) const override;
 
-  bool isFoldableCopy(const MachineInstr &MI) const;
+  static bool isFoldableCopy(const MachineInstr &MI);
 
   bool FoldImmediate(MachineInstr &UseMI, MachineInstr &DefMI, Register Reg,
                      MachineRegisterInfo *MRI) const final;
 
   unsigned getMachineCSELookAheadLimit() const override { return 500; }
 
-  MachineInstr *convertToThreeAddress(MachineFunction::iterator &MBB,
-                                      MachineInstr &MI,
-                                      LiveVariables *LV) const override;
+  MachineInstr *convertToThreeAddress(MachineInstr &MI, LiveVariables *LV,
+                                      LiveIntervals *LIS) const override;
 
   bool isSchedulingBoundary(const MachineInstr &MI,
                             const MachineBasicBlock *MBB,
@@ -506,28 +516,28 @@ public:
   // i.e. global_* or scratch_*.
   static bool isSegmentSpecificFLAT(const MachineInstr &MI) {
     auto Flags = MI.getDesc().TSFlags;
-    return Flags & (SIInstrFlags::IsFlatGlobal | SIInstrFlags::IsFlatScratch);
+    return Flags & (SIInstrFlags::FlatGlobal | SIInstrFlags::FlatScratch);
   }
 
   bool isSegmentSpecificFLAT(uint16_t Opcode) const {
     auto Flags = get(Opcode).TSFlags;
-    return Flags & (SIInstrFlags::IsFlatGlobal | SIInstrFlags::IsFlatScratch);
+    return Flags & (SIInstrFlags::FlatGlobal | SIInstrFlags::FlatScratch);
   }
 
   static bool isFLATGlobal(const MachineInstr &MI) {
-    return MI.getDesc().TSFlags & SIInstrFlags::IsFlatGlobal;
+    return MI.getDesc().TSFlags & SIInstrFlags::FlatGlobal;
   }
 
   bool isFLATGlobal(uint16_t Opcode) const {
-    return get(Opcode).TSFlags & SIInstrFlags::IsFlatGlobal;
+    return get(Opcode).TSFlags & SIInstrFlags::FlatGlobal;
   }
 
   static bool isFLATScratch(const MachineInstr &MI) {
-    return MI.getDesc().TSFlags & SIInstrFlags::IsFlatScratch;
+    return MI.getDesc().TSFlags & SIInstrFlags::FlatScratch;
   }
 
   bool isFLATScratch(uint16_t Opcode) const {
-    return get(Opcode).TSFlags & SIInstrFlags::IsFlatScratch;
+    return get(Opcode).TSFlags & SIInstrFlags::FlatScratch;
   }
 
   // Any FLAT encoded instruction, including global_* and scratch_*.
@@ -946,6 +956,10 @@ public:
   MachineBasicBlock *
   legalizeOperands(MachineInstr &MI, MachineDominatorTree *MDT = nullptr) const;
 
+  /// Change SADDR form of a FLAT \p Inst to its VADDR form if saddr operand
+  /// was moved to VGPR. \returns true if succeeded.
+  bool moveFlatAddrToVGPR(MachineInstr &Inst) const;
+
   /// Replace this instruction's opcode with the equivalent VALU
   /// opcode.  This function will also move the users of \p MI to the
   /// VALU if necessary. If present, \p MDT is updated.
@@ -1029,6 +1043,10 @@ public:
   ScheduleHazardRecognizer *
   CreateTargetPostRAHazardRecognizer(const MachineFunction &MF) const override;
 
+  ScheduleHazardRecognizer *
+  CreateTargetMIHazardRecognizer(const InstrItineraryData *II,
+                                 const ScheduleDAGMI *DAG) const override;
+
   bool isBasicBlockPrologue(const MachineInstr &MI) const override;
 
   MachineInstr *createPHIDestinationCopy(MachineBasicBlock &MBB,
@@ -1070,13 +1088,13 @@ public:
   /// encoded instruction. If \p Signed, this is for an instruction that
   /// interprets the offset as signed.
   bool isLegalFLATOffset(int64_t Offset, unsigned AddrSpace,
-                         bool Signed) const;
+                         uint64_t FlatVariant) const;
 
   /// Split \p COffsetVal into {immediate offset field, remainder offset}
   /// values.
   std::pair<int64_t, int64_t> splitFlatOffset(int64_t COffsetVal,
                                               unsigned AddrSpace,
-                                              bool IsSigned) const;
+                                              uint64_t FlatVariant) const;
 
   /// \brief Return a target-specific opcode if Opcode is a pseudo instruction.
   /// Return -1 if the target-specific opcode for the pseudo instruction does
@@ -1112,6 +1130,8 @@ public:
   }
 
   static unsigned getDSShaderTypeValue(const MachineFunction &MF);
+
+  const TargetSchedModel &getSchedModel() const { return SchedModel; }
 };
 
 /// \brief Returns true if a reg:subreg pair P has a TRC class
@@ -1198,17 +1218,33 @@ namespace AMDGPU {
   LLVM_READONLY
   int getSOPKOp(uint16_t Opcode);
 
+  /// \returns SADDR form of a FLAT Global instruction given an \p Opcode
+  /// of a VADDR form.
   LLVM_READONLY
   int getGlobalSaddrOp(uint16_t Opcode);
+
+  /// \returns VADDR form of a FLAT Global instruction given an \p Opcode
+  /// of a SADDR form.
+  LLVM_READONLY
+  int getGlobalVaddrOp(uint16_t Opcode);
 
   LLVM_READONLY
   int getVCMPXNoSDstOp(uint16_t Opcode);
 
+  /// \returns ST form with only immediate offset of a FLAT Scratch instruction
+  /// given an \p Opcode of an SS (SADDR) form.
   LLVM_READONLY
   int getFlatScratchInstSTfromSS(uint16_t Opcode);
 
+  /// \returns SS (SADDR) form of a FLAT Scratch instruction given an \p Opcode
+  /// of an SV (VADDR) form.
   LLVM_READONLY
   int getFlatScratchInstSSfromSV(uint16_t Opcode);
+
+  /// \returns SV (VADDR) form of a FLAT Scratch instruction given an \p Opcode
+  /// of an SS (SADDR) form.
+  LLVM_READONLY
+  int getFlatScratchInstSVfromSS(uint16_t Opcode);
 
   const uint64_t RSRC_DATA_FORMAT = 0xf00000000000LL;
   const uint64_t RSRC_ELEMENT_SIZE_SHIFT = (32 + 19);

@@ -8,7 +8,7 @@
 #ifndef MLIR_CONVERSION_GPUCOMMON_INDEXINTRINSICSOPLOWERING_H_
 #define MLIR_CONVERSION_GPUCOMMON_INDEXINTRINSICSOPLOWERING_H_
 
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
+#include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -23,11 +23,11 @@ namespace mlir {
 template <typename Op, typename XOp, typename YOp, typename ZOp>
 struct GPUIndexIntrinsicOpLowering : public ConvertOpToLLVMPattern<Op> {
 private:
-  enum dimension { X = 0, Y = 1, Z = 2, invalid };
+  enum Dimension { X = 0, Y = 1, Z = 2, invalid };
   unsigned indexBitwidth;
 
-  static dimension dimensionToIndex(Op op) {
-    return StringSwitch<dimension>(op.dimension())
+  static Dimension dimensionToIndex(Op op) {
+    return StringSwitch<Dimension>(op.dimension())
         .Case("x", X)
         .Case("y", Y)
         .Case("z", Z)
@@ -41,7 +41,7 @@ public:
 
   // Convert the kernel arguments to an LLVM type, preserve the rest.
   LogicalResult
-  matchAndRewrite(Op op, ArrayRef<Value> operands,
+  matchAndRewrite(Op op, typename Op::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op->getLoc();
     MLIRContext *context = rewriter.getContext();

@@ -1,15 +1,29 @@
 // RUN: mlir-opt %s -split-input-file -verify-diagnostics
 
 //===----------------------------------------------------------------------===//
-// pdl::ApplyConstraintOp
+// pdl::ApplyNativeConstraintOp
 //===----------------------------------------------------------------------===//
 
 pdl.pattern : benefit(1) {
   %op = pdl.operation "foo.op"
 
   // expected-error@below {{expected at least one argument}}
-  "pdl.apply_constraint"() {name = "foo", params = []} : () -> ()
+  "pdl.apply_native_constraint"() {name = "foo", params = []} : () -> ()
   pdl.rewrite %op with "rewriter"
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// pdl::ApplyNativeRewriteOp
+//===----------------------------------------------------------------------===//
+
+pdl.pattern : benefit(1) {
+  %op = pdl.operation "foo.op"
+  pdl.rewrite %op {
+    // expected-error@below {{expected at least one argument}}
+    "pdl.apply_native_rewrite"() {name = "foo", params = []} : () -> ()
+  }
 }
 
 // -----
@@ -24,7 +38,7 @@ pdl.pattern : benefit(1) {
   // expected-error@below {{expected only one of [`type`, `value`] to be set}}
   %attr = pdl.attribute : %type 10
 
-  %op, %result = pdl.operation "foo.op" {"attr" = %attr} -> %type
+  %op = pdl.operation "foo.op" {"attr" = %attr} -> (%type : !pdl.type)
   pdl.rewrite %op with "rewriter"
 }
 
@@ -53,7 +67,7 @@ pdl.pattern : benefit(1) {
 // -----
 
 pdl.pattern : benefit(1) {
-  // expected-error@below {{expected a bindable (i.e. `pdl.operation`) user when defined in the matcher body of a `pdl.pattern`}}
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
   %unused = pdl.attribute
 
   %op = pdl.operation "foo.op"
@@ -67,8 +81,22 @@ pdl.pattern : benefit(1) {
 //===----------------------------------------------------------------------===//
 
 pdl.pattern : benefit(1) {
-  // expected-error@below {{expected a bindable (i.e. `pdl.operation`) user when defined in the matcher body of a `pdl.pattern`}}
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
   %unused = pdl.operand
+
+  %op = pdl.operation "foo.op"
+  pdl.rewrite %op with "rewriter"
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// pdl::OperandsOp
+//===----------------------------------------------------------------------===//
+
+pdl.pattern : benefit(1) {
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
+  %unused = pdl.operands
 
   %op = pdl.operation "foo.op"
   pdl.rewrite %op with "rewriter"
@@ -102,20 +130,20 @@ pdl.pattern : benefit(1) {
 // -----
 
 pdl.pattern : benefit(1) {
-  %op = pdl.operation "foo.op"()
+  %op = pdl.operation "foo.op"
   pdl.rewrite %op {
     %type = pdl.type
 
     // expected-error@below {{op must have inferable or constrained result types when nested within `pdl.rewrite`}}
     // expected-note@below {{result type #0 was not constrained}}
-    %newOp, %result = pdl.operation "foo.op" -> %type
+    %newOp = pdl.operation "foo.op" -> (%type : !pdl.type)
   }
 }
 
 // -----
 
 pdl.pattern : benefit(1) {
-  // expected-error@below {{expected a bindable (i.e. `pdl.operation` or `pdl.rewrite`) user when defined in the matcher body of a `pdl.pattern`}}
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
   %unused = pdl.operation "foo.op"
 
   %op = pdl.operation "foo.op"
@@ -136,29 +164,44 @@ pdl.pattern : benefit(1) {
 
 // -----
 
+// expected-error@below {{the pattern must contain at least one `pdl.operation`}}
+pdl.pattern : benefit(1) {
+  pdl.rewrite with "foo"
+}
+
+// -----
 // expected-error@below {{expected only `pdl` operations within the pattern body}}
 pdl.pattern : benefit(1) {
   // expected-note@below {{see non-`pdl` operation defined here}}
-  "foo.other_op"() : () -> ()
+  "test.foo.other_op"() : () -> ()
 
   %root = pdl.operation "foo.op"
   pdl.rewrite %root with "foo"
 }
 
 // -----
-
-//===----------------------------------------------------------------------===//
-// pdl::ReplaceOp
-//===----------------------------------------------------------------------===//
-
+// expected-error@below {{the operations must form a connected component}}
 pdl.pattern : benefit(1) {
-  %root = pdl.operation "foo.op"
-  pdl.rewrite %root {
-    %type = pdl.type : i32
-    %newOp, %newResult = pdl.operation "foo.op" -> %type
+  %op1 = pdl.operation "foo.op"
+  %op2 = pdl.operation "bar.op"
+  // expected-note@below {{see a disconnected value / operation here}}
+  %val = pdl.result 0 of %op2
+  pdl.rewrite %op1 with "foo"(%val : !pdl.value)
+}
 
-    // expected-error@below {{to have the same number of results as the replacement operation}}
-    pdl.replace %root with %newOp
+// -----
+// expected-error@below {{the operations must form a connected component}}
+pdl.pattern : benefit(1) {
+  %type = pdl.type
+  %op1 = pdl.operation "foo.op" -> (%type : !pdl.type)
+  %val = pdl.result 0 of %op1
+  %op2 = pdl.operation "bar.op"(%val : !pdl.value)
+  // expected-note@below {{see a disconnected value / operation here}}
+  %op3 = pdl.operation "baz.op"
+  pdl.rewrite {
+    pdl.erase %op1
+    pdl.erase %op2
+    pdl.erase %op3
   }
 }
 
@@ -166,9 +209,10 @@ pdl.pattern : benefit(1) {
 
 pdl.pattern : benefit(1) {
   %type = pdl.type : i32
-  %root, %oldResult = pdl.operation "foo.op" -> %type
+  %root = pdl.operation "foo.op" -> (%type : !pdl.type)
   pdl.rewrite %root {
-    %newOp, %newResult = pdl.operation "foo.op" -> %type
+    %newOp = pdl.operation "foo.op" -> (%type : !pdl.type)
+    %newResult = pdl.result 0 of %newOp
 
     // expected-error@below {{expected no replacement values to be provided when the replacement operation is present}}
     "pdl.replace"(%root, %newOp, %newResult) {
@@ -179,15 +223,15 @@ pdl.pattern : benefit(1) {
 
 // -----
 
+//===----------------------------------------------------------------------===//
+// pdl::ResultsOp
+//===----------------------------------------------------------------------===//
+
 pdl.pattern : benefit(1) {
   %root = pdl.operation "foo.op"
-  pdl.rewrite %root {
-    %type = pdl.type : i32
-    %newOp, %newResult = pdl.operation "foo.op" -> %type
-
-    // expected-error@below {{to have the same number of results as the provided replacement values}}
-    pdl.replace %root with (%newResult)
-  }
+  // expected-error@below {{expected `pdl.range<value>` result type when no index is specified, but got: '!pdl.value'}}
+  %results = "pdl.results"(%root) : (!pdl.operation) -> !pdl.value
+  pdl.rewrite %root with "rewriter"
 }
 
 // -----
@@ -200,7 +244,9 @@ pdl.pattern : benefit(1) {
   %op = pdl.operation "foo.op"
 
   // expected-error@below {{expected rewrite region to be non-empty if external name is not specified}}
-  "pdl.rewrite"(%op) ({}) : (!pdl.operation) -> ()
+  "pdl.rewrite"(%op) ({}) {
+    operand_segment_sizes = dense<[1,0]> : vector<2xi32>
+  } : (!pdl.operation) -> ()
 }
 
 // -----
@@ -211,8 +257,9 @@ pdl.pattern : benefit(1) {
   // expected-error@below {{expected no external arguments when the rewrite is specified inline}}
   "pdl.rewrite"(%op, %op) ({
     ^bb1:
-      pdl.rewrite_end
-  }) : (!pdl.operation, !pdl.operation) -> ()
+  }) {
+    operand_segment_sizes = dense<1> : vector<2xi32>
+  }: (!pdl.operation, !pdl.operation) -> ()
 }
 
 // -----
@@ -223,8 +270,9 @@ pdl.pattern : benefit(1) {
   // expected-error@below {{expected no external constant parameters when the rewrite is specified inline}}
   "pdl.rewrite"(%op) ({
     ^bb1:
-      pdl.rewrite_end
-  }) {externalConstParams = []} : (!pdl.operation) -> ()
+  }) {
+    operand_segment_sizes = dense<[1,0]> : vector<2xi32>,
+    externalConstParams = []} : (!pdl.operation) -> ()
 }
 
 // -----
@@ -235,8 +283,10 @@ pdl.pattern : benefit(1) {
   // expected-error@below {{expected rewrite region to be empty when rewrite is external}}
   "pdl.rewrite"(%op) ({
     ^bb1:
-      pdl.rewrite_end
-  }) {name = "foo"} : (!pdl.operation) -> ()
+  }) {
+    name = "foo",
+    operand_segment_sizes = dense<[1,0]> : vector<2xi32>
+  } : (!pdl.operation) -> ()
 }
 
 // -----
@@ -246,8 +296,22 @@ pdl.pattern : benefit(1) {
 //===----------------------------------------------------------------------===//
 
 pdl.pattern : benefit(1) {
-  // expected-error@below {{expected a bindable (i.e. `pdl.attribute`, `pdl.operand`, or `pdl.operation`) user when defined in the matcher body of a `pdl.pattern`}}
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
   %unused = pdl.type
+
+  %op = pdl.operation "foo.op"
+  pdl.rewrite %op with "rewriter"
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// pdl::TypesOp
+//===----------------------------------------------------------------------===//
+
+pdl.pattern : benefit(1) {
+  // expected-error@below {{expected a bindable user when defined in the matcher body of a `pdl.pattern`}}
+  %unused = pdl.types
 
   %op = pdl.operation "foo.op"
   pdl.rewrite %op with "rewriter"

@@ -250,7 +250,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     unsigned LLVMRegNum = *TRI->getLLVMRegNum(DwarfRegNum, false);
     unsigned SubRegIdx = TRI->getSubRegIndex(LLVMRegNum, MOI->getReg());
     if (SubRegIdx)
-      Offset = TRI->getSubRegIdxOffset(SubRegIdx).getValueOr((unsigned)(uint16_t) -1);
+      Offset = TRI->getSubRegIdxOffset(SubRegIdx);
 
     Locs.emplace_back(Location::Register, TRI->getSpillSize(*RC),
                       DwarfRegNum, Offset);
@@ -511,7 +511,7 @@ void StackMaps::recordStackMapOpers(const MCSymbol &MILabel,
   const MachineFrameInfo &MFI = AP.MF->getFrameInfo();
   const TargetRegisterInfo *RegInfo = AP.MF->getSubtarget().getRegisterInfo();
   bool HasDynamicFrameSize =
-      MFI.hasVarSizedObjects() || RegInfo->needsStackRealignment(*(AP.MF));
+      MFI.hasVarSizedObjects() || RegInfo->hasStackRealignment(*(AP.MF));
   uint64_t FrameSize = HasDynamicFrameSize ? UINT64_MAX : MFI.getStackSize();
 
   auto CurrentIt = FnInfos.find(AP.CurrentFnSym);

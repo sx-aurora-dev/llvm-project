@@ -130,7 +130,7 @@ using ElementWiseVisitor = llvm::function_ref<void(T &ptr, ArrayRef<int64_t>)>;
 
 /// Owning MemRef type that abstracts over the runtime type for ranked strided
 /// memref.
-template <typename T, int Rank>
+template <typename T, unsigned Rank>
 class OwningMemRef {
 public:
   using DescriptorType = StridedMemRefType<T, Rank>;
@@ -198,7 +198,7 @@ public:
   DescriptorType &operator*() { return descriptor; }
   DescriptorType *operator->() { return &descriptor; }
   T &operator[](std::initializer_list<int64_t> indices) {
-    return descriptor[std::move(indices)];
+    return descriptor[indices];
   }
 
 private:

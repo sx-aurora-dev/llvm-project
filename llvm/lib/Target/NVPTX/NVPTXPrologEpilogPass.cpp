@@ -74,7 +74,6 @@ bool NVPTXPrologEpilogPass::runOnMachineFunction(MachineFunction &MF) {
           auto Offset =
               TFI.getFrameIndexReference(MF, Op.getIndex(), Reg);
           Op.ChangeToRegister(Reg, /*isDef=*/false);
-          Op.setIsDebug();
           const DIExpression *DIExpr = MI.getDebugExpression();
           if (MI.isNonListDebugValue()) {
             DIExpr = TRI.prependOffsetExpression(MI.getDebugExpression(), DIExpression::ApplyOffset, Offset);
@@ -238,7 +237,7 @@ NVPTXPrologEpilogPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
     // value.
     Align StackAlign;
     if (MFI.adjustsStack() || MFI.hasVarSizedObjects() ||
-        (RegInfo->needsStackRealignment(Fn) && MFI.getObjectIndexEnd() != 0))
+        (RegInfo->hasStackRealignment(Fn) && MFI.getObjectIndexEnd() != 0))
       StackAlign = TFI.getStackAlign();
     else
       StackAlign = TFI.getTransientStackAlign();

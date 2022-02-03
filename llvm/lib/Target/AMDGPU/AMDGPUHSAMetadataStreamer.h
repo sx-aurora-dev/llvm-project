@@ -30,8 +30,14 @@ class MDNode;
 class Module;
 struct SIProgramInfo;
 class Type;
+class GCNSubtarget;
 
 namespace AMDGPU {
+
+namespace IsaInfo {
+class AMDGPUTargetID;
+}
+
 namespace HSAMD {
 
 class MetadataStreamer {
@@ -40,7 +46,8 @@ public:
 
   virtual bool emitTo(AMDGPUTargetStreamer &TargetStreamer) = 0;
 
-  virtual void begin(const Module &Mod) = 0;
+  virtual void begin(const Module &Mod,
+                     const IsaInfo::AMDGPUTargetID &TargetID) = 0;
 
   virtual void end() = 0;
 
@@ -48,8 +55,9 @@ public:
                           const SIProgramInfo &ProgramInfo) = 0;
 };
 
-class MetadataStreamerV3 final : public MetadataStreamer {
-private:
+// TODO: Rename MetadataStreamerV3 -> MetadataStreamerMsgPackV3.
+class MetadataStreamerV3 : public MetadataStreamer {
+protected:
   std::unique_ptr<msgpack::Document> HSAMetadataDoc =
       std::make_unique<msgpack::Document>();
 
@@ -79,7 +87,8 @@ private:
 
   void emitKernelAttrs(const Function &Func, msgpack::MapDocNode Kern);
 
-  void emitKernelArgs(const Function &Func, msgpack::MapDocNode Kern);
+  void emitKernelArgs(const Function &Func, const GCNSubtarget &ST,
+                      msgpack::MapDocNode Kern);
 
   void emitKernelArg(const Argument &Arg, unsigned &Offset,
                      msgpack::ArrayDocNode Args);
@@ -91,8 +100,8 @@ private:
                      StringRef BaseTypeName = "", StringRef AccQual = "",
                      StringRef TypeQual = "");
 
-  void emitHiddenKernelArgs(const Function &Func, unsigned &Offset,
-                            msgpack::ArrayDocNode Args);
+  void emitHiddenKernelArgs(const Function &Func, const GCNSubtarget &ST,
+                            unsigned &Offset, msgpack::ArrayDocNode Args);
 
   msgpack::DocNode &getRootMetadata(StringRef Key) {
     return HSAMetadataDoc->getRoot().getMap(/*Convert=*/true)[Key];
@@ -108,7 +117,8 @@ public:
 
   bool emitTo(AMDGPUTargetStreamer &TargetStreamer) override;
 
-  void begin(const Module &Mod) override;
+  void begin(const Module &Mod,
+             const IsaInfo::AMDGPUTargetID &TargetID) override;
 
   void end() override;
 
@@ -116,6 +126,21 @@ public:
                   const SIProgramInfo &ProgramInfo) override;
 };
 
+// TODO: Rename MetadataStreamerV4 -> MetadataStreamerMsgPackV4.
+class MetadataStreamerV4 final : public MetadataStreamerV3 {
+  void emitVersion();
+
+  void emitTargetID(const IsaInfo::AMDGPUTargetID &TargetID);
+
+public:
+  MetadataStreamerV4() = default;
+  ~MetadataStreamerV4() = default;
+
+  void begin(const Module &Mod,
+             const IsaInfo::AMDGPUTargetID &TargetID) override;
+};
+
+// TODO: Rename MetadataStreamerV2 -> MetadataStreamerYamlV2.
 class MetadataStreamerV2 final : public MetadataStreamer {
 private:
   Metadata HSAMetadata;
@@ -150,7 +175,7 @@ private:
 
   void emitKernelAttrs(const Function &Func);
 
-  void emitKernelArgs(const Function &Func);
+  void emitKernelArgs(const Function &Func, const GCNSubtarget &ST);
 
   void emitKernelArg(const Argument &Arg);
 
@@ -160,7 +185,7 @@ private:
                      StringRef BaseTypeName = "", StringRef AccQual = "",
                      StringRef TypeQual = "");
 
-  void emitHiddenKernelArgs(const Function &Func);
+  void emitHiddenKernelArgs(const Function &Func, const GCNSubtarget &ST);
 
   const Metadata &getHSAMetadata() const {
     return HSAMetadata;
@@ -172,7 +197,8 @@ public:
 
   bool emitTo(AMDGPUTargetStreamer &TargetStreamer) override;
 
-  void begin(const Module &Mod) override;
+  void begin(const Module &Mod,
+             const IsaInfo::AMDGPUTargetID &TargetID) override;
 
   void end() override;
 

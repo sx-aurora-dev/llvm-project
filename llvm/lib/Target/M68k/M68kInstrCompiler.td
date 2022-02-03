@@ -1,4 +1,4 @@
-//===-- M68kInstrCompiler.td - Pseudos and Patterns ------*- tablegen -*-===//
+//===-- M68kInstrCompiler.td - Pseudos and Patterns --------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,15 +23,15 @@ def : Pat<(i32 (MxWrapper tjumptable    :$src)), (MOV32ri tjumptable    :$src)>;
 def : Pat<(i32 (MxWrapper tblockaddress :$src)), (MOV32ri tblockaddress :$src)>;
 
 def : Pat<(add MxDRD32:$src, (MxWrapper tconstpool:$opd)),
-          (ADD32ri MxDRD32:$src, tconstpool:$opd)>;
+          (ADD32di MxDRD32:$src, tconstpool:$opd)>;
 def : Pat<(add MxARD32:$src, (MxWrapper tjumptable:$opd)),
-          (ADD32ri MxARD32:$src, tjumptable:$opd)>;
+          (ADD32ai MxARD32:$src, tjumptable:$opd)>;
 def : Pat<(add MxARD32:$src, (MxWrapper tglobaladdr :$opd)),
-          (ADD32ri MxARD32:$src, tglobaladdr:$opd)>;
+          (ADD32ai MxARD32:$src, tglobaladdr:$opd)>;
 def : Pat<(add MxARD32:$src, (MxWrapper texternalsym:$opd)),
-          (ADD32ri MxARD32:$src, texternalsym:$opd)>;
+          (ADD32ai MxARD32:$src, texternalsym:$opd)>;
 def : Pat<(add MxARD32:$src, (MxWrapper tblockaddress:$opd)),
-          (ADD32ri MxARD32:$src, tblockaddress:$opd)>;
+          (ADD32ai MxARD32:$src, tblockaddress:$opd)>;
 
 def : Pat<(store (i32 (MxWrapper tglobaladdr:$src)), iPTR:$dst),
           (MOV32ji MxARI32:$dst, tglobaladdr:$src)>;
@@ -57,7 +57,6 @@ def : Pat<(i32 (MxWrapperPC tblockaddress :$src)), (LEA32q tblockaddress :$src)>
 let usesCustomInserter = 1, Uses = [CCR] in
 class MxCMove<MxType TYPE>
     : MxPseudo<(outs TYPE.ROp:$dst), (ins TYPE.ROp:$t, TYPE.ROp:$f, i8imm:$cond),
-               "",
                [(set TYPE.VT:$dst,
                      (TYPE.VT (MxCmov TYPE.VT:$t, TYPE.VT:$f, imm:$cond, CCR)))]>;
 
@@ -78,11 +77,11 @@ def CMOV32r : MxCMove<MxType32r>;
 let Defs = [SP, CCR], Uses = [SP] in {
 
   def ADJCALLSTACKDOWN
-    : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2), "#ADJCALLSTACKDOWN",
+    : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                [(MxCallSeqStart timm:$amt1, timm:$amt2)]>;
 
   def ADJCALLSTACKUP
-    : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2), "#ADJCALLSTACKUP",
+    : MxPseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                [(MxCallSeqEnd timm:$amt1, timm:$amt2)]>;
 
 } // Defs
@@ -124,5 +123,4 @@ def : Pat<(MxTCRet (i32 texternalsym:$dst), imm:$adj),
 let Defs = [SP, CCR], Uses = [SP] in
 let usesCustomInserter = 1 in
 def SALLOCA : MxPseudo<(outs MxARD32:$dst), (ins MxARD32:$size),
-                       "# variable sized alloca for segmented stacks",
                        [(set iPTR:$dst, (MxSegAlloca iPTR:$size))]>;

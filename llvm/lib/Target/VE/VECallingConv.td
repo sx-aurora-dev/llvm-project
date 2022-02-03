@@ -30,6 +30,9 @@ class CCIfNotSubtarget<string F, CCAction A>
 class CCIfVPU<CCAction A> : CCIfSubtarget<"enableVPU()",A>;
 class CCIfNotVPU<CCAction A> : CCIfNotSubtarget<"enableVPU()",A>;
 
+class CCIfPacked<CCAction A> : CCIfVPU<CCIfSubtarget<"hasPackedMode()",A>>;
+class CCIfNotPacked<CCAction A> : CCIfNotSubtarget<"hasPackedMode()",A>;
+
 def CC_VE_C_Stack: CallingConv<[
   // F128 are assigned to the stack in 16-byte aligned units
   CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
@@ -176,16 +179,14 @@ def RetCC_VE_C : CallingConv<[
 ///// fastcc - fast vreg passing /////
 def CC_VE_Fast : CallingConv<[
   // Virtual packed registers.
-  CCIfVPU<CCIfType<[v512f64, v512i64],
+  CCIfPacked<CCIfType<[v512f64, v512i64],
            CCAssignToRegWithShadow<[VP0, VP1, VP2, VP3],
                                    [V0,  V2,  V4,  V6]>>>,
 
   // vector --> generic vector registers
-  CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64,
-            v512i32, v512f32],
+  CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
-
-  CCIfVPU<CCIfType<[v512i32, v512f32],
+  CCIfPacked<CCIfType<[v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
   // vector mask --> generic vector mask registers
@@ -193,7 +194,7 @@ def CC_VE_Fast : CallingConv<[
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfVPU<CCIfType<[v512i1],
+  CCIfPacked<CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM3, VM5]>>>,
 
   // Default to the standard cc
@@ -202,7 +203,7 @@ def CC_VE_Fast : CallingConv<[
 
 def RetCC_VE_Fast : CallingConv<[
   // Virtual packed registers.
-  CCIfVPU<CCIfType<[v512f64, v512i64],
+  CCIfPacked<CCIfType<[v512f64, v512i64],
            CCAssignToRegWithShadow<[VP0, VP1, VP2, VP3],
                                    [V0,  V2,  V4,  V6]>>>,
 
@@ -210,7 +211,7 @@ def RetCC_VE_Fast : CallingConv<[
   CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
-  CCIfVPU<CCIfType<[v512i32, v512f32],
+  CCIfPacked<CCIfType<[v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
             
   // vector mask --> generic vector mask registers
@@ -218,7 +219,7 @@ def RetCC_VE_Fast : CallingConv<[
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfVPU<CCIfType<[v512i1],
+  CCIfPacked<CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
                                    [VM1, VM3, VM5]>>>,
 

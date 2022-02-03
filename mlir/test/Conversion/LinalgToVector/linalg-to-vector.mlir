@@ -12,21 +12,21 @@
 //  CHECK-SAME: %[[arg1:[a-zA-Z0-9]+]]: memref<?xf32>
 //  CHECK-SAME: %[[arg2:[a-zA-Z0-9]+]]: memref<?xf32
 func @conv_1d(%arg0: memref<?xf32>, %arg1: memref<?xf32>, %arg2: memref<?xf32>) {
-//   CHECK-DAG:   %[[c12:.*]] = constant 12 : index
-//   CHECK-DAG:   %[[c4:.*]] = constant 4 : index
-//   CHECK-DAG:   %[[cst:.*]] = constant 0.000000e+00 : f32
-//   CHECK-DAG:   %[[c3:.*]] = constant 3 : index
-//   CHECK-DAG:   %[[c0:.*]] = constant 0 : index
-//   CHECK-DAG:   %[[c1:.*]] = constant 1 : index
-//       CHECK:   %[[v0:.*]] = dim %[[arg1]], %[[c0]] : memref<?xf32>
-//       CHECK:   %[[v1:.*]] = dim %[[arg2]], %[[c0]] : memref<?xf32>
-//       CHECK:   %[[v2:.*]] = dim %[[arg0]], %[[c0]] : memref<?xf32>
-//       CHECK:   %[[v3:.*]] = alloc(%[[c12]]) : memref<?xi8>
-//       CHECK:   %[[v4:.*]] = alloc(%[[c12]]) : memref<?xi8>
-//       CHECK:   %[[v5:.*]] = alloc(%[[c4]]) : memref<?xi8>
-//       CHECK:   %[[v6:.*]] = std.view %[[v3]][%[[c0]]][] : memref<?xi8> to memref<3xf32>
-//       CHECK:   %[[v7:.*]] = std.view %[[v4]][%[[c0]]][] : memref<?xi8> to memref<3xf32>
-//       CHECK:   %[[v8:.*]] = std.view %[[v5]][%[[c0]]][] : memref<?xi8> to memref<1xf32>
+//   CHECK-DAG:   %[[c12:.*]] = arith.constant 12 : index
+//   CHECK-DAG:   %[[c4:.*]] = arith.constant 4 : index
+//   CHECK-DAG:   %[[cst:.*]] = arith.constant 0.000000e+00 : f32
+//   CHECK-DAG:   %[[c3:.*]] = arith.constant 3 : index
+//   CHECK-DAG:   %[[c0:.*]] = arith.constant 0 : index
+//   CHECK-DAG:   %[[c1:.*]] = arith.constant 1 : index
+//       CHECK:   %[[v0:.*]] = memref.dim %[[arg1]], %[[c0]] : memref<?xf32>
+//       CHECK:   %[[v1:.*]] = memref.dim %[[arg2]], %[[c0]] : memref<?xf32>
+//       CHECK:   %[[v2:.*]] = memref.dim %[[arg0]], %[[c0]] : memref<?xf32>
+//       CHECK:   %[[v3:.*]] = memref.alloc(%[[c12]]) : memref<?xi8>
+//       CHECK:   %[[v4:.*]] = memref.alloc(%[[c12]]) : memref<?xi8>
+//       CHECK:   %[[v5:.*]] = memref.alloc(%[[c4]]) : memref<?xi8>
+//       CHECK:   %[[v6:.*]] = memref.view %[[v3]][%[[c0]]][] : memref<?xi8> to memref<3xf32>
+//       CHECK:   %[[v7:.*]] = memref.view %[[v4]][%[[c0]]][] : memref<?xi8> to memref<3xf32>
+//       CHECK:   %[[v8:.*]] = memref.view %[[v5]][%[[c0]]][] : memref<?xi8> to memref<1xf32>
 //       CHECK:   scf.for %[[arg3:.*]] = %[[c0]] to %[[v1]] step %[[c1]] {
 //       CHECK:     %[[v9:.*]] = affine.min #[[$map0]](%[[arg3]])[%[[v1]]]
 //       CHECK:     %[[v10:.*]] = subview %[[arg2]][%[[arg3]]] [%[[v9]]] [1]  : memref<?xf32> to memref<?xf32, #[[$map1]]>
@@ -38,9 +38,9 @@ func @conv_1d(%arg0: memref<?xf32>, %arg1: memref<?xf32>, %arg2: memref<?xf32>) 
 //       CHECK:       %[[v15:.*]] = affine.min #[[$map4]](%arg4)[%0]
 //       CHECK:       %[[v16:.*]] = subview %[[arg1]][%[[arg4]]] [%[[v15]]] [1]  : memref<?xf32> to memref<?xf32, #[[$map1]]>
 //       CHECK:       %[[v17:.*]] = subview %[[v6]][0] [%[[v13]]] [1]  : memref<3xf32> to memref<?xf32>
-//       CHECK:       %[[v19:.*]] = vector.transfer_read %[[v6]][%[[c0]]], %[[cst]] {masked = [false]} : memref<3xf32>, vector<3xf32>
-//       CHECK:       %[[v20:.*]] = vector.transfer_read %[[v7]][%[[c0]]], %[[cst]] {masked = [false]} : memref<3xf32>, vector<3xf32>
-//       CHECK:       %[[v21:.*]] = mulf %[[v19]], %[[v20]] : vector<3xf32>
+//       CHECK:       %[[v19:.*]] = vector.transfer_read %[[v6]][%[[c0]]], %[[cst]] {in_bounds = [true]} : memref<3xf32>, vector<3xf32>
+//       CHECK:       %[[v20:.*]] = vector.transfer_read %[[v7]][%[[c0]]], %[[cst]] {in_bounds = [true]} : memref<3xf32>, vector<3xf32>
+//       CHECK:       %[[v21:.*]] = arith.mulf %[[v19]], %[[v20]] : vector<3xf32>
 //       CHECK:       %[[v22:.*]] = vector.reduction "add", %[[v21]], %[[cst]] : vector<3xf32> into f32
 //       CHECK:       store %[[v22]], %[[v8]][%[[c0]]] : memref<1xf32>
 //       CHECK:       scf.for %[[arg5:.*]] = %[[c0]] to %[[v9]] step %[[c1]] {

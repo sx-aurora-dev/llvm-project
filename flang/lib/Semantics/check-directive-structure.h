@@ -35,8 +35,8 @@ public:
       parser::CharBlock sourcePosition, D directive,
       std::string &&upperCaseDirName)
       : context_{context}, sourcePosition_{sourcePosition},
-        upperCaseDirName_{std::move(upperCaseDirName)}, currentDirective_{
-                                                            directive} {}
+        upperCaseDirName_{std::move(upperCaseDirName)},
+        currentDirective_{directive}, numDoConstruct_{0} {}
   template <typename T> bool Pre(const T &) { return true; }
   template <typename T> void Post(const T &) {}
 
@@ -45,16 +45,40 @@ public:
     return true;
   }
 
+  bool Pre(const parser::DoConstruct &) {
+    numDoConstruct_++;
+    return true;
+  }
+  void Post(const parser::DoConstruct &) { numDoConstruct_--; }
   void Post(const parser::ReturnStmt &) { EmitBranchOutError("RETURN"); }
   void Post(const parser::ExitStmt &exitStmt) {
     if (const auto &exitName{exitStmt.v}) {
       CheckConstructNameBranching("EXIT", exitName.value());
+    } else {
+      CheckConstructNameBranching("EXIT");
     }
   }
   void Post(const parser::StopStmt &) { EmitBranchOutError("STOP"); }
   void Post(const parser::CycleStmt &cycleStmt) {
     if (const auto &cycleName{cycleStmt.v}) {
       CheckConstructNameBranching("CYCLE", cycleName.value());
+    } else {
+      switch ((llvm::omp::Directive)currentDirective_) {
+      // exclude directives which do not need a check for unlabelled CYCLES
+      case llvm::omp::Directive::OMPD_do:
+      case llvm::omp::Directive::OMPD_simd:
+      case llvm::omp::Directive::OMPD_parallel_do:
+      case llvm::omp::Directive::OMPD_parallel_do_simd:
+      case llvm::omp::Directive::OMPD_distribute_parallel_do:
+      case llvm::omp::Directive::OMPD_distribute_parallel_do_simd:
+      case llvm::omp::Directive::OMPD_distribute_parallel_for:
+      case llvm::omp::Directive::OMPD_distribute_simd:
+      case llvm::omp::Directive::OMPD_distribute_parallel_for_simd:
+        return;
+      default:
+        break;
+      }
+      CheckConstructNameBranching("CYCLE");
     }
   }
 
@@ -68,6 +92,14 @@ private:
         .Say(currentStatementSourcePosition_,
             "%s statement is not allowed in a %s construct"_err_en_US, stmt,
             upperCaseDirName_)
+        .Attach(sourcePosition_, GetEnclosingMsg());
+  }
+
+  inline void EmitUnlabelledBranchOutError(const char *stmt) {
+    context_
+        .Say(currentStatementSourcePosition_,
+            "%s to construct outside of %s construct is not allowed"_err_en_US,
+            stmt, upperCaseDirName_)
         .Attach(sourcePosition_, GetEnclosingMsg());
   }
 
@@ -102,11 +134,25 @@ private:
     }
   }
 
+  // Check branching for unlabelled CYCLES and EXITs
+  void CheckConstructNameBranching(const char *stmt) {
+    // found an enclosing looping construct for the unlabelled EXIT/CYCLE
+    if (numDoConstruct_ > 0) {
+      return;
+    }
+    // did not found an enclosing looping construct within the OpenMP/OpenACC
+    // directive
+    EmitUnlabelledBranchOutError(stmt);
+    return;
+  }
+
   SemanticsContext &context_;
   parser::CharBlock currentStatementSourcePosition_;
   parser::CharBlock sourcePosition_;
   std::string upperCaseDirName_;
   D currentDirective_;
+  int numDoConstruct_; // tracks number of DoConstruct found AFTER encountering
+                       // an OpenMP/OpenACC directive
 };
 
 // Generic structure checker for directives/clauses language such as OpenMP
@@ -123,6 +169,7 @@ protected:
       : context_{context}, directiveClausesMap_(directiveClausesMap) {}
   virtual ~DirectiveStructureChecker() {}
 
+  using ClauseMapTy = std::multimap<C, const PC *>;
   struct DirectiveContext {
     DirectiveContext(parser::CharBlock source, D d)
         : directiveSource{source}, directive{d} {}
@@ -136,7 +183,7 @@ protected:
     common::EnumSet<C, ClauseEnumSize> requiredClauses{};
 
     const PC *clause{nullptr};
-    std::multimap<C, const PC *> clauseInfo;
+    ClauseMapTy clauseInfo;
     std::list<C> actualClauses;
     Symbol *loopIV{nullptr};
   };
@@ -147,6 +194,11 @@ protected:
   DirectiveContext &GetContext() {
     CHECK(!dirContext_.empty());
     return dirContext_.back();
+  }
+
+  DirectiveContext &GetContextParent() {
+    CHECK(dirContext_.size() >= 2);
+    return dirContext_[dirContext_.size() - 2];
   }
 
   void SetContextClause(const PC &clause) {
@@ -197,10 +249,35 @@ protected:
     GetContext().actualClauses.push_back(type);
   }
 
+  // Check if the given clause is present in the current context
   const PC *FindClause(C type) {
     auto it{GetContext().clauseInfo.find(type)};
     if (it != GetContext().clauseInfo.end()) {
       return it->second;
+    }
+    return nullptr;
+  }
+
+  // Check if the given clause is present in the parent context
+  const PC *FindClauseParent(C type) {
+    auto it{GetContextParent().clauseInfo.find(type)};
+    if (it != GetContextParent().clauseInfo.end()) {
+      return it->second;
+    }
+    return nullptr;
+  }
+
+  std::pair<typename ClauseMapTy::iterator, typename ClauseMapTy::iterator>
+  FindClauses(C type) {
+    auto it{GetContext().clauseInfo.equal_range(type)};
+    return it;
+  }
+
+  DirectiveContext *GetEnclosingDirContext() {
+    CHECK(!dirContext_.empty());
+    auto it{dirContext_.rbegin()};
+    if (++it != dirContext_.rend()) {
+      return &(*it);
     }
     return nullptr;
   }
@@ -220,7 +297,7 @@ protected:
     return nullptr;
   }
 
-  bool CurrentDirectiveIsNested() { return dirContext_.size() > 0; };
+  bool CurrentDirectiveIsNested() { return dirContext_.size() > 1; };
 
   void SetClauseSets(D dir) {
     dirContext_.back().allowedClauses = directiveClausesMap_[dir].allowed;

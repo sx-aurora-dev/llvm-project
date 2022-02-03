@@ -160,9 +160,6 @@ static void CheckArrayDesignatorSyntax(Parser &P, SourceLocation Loc,
 /// \p CodeCompleteCB is called with Designation parsed so far.
 ExprResult Parser::ParseInitializerWithPotentialDesignator(
     DesignatorCompletionInfo DesignatorCompletion) {
-  if (!getPreprocessor().isCodeCompletionEnabled())
-    DesignatorCompletion.PreferredBaseType = QualType(); // skip field lookup
-
   // If this is the old-style GNU extension:
   //   designation ::= identifier ':'
   // Handle it as a field designator.  Otherwise, this must be the start of a
@@ -203,9 +200,9 @@ ExprResult Parser::ParseInitializerWithPotentialDesignator(
       SourceLocation DotLoc = ConsumeToken();
 
       if (Tok.is(tok::code_completion)) {
+        cutOffParsing();
         Actions.CodeCompleteDesignator(DesignatorCompletion.PreferredBaseType,
                                        DesignatorCompletion.InitExprs, Desig);
-        cutOffParsing();
         return ExprError();
       }
       if (Tok.isNot(tok::identifier)) {
@@ -462,12 +459,22 @@ ExprResult Parser::ParseBraceInitializer() {
       Actions, EnterExpressionEvaluationContext::InitList);
 
   bool InitExprsOk = true;
-  DesignatorCompletionInfo DesignatorCompletion{
-      InitExprs,
-      PreferredType.get(T.getOpenLocation()),
+  QualType LikelyType = PreferredType.get(T.getOpenLocation());
+  DesignatorCompletionInfo DesignatorCompletion{InitExprs, LikelyType};
+  bool CalledSignatureHelp = false;
+  auto RunSignatureHelp = [&] {
+    QualType PreferredType;
+    if (!LikelyType.isNull())
+      PreferredType = Actions.ProduceConstructorSignatureHelp(
+          LikelyType->getCanonicalTypeInternal(), T.getOpenLocation(),
+          InitExprs, T.getOpenLocation(), /*Braced=*/true);
+    CalledSignatureHelp = true;
+    return PreferredType;
   };
 
-  while (1) {
+  while (true) {
+    PreferredType.enterFunctionArgument(Tok.getLocation(), RunSignatureHelp);
+
     // Handle Microsoft __if_exists/if_not_exists if necessary.
     if (getLangOpts().MicrosoftExt && (Tok.is(tok::kw___if_exists) ||
         Tok.is(tok::kw___if_not_exists))) {
