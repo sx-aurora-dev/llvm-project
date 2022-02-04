@@ -92,7 +92,7 @@ EVT splitType(EVT);
 
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
-bool isPackedType(EVT SomeVT);
+bool isPackedVectorType(EVT SomeVT);
 bool isMaskType(EVT VT);
 bool isPackedMaskType(EVT SomeVT);
 bool isOverPackedType(EVT VT);

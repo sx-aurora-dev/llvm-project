@@ -1721,6 +1721,7 @@ def f2l : OutPatFrag<(ops node:$exp),
 def l2f : OutPatFrag<(ops node:$exp),
                      (EXTRACT_SUBREG $exp, sub_f32)>;
 
+// Zero out subregisters.
 def zero_i32 : OutPatFrag<(ops node:$expr),
                           (ANDrm $expr, 32)>;
 def zero_f32 : OutPatFrag<(ops node:$expr),
@@ -2725,10 +2726,15 @@ def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 3,       [SDTCi
 // exchange the odd-even pairs in a v512.32
 def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, IsVLVT<2>]>>;
 
-// replicate lower 32bit to upper 32bit (f32 scalar replication)
-def repl_f32        : SDNode<"VEISD::REPL_F32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisFP<1>]>>;
-// replicate upper 32bit to lower 32 bit (i32 scalar replication)
-def repl_i32        : SDNode<"VEISD::REPL_I32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisInt<1>]>>;
+// replicate lower 32bit to upper 32bit (f32 scalar replication).
+def repl_f32            : SDNode<"VEISD::REPL_F32",
+                            SDTypeProfile<1, 1,
+                              [SDTCisInt<0>, SDTCisFP<1>]>>;
+// replicate upper 32bit to lower 32 bit (i32 scalar replication).
+def repl_i32            : SDNode<"VEISD::REPL_I32",
+                            SDTypeProfile<1, 1,
+                              [SDTCisInt<0>, SDTCisInt<1>]>>;
+
 
 // Whether this is an all-true mask (assuming undef-bits above VL are all-true).
 def true_mask           : PatLeaf<

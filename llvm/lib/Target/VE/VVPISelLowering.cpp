@@ -431,7 +431,7 @@ static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32, MVT::v512f64,
 void VETargetLowering::initRegisterClasses_VVP() {
   // VVP-based backend.
   for (MVT VecVT : AllVectorVTs)
-    if (!isPackedType(VecVT) || Subtarget->hasPackedMode())
+    if (!isPackedVectorType(VecVT) || Subtarget->hasPackedMode())
       addRegisterClass(VecVT, &VE::V64RegClass);
 
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
@@ -687,7 +687,7 @@ void VETargetLowering::initVPUActions() {
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
 
     // Custom split packed mask operations.
-    if (isPackedType(MaskVT))
+    if (isPackedVectorType(MaskVT))
       ForAll_setOperationAction(IntArithOCs, MaskVT, Custom);
   }
 
@@ -1747,7 +1747,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   EVT DataVT = *getIdiomaticType(Op.getNode());
 
   // Ignore the VLD mask as an optimization.
-  if (!isPackedType(DataVT) &&
+  if (!isPackedVectorType(DataVT) &&
       (Op->getOpcode() == VEISD::VVP_LOAD && OptimizeVectorMemory)) {
     auto AllTrueMask = CDAG.createUniformConstMask(MVT::v256i1, true);
     return CDAG.getVVPLoad(Op.getValueType(), Op.getOperand(0),
@@ -1755,7 +1755,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                            Op.getOperand(4));
   }
 
-  if (!isPackedType(DataVT)) {
+  if (!isPackedVectorType(DataVT)) {
     LLVM_DEBUG(dbgs() << "Legal!\n");
     return Op;
   }
@@ -1805,7 +1805,7 @@ SDValue VETargetLowering::legalizeVM_POPCOUNT(SDValue Op,
   LLVM_DEBUG(dbgs() << "::LegalizeVM_POPCOUNT\n";);
   auto Mask = Op->getOperand(0);
   auto AVL = Op->getOperand(1);
-  if (!isPackedType(Mask.getValueType()))
+  if (!isPackedVectorType(Mask.getValueType()))
     return Op;
 
   VECustomDAG CDAG(*this, DAG, Op);
@@ -2464,7 +2464,7 @@ SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
   if (Res)
     return Res;
 
-  assert(isPackedType(LegalResVT) &&
+  assert(isPackedVectorType(LegalResVT) &&
          "normal and over-packed EVTs should have been lowered by now!");
   return splitVectorShuffle(Op, CDAG, Mode);
 }

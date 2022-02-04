@@ -28,7 +28,7 @@ namespace llvm {
 /// Packing {
 
 bool isPackedMaskType(EVT SomeVT) {
-  return isPackedType(SomeVT) && isMaskType(SomeVT);
+  return isPackedVectorType(SomeVT) && isMaskType(SomeVT);
 }
 template <> Packing getPackingForMaskBits(const LaneBits MB) {
   return Packing::Normal;
@@ -81,7 +81,7 @@ MVT getUnpackSourceType(EVT VT, PackElem Elem) {
 
 Packing getPackingForVT(EVT VT) {
   assert(VT.isVector());
-  return isPackedType(VT) ? Packing::Dense : Packing::Normal;
+  return isPackedVectorType(VT) ? Packing::Dense : Packing::Normal;
 }
 
 // True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
@@ -278,7 +278,7 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
 }
 
 bool supportsPackedMode(unsigned Opcode, EVT IdiomVT) {
-  bool IsPackedOp = isPackedType(IdiomVT);
+  bool IsPackedOp = isPackedVectorType(IdiomVT);
   bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
 
 #if 0
@@ -639,7 +639,7 @@ VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B) {
 }
 
 EVT splitType(LLVMContext &Ctx, EVT PackedVT, PackElem P) {
-  assert(isPackedType(PackedVT));
+  assert(isPackedVectorType(PackedVT));
   unsigned PackedNumEls = PackedVT.getVectorNumElements();
 
   unsigned OneExtra = P == PackElem::Hi ? PackedNumEls % 2 : 0;
@@ -650,7 +650,7 @@ EVT splitType(LLVMContext &Ctx, EVT PackedVT, PackElem P) {
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
 
-bool isPackedType(EVT SomeVT) {
+bool isPackedVectorType(EVT SomeVT) {
   if (!SomeVT.isVector())
     return false;
   return SomeVT.getVectorNumElements() > StandardVectorWidth;
@@ -669,7 +669,7 @@ static SDValue supplementPackedReplication(SDValue Op, SelectionDAG &DAG) {
   auto VLOp = Op.getOperand(1);
 
   // v256x broadcast (element has to be i64/f64 always)
-  if (!isPackedType(VT))
+  if (!isPackedVectorType(VT))
     return Op;
 
   LLVM_DEBUG(dbgs() << "Legalize packed broadcast\n");
@@ -822,7 +822,7 @@ SDValue VECustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
 
   // vector shift
   EVT VecVT = Src.getValueType();
-  assert(!isPackedType(VecVT) && "TODO implement");
+  assert(!isPackedVectorType(VecVT) && "TODO implement");
   assert(!isMaskType(VecVT));
   return createVMV(ResVT, Src, getConstant(Offset, MVT::i32),
                    createUniformConstMask(Packing::Normal,
@@ -1076,7 +1076,7 @@ SDValue VECustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
   if (isMaskType(VectorV.getValueType()))
     return VectorV;
 
-  if (isPackedType(VectorV.getValueType())) {
+  if (isPackedVectorType(VectorV.getValueType())) {
     auto ValVT = VectorV.getValueType();
     auto LoPart =
         createUnpack(splitVectorType(ValVT), VectorV, PackElem::Lo, AVL);

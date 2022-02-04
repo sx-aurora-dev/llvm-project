@@ -471,7 +471,7 @@ define fastcc i32 @test_reduce_mul(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %n
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    pvbrd %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    vmrg.w %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvs %s0, %v0(%s0)
@@ -6382,7 +6382,7 @@ define fastcc i32 @test_reduce_smin(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    pvbrd %v1, %s0
+; CHECK-NEXT:    vbrd %v1, %s0
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvs %s0, %v1(%s0)
@@ -12343,7 +12343,7 @@ define fastcc i32 @test_reduce_umin(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v1, %s0
+; CHECK-NEXT:    vbrd %v1, %s0
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvs %s0, %v1(%s0)
@@ -18283,7 +18283,7 @@ define fastcc i32 @test_reduce_umax(i32 %s, <512 x i32> %v, <512 x i1> %m, i32 %
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v1, %s2
+; CHECK-NEXT:    vbrd %v1, %s2
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    lvs %s2, %v1(%s2)

@@ -355,7 +355,7 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
 // materialize the code to synthesize this operation
 SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
   Packing PackFlag =
-      isPackedType(LegalMaskVT) ? Packing::Dense : Packing::Normal;
+      isPackedVectorType(LegalMaskVT) ? Packing::Dense : Packing::Normal;
 
   // this view reflects exactly those insertions that are non-constant and have
   // a MVT::i32 type
@@ -741,7 +741,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     EVT LegalResVT =
         PartialV.getValueType(); // LegalizeVectorType(Op.getValueType(),
                                  // Op, DAG, Mode);
-    bool Packed = isPackedType(LegalResVT);
+    bool Packed = isPackedVectorType(LegalResVT);
     unsigned NativeNumElems = LegalResVT.getVectorNumElements();
 
     EVT ElemTy = PartialV.getValueType().getVectorElementType();
@@ -1014,7 +1014,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
           cast<FixedVectorType>(VecConstant->getType())->getElementType();
       uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
                         8; // FIXME should be using datala
-      Packing P = isPackedType(LegalResVT) ? Packing::Dense : Packing::Normal;
+      Packing P = isPackedVectorType(LegalResVT) ? Packing::Dense : Packing::Normal;
       SDValue MaskV = CDAG.createUniformConstMask(
           P, LegalResVT.getVectorNumElements(), true);
       SDValue StrideV = CDAG.getConstant(Stride, MVT::i64);
