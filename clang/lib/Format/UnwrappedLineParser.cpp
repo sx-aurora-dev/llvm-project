@@ -687,9 +687,9 @@ void UnwrappedLineParser::calculateBraceTypes(bool ExpectClassBody) {
   } while (Tok->Tok.isNot(tok::eof) && !LBraceStack.empty());
 
   // Assume other blocks for all unclosed opening braces.
-  for (unsigned i = 0, e = LBraceStack.size(); i != e; ++i) {
-    if (LBraceStack[i]->is(BK_Unknown))
-      LBraceStack[i]->setBlockKind(BK_Block);
+  for (FormatToken *LBrace : LBraceStack) {
+    if (LBrace->is(BK_Unknown))
+      LBrace->setBlockKind(BK_Block);
   }
 
   FormatTok = Tokens->setPosition(StoredPosition);
@@ -1856,6 +1856,7 @@ bool UnwrappedLineParser::tryToParseLambda() {
     return false;
 
   bool SeenArrow = false;
+  bool InTemplateParameterList = false;
 
   while (FormatTok->isNot(tok::l_brace)) {
     if (FormatTok->isSimpleTypeSpecifier()) {
@@ -1871,6 +1872,14 @@ bool UnwrappedLineParser::tryToParseLambda() {
     case tok::l_square:
       parseSquare();
       break;
+    case tok::kw_class:
+    case tok::kw_template:
+    case tok::kw_typename:
+      assert(FormatTok->Previous);
+      if (FormatTok->Previous->is(tok::less))
+        InTemplateParameterList = true;
+      nextToken();
+      break;
     case tok::amp:
     case tok::star:
     case tok::kw_const:
@@ -1880,11 +1889,8 @@ bool UnwrappedLineParser::tryToParseLambda() {
     case tok::identifier:
     case tok::numeric_constant:
     case tok::coloncolon:
-    case tok::kw_class:
     case tok::kw_mutable:
     case tok::kw_noexcept:
-    case tok::kw_template:
-    case tok::kw_typename:
       nextToken();
       break;
     // Specialization of a template with an integer parameter can contain
@@ -1921,7 +1927,7 @@ bool UnwrappedLineParser::tryToParseLambda() {
     case tok::ellipsis:
     case tok::kw_true:
     case tok::kw_false:
-      if (SeenArrow) {
+      if (SeenArrow || InTemplateParameterList) {
         nextToken();
         break;
       }
@@ -2476,7 +2482,8 @@ void UnwrappedLineParser::parseNamespace() {
     parseParens();
   } else {
     while (FormatTok->isOneOf(tok::identifier, tok::coloncolon, tok::kw_inline,
-                              tok::l_square, tok::period)) {
+                              tok::l_square, tok::period) ||
+           (Style.isCSharp() && FormatTok->is(tok::kw_union))) {
       if (FormatTok->is(tok::l_square))
         parseSquare();
       else
@@ -2701,14 +2708,25 @@ void UnwrappedLineParser::parseSwitch() {
 }
 
 void UnwrappedLineParser::parseAccessSpecifier() {
+  FormatToken *AccessSpecifierCandidate = FormatTok;
   nextToken();
   // Understand Qt's slots.
   if (FormatTok->isOneOf(Keywords.kw_slots, Keywords.kw_qslots))
     nextToken();
   // Otherwise, we don't know what it is, and we'd better keep the next token.
-  if (FormatTok->Tok.is(tok::colon))
+  if (FormatTok->Tok.is(tok::colon)) {
     nextToken();
-  addUnwrappedLine();
+    addUnwrappedLine();
+  } else if (!FormatTok->Tok.is(tok::coloncolon) &&
+             !std::binary_search(COperatorsFollowingVar.begin(),
+                                 COperatorsFollowingVar.end(),
+                                 FormatTok->Tok.getKind())) {
+    // Not a variable name nor namespace name.
+    addUnwrappedLine();
+  } else if (AccessSpecifierCandidate) {
+    // Consider the access specifier to be a C identifier.
+    AccessSpecifierCandidate->Tok.setKind(tok::identifier);
+  }
 }
 
 void UnwrappedLineParser::parseConcept() {
@@ -2862,6 +2880,7 @@ bool UnwrappedLineParser::parseEnum() {
   // Just a declaration or something is wrong.
   if (FormatTok->isNot(tok::l_brace))
     return true;
+  FormatTok->setType(TT_RecordLBrace);
   FormatTok->setBlockKind(BK_Block);
 
   if (Style.Language == FormatStyle::LK_Java) {
@@ -3102,6 +3121,7 @@ void UnwrappedLineParser::parseRecord(bool ParseAsExpr) {
     }
   }
   if (FormatTok->Tok.is(tok::l_brace)) {
+    FormatTok->setType(TT_RecordLBrace);
     if (ParseAsExpr) {
       parseChildBlock();
     } else {

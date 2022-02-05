@@ -15,9 +15,9 @@
 #include "MetadataImpl.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
 
 #include <numeric>
 
@@ -567,13 +567,16 @@ Optional<DIBasicType::Signedness> DIBasicType::getSignedness() const {
 DIStringType *DIStringType::getImpl(LLVMContext &Context, unsigned Tag,
                                     MDString *Name, Metadata *StringLength,
                                     Metadata *StringLengthExp,
+                                    Metadata *StringLocationExp,
                                     uint64_t SizeInBits, uint32_t AlignInBits,
                                     unsigned Encoding, StorageType Storage,
                                     bool ShouldCreate) {
   assert(isCanonical(Name) && "Expected canonical MDString");
-  DEFINE_GETIMPL_LOOKUP(DIStringType, (Tag, Name, StringLength, StringLengthExp,
-                                       SizeInBits, AlignInBits, Encoding));
-  Metadata *Ops[] = {nullptr, nullptr, Name, StringLength, StringLengthExp};
+  DEFINE_GETIMPL_LOOKUP(DIStringType,
+                        (Tag, Name, StringLength, StringLengthExp,
+                         StringLocationExp, SizeInBits, AlignInBits, Encoding));
+  Metadata *Ops[] = {nullptr,      nullptr,         Name,
+                     StringLength, StringLengthExp, StringLocationExp};
   DEFINE_GETIMPL_STORE(DIStringType, (Tag, SizeInBits, AlignInBits, Encoding),
                        Ops);
 }

@@ -31,7 +31,7 @@ def StandardOps_Dialect : Dialect {
 }
 
 // Base class for Standard dialect ops.
-class Std_Op<string mnemonic, list<OpTrait> traits = []> :
+class Std_Op<string mnemonic, list<Trait> traits = []> :
     Op<StandardOps_Dialect, mnemonic, traits> {
   // For every standard op, there needs to be a:
   //   * void print(OpAsmPrinter &p, ${C++ class of Op} op)
@@ -43,111 +43,6 @@ class Std_Op<string mnemonic, list<OpTrait> traits = []> :
   let verifier = [{ return ::verify(*this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
-
-// Base class for unary ops. Requires single operand and result. Individual
-// classes will have `operand` accessor.
-class UnaryOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<StandardOps_Dialect, mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let results = (outs AnyType);
-  let printer = [{
-    return printStandardUnaryOp(this->getOperation(), p);
-  }];
-}
-
-class UnaryOpSameOperandAndResultType<string mnemonic,
-                                      list<OpTrait> traits = []> :
-    UnaryOp<mnemonic, !listconcat(traits, [SameOperandsAndResultType])> {
-  let parser = [{
-    return impl::parseOneResultSameOperandTypeOp(parser, result);
-  }];
-}
-
-class FloatUnaryOp<string mnemonic, list<OpTrait> traits = []> :
-    UnaryOpSameOperandAndResultType<mnemonic, traits # [
-    DeclareOpInterfaceMethods<VectorUnrollOpInterface>] #
-    ElementwiseMappable.traits>, Arguments<(ins FloatLike:$operand)>;
-
-// Base class for standard arithmetic operations.  Requires operands and
-// results to be of the same type, but does not constrain them to specific
-// types.
-class ArithmeticOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<StandardOps_Dialect, mnemonic, traits # [NoSideEffect,
-    SameOperandsAndResultType,
-    DeclareOpInterfaceMethods<VectorUnrollOpInterface>] #
-    ElementwiseMappable.traits> {
-
-  let results = (outs AnyType:$result);
-
-  let parser = [{
-    return impl::parseOneResultSameOperandTypeOp(parser, result);
-  }];
-}
-
-// Base class for standard binary arithmetic operations.
-class ArithmeticBinaryOp<string mnemonic, list<OpTrait> traits = []> :
-    ArithmeticOp<mnemonic, traits> {
-
-  let parser = [{
-    return impl::parseOneResultSameOperandTypeOp(parser, result);
-  }];
-}
-
-// Base class for standard ternary arithmetic operations.
-class ArithmeticTernaryOp<string mnemonic, list<OpTrait> traits = []> :
-    ArithmeticOp<mnemonic, traits> {
-
-  let parser = [{
-    return impl::parseOneResultSameOperandTypeOp(parser, result);
-  }];
-
-  let printer = [{
-    return printStandardTernaryOp(this->getOperation(), p);
-  }];
-}
-
-// Base class for standard arithmetic operations on integers, vectors and
-// tensors thereof.  This operation takes two operands and returns one result,
-// each of these is required to be of the same type.  This type may be an
-// integer scalar type, a vector whose element type is an integer type, or an
-// integer tensor.  The custom assembly form of the operation is as follows
-//
-//     <op>i %0, %1 : i32
-//
-class IntBinaryOp<string mnemonic, list<OpTrait> traits = []> :
-    ArithmeticBinaryOp<mnemonic,
-      !listconcat(traits,
-                  [DeclareOpInterfaceMethods<VectorUnrollOpInterface>])>,
-    Arguments<(ins SignlessIntegerLike:$lhs, SignlessIntegerLike:$rhs)>;
-
-// Base class for standard arithmetic binary operations on floats, vectors and
-// tensors thereof.  This operation has two operands and returns one result,
-// each of these is required to be of the same type.  This type may be a
-// floating point scalar type, a vector whose element type is a floating point
-// type, or a floating point tensor.  The custom assembly form of the operation
-// is as follows
-//
-//     <op>f %0, %1 : f32
-//
-class FloatBinaryOp<string mnemonic, list<OpTrait> traits = []> :
-    ArithmeticBinaryOp<mnemonic,
-      !listconcat(traits,
-                  [DeclareOpInterfaceMethods<VectorUnrollOpInterface>])>,
-    Arguments<(ins FloatLike:$lhs, FloatLike:$rhs)>;
-
-// Base class for standard arithmetic ternary operations on floats, vectors and
-// tensors thereof.  This operation has three operands and returns one result,
-// each of these is required to be of the same type.  This type may be a
-// floating point scalar type, a vector whose element type is a floating point
-// type, or a floating point tensor.  The custom assembly form of the operation
-// is as follows
-//
-//     <op> %0, %1, %2 : f32
-//
-class FloatTernaryOp<string mnemonic, list<OpTrait> traits = []> :
-    ArithmeticTernaryOp<mnemonic,
-      !listconcat(traits,
-                  [DeclareOpInterfaceMethods<VectorUnrollOpInterface>])>,
-    Arguments<(ins FloatLike:$a, FloatLike:$b, FloatLike:$c)>;
 
 //===----------------------------------------------------------------------===//
 // AssertOp
@@ -176,76 +71,6 @@ def AssertOp : Std_Op<"assert"> {
   let verifier = ?;
 
   let hasCanonicalizeMethod = 1;
-}
-
-def GenericAtomicRMWOp : Std_Op<"generic_atomic_rmw", [
-      SingleBlockImplicitTerminator<"AtomicYieldOp">,
-      TypesMatchWith<"result type matches element type of memref",
-                     "memref", "result",
-                     "$_self.cast<MemRefType>().getElementType()">
-    ]> {
-  let summary = "atomic read-modify-write operation with a region";
-  let description = [{
-    The `generic_atomic_rmw` operation provides a way to perform a read-modify-write
-    sequence that is free from data races. The memref operand represents the
-    buffer that the read and write will be performed against, as accessed by
-    the specified indices. The arity of the indices is the rank of the memref.
-    The result represents the latest value that was stored. The region contains
-    the code for the modification itself. The entry block has a single argument
-    that represents the value stored in `memref[indices]` before the write is
-    performed. No side-effecting ops are allowed in the body of
-    `GenericAtomicRMWOp`.
-
-    Example:
-
-    ```mlir
-    %x = generic_atomic_rmw %I[%i] : memref<10xf32> {
-      ^bb0(%current_value : f32):
-        %c1 = arith.constant 1.0 : f32
-        %inc = arith.addf %c1, %current_value : f32
-        atomic_yield %inc : f32
-    }
-    ```
-  }];
-
-  let arguments = (ins
-      MemRefOf<[AnySignlessInteger, AnyFloat]>:$memref,
-      Variadic<Index>:$indices);
-
-  let results = (outs
-      AnyTypeOf<[AnySignlessInteger, AnyFloat]>:$result);
-
-  let regions = (region AnyRegion:$atomic_body);
-
-  let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$memref, "ValueRange":$ivs)>];
-
-  let extraClassDeclaration = [{
-    // TODO: remove post migrating callers.
-    Region &body() { return getRegion(); }
-
-    // The value stored in memref[ivs].
-    Value getCurrentValue() {
-      return getRegion().getArgument(0);
-    }
-    MemRefType getMemRefType() {
-      return getMemref().getType().cast<MemRefType>();
-    }
-  }];
-}
-
-def AtomicYieldOp : Std_Op<"atomic_yield", [
-      HasParent<"GenericAtomicRMWOp">,
-      NoSideEffect,
-      Terminator
-    ]> {
-  let summary = "yield operation for GenericAtomicRMWOp";
-  let description = [{
-    "atomic_yield" yields an SSA value from a GenericAtomicRMWOp region.
-  }];
-
-  let arguments = (ins AnyType:$result);
-  let assemblyFormat = "$result attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

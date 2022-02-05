@@ -2477,10 +2477,28 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
 
 // Fence instruction simplification
 Instruction *InstCombinerImpl::visitFenceInst(FenceInst &FI) {
-  // Remove identical consecutive fences.
-  Instruction *Next = FI.getNextNonDebugInstruction();
-  if (auto *NFI = dyn_cast<FenceInst>(Next))
-    if (FI.isIdenticalTo(NFI))
+  auto *NFI = dyn_cast<FenceInst>(FI.getNextNonDebugInstruction());
+  // This check is solely here to handle arbitrary target-dependent syncscopes.
+  // TODO: Can remove if does not matter in practice.
+  if (NFI && FI.isIdenticalTo(NFI))
+    return eraseInstFromFunction(FI);
+
+  // Returns true if FI1 is identical or stronger fence than FI2.
+  auto isIdenticalOrStrongerFence = [](FenceInst *FI1, FenceInst *FI2) {
+    auto FI1SyncScope = FI1->getSyncScopeID();
+    // Consider same scope, where scope is global or single-thread.
+    if (FI1SyncScope != FI2->getSyncScopeID() ||
+        (FI1SyncScope != SyncScope::System &&
+         FI1SyncScope != SyncScope::SingleThread))
+      return false;
+
+    return isAtLeastOrStrongerThan(FI1->getOrdering(), FI2->getOrdering());
+  };
+  if (NFI && isIdenticalOrStrongerFence(NFI, &FI))
+    return eraseInstFromFunction(FI);
+
+  if (auto *PFI = dyn_cast_or_null<FenceInst>(FI.getPrevNonDebugInstruction()))
+    if (isIdenticalOrStrongerFence(PFI, &FI))
       return eraseInstFromFunction(FI);
   return nullptr;
 }
@@ -2792,9 +2810,9 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
         PointerType *NewTy = cast<PointerType>(CI->getOperand(0)->getType());
         if (!NewTy->isOpaque() && Call.isByValArgument(ix)) {
           Call.removeParamAttr(ix, Attribute::ByVal);
-          Call.addParamAttr(
-              ix, Attribute::getWithByValType(
-                      Call.getContext(), NewTy->getPointerElementType()));
+          Call.addParamAttr(ix, Attribute::getWithByValType(
+                                    Call.getContext(),
+                                    NewTy->getNonOpaquePointerElementType()));
         }
         Changed = true;
       }
@@ -3061,17 +3079,14 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
     // If the callee is just a declaration, don't change the varargsness of the
     // call.  We don't want to introduce a varargs call where one doesn't
     // already exist.
-    PointerType *APTy = cast<PointerType>(Call.getCalledOperand()->getType());
-    if (FT->isVarArg()!=cast<FunctionType>(APTy->getPointerElementType())->isVarArg())
+    if (FT->isVarArg() != Call.getFunctionType()->isVarArg())
       return false;
 
     // If both the callee and the cast type are varargs, we still have to make
     // sure the number of fixed parameters are the same or we have the same
     // ABI issues as if we introduce a varargs call.
-    if (FT->isVarArg() &&
-        cast<FunctionType>(APTy->getPointerElementType())->isVarArg() &&
-        FT->getNumParams() !=
-        cast<FunctionType>(APTy->getPointerElementType())->getNumParams())
+    if (FT->isVarArg() && Call.getFunctionType()->isVarArg() &&
+        FT->getNumParams() != Call.getFunctionType()->getNumParams())
       return false;
   }
 

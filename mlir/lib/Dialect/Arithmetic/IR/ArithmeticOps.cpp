@@ -194,12 +194,12 @@ OpFoldResult arith::AddIOp::fold(ArrayRef<Attribute> operands) {
   if (matchPattern(getRhs(), m_Zero()))
     return getLhs();
 
-  // add(sub(a, b), b) -> a
+  // addi(subi(a, b), b) -> a
   if (auto sub = getLhs().getDefiningOp<SubIOp>())
     if (getRhs() == sub.getRhs())
       return sub.getLhs();
 
-  // add(b, sub(a, b)) -> a
+  // addi(b, subi(a, b)) -> a
   if (auto sub = getRhs().getDefiningOp<SubIOp>())
     if (getLhs() == sub.getRhs())
       return sub.getLhs();
@@ -209,7 +209,7 @@ OpFoldResult arith::AddIOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void arith::AddIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<AddIAddConstant, AddISubConstantRHS, AddISubConstantLHS>(
       context);
 }
@@ -231,7 +231,7 @@ OpFoldResult arith::SubIOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void arith::SubIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<SubIRHSAddConstant, SubILHSAddConstant, SubIRHSSubConstantRHS,
                   SubIRHSSubConstantLHS, SubILHSSubConstantRHS,
                   SubILHSSubConstantLHS>(context);
@@ -567,7 +567,7 @@ OpFoldResult arith::XOrIOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void arith::XOrIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<XOrINotCmpI>(context);
 }
 
@@ -576,6 +576,10 @@ void arith::XOrIOp::getCanonicalizationPatterns(
 //===----------------------------------------------------------------------===//
 
 OpFoldResult arith::AddFOp::fold(ArrayRef<Attribute> operands) {
+  // addf(x, -0) -> x
+  if (matchPattern(getRhs(), m_NegZeroFloat()))
+    return getLhs();
+
   return constFoldBinaryOp<FloatAttr>(
       operands, [](const APFloat &a, const APFloat &b) { return a + b; });
 }
@@ -585,8 +589,32 @@ OpFoldResult arith::AddFOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult arith::SubFOp::fold(ArrayRef<Attribute> operands) {
+  // subf(x, +0) -> x
+  if (matchPattern(getRhs(), m_PosZeroFloat()))
+    return getLhs();
+
   return constFoldBinaryOp<FloatAttr>(
       operands, [](const APFloat &a, const APFloat &b) { return a - b; });
+}
+
+//===----------------------------------------------------------------------===//
+// MaxFOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::MaxFOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.size() == 2 && "maxf takes two operands");
+
+  // maxf(x,x) -> x
+  if (getLhs() == getRhs())
+    return getRhs();
+
+  // maxf(x, -inf) -> x
+  if (matchPattern(getRhs(), m_NegInfFloat()))
+    return getLhs();
+
+  return constFoldBinaryOp<FloatAttr>(
+      operands,
+      [](const APFloat &a, const APFloat &b) { return llvm::maximum(a, b); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -641,6 +669,26 @@ OpFoldResult MaxUIOp::fold(ArrayRef<Attribute> operands) {
                                         [](const APInt &a, const APInt &b) {
                                           return llvm::APIntOps::umax(a, b);
                                         });
+}
+
+//===----------------------------------------------------------------------===//
+// MinFOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::MinFOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.size() == 2 && "minf takes two operands");
+
+  // minf(x,x) -> x
+  if (getLhs() == getRhs())
+    return getRhs();
+
+  // minf(x, +inf) -> x
+  if (matchPattern(getRhs(), m_PosInfFloat()))
+    return getLhs();
+
+  return constFoldBinaryOp<FloatAttr>(
+      operands,
+      [](const APFloat &a, const APFloat &b) { return llvm::minimum(a, b); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -702,6 +750,15 @@ OpFoldResult MinUIOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult arith::MulFOp::fold(ArrayRef<Attribute> operands) {
+  APFloat floatValue(0.0f), inverseValue(0.0f);
+  // mulf(x, 1) -> x
+  if (matchPattern(getRhs(), m_OneFloat()))
+    return getLhs();
+
+  // mulf(1, x) -> x
+  if (matchPattern(getLhs(), m_OneFloat()))
+    return getRhs();
+
   return constFoldBinaryOp<FloatAttr>(
       operands, [](const APFloat &a, const APFloat &b) { return a * b; });
 }
@@ -711,6 +768,11 @@ OpFoldResult arith::MulFOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult arith::DivFOp::fold(ArrayRef<Attribute> operands) {
+  APFloat floatValue(0.0f), inverseValue(0.0f);
+  // divf(x, 1) -> x
+  if (matchPattern(getRhs(), m_OneFloat()))
+    return getLhs();
+
   return constFoldBinaryOp<FloatAttr>(
       operands, [](const APFloat &a, const APFloat &b) { return a / b; });
 }
@@ -846,7 +908,7 @@ bool arith::ExtSIOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 }
 
 void arith::ExtSIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<ExtSIOfExtUI>(context);
 }
 
@@ -926,7 +988,7 @@ bool arith::TruncFOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 //===----------------------------------------------------------------------===//
 
 void arith::AndIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<AndOfExtUI, AndOfExtSI>(context);
 }
 
@@ -935,7 +997,7 @@ void arith::AndIOp::getCanonicalizationPatterns(
 //===----------------------------------------------------------------------===//
 
 void arith::OrIOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<OrOfExtUI, OrOfExtSI>(context);
 }
 
@@ -1074,7 +1136,7 @@ OpFoldResult arith::IndexCastOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void arith::IndexCastOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<IndexCastOfIndexCast, IndexCastOfExtSI>(context);
 }
 
@@ -1123,7 +1185,7 @@ OpFoldResult arith::BitcastOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void arith::BitcastOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *context) {
+    RewritePatternSet &patterns, MLIRContext *context) {
   patterns.insert<BitcastOfBitcast>(context);
 }
 
