@@ -26,7 +26,6 @@ def: Pat<(i64 (repl_i32 i32:$val)),
               (SLLri (i2l $val), 32))>;
 
 
-
 ///// Mask insert, extract, popcount /////
 
 // Mask Insert & Extract
@@ -238,11 +237,10 @@ defm : patterns_elem32<v256f32, f32, simm7fp, LO7FP, l2f, f2l>;
 defm : patterns_elem64<v256i64, i64, simm7, LO7>;
 defm : patterns_elem64<v256f64, f64, simm7fp, LO7FP>;
 
-
-def: Pat<(v512i32 (vec_broadcast i64:$val, i32:$vl)),
-         (PVBRDrl $val, $vl)>;
-def: Pat<(v512f32 (vec_broadcast i64:$val, i32:$vl)),
-         (PVBRDrl $val, $vl)>;
+defm : vbrd_elem64<v512i32, i64, simm7, LO7>;
+defm : vbrd_elem64<v512f32, i64, simm7, LO7>;
+defm : vbrd_elem64<v512i32, f64, simm7fp, LO7FP>;
+defm : vbrd_elem64<v512f32, f64, simm7fp, LO7FP>;
 
 
 ///// vec_seq /////

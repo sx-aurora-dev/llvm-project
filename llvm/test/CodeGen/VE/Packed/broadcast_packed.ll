@@ -11,10 +11,10 @@ define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 129
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    lea %s1, 130
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v1, %s0
+; CHECK-NEXT:    vbrd %v1, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %val = insertelement <1024 x i32> undef, i32 %0, i32 0
   %r0 = insertelement <1024 x i32> %val, i32 %0, i32 1
@@ -34,7 +34,7 @@ define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %val = insertelement <512 x i32> undef, i32 %0, i32 0
   %ret = insertelement <512 x i32> %val, i32 %0, i32 1
@@ -50,7 +50,7 @@ define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %val = insertelement <512 x float> undef, float %0, i32 0
   %ret = insertelement <512 x float> %val, float %0, i32 1

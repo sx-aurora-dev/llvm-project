@@ -11,10 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VECustomDAG.h"
 #include "VEISelLowering.h"
 #include "MCTargetDesc/VEMCExpr.h"
-#include "VEISelLowering.h"
+#include "VECustomDAG.h"
 #include "VEInstrBuilder.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
@@ -2904,43 +2903,6 @@ SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
       0);
 
   return Final;
-}
-
-/// This function is called when we have proved that a SETCC node can be
-/// replaced by EQV/XOR+CMOV instead of CMP+LEA+CMOV
-static SDValue generateEquivalentBitOp(SDNode *N, unsigned Cmp,
-                                       SelectionDAG &DAG) {
-  assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
-
-  SDLoc DL(N);
-  auto Op0 = N->getOperand(0);
-  auto Op1 = N->getOperand(1);
-  EVT SrcVT = Op0.getValueType();
-  EVT VT = N->getValueType(0);
-  assert(SrcVT.isScalarInteger() &&
-         "Scalar integer is expected as inputs of ISD::SETCC.");
-  assert(VT == MVT::i32 && "i32 is expected as a result of ISD::SETCC.");
-
-  // Compare or equiv integers.
-  auto CmpNode = DAG.getNode(Cmp, DL, SrcVT, Op0, Op1);
-
-  // Adjust register size for CMOV's base register.
-  //   CMOV cmp, 1, base (=cmp)
-  auto Base = CmpNode;
-  if (VT != SrcVT) {
-    // Cmp is equal to 0 iff it is used as base register, so safe to use
-    // INSERT_SUBREG/EXTRACT_SUBRAG.
-    SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
-    Base = SDValue(
-        DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, DL, VT, Base, Sub_i32),
-        0);
-  }
-  // Set 1 iff comparison result is not equal to 0.
-  auto Cmoved =
-      DAG.getNode(VEISD::CMOV, DL, VT, CmpNode, DAG.getConstant(1, DL, VT),
-                  Base, DAG.getConstant(VECC::CC_INE, DL, MVT::i32));
-
-  return Cmoved;
 }
 
 /// This function is called when we have proved that a SETCC node can be
