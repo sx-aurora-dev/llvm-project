@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -26,7 +27,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Error.h"
 
 namespace clang {
 namespace dataflow {
@@ -119,7 +120,8 @@ transferCFGStmt(const CFGStmt &CfgStmt, TypeErasedDataflowAnalysis &Analysis,
   const Stmt *S = CfgStmt.getStmt();
   assert(S != nullptr);
 
-  transfer(*S, State.Env);
+  if (Analysis.applyBuiltinTransfer())
+    transfer(*S, State.Env);
   Analysis.transferTypeErased(S, State.Lattice, State.Env);
 
   if (HandleTransferredStmt != nullptr)
@@ -178,7 +180,8 @@ TypeErasedDataflowAnalysisState transferBlock(
                       HandleTransferredStmt);
       break;
     case CFGElement::Initializer:
-      transferCFGInitializer(*Element.getAs<CFGInitializer>(), State);
+      if (Analysis.applyBuiltinTransfer())
+        transferCFGInitializer(*Element.getAs<CFGInitializer>(), State);
       break;
     default:
       // FIXME: Evaluate other kinds of `CFGElement`.
@@ -188,7 +191,7 @@ TypeErasedDataflowAnalysisState transferBlock(
   return State;
 }
 
-std::vector<llvm::Optional<TypeErasedDataflowAnalysisState>>
+llvm::Expected<std::vector<llvm::Optional<TypeErasedDataflowAnalysisState>>>
 runTypeErasedDataflowAnalysis(const ControlFlowContext &CFCtx,
                               TypeErasedDataflowAnalysis &Analysis,
                               const Environment &InitEnv) {
@@ -214,8 +217,8 @@ runTypeErasedDataflowAnalysis(const ControlFlowContext &CFCtx,
   static constexpr uint32_t MaxIterations = 1 << 16;
   while (const CFGBlock *Block = Worklist.dequeue()) {
     if (++Iterations > MaxIterations) {
-      llvm::errs() << "Maximum number of iterations reached, giving up.\n";
-      break;
+      return llvm::createStringError(std::errc::timed_out,
+                                     "maximum number of iterations reached");
     }
 
     const llvm::Optional<TypeErasedDataflowAnalysisState> &OldBlockState =
@@ -226,7 +229,7 @@ runTypeErasedDataflowAnalysis(const ControlFlowContext &CFCtx,
     if (OldBlockState.hasValue() &&
         Analysis.isEqualTypeErased(OldBlockState.getValue().Lattice,
                                    NewBlockState.Lattice) &&
-        OldBlockState->Env == NewBlockState.Env) {
+        OldBlockState->Env.equivalentTo(NewBlockState.Env, Analysis)) {
       // The state of `Block` didn't change after transfer so there's no need to
       // revisit its successors.
       continue;

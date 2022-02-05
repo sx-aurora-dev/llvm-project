@@ -25,7 +25,7 @@ def MemRefTypeAttr
   let constBuilderCall = "::mlir::TypeAttr::get($0)";
 }
 
-class MemRef_Op<string mnemonic, list<OpTrait> traits = []>
+class MemRef_Op<string mnemonic, list<Trait> traits = []>
     : Op<MemRef_Dialect, mnemonic, traits> {
   let printer = [{ return ::print(p, *this); }];
   let verifier = [{ return ::verify(*this); }];
@@ -42,7 +42,7 @@ class MemRef_Op<string mnemonic, list<OpTrait> traits = []>
 //
 class AllocLikeOp<string mnemonic,
                   Resource resource,
-                  list<OpTrait> traits = []> :
+                  list<Trait> traits = []> :
     MemRef_Op<mnemonic,
     !listconcat([
       AttrSizedOperandSegments
@@ -407,6 +407,7 @@ def CopyOp : MemRef_Op<"copy",
   }];
 
   let hasCanonicalizer = 1;
+  let hasFolder = 1;
   let verifier = ?;
 }
 
@@ -696,6 +697,81 @@ def MemRef_DmaWaitOp : MemRef_Op<"dma_wait"> {
     Value getNumElements() { return numElements(); }
   }];
   let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// GenericAtomicRMWOp
+//===----------------------------------------------------------------------===//
+
+def GenericAtomicRMWOp : MemRef_Op<"generic_atomic_rmw", [
+      SingleBlockImplicitTerminator<"AtomicYieldOp">,
+      TypesMatchWith<"result type matches element type of memref",
+                     "memref", "result",
+                     "$_self.cast<MemRefType>().getElementType()">
+    ]> {
+  let summary = "atomic read-modify-write operation with a region";
+  let description = [{
+    The `memref.generic_atomic_rmw` operation provides a way to perform a
+    read-modify-write sequence that is free from data races. The memref operand
+    represents the buffer that the read and write will be performed against, as
+    accessed by the specified indices. The arity of the indices is the rank of
+    the memref. The result represents the latest value that was stored. The
+    region contains the code for the modification itself. The entry block has
+    a single argument that represents the value stored in `memref[indices]`
+    before the write is performed. No side-effecting ops are allowed in the
+    body of `GenericAtomicRMWOp`.
+
+    Example:
+
+    ```mlir
+    %x = memref.generic_atomic_rmw %I[%i] : memref<10xf32> {
+      ^bb0(%current_value : f32):
+        %c1 = arith.constant 1.0 : f32
+        %inc = arith.addf %c1, %current_value : f32
+        memref.atomic_yield %inc : f32
+    }
+    ```
+  }];
+
+  let arguments = (ins
+      MemRefOf<[AnySignlessInteger, AnyFloat]>:$memref,
+      Variadic<Index>:$indices);
+
+  let results = (outs
+      AnyTypeOf<[AnySignlessInteger, AnyFloat]>:$result);
+
+  let regions = (region AnyRegion:$atomic_body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(ins "Value":$memref, "ValueRange":$ivs)>];
+
+  let extraClassDeclaration = [{
+    // TODO: remove post migrating callers.
+    Region &body() { return getRegion(); }
+
+    // The value stored in memref[ivs].
+    Value getCurrentValue() {
+      return getRegion().getArgument(0);
+    }
+    MemRefType getMemRefType() {
+      return memref().getType().cast<MemRefType>();
+    }
+  }];
+}
+
+def AtomicYieldOp : MemRef_Op<"atomic_yield", [
+      HasParent<"GenericAtomicRMWOp">,
+      NoSideEffect,
+      Terminator
+    ]> {
+  let summary = "yield operation for GenericAtomicRMWOp";
+  let description = [{
+    "memref.atomic_yield" yields an SSA value from a
+    GenericAtomicRMWOp region.
+  }];
+
+  let arguments = (ins AnyType:$result);
+  let assemblyFormat = "$result attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -1091,7 +1167,7 @@ def MemRef_ReshapeOp: MemRef_Op<"reshape", [
 // ExpandShapeOp / CollapseShapeOp
 //===----------------------------------------------------------------------===//
 
-class MemRef_ReassociativeReshapeOp<string mnemonic, list<OpTrait> traits = []> :
+class MemRef_ReassociativeReshapeOp<string mnemonic, list<Trait> traits = []> :
     MemRef_Op<mnemonic, !listconcat(traits,
       [NoSideEffect, ViewLikeOpInterface])>,
     Arguments<(ins AnyStridedMemRef:$src, IndexListArrayAttr:$reassociation)>,
@@ -1687,7 +1763,7 @@ def AtomicRMWOp : MemRef_Op<"atomic_rmw", [
     ]> {
   let summary = "atomic read-modify-write operation";
   let description = [{
-    The `atomic_rmw` operation provides a way to perform a read-modify-write
+    The `memref.atomic_rmw` operation provides a way to perform a read-modify-write
     sequence that is free from data races. The kind enumeration specifies the
     modification to perform. The value operand represents the new value to be
     applied during the modification. The memref operand represents the buffer
@@ -1698,7 +1774,7 @@ def AtomicRMWOp : MemRef_Op<"atomic_rmw", [
     Example:
 
     ```mlir
-    %x = arith.atomic_rmw "addf" %value, %I[%i] : (f32, memref<10xf32>) -> f32
+    %x = memref.atomic_rmw "addf" %value, %I[%i] : (f32, memref<10xf32>) -> f32
     ```
   }];
 
