@@ -431,6 +431,10 @@ void VEDAGToDAGISel::Select(SDNode *N) {
      return;
    }
 
+  // Late eliminate the LEGALAVL wrapper
+  case VEISD::LEGALAVL:
+    ReplaceNode(N, N->getOperand(0).getNode());
+    return;
 
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());

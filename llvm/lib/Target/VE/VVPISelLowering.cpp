@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the interfaces that VE uses to lower LLVM code into a
-// selection DAG.
+// This file implements the lowering and legalization of vector instructions to
+// VVP_*layer SDNodes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -294,28 +294,6 @@ static bool hasChain(SDNode &N) {
 static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
   if (OpIdx == 1 && (N->getOpcode() == ISD::FP_ROUND))
     return true;
-  return false;
-}
-
-static bool maySafelyIgnoreMask(unsigned VVPOpcode) {
-  if (!IgnoreMasks)
-    return false;
-
-  // Most arithmetic is safe without mask.
-  if (isVVPTernaryOp(VVPOpcode))
-    return VVPOpcode != VEISD::VVP_SELECT;
-  if (isVVPBinaryOp(VVPOpcode)) {
-    switch (VVPOpcode) {
-    default:
-      return true;
-    case VEISD::VVP_UREM:
-    case VEISD::VVP_SREM:
-    case VEISD::VVP_UDIV:
-    case VEISD::VVP_SDIV:
-    case VEISD::VVP_FDIV:
-      return false;
-    }
-  }
   return false;
 }
 
@@ -1077,7 +1055,6 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
 
   std::vector<SDValue> Created;
 
-  bool PackLegalized = isPackLegalizedInternalNode(Op.getNode());
   for (int i = 0; i < (int)Op->getNumOperands(); ++i) {
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
@@ -1103,18 +1080,12 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
     // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
     auto ConstZero = CDAG.getConstant(0, ElemTy);
     auto ZeroBroadcast = CDAG.getBroadcast(Ty, ConstZero, AVL);
-    if (!PackLegalized)
-      Created.push_back(ZeroBroadcast);
 
     auto ConstOne = CDAG.getConstant(1, ElemTy);
     auto OneBroadcast = CDAG.getBroadcast(Ty, ConstOne, AVL);
-    if (!PackLegalized)
-      Created.push_back(OneBroadcast);
 
     auto Expanded =
         CDAG.createSelect(Ty, OneBroadcast, ZeroBroadcast, Operand, AVL);
-    if (!PackLegalized)
-      Created.push_back(Expanded);
     FixedOperandList.push_back(Expanded);
     NeededExpansion = true;
   }
@@ -1125,8 +1096,6 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
   // Re-materialize the operator.
   auto Ret =
       CDAG.getLegalOpVVP(Op.getOpcode(), Op.getValueType(), FixedOperandList);
-  for (SDValue V : Created)
-    addPackLegalizedNode(V.getNode());
   return Ret;
 }
 
@@ -1212,6 +1181,7 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
     // attach those additional inputs here.
     auto SplitTM =
         CDAG.createTargetSplitMask(WidenInfo, PackedMask, PackedAVL, Part);
+    SplitTM.AVL = CDAG.annotateLegalAVL(SplitTM.AVL);
 
     // Keep track of the (higher) lvl.
     if (Part == PackElem::Hi)
@@ -1282,10 +1252,16 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-SDValue VETargetLowering::legalizePackedAVL(SDValue Op, VECustomDAG &CDAG) const {
+SDValue VETargetLowering::legalizePackedAVL(SDValue Op,
+                                            VECustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "::legalizePackedAVL\n";);
   // Only required for VEC and VVP ops.
   if (!isVVPOrVEC(Op->getOpcode()))
+    return Op;
+
+  // Operation already has a legal AVL.
+  auto AVL = getNodeAVL(Op);
+  if (isLegalAVL(AVL))
     return Op;
 
   // Legalize mask & avl.
@@ -1296,11 +1272,12 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, VECustomDAG &CDAG) const
       CDAG.createTargetMask(WidenInfo, getNodeMask(Op), getNodeAVL(Op));
 
   // Check whether we can safely drop the mask.
-  if (MaskPos && maySafelyIgnoreMask(Op->getOpcode()))
+  if (MaskPos && IgnoreMasks && maySafelyIgnoreMask(Op->getOpcode()))
     TargetMasks.Mask =
         CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
 
   // TODO: Peephole short-cut (if op not changed).
+  TargetMasks.AVL = CDAG.annotateLegalAVL(TargetMasks.AVL);
 
   // Copy the operand list.
   int NumOp = Op->getNumOperands();
@@ -1356,6 +1333,9 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
     auto SplitTM =
         CDAG.createTargetSplitMask(WidenInfo, PackedMask, PackedAVL, Part);
 
+    // This will be a legal AVL.
+    SplitTM.AVL = CDAG.annotateLegalAVL(SplitTM.AVL);
+
     if (Part == PackElem::Hi) {
       UpperPartAVL = SplitTM.AVL;
     }
@@ -1389,7 +1369,7 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
     // Ignore the mask where possible.
     if (OptimizeSplitAVL)
       SplitTM.AVL = UpperPartAVL;
-    if (maySafelyIgnoreMask(VVPOC))
+    if (IgnoreMasks && maySafelyIgnoreMask(VVPOC))
       SplitTM.Mask = CDAG.createUniformConstMask(MVT::v256i1, true);
 
     // Add predicating args and generate part node.
@@ -1750,9 +1730,10 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   if (!isPackedVectorType(DataVT) &&
       (Op->getOpcode() == VEISD::VVP_LOAD && OptimizeVectorMemory)) {
     auto AllTrueMask = CDAG.createUniformConstMask(MVT::v256i1, true);
+    SDValue LegalAVL = CDAG.annotateLegalAVL(Op.getOperand(4));
     return CDAG.getVVPLoad(Op.getValueType(), Op.getOperand(0),
                            Op.getOperand(1), Op.getOperand(2), AllTrueMask,
-                           Op.getOperand(4));
+                           LegalAVL);
   }
 
   if (!isPackedVectorType(DataVT)) {
@@ -1780,11 +1761,12 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   auto Chain = Op->getOperand(0);
   SDValue PackPtr = getMemoryPtr(Op);
 
+  TargetMask.AVL = CDAG.annotateLegalAVL(TargetMask.AVL);
+
   // Be optimistic about loads.. (FIXME: implies OptimizeVectorMemory cl::opt).
   if (Op->getOpcode() == VEISD::VVP_LOAD) {
     SDValue LoadV = CDAG.getVVPLoad(Op.getValueType(), Chain, PackPtr, DoubledStride,
                                     NormalMask, TargetMask.AVL);
-    addPackLegalizedNode(LoadV.getNode());
 
     SDValue SwappedValue = CDAG.createSwap(LoadV.getValueType(), LoadV, TargetMask.AVL);
     return CDAG.getMergeValues({SwappedValue, SDValue(LoadV.getNode(), 1)});
@@ -1793,7 +1775,6 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   SDValue PackedMask = getNodeMask(Op);
   SDValue PackedData = Op->getOperand(1);
   SDValue SwappedData = CDAG.createSwap(PackedData.getValueType(), PackedData, TargetMask.AVL);
-  addPackLegalizedNode(SwappedData.getNode());
 
   assert(isAllTrueMask(PackedMask) && "TODO in-place expand masked VST");
   return CDAG.getVVPStore(Chain, SwappedData, PackPtr, DoubledStride, NormalMask,
@@ -1886,6 +1867,8 @@ SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
 
   EVT SplitDataVT = CDAG.splitVectorType(OldDataVT);
 
+  bool IsOverPackedSplit = isOverPackedType(OldDataVT);
+
   SDValue PartOps[2];
   SmallVector<SDValue, 2> PartChains(2);
   SDValue UpperPartAVL; // we will use this for packing things back together
@@ -1894,6 +1877,10 @@ SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
 
     auto SplitTM =
         CDAG.createTargetSplitMask(WidenInfo, PackMask, PackAVL, Part);
+
+    // Only splitting non-over-packed packed will result in a legal AVL.
+    if (!IsOverPackedSplit)
+      SplitTM.AVL = CDAG.annotateLegalAVL(SplitTM.AVL);
 
     // Keep track of the (higher) lvl.
     if (Part == PackElem::Hi)
@@ -2522,32 +2509,16 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_BROADCAST:
   case VEISD::VEC_VMV:
-  case VEISD::VEC_SEQ: {
-    // Check whether this node was legalized before.
-    if (LegalizedVectorNodes.count(Op.getNode())) {
-      LLVM_DEBUG(dbgs() << "\tVisited before!\n";);
+  case VEISD::VEC_SEQ:
+    // AVL already legalized.
+    if (getAnnotatedNodeAVL(Op).second)
       return Op;
-    }
-    SDValue LegalVecOp =
-        legalizeInternalVectorOp(lowerSETCCInVectorArithmetic(Op, DAG), DAG);
-    addPackLegalizedNode(LegalVecOp.getNode());
-    return LegalVecOp;
-  }
+    return legalizeInternalVectorOp(Op, DAG);
 
   // "forget" about the narrowing
   case VEISD::VEC_NARROW:
     return Op->getOperand(0);
   }
-}
-
-SDValue VETargetLowering::combineEntryToken_VVP(SDNode *N,
-                                                DAGCombinerInfo &DCI) const {
-  // Reset the set as early as possible .
-  if (!DCI.isBeforeLegalize())
-    return SDValue();
-  LLVM_DEBUG(dbgs() << "Resetting LegalizedVectorNodes set!\n";);
-  LegalizedVectorNodes.clear();
-  return SDValue();
 }
 
 #if 0

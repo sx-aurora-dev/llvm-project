@@ -99,6 +99,11 @@ enum NodeType : unsigned {
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
 
+  // Annotation as a wrapper. LEGALAVL(VL) means that VL refers to 64bit of
+  // data, whereas the raw EVL coming in from VP nodes always refers to number
+  // of elements, regardless of their size.
+  LEGALAVL,
+
 // VVP_* nodes.
 #define REGISTER_VVP_OP(VVP_NAME) VVP_NAME,
 #include "VVPNodes.def"
@@ -127,15 +132,6 @@ struct VVPWideningInfo {
 };
 
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
-  // FIXME: Find a more robust solution for this.
-  mutable std::set<const SDNode *> LegalizedVectorNodes;
-  bool isPackLegalizedInternalNode(const SDNode *N) const {
-    return LegalizedVectorNodes.count(N);
-  }
-  void addPackLegalizedNode(const SDNode *N) const {
-    LegalizedVectorNodes.insert(N);
-  }
-
   const VESubtarget *Subtarget;
 
   void initRegisterClasses();
@@ -227,9 +223,9 @@ public:
   /// } Custom CC Mapping
 
   /// Custom Lower {
-
   Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
                                                  EVT VT) const override;
+
   const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                                           const MachineBasicBlock *MBB,
                                           unsigned uid,
@@ -305,7 +301,6 @@ public:
   /// VVP Lowering {
   // internal node tracker reset checkpoint.
 
-  SDValue combineEntryToken_VVP(SDNode *N, DAGCombinerInfo &DCI) const;
   // Expand SETCC operands directly used in vector arithmetic ops.
   SDValue lowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandSELECT(SDValue MaskV, SDValue OnTrueV, SDValue OnFalseV,
