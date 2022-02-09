@@ -636,11 +636,16 @@ defm : Binary_vr_vv<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 // Floating-point arithmetic (512 elements)
 defm : Unary<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
 
-defm : Binary_rv_vv<c_vvp_fadd,    i64, v512f32, v512i1, "PVFADD">;
-defm : Binary_rv_vv<c_vvp_fmul,    i64, v512f32, v512i1, "PVFMUL">;
-defm : Binary_rv_vv<vvp_fsub,     i64, v512f32, v512i1, "PVFSUB">;
-defm : Binary_rv_vv<c_vvp_fminnum, i64, v512f32, v512i1, "PVFMIN">;
-defm : Binary_rv_vv<c_vvp_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
+defm : Binary_rv_vv<c_vvp_fadd,
+                    i64, v512f32, v512i1, "PVFADD">;
+defm : Binary_rv_vv<c_vvp_fmul,
+                    i64, v512f32, v512i1, "PVFMUL">;
+defm : Binary_rv_vv<vvp_fsub,
+                    i64, v512f32, v512i1, "PVFSUB">;
+defm : Binary_rv_vv<c_vvp_fminnum,
+                    i64, v512f32, v512i1, "PVFMIN">;
+defm : Binary_rv_vv<c_vvp_fmaxnum,
+                    i64, v512f32, v512i1, "PVFMAX">;
 
 defm : Ternary<c_vvp_ffma, i64, v512f32, v512i1, "PVFMAD">;
 defm : Ternary<c_vvp_ffms, i64, v512f32, v512i1, "PVFMSB">;
