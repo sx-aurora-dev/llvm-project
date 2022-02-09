@@ -341,7 +341,7 @@ public:
   }
 
   bool doFinalization(Module &M) override {
-    RewindFunction = nullptr;
+    //RewindFunction = nullptr;
     return false;
   }
 
