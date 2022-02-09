@@ -701,10 +701,25 @@ bool isMaskType(EVT VT) {
     return false;
 
   // an actual bit mask type
-  if (VT.getVectorElementType() == MVT::i1)
-    return true;
+  return VT.getVectorElementType() == MVT::i1;
+}
 
-  // not a mask
+bool maySafelyIgnoreMask(unsigned VVPOpcode) {
+  // Most arithmetic is safe without mask.
+  if (isVVPTernaryOp(VVPOpcode))
+    return VVPOpcode != VEISD::VVP_SELECT;
+  if (isVVPBinaryOp(VVPOpcode)) {
+    switch (VVPOpcode) {
+    default:
+      return true;
+    case VEISD::VVP_UREM:
+    case VEISD::VVP_SREM:
+    case VEISD::VVP_UDIV:
+    case VEISD::VVP_SDIV:
+    case VEISD::VVP_FDIV:
+      return false;
+    }
+  }
   return false;
 }
 
@@ -1050,6 +1065,17 @@ SDValue VECustomDAG::createUniformConstMask(Packing Packing, unsigned NumElement
     return Res;
 
   return DAG.getNOT(DL, Res, Res.getValueType());
+}
+
+bool isLegalAVL(SDValue AVL) { return AVL->getOpcode() == VEISD::LEGALAVL; }
+
+std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue Op) {
+  SDValue AVL = getNodeAVL(Op);
+  if (!AVL)
+    return {SDValue(), true};
+  if (isLegalAVL(AVL))
+    return {AVL->getOperand(0), true};
+  return {AVL, false};
 }
 
 SDValue VECustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
@@ -1406,6 +1432,12 @@ void VECustomDAG::dump(SDValue V) const { print(errs(), V); }
 raw_ostream &VECustomDAG::print(raw_ostream &Out, SDValue V) const {
   V->print(Out, &DAG);
   return Out;
+}
+
+SDValue VECustomDAG::annotateLegalAVL(SDValue AVL) const {
+  if (isLegalAVL(AVL))
+    return AVL;
+  return getNode(VEISD::LEGALAVL, AVL.getValueType(), AVL);
 }
 
 /// } class VECustomDAG

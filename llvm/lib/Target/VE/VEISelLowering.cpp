@@ -1092,6 +1092,8 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
 
     TARGET_NODE_CASE(REPL_F32)
     TARGET_NODE_CASE(REPL_I32)
+    TARGET_NODE_CASE(LEGALAVL)
+
     // Register the VVP_* SDNodes.
 #define REGISTER_VVP_OP(VVP_NAME) TARGET_NODE_CASE(VVP_NAME)
 #include "VVPNodes.def"
@@ -1969,6 +1971,60 @@ SDValue VETargetLowering::lowerINTRINSIC_W_CHAIN(SDValue Op,
   switch (IntNo) {
   default:
     return SDValue(); // Don't custom lower most intrinsics.
+  }
+}
+
+SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "::LowerOperation"; Op->print(dbgs()););
+  unsigned Opcode = Op.getOpcode();
+  switch (Opcode) {
+  default:
+    if (Subtarget->enableVPU())
+      return LowerOperation_VVP(Op, DAG);
+    else if (Subtarget->simd())
+      return LowerOperation_SIMD(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  case ISD::ATOMIC_FENCE:
+    return lowerATOMIC_FENCE(Op, DAG);
+  case ISD::ATOMIC_SWAP:
+    return lowerATOMIC_SWAP(Op, DAG);
+  case ISD::BlockAddress:
+    return lowerBlockAddress(Op, DAG);
+  case ISD::ConstantPool:
+    return lowerConstantPool(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return lowerDYNAMIC_STACKALLOC(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP:
+    return lowerEH_SJLJ_LONGJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETJMP:
+    return lowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETUP_DISPATCH:
+    return lowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
+  case ISD::FRAMEADDR:
+    return lowerFRAMEADDR(Op, DAG, *this, Subtarget);
+  case ISD::GlobalAddress:
+    return lowerGlobalAddress(Op, DAG);
+  case ISD::GlobalTLSAddress:
+    return lowerGlobalTLSAddress(Op, DAG);
+  case ISD::INTRINSIC_VOID:
+    return lowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:
+    return lowerINTRINSIC_W_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_WO_CHAIN:
+    return lowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::JumpTable:
+    return lowerJumpTable(Op, DAG);
+  case ISD::LOAD:
+    return lowerLOAD(Op, DAG);
+  case ISD::RETURNADDR:
+    return lowerRETURNADDR(Op, DAG, *this, Subtarget);
+  case ISD::STORE:
+    return lowerSTORE(Op, DAG);
+  case ISD::VASTART:
+    return lowerVASTART(Op, DAG);
+  case ISD::VAARG:
+    return lowerVAARG(Op, DAG);
   }
 }
 
@@ -3427,8 +3483,6 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   SDLoc dl(N);
   unsigned Opcode = N->getOpcode();
   switch (Opcode) {
-  case ISD::EntryToken:
-    return combineEntryToken_VVP(N, DCI);
   default:
     if (!Subtarget->enableVPU())
       return SDValue();
@@ -3681,61 +3735,6 @@ bool VETargetLowering::hasAndNot(SDValue Y) const {
 
   // It's ok for generic registers.
   return true;
-}
-
-SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "LowerOp: "; Op.dump(&DAG); dbgs() << "\n";);
-
-  switch (Op.getOpcode()) {
-  default:
-    if (Subtarget->enableVPU())
-      return LowerOperation_VVP(Op, DAG);
-    else if (Subtarget->simd())
-      return LowerOperation_SIMD(Op, DAG);
-    llvm_unreachable("Unexpected Opcode in LowerOperation");
-
-  // Mostly all-scalar lowerings below.
-  case ISD::ATOMIC_FENCE:
-    return lowerATOMIC_FENCE(Op, DAG);
-  case ISD::ATOMIC_SWAP:
-    return lowerATOMIC_SWAP(Op, DAG);
-  case ISD::BlockAddress:
-    return lowerBlockAddress(Op, DAG);
-  case ISD::ConstantPool:
-    return lowerConstantPool(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC:
-    return lowerDYNAMIC_STACKALLOC(Op, DAG);
-  case ISD::EH_SJLJ_LONGJMP:
-    return lowerEH_SJLJ_LONGJMP(Op, DAG);
-  case ISD::EH_SJLJ_SETJMP:
-    return lowerEH_SJLJ_SETJMP(Op, DAG);
-  case ISD::EH_SJLJ_SETUP_DISPATCH:
-    return lowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
-  case ISD::FRAMEADDR:
-    return lowerFRAMEADDR(Op, DAG, *this, Subtarget);
-  case ISD::GlobalAddress:
-    return lowerGlobalAddress(Op, DAG);
-  case ISD::GlobalTLSAddress:
-    return lowerGlobalTLSAddress(Op, DAG);
-  case ISD::INTRINSIC_VOID:
-    return lowerINTRINSIC_VOID(Op, DAG);
-  case ISD::INTRINSIC_W_CHAIN:
-    return lowerINTRINSIC_W_CHAIN(Op, DAG);
-  case ISD::INTRINSIC_WO_CHAIN:
-    return lowerINTRINSIC_WO_CHAIN(Op, DAG);
-  case ISD::JumpTable:
-    return lowerJumpTable(Op, DAG);
-  case ISD::LOAD:
-    return lowerLOAD(Op, DAG);
-  case ISD::RETURNADDR:
-    return lowerRETURNADDR(Op, DAG, *this, Subtarget);
-  case ISD::STORE:
-    return lowerSTORE(Op, DAG);
-  case ISD::VASTART:
-    return lowerVASTART(Op, DAG);
-  case ISD::VAARG:
-    return lowerVAARG(Op, DAG);
-  }
 }
 
 static bool isPackableElemVT(EVT VT) {
