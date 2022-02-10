@@ -1217,12 +1217,13 @@ bool CombinerHelper::tryEmitMemcpyInline(MachineInstr &MI) {
   LegalizerHelper Helper(HelperBuilder.getMF(), DummyObserver, HelperBuilder);
   return Helper.lowerMemcpyInline(MI) ==
          LegalizerHelper::LegalizeResult::Legalized;
+}
 
 // Get a vectorized representation of the memset value operand, GISel edition.
 static Register getMemsetValue(Register Val, LLT Ty, MachineIRBuilder &MIB) {
   MachineRegisterInfo &MRI = *MIB.getMRI();
   unsigned NumBits = Ty.getScalarSizeInBits();
-  auto ValVRegAndVal = getConstantVRegValWithLookThrough(Val, MRI);
+  auto ValVRegAndVal = getAnyConstantVRegValWithLookThrough(Val, MRI);
   if (!Ty.isVector() && ValVRegAndVal) {
     APInt Scalar = ValVRegAndVal->Value.truncOrSelf(8);
     APInt SplatVal = APInt::getSplat(NumBits, Scalar);
