@@ -10,7 +10,7 @@ define fastcc <512 x i32> @test_vp_shl_v512i32_vv(<512 x i32> %i0, <512 x i32> %
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvsll %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    pvsll %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <512 x i32> @llvm.vp.shl.v512i32(<512 x i32> %i0, <512 x i32> %i1, <512 x i1> %m, i32 %n)
   ret <512 x i32> %r0
@@ -30,7 +30,7 @@ define fastcc <512 x i32> @test_vp_shl_v512i32_rv(i32 %s0, <512 x i32> %i1, <512
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvsll %v0, %v1, %v0, %vm2
+; CHECK-NEXT:    pvsll %v0, %v1, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %xins = insertelement <512 x i32> undef, i32 %s0, i32 0
   %i0 = shufflevector <512 x i32> %xins, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -49,7 +49,7 @@ define fastcc <512 x i32> @test_vp_shl_v512i32_vr(<512 x i32> %i0, i32 %s1, <512
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvsll %v0, %v0, %s0, %vm2
+; CHECK-NEXT:    pvsll %v0, %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %yins = insertelement <512 x i32> undef, i32 %s1, i32 0
   %i1 = shufflevector <512 x i32> %yins, <512 x i32> undef, <512 x i32> zeroinitializer
