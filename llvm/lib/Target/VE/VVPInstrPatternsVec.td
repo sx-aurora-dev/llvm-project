@@ -623,15 +623,23 @@ def : Pat<(v256i32 (vvp_itrunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue)))
 
 ///// ARITHMETIC /////
 // Integer arithmetic (512 elements)
-defm : Binary_rv_vv<c_vvp_and, i64, v512i32, v512i1, "PVAND">; 
-defm : Binary_rv_vv<c_vvp_or, i64, v512i32, v512i1, "PVOR">; 
-defm : Binary_rv_vv<c_vvp_xor, i64, v512i32, v512i1, "PVXOR">; 
+defm : Binary_rv_vv<c_vvp_and,
+                    i64, v512i32, v512i1, "PVAND">;
+defm : Binary_rv_vv<c_vvp_or,
+                    i64, v512i32, v512i1, "PVOR">;
+defm : Binary_rv_vv<c_vvp_xor,
+                    i64, v512i32, v512i1, "PVXOR">;
 
-defm : Binary_rv_vv<c_vvp_add, i64, v512i32, v512i1, "PVADDU">; 
-defm : Binary_rv_vv<vvp_sub,  i64, v512i32, v512i1, "PVSUBU">;
-defm : Binary_vr_vv<vvp_srl, i64, v512i32, v512i1, "PVSRL">;
-defm : Binary_vr_vv<vvp_sra, i64, v512i32, v512i1, "PVSRA">;
-defm : Binary_vr_vv<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
+defm : Binary_rv_vv<c_vvp_add,
+                    i64, v512i32, v512i1, "PVADDU">;
+defm : Binary_rv_vv<vvp_sub,
+                    i64, v512i32, v512i1, "PVSUBU">;
+defm : Binary_vr_vv<vvp_srl,
+                    i64, v512i32, v512i1, "PVSRL">;
+defm : Binary_vr_vv<vvp_sra,
+                    i64, v512i32, v512i1, "PVSRA">;
+defm : Binary_vr_vv<vvp_shl,
+                    i64, v512i32, v512i1, "PVSLL">;
 
 // Floating-point arithmetic (512 elements)
 defm : Unary<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
