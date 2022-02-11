@@ -22,6 +22,7 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadSpec.h"
+#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -33,8 +34,7 @@ BreakpointLocation::BreakpointLocation(break_id_t loc_id, Breakpoint &owner,
                                        bool hardware, bool check_for_resolver)
     : m_being_created(true), m_should_resolve_indirect_functions(false),
       m_is_reexported(false), m_is_indirect(false), m_address(addr),
-      m_owner(owner), m_options_up(), m_bp_site_sp(), m_condition_mutex(),
-      m_condition_hash(0), m_loc_id(loc_id), m_hit_counter() {
+      m_owner(owner), m_condition_hash(0), m_loc_id(loc_id), m_hit_counter() {
   if (check_for_resolver) {
     Symbol *symbol = m_address.CalculateSymbolContextSymbol();
     if (symbol && symbol->IsIndirect()) {

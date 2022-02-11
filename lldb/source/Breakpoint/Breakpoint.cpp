@@ -19,13 +19,14 @@
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/SearchFilter.h"
 #include "lldb/Core/Section.h"
-#include "lldb/Target/SectionLoadList.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/ThreadSpec.h"
+#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
@@ -1011,8 +1012,7 @@ void Breakpoint::SendBreakpointChangedEvent(BreakpointEventData *data) {
 
 Breakpoint::BreakpointEventData::BreakpointEventData(
     BreakpointEventType sub_type, const BreakpointSP &new_breakpoint_sp)
-    : EventData(), m_breakpoint_event(sub_type),
-      m_new_breakpoint_sp(new_breakpoint_sp) {}
+    : m_breakpoint_event(sub_type), m_new_breakpoint_sp(new_breakpoint_sp) {}
 
 Breakpoint::BreakpointEventData::~BreakpointEventData() = default;
 

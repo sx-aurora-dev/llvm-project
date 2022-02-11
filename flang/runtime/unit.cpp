@@ -288,7 +288,12 @@ bool ExternalFileUnit::Emit(const char *data, std::size_t bytes,
         header = static_cast<int>(sizeof(std::uint32_t));
         extra = 2 * header;
       } else {
-        extra = 1; // newline
+#ifdef _WIN32
+        if (!isWindowsTextFile()) {
+          ++extra; // carriage return (CR)
+        }
+#endif
+        ++extra; // newline (LF)
       }
     }
     if (furthestAfter > extra + *openRecl) {
@@ -359,10 +364,17 @@ bool ExternalFileUnit::Receive(char *data, std::size_t bytes,
 std::size_t ExternalFileUnit::GetNextInputBytes(
     const char *&p, IoErrorHandler &handler) {
   RUNTIME_CHECK(handler, direction_ == Direction::Input);
-  p = FrameNextInput(handler, 1);
-  return p ? EffectiveRecordLength().value_or(positionInRecord + 1) -
-          positionInRecord
-           : 0;
+  std::size_t length{1};
+  if (auto recl{EffectiveRecordLength()}) {
+    if (positionInRecord < *recl) {
+      length = *recl - positionInRecord;
+    } else {
+      p = nullptr;
+      return 0;
+    }
+  }
+  p = FrameNextInput(handler, length);
+  return p ? length : 0;
 }
 
 std::optional<char32_t> ExternalFileUnit::GetCurrentChar(
@@ -479,7 +491,7 @@ void ExternalFileUnit::FinishReadingRecord(IoErrorHandler &handler) {
             Frame()[recordOffsetInFrame_] == '\r') {
           ++recordOffsetInFrame_;
         }
-        if (FrameLength() >= recordOffsetInFrame_ &&
+        if (FrameLength() > recordOffsetInFrame_ &&
             Frame()[recordOffsetInFrame_] == '\n') {
           ++recordOffsetInFrame_;
         }
@@ -539,7 +551,15 @@ bool ExternalFileUnit::AdvanceRecord(IoErrorHandler &handler) {
       }
     } else {
       // Terminate formatted variable length record
-      ok = ok && Emit("\n", 1, 1, handler); // TODO: Windows CR+LF
+      const char *lineEnding{"\n"};
+      std::size_t lineEndingBytes{1};
+#ifdef _WIN32
+      if (!isWindowsTextFile()) {
+        lineEnding = "\r\n";
+        lineEndingBytes = 2;
+      }
+#endif
+      ok = ok && Emit(lineEnding, lineEndingBytes, 1, handler);
     }
     if (IsAfterEndfile()) {
       return false;

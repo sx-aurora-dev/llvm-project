@@ -307,11 +307,6 @@ static cl::opt<bool> InterleaveSmallLoopScalarReduction(
     cl::desc("Enable interleaving for loops with small iteration counts that "
              "contain scalar reductions to expose ILP."));
 
-/// The number of stores in a loop that are allowed to need predication.
-static cl::opt<unsigned> NumberOfStoresToPredicate(
-    "vectorize-num-stores-pred", cl::init(1), cl::Hidden,
-    cl::desc("Max number of stores to be predicated behind an if."));
-
 static cl::opt<bool> EnableIndVarRegisterHeur(
     "enable-ind-var-reg-heur", cl::init(true), cl::Hidden,
     cl::desc("Count the induction variable only once when interleaving"));
@@ -530,7 +525,7 @@ public:
   /// Set the debug location in the builder \p Ptr using the debug location in
   /// \p V. If \p Ptr is None then it uses the class member's Builder.
   void setDebugLocFromInst(const Value *V,
-                           Optional<IRBuilder<> *> CustomBuilder = None);
+                           Optional<IRBuilderBase *> CustomBuilder = None);
 
   /// Fix the non-induction PHIs in the OrigPHIsToFix vector.
   void fixNonInductionPHIs(VPTransformState &State);
@@ -663,8 +658,8 @@ protected:
   /// For pointer induction, returns StartValue[Index * StepValue].
   /// FIXME: The newly created binary instructions should contain nsw/nuw
   /// flags, which can be found from the original scalar operations.
-  Value *emitTransformedIndex(IRBuilder<> &B, Value *Index, ScalarEvolution *SE,
-                              const DataLayout &DL,
+  Value *emitTransformedIndex(IRBuilderBase &B, Value *Index,
+                              ScalarEvolution *SE, const DataLayout &DL,
                               const InductionDescriptor &ID,
                               BasicBlock *VectorHeader) const;
 
@@ -994,8 +989,8 @@ static Instruction *getDebugLocFromInstOrOperands(Instruction *I) {
 }
 
 void InnerLoopVectorizer::setDebugLocFromInst(
-    const Value *V, Optional<IRBuilder<> *> CustomBuilder) {
-  IRBuilder<> *B = (CustomBuilder == None) ? &Builder : *CustomBuilder;
+    const Value *V, Optional<IRBuilderBase *> CustomBuilder) {
+  IRBuilderBase *B = (CustomBuilder == None) ? &Builder : *CustomBuilder;
   if (const Instruction *Inst = dyn_cast_or_null<Instruction>(V)) {
     const DILocation *DIL = Inst->getDebugLoc();
 
@@ -1059,7 +1054,7 @@ static OptimizationRemarkAnalysis createLVAnalysis(const char *PassName,
 namespace llvm {
 
 /// Return a value for Step multiplied by VF.
-Value *createStepForVF(IRBuilder<> &B, Type *Ty, ElementCount VF,
+Value *createStepForVF(IRBuilderBase &B, Type *Ty, ElementCount VF,
                        int64_t Step) {
   assert(Ty->isIntegerTy() && "Expected an integer step");
   Constant *StepVal = ConstantInt::get(Ty, Step * VF.getKnownMinValue());
@@ -1067,12 +1062,13 @@ Value *createStepForVF(IRBuilder<> &B, Type *Ty, ElementCount VF,
 }
 
 /// Return the runtime value for VF.
-Value *getRuntimeVF(IRBuilder<> &B, Type *Ty, ElementCount VF) {
+Value *getRuntimeVF(IRBuilderBase &B, Type *Ty, ElementCount VF) {
   Constant *EC = ConstantInt::get(Ty, VF.getKnownMinValue());
   return VF.isScalable() ? B.CreateVScale(EC) : EC;
 }
 
-static Value *getRuntimeVFAsFloat(IRBuilder<> &B, Type *FTy, ElementCount VF) {
+static Value *getRuntimeVFAsFloat(IRBuilderBase &B, Type *FTy,
+                                  ElementCount VF) {
   assert(FTy->isFloatingPointTy() && "Expected floating point type!");
   Type *IntTy = IntegerType::get(FTy->getContext(), FTy->getScalarSizeInBits());
   Value *RuntimeVF = getRuntimeVF(B, IntTy, VF);
@@ -1701,6 +1697,11 @@ public:
 private:
   unsigned NumPredStores = 0;
 
+  /// Convenience function that returns the value of vscale_range iff
+  /// vscale_range.min == vscale_range.max or otherwise returns the value
+  /// returned by the corresponding TLI method.
+  Optional<unsigned> getVScaleForTuning() const;
+
   /// \return An upper bound for the vectorization factors for both
   /// fixed and scalable vectorization, where the minimum-known number of
   /// elements is a power-of-2 larger than zero. If scalable vectorization is
@@ -1791,10 +1792,6 @@ private:
   /// Returns whether the instruction is a load or store and will be a emitted
   /// as a vector operation.
   bool isConsecutiveLoadOrStore(Instruction *I);
-
-  /// Returns true if an artificially high cost for emulated masked memrefs
-  /// should be used.
-  bool useEmulatedMaskMemRefHack(Instruction *I, ElementCount VF);
 
   /// Map of scalar integer values to the smallest bitwidth they can be legally
   /// represented as. The vector equivalents of these values should be truncated
@@ -2342,7 +2339,7 @@ Value *InnerLoopVectorizer::getBroadcastInstrs(Value *V) {
 /// \p Opcode is relevant for FP induction variable.
 static Value *getStepVector(Value *Val, Value *StartIdx, Value *Step,
                             Instruction::BinaryOps BinOp, ElementCount VF,
-                            IRBuilder<> &Builder) {
+                            IRBuilderBase &Builder) {
   assert(VF.isVector() && "only vector VFs are supported");
 
   // Create and check the types.
@@ -2393,7 +2390,7 @@ static Value *getStepVector(Value *Val, Value *StartIdx, Value *Step,
 void InnerLoopVectorizer::createVectorIntOrFpInductionPHI(
     const InductionDescriptor &II, Value *Step, Value *Start,
     Instruction *EntryVal, VPValue *Def, VPTransformState &State) {
-  IRBuilder<> &Builder = State.Builder;
+  IRBuilderBase &Builder = State.Builder;
   assert((isa<PHINode>(EntryVal) || isa<TruncInst>(EntryVal)) &&
          "Expected either an induction phi-node or a truncate of it!");
 
@@ -2479,7 +2476,7 @@ void InnerLoopVectorizer::widenIntOrFpInduction(
   Value *Start = Def->getStartValue()->getLiveInIRValue();
   const InductionDescriptor &ID = Def->getInductionDescriptor();
   TruncInst *Trunc = Def->getTruncInst();
-  IRBuilder<> &Builder = State.Builder;
+  IRBuilderBase &Builder = State.Builder;
   assert(IV->getType() == ID.getStartValue()->getType() && "Types must match");
   assert(!State.VF.isZero() && "VF must be non-zero");
 
@@ -2582,7 +2579,7 @@ void InnerLoopVectorizer::buildScalarSteps(Value *ScalarIV, Value *Step,
                                            const InductionDescriptor &ID,
                                            VPValue *Def,
                                            VPTransformState &State) {
-  IRBuilder<> &Builder = State.Builder;
+  IRBuilderBase &Builder = State.Builder;
   // We shouldn't have to build scalar steps if we aren't vectorizing.
   assert(State.VF.isVector() && "VF should be greater than one");
   // Get the value type and ensure it and the step have the same integer type.
@@ -2941,7 +2938,8 @@ void InnerLoopVectorizer::scalarizeInstruction(Instruction *Instr,
   for (auto &I : enumerate(RepRecipe->operands())) {
     auto InputInstance = Instance;
     VPValue *Operand = I.value();
-    if (State.Plan->isUniformAfterVectorization(Operand))
+    VPReplicateRecipe *OperandR = dyn_cast<VPReplicateRecipe>(Operand);
+    if (OperandR && OperandR->isUniform())
       InputInstance.Lane = VPLane::getFirstLane();
     Cloned->setOperand(I.index(), State.get(Operand, InputInstance));
   }
@@ -3221,7 +3219,7 @@ BasicBlock *InnerLoopVectorizer::emitMemRuntimeChecks(Loop *L,
 }
 
 Value *InnerLoopVectorizer::emitTransformedIndex(
-    IRBuilder<> &B, Value *Index, ScalarEvolution *SE, const DataLayout &DL,
+    IRBuilderBase &B, Value *Index, ScalarEvolution *SE, const DataLayout &DL,
     const InductionDescriptor &ID, BasicBlock *VectorHeader) const {
 
   SCEVExpander Exp(*SE, DL, "induction");
@@ -5601,6 +5599,18 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
   return MaxVF;
 }
 
+Optional<unsigned> LoopVectorizationCostModel::getVScaleForTuning() const {
+  if (TheFunction->hasFnAttribute(Attribute::VScaleRange)) {
+    auto Attr = TheFunction->getFnAttribute(Attribute::VScaleRange);
+    auto Min = Attr.getVScaleRangeMin();
+    auto Max = Attr.getVScaleRangeMax();
+    if (Max && Min == Max)
+      return Max;
+  }
+
+  return TTI.getVScaleForTuning();
+}
+
 bool LoopVectorizationCostModel::isMoreProfitable(
     const VectorizationFactor &A, const VectorizationFactor &B) const {
   InstructionCost CostA = A.Cost;
@@ -5625,7 +5635,7 @@ bool LoopVectorizationCostModel::isMoreProfitable(
   // Improve estimate for the vector width if it is scalable.
   unsigned EstimatedWidthA = A.Width.getKnownMinValue();
   unsigned EstimatedWidthB = B.Width.getKnownMinValue();
-  if (Optional<unsigned> VScale = TTI.getVScaleForTuning()) {
+  if (Optional<unsigned> VScale = getVScaleForTuning()) {
     if (A.Width.isScalable())
       EstimatedWidthA *= VScale.getValue();
     if (B.Width.isScalable())
@@ -5674,7 +5684,7 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
 
 #ifndef NDEBUG
     unsigned AssumedMinimumVscale = 1;
-    if (Optional<unsigned> VScale = TTI.getVScaleForTuning())
+    if (Optional<unsigned> VScale = getVScaleForTuning())
       AssumedMinimumVscale = VScale.getValue();
     unsigned Width =
         Candidate.Width.isScalable()
@@ -5886,8 +5896,20 @@ LoopVectorizationCostModel::selectEpilogueVectorizationFactor(
     return Result;
   }
 
+  // If MainLoopVF = vscale x 2, and vscale is expected to be 4, then we know
+  // the main loop handles 8 lanes per iteration. We could still benefit from
+  // vectorizing the epilogue loop with VF=4.
+  ElementCount EstimatedRuntimeVF = MainLoopVF;
+  if (MainLoopVF.isScalable()) {
+    EstimatedRuntimeVF = ElementCount::getFixed(MainLoopVF.getKnownMinValue());
+    if (Optional<unsigned> VScale = getVScaleForTuning())
+      EstimatedRuntimeVF *= VScale.getValue();
+  }
+
   for (auto &NextVF : ProfitableVFs)
-    if (ElementCount::isKnownLT(NextVF.Width, MainLoopVF) &&
+    if (((!NextVF.Width.isScalable() && MainLoopVF.isScalable() &&
+          ElementCount::isKnownLT(NextVF.Width, EstimatedRuntimeVF)) ||
+         ElementCount::isKnownLT(NextVF.Width, MainLoopVF)) &&
         (Result.Width.isScalar() || isMoreProfitable(NextVF, Result)) &&
         LVP.hasPlanWithVF(NextVF.Width))
       Result = NextVF;
@@ -6116,9 +6138,15 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     return IC;
   }
 
-  // Note that if we've already vectorized the loop we will have done the
-  // runtime check and so interleaving won't require further checks.
-  bool InterleavingRequiresRuntimePointerCheck =
+  // For any scalar loop that either requires runtime checks or predication we
+  // are better off leaving this to the unroller. Note that if we've already
+  // vectorized the loop we will have done the runtime check and so interleaving
+  // won't require further checks.
+  bool ScalarInterleavingRequiresPredication =
+      (VF.isScalar() && any_of(TheLoop->blocks(), [this](BasicBlock *BB) {
+         return Legal->blockNeedsPredication(BB);
+       }));
+  bool ScalarInterleavingRequiresRuntimePointerCheck =
       (VF.isScalar() && Legal->getRuntimePointerChecking()->Need);
 
   // We want to interleave small loops in order to reduce the loop overhead and
@@ -6128,7 +6156,8 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
                     << "LV: VF is " << VF << '\n');
   const bool AggressivelyInterleaveReductions =
       TTI.enableAggressiveInterleaving(HasReductions);
-  if (!InterleavingRequiresRuntimePointerCheck && LoopCost < SmallLoopCost) {
+  if (!ScalarInterleavingRequiresRuntimePointerCheck &&
+      !ScalarInterleavingRequiresPredication && LoopCost < SmallLoopCost) {
     // We assume that the cost overhead is 1 and we use the cost model
     // to estimate the cost of the loop and interleave until the cost of the
     // loop overhead is about 5% of the cost of the loop.
@@ -6409,22 +6438,6 @@ LoopVectorizationCostModel::calculateRegisterUsage(ArrayRef<ElementCount> VFs) {
   return RUs;
 }
 
-bool LoopVectorizationCostModel::useEmulatedMaskMemRefHack(Instruction *I,
-                                                           ElementCount VF) {
-  // TODO: Cost model for emulated masked load/store is completely
-  // broken. This hack guides the cost model to use an artificially
-  // high enough value to practically disable vectorization with such
-  // operations, except where previously deployed legality hack allowed
-  // using very low cost values. This is to avoid regressions coming simply
-  // from moving "masked load/store" check from legality to cost model.
-  // Masked Load/Gather emulation was previously never allowed.
-  // Limited number of Masked Store/Scatter emulation was allowed.
-  assert(isPredicatedInst(I, VF) && "Expecting a scalar emulated instruction");
-  return isa<LoadInst>(I) ||
-         (isa<StoreInst>(I) &&
-          NumPredStores > NumberOfStoresToPredicate);
-}
-
 void LoopVectorizationCostModel::collectInstsToScalarize(ElementCount VF) {
   // If we aren't vectorizing the loop, or if we've already collected the
   // instructions to scalarize, there's nothing to do. Collection may already
@@ -6450,9 +6463,7 @@ void LoopVectorizationCostModel::collectInstsToScalarize(ElementCount VF) {
         ScalarCostsTy ScalarCosts;
         // Do not apply discount if scalable, because that would lead to
         // invalid scalarization costs.
-        // Do not apply discount logic if hacked cost is needed
-        // for emulated masked memrefs.
-        if (!VF.isScalable() && !useEmulatedMaskMemRefHack(&I, VF) &&
+        if (!VF.isScalable() &&
             computePredInstDiscount(&I, ScalarCosts, VF) >= 0)
           ScalarCostsVF.insert(ScalarCosts.begin(), ScalarCosts.end());
         // Remember that BB will remain after vectorization.
@@ -6708,11 +6719,6 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
         Vec_i1Ty, APInt::getAllOnes(VF.getKnownMinValue()),
         /*Insert=*/false, /*Extract=*/true);
     Cost += TTI.getCFInstrCost(Instruction::Br, TTI::TCK_RecipThroughput);
-
-    if (useEmulatedMaskMemRefHack(I, VF))
-      // Artificially setting to a high enough value to practically disable
-      // vectorization with such operations.
-      Cost = 3000000;
   }
 
   return Cost;

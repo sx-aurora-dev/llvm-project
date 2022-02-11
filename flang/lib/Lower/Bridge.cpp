@@ -13,6 +13,9 @@
 #include "flang/Lower/Bridge.h"
 #include "flang/Evaluate/tools.h"
 #include "flang/Lower/CallInterface.h"
+#include "flang/Lower/ConvertExpr.h"
+#include "flang/Lower/ConvertType.h"
+#include "flang/Lower/ConvertVariable.h"
 #include "flang/Lower/Mangler.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Runtime.h"
@@ -73,12 +76,14 @@ public:
 
   fir::ExtendedValue genExprAddr(const Fortran::lower::SomeExpr &expr,
                                  mlir::Location *loc = nullptr) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    TODO_NOLOC("Not implemented genExprAddr. Needed for more complex "
+               "expression lowering");
   }
   fir::ExtendedValue
   genExprValue(const Fortran::lower::SomeExpr &expr,
                mlir::Location *loc = nullptr) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    return createSomeExtendedExpression(loc ? *loc : toLocation(), *this, expr,
+                                        localSymbols);
   }
 
   Fortran::evaluate::FoldingContext &getFoldingContext() override final {
@@ -86,23 +91,27 @@ public:
   }
 
   mlir::Type genType(const Fortran::evaluate::DataRef &) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    TODO_NOLOC("Not implemented genType DataRef. Needed for more complex "
+               "expression lowering");
   }
   mlir::Type genType(const Fortran::lower::SomeExpr &) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    TODO_NOLOC("Not implemented genType SomeExpr. Needed for more complex "
+               "expression lowering");
   }
   mlir::Type genType(Fortran::lower::SymbolRef) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    TODO_NOLOC("Not implemented genType SymbolRef. Needed for more complex "
+               "expression lowering");
   }
   mlir::Type genType(Fortran::common::TypeCategory tc) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    TODO_NOLOC("Not implemented genType TypeCategory. Needed for more complex "
+               "expression lowering");
   }
   mlir::Type genType(Fortran::common::TypeCategory tc,
                      int kind) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+    return Fortran::lower::getFIRType(&getMLIRContext(), tc, kind);
   }
-  mlir::Type genType(const Fortran::lower::pft::Variable &) override final {
-    TODO_NOLOC("Not implemented. Needed for more complex expression lowering");
+  mlir::Type genType(const Fortran::lower::pft::Variable &var) override final {
+    return Fortran::lower::translateVariableToFIRType(*this, var);
   }
 
   void setCurrentPosition(const Fortran::parser::CharBlock &position) {
@@ -187,6 +196,12 @@ public:
     localSymbols.clear();
   }
 
+  /// Instantiate variable \p var and add it to the symbol map.
+  /// See ConvertVariable.cpp.
+  void instantiateVar(const Fortran::lower::pft::Variable &var) {
+    Fortran::lower::instantiateVariable(*this, var, localSymbols);
+  }
+
   /// Prepare to translate a new function
   void startNewFunction(Fortran::lower::pft::FunctionLikeUnit &funit) {
     assert(!builder && "expected nullptr");
@@ -196,6 +211,13 @@ public:
     builder = new fir::FirOpBuilder(func, bridge.getKindMap());
     assert(builder && "FirOpBuilder did not instantiate");
     builder->setInsertionPointToStart(&func.front());
+
+    for (const Fortran::lower::pft::Variable &var :
+         funit.getOrderedSymbolTable()) {
+      const Fortran::semantics::Symbol &sym = var.getSymbol();
+      if (!sym.IsFuncResult() || !funit.primaryResult)
+        instantiateVar(var);
+    }
   }
 
   /// Lower a procedure (nest).
