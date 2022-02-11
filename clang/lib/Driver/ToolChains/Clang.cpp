@@ -5957,13 +5957,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        options::OPT_fno_openmp_cuda_mode, /*Default=*/false))
         CmdArgs.push_back("-fopenmp-cuda-mode");
 
-      // When in OpenMP offloading mode, enable or disable the new device
-      // runtime.
-      if (Args.hasFlag(options::OPT_fopenmp_target_new_runtime,
-                       options::OPT_fno_openmp_target_new_runtime,
-                       /*Default=*/true))
-        CmdArgs.push_back("-fopenmp-target-new-runtime");
-
       // When in OpenMP offloading mode, enable debugging on the device.
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_target_debug_EQ);
       if (Args.hasFlag(options::OPT_fopenmp_target_debug,
@@ -6157,14 +6150,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-arm-restrict-it");
     } else {
       CmdArgs.push_back("-mllvm");
-      CmdArgs.push_back("-arm-no-restrict-it");
+      CmdArgs.push_back("-arm-default-it");
     }
-  } else if (Triple.isOSWindows() &&
-             (Triple.getArch() == llvm::Triple::arm ||
-              Triple.getArch() == llvm::Triple::thumb)) {
-    // Windows on ARM expects restricted IT blocks
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-arm-restrict-it");
   }
 
   // Forward -cl options to -cc1
@@ -8171,11 +8158,25 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
+  const Driver &D = getToolChain().getDriver();
+  const llvm::Triple TheTriple = getToolChain().getTriple();
+  auto OpenMPTCRange = C.getOffloadToolChains<Action::OFK_OpenMP>();
   ArgStringList CmdArgs;
 
-  if (getToolChain().getDriver().isUsingLTO(/* IsOffload */ true)) {
+  // Pass the CUDA path to the linker wrapper tool.
+  for (auto &I : llvm::make_range(OpenMPTCRange.first, OpenMPTCRange.second)) {
+    const ToolChain *TC = I.second;
+    if (TC->getTriple().isNVPTX()) {
+      CudaInstallationDetector CudaInstallation(D, TheTriple, Args);
+      if (CudaInstallation.isValid())
+        CmdArgs.push_back(Args.MakeArgString(
+            "--cuda-path=" + CudaInstallation.getInstallPath()));
+      break;
+    }
+  }
+
+  if (D.isUsingLTO(/* IsOffload */ true)) {
     // Pass in target features for each toolchain.
-    auto OpenMPTCRange = C.getOffloadToolChains<Action::OFK_OpenMP>();
     for (auto &I :
          llvm::make_range(OpenMPTCRange.first, OpenMPTCRange.second)) {
       const ToolChain *TC = I.second;
@@ -8188,16 +8189,14 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
     }
 
     // Pass in the bitcode library to be linked during LTO.
-    for (auto &I : llvm::make_range(OpenMPTCRange.first, OpenMPTCRange.second)) {
+    for (auto &I :
+         llvm::make_range(OpenMPTCRange.first, OpenMPTCRange.second)) {
       const ToolChain *TC = I.second;
-      const Driver &D = TC->getDriver();
+      const Driver &TCDriver = TC->getDriver();
       const ArgList &TCArgs = C.getArgsForToolChain(TC, "", Action::OFK_OpenMP);
       StringRef Arch = TCArgs.getLastArgValue(options::OPT_march_EQ);
 
       std::string BitcodeSuffix;
-      if (TCArgs.hasFlag(options::OPT_fopenmp_target_new_runtime,
-                         options::OPT_fno_openmp_target_new_runtime, true))
-        BitcodeSuffix += "new-";
       if (TC->getTriple().isNVPTX())
         BitcodeSuffix += "nvptx-";
       else if (TC->getTriple().isAMDGPU())
@@ -8205,7 +8204,7 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       BitcodeSuffix += Arch;
 
       ArgStringList BitcodeLibrary;
-      addOpenMPDeviceRTL(D, TCArgs, BitcodeLibrary, BitcodeSuffix,
+      addOpenMPDeviceRTL(TCDriver, TCArgs, BitcodeLibrary, BitcodeSuffix,
                          TC->getTriple());
 
       if (!BitcodeLibrary.empty())
@@ -8233,12 +8232,8 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  // Construct the link job so we can wrap around it.
-  Linker->ConstructJob(C, JA, Output, Inputs, Args, LinkingOutput);
-  const auto &LinkCommand = C.getJobs().getJobs().back();
-
   CmdArgs.push_back("-host-triple");
-  CmdArgs.push_back(Args.MakeArgString(getToolChain().getTripleString()));
+  CmdArgs.push_back(Args.MakeArgString(TheTriple.getTriple()));
   if (Args.hasArg(options::OPT_v))
     CmdArgs.push_back("-v");
 
@@ -8268,6 +8263,10 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         Args.MakeArgString(Twine("-pass-remarks-analysis=") + A->getValue()));
   if (Args.getLastArg(options::OPT_save_temps_EQ))
     CmdArgs.push_back("-save-temps");
+
+  // Construct the link job so we can wrap around it.
+  Linker->ConstructJob(C, JA, Output, Inputs, Args, LinkingOutput);
+  const auto &LinkCommand = C.getJobs().getJobs().back();
 
   // Add the linker arguments to be forwarded by the wrapper.
   CmdArgs.push_back("-linker-path");

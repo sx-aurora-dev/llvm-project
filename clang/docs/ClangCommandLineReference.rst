@@ -1232,9 +1232,9 @@ Set directory to include search path with prefix
 
 Add directory to SYSTEM include search path, absolute paths are relative to -isysroot
 
-.. option:: --libomptarget-amdgcn-bc-path=<arg>
+.. option:: --libomptarget-amdgpu-bc-path=<arg>
 
-Path to libomptarget-amdgcn bitcode library
+Path to libomptarget-amdgpu bitcode library
 
 .. option:: --libomptarget-nvptx-bc-path=<arg>
 
@@ -2076,6 +2076,10 @@ Enable debugging in the OpenMP offloading device RTL
 .. option:: -fopenmp-target-new-runtime, -fno-openmp-target-new-runtime
 
 Use the new bitcode library for OpenMP offloading
+
+.. option:: -fopenmp-new-driver
+
+Use the new scheme for creating and linking OpenMP offloading code
 
 .. option:: -fopenmp-version=<arg>
 
@@ -3309,7 +3313,7 @@ Disallow use of CRC instructions (ARM only)
 
 .. option:: -mrestrict-it, -mno-restrict-it
 
-Disallow generation of deprecated IT blocks for ARMv8. It is on by default for ARMv8 Thumb mode.
+Disallow generation of complex IT blocks. It is off by default.
 
 .. option:: -mtp=<arg>
 
