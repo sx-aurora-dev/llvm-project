@@ -280,8 +280,6 @@ VP_PROPERTY_CONSTRAINEDFP(1, 0, not_intrinsic) // experimental_constrained_fneg
 VP_PROPERTY_UNARYOP
 END_REGISTER_VP(vp_fneg, VP_FNEG)
 
-
-
 // llvm.vp.fma(x,y,z,mask,vlen)
 BEGIN_REGISTER_VP(vp_fma, 3, 4, VP_FMA, -1)
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_fma)
