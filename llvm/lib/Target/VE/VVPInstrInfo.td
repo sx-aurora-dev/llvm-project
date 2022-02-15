@@ -73,10 +73,19 @@ def SDTSelectVVP : SDTypeProfile<1, 4, [       // vp_select, vp_merge
   IsVLVT<4>
 ]>;
 
-// setcc (lhs, rhs, cc, mask, vl)
+// SetCC (lhs, rhs, cc, mask, vl)
 def SDTSetCCVVP : SDTypeProfile<1, 5, [        // vp_setcc
-  SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameAs<1, 2>, SDTCisVT<3, OtherVT>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
+  SDTCisVec<0>,
+  SDTCisVec<1>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameAs<1, 2>,
+  SDTCisVT<3, OtherVT>,
+  SDTCisInt<4>,
+  SDTCisSameNumEltsAs<0, 4>,
+  IsVLVT<5>
 ]>;
+
+
 
 // s/uint_to_fp
 def SDTIntToFPOpVVP : SDTypeProfile<1, 3, [    // [su]int_to_fp
@@ -245,3 +254,5 @@ def c_vvp_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 def c_vvp_ffma        : vvp_fma_commutative<vvp_ffma>;
 def c_vvp_ffms        : vvp_fma_commutative<vvp_ffms>;
 def c_vvp_ffmsn       : vvp_fma_commutative<vvp_ffmsn>;
+
+// } Binary Operators
