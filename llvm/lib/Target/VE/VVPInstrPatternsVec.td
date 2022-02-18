@@ -499,42 +499,38 @@ defm : Merge_mvv_ShortLong<vvp_select,
                            v256i64,
                            v256i32, "VMRG">;
 
-multiclass VectorSelect_Packed<ValueType PackedVT> {
-    def : Pat<(PackedVT (vvp_select PackedVT:$vtrue, PackedVT:$vfalse, v512i1:$vm, i32:$pivot)),
-                        (VMRGWvvml_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
-}
-
-defm : VectorSelect_Packed<v512i32>;
-defm : VectorSelect_Packed<v512f32>;
+defm : Merge_mvv<vvp_select,v512i32,v512i1,"VMRGW">;
+defm : Merge_mvv<vvp_select,v512f32,v512i1,"VMRGW">;
 
 
 ///// Comparison (VVP_SETCC) /////
 
-multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv, string MaskTag="m"> {
-  // TODO: Fused broadcast. Requires adapting SPU reg type to element type (as done for PVFADDUP, etc).
-  // TODO: Predicate inversion to fuse broadcast (may do this in cpp code).
-  // // Unmasked + broadcast
-  // def : Pat<(MaskVT (vvp_setcc (any_broadcast ScalarVT:$LHS), DataVT:$RHS, CCMatcher:$cond, (MaskVT true_mask), i32:$vl)),
-  //                   (!cast<Instruction>(FmkBaseName#"vl") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"rvl") $LHS, $RHS, $vl), $vl)>;
-  // unmasked
-  def : Pat<(MaskVT (vvp_setcc DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, (MaskVT true_mask), i32:$vl)),
-                    (!cast<Instruction>(FmkBaseName#"vl") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vl)>;
-  // masked
-  def : Pat<(MaskVT (vvp_setcc DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, MaskVT:$vm, i32:$vl)),
-                    (!cast<Instruction>(FmkBaseName#"v"#MaskTag#"l") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vm, $vl)>;
+multiclass Set_CC<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDNodeXForm CCConv> {
+  // Unmasked.
+  def : Pat<(v256i1 (vvp_setcc
+              DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, (v256i1 true_mask), i32:$vl)),
+              (!cast<Instruction>(FmkBaseName#"vl")
+                (CCConv $cond),
+                (!cast<Instruction>(CmpBaseName#"vvl")
+                  $LHS, $RHS, $vl),
+                $vl)>;
+  // Masked.
+  def : Pat<(v256i1 (vvp_setcc
+              DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, v256i1:$vm, i32:$vl)),
+              (!cast<Instruction>(FmkBaseName#"vml")
+                (CCConv $cond),
+                (!cast<Instruction>(CmpBaseName#"vvl")
+                  $LHS, $RHS, $vl),
+                $vm, $vl)>;
 }
 
-multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDNodeXForm CCConv>
-  : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
+defm : Set_CC<v256i64,"VFMKL","VCMPUL",CCUIOp,icond2cc>;
+defm : Set_CC<v256i64,"VFMKL","VCMPSL",CCSIOp,icond2cc>;
+defm : Set_CC<v256f64,"VFMKL","VFCMPD",cond,fcond2cc>;
 
-// SETCC (256)
-defm : Set_CC_256<v256i64,"VFMKL","VCMPUL",CCUIOp,icond2cc>;
-defm : Set_CC_256<v256i64,"VFMKL","VCMPSL",CCSIOp,icond2cc>;
-defm : Set_CC_256<v256f64,"VFMKL","VFCMPD",cond,fcond2cc>;
-
-defm : Set_CC_256<v256i32,"VFMKW","VCMPUW",CCUIOp,icond2cc>;
-defm : Set_CC_256<v256i32,"VFMKW","VCMPSWZX",CCSIOp,icond2cc>;
-defm : Set_CC_256<v256f32,"VFMKS","VFCMPS",cond,fcond2cc>;
+defm : Set_CC<v256i32,"VFMKW","VCMPUW",CCUIOp,icond2cc>;
+defm : Set_CC<v256i32,"VFMKW","VCMPSWZX",CCSIOp,icond2cc>;
+defm : Set_CC<v256f32,"VFMKS","VFCMPS",cond,fcond2cc>;
 
 ///// Conversion /////
 
