@@ -246,9 +246,7 @@
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
 
-#if 0
 #include "rv/registerPasses.h"
-#endif
 
 using namespace llvm;
 
@@ -413,9 +411,7 @@ PassBuilder::PassBuilder(TargetMachine *TM, PipelineTuningOptions PTO,
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #include "PassRegistry.def"
   }
-#if 0
   rv::addConfiguredRVPasses(*this);
-#endif
 }
 
 void PassBuilder::registerModuleAnalyses(ModuleAnalysisManager &MAM) {
