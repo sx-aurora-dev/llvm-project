@@ -65,20 +65,14 @@ bool mayHaveIntegerOverflow(llvm::ConstantInt *LHS, llvm::ConstantInt *RHS,
   const auto &LHSAP = LHS->getValue();
   const auto &RHSAP = RHS->getValue();
   if (Opcode == BO_Add) {
-    if (Signed)
-      Result = LHSAP.sadd_ov(RHSAP, Overflow);
-    else
-      Result = LHSAP.uadd_ov(RHSAP, Overflow);
+    Result = Signed ? LHSAP.sadd_ov(RHSAP, Overflow)
+                    : LHSAP.uadd_ov(RHSAP, Overflow);
   } else if (Opcode == BO_Sub) {
-    if (Signed)
-      Result = LHSAP.ssub_ov(RHSAP, Overflow);
-    else
-      Result = LHSAP.usub_ov(RHSAP, Overflow);
+    Result = Signed ? LHSAP.ssub_ov(RHSAP, Overflow)
+                    : LHSAP.usub_ov(RHSAP, Overflow);
   } else if (Opcode == BO_Mul) {
-    if (Signed)
-      Result = LHSAP.smul_ov(RHSAP, Overflow);
-    else
-      Result = LHSAP.umul_ov(RHSAP, Overflow);
+    Result = Signed ? LHSAP.smul_ov(RHSAP, Overflow)
+                    : LHSAP.umul_ov(RHSAP, Overflow);
   } else if (Opcode == BO_Div || Opcode == BO_Rem) {
     if (Signed && !RHS->isZero())
       Result = LHSAP.sdiv_ov(RHSAP, Overflow);
@@ -2093,7 +2087,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         if (ScalableDst == PredType &&
             FixedSrc->getElementType() == Builder.getInt8Ty()) {
           DstTy = llvm::ScalableVectorType::get(Builder.getInt8Ty(), 2);
-          ScalableDst = dyn_cast<llvm::ScalableVectorType>(DstTy);
+          ScalableDst = cast<llvm::ScalableVectorType>(DstTy);
           NeedsBitCast = true;
         }
         if (FixedSrc->getElementType() == ScalableDst->getElementType()) {
@@ -2119,7 +2113,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         if (ScalableSrc == PredType &&
             FixedDst->getElementType() == Builder.getInt8Ty()) {
           SrcTy = llvm::ScalableVectorType::get(Builder.getInt8Ty(), 2);
-          ScalableSrc = dyn_cast<llvm::ScalableVectorType>(SrcTy);
+          ScalableSrc = cast<llvm::ScalableVectorType>(SrcTy);
           Src = Builder.CreateBitCast(Src, SrcTy);
         }
         if (ScalableSrc->getElementType() == FixedDst->getElementType()) {
