@@ -1655,6 +1655,11 @@ let IntrProperties =
                                 LLVMMatchType<0>,
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty]>;
+  def int_vp_fneg : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                llvm_i32_ty]>;
+
   def int_vp_fma : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                               [ LLVMMatchType<0>,
                                 LLVMMatchType<0>,
@@ -1691,12 +1696,6 @@ def int_vp_compress: Intrinsic<[ llvm_anyvector_ty ],
 
 
 // VP standard fp-math intrinsics.
-def int_vp_fneg : Intrinsic<[ llvm_anyvector_ty ],
-                            [ LLVMMatchType<0>,
-                              LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                              llvm_i32_ty],
-                            [ IntrNoMem, IntrWillReturn]>;
-
 
 def int_vp_merge : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                               [ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
