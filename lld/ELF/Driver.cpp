@@ -334,9 +334,6 @@ static void checkOptions() {
   if (!config->shared && !config->auxiliaryList.empty())
     error("-f may not be used without -shared");
 
-  if (!config->relocatable && !config->defineCommon)
-    error("-no-define-common not supported in non relocatable output");
-
   if (config->strip == StripPolicy::All && config->emitRelocs)
     error("--strip-all and --emit-relocs may not be used together");
 
@@ -996,8 +993,6 @@ static void readConfigs(opt::InputArgList &args) {
   config->chroot = args.getLastArgValue(OPT_chroot);
   config->compressDebugSections = getCompressDebugSections(args);
   config->cref = args.hasArg(OPT_cref);
-  config->defineCommon = args.hasFlag(OPT_define_common, OPT_no_define_common,
-                                      !args.hasArg(OPT_relocatable));
   config->optimizeBBJumps =
       args.hasFlag(OPT_optimize_bb_jumps, OPT_no_optimize_bb_jumps, false);
   config->demangle = args.hasFlag(OPT_demangle, OPT_no_demangle, true);
@@ -1827,20 +1822,21 @@ static void replaceCommonSymbols() {
   }
 }
 
-// If all references to a DSO happen to be weak, the DSO is not added
-// to DT_NEEDED. If that happens, we need to eliminate shared symbols
-// created from the DSO. Otherwise, they become dangling references
-// that point to a non-existent DSO.
-static void demoteSharedSymbols() {
-  llvm::TimeTraceScope timeScope("Demote shared symbols");
+// If all references to a DSO happen to be weak, the DSO is not added to
+// DT_NEEDED. If that happens, replace ShardSymbol with Undefined to avoid
+// dangling references to an unneeded DSO. Use a weak binding to avoid
+// --no-allow-shlib-undefined diagnostics. Similarly, demote lazy symbols.
+static void demoteSharedAndLazySymbols() {
+  llvm::TimeTraceScope timeScope("Demote shared and lazy symbols");
   for (Symbol *sym : symtab->symbols()) {
     auto *s = dyn_cast<SharedSymbol>(sym);
     if (!(s && !s->getFile().isNeeded) && !sym->isLazy())
       continue;
 
     bool used = sym->used;
+    uint8_t binding = sym->isLazy() ? sym->binding : uint8_t(STB_WEAK);
     sym->replace(
-        Undefined{nullptr, sym->getName(), STB_WEAK, sym->stOther, sym->type});
+        Undefined{nullptr, sym->getName(), binding, sym->stOther, sym->type});
     sym->used = used;
     sym->versionId = VER_NDX_GLOBAL;
   }
@@ -2507,7 +2503,7 @@ void LinkerDriver::link(opt::InputArgList &args) {
 
   // Garbage collection and removal of shared symbols from unused shared objects.
   invokeELFT(markLive);
-  demoteSharedSymbols();
+  demoteSharedAndLazySymbols();
 
   // Make copies of any input sections that need to be copied into each
   // partition.
