@@ -33,15 +33,9 @@
 #include <map>
 #include <optional>
 #include <queue>
-#ifndef _LIBCPP_HAS_NO_LOCALIZATION
-#  include <regex>
-#endif
 #include <set>
 #include <stack>
 #include <span>
-#ifndef _LIBCPP_HAS_NO_THREADS
-#  include <thread>
-#endif
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -50,6 +44,13 @@
 #include <variant>
 
 #include "test_macros.h"
+
+#ifndef TEST_HAS_NO_LOCALIZATION
+#  include <regex>
+#endif
+#ifndef TEST_HAS_NO_THREADS
+#  include <thread>
+#endif
 
 // Validate default template argument.
 static_assert(std::same_as<std::formatter<int>, std::formatter<int, char>>);
@@ -134,7 +135,7 @@ void test_P0645() {
   assert_formatter_is_enabled<signed int, CharT>();
   assert_formatter_is_enabled<signed long, CharT>();
   assert_formatter_is_enabled<signed long long, CharT>();
-#ifndef _LIBCPP_HAS_NO_INT128
+#ifndef TEST_HAS_NO_INT128
   assert_formatter_is_enabled<__int128_t, CharT>();
 #endif
 
@@ -143,7 +144,7 @@ void test_P0645() {
   assert_formatter_is_enabled<unsigned int, CharT>();
   assert_formatter_is_enabled<unsigned long, CharT>();
   assert_formatter_is_enabled<unsigned long long, CharT>();
-#ifndef _LIBCPP_HAS_NO_INT128
+#ifndef TEST_HAS_NO_INT128
   assert_formatter_is_enabled<__uint128_t, CharT>();
 #endif
 
@@ -213,10 +214,10 @@ void test_P1636() {
   assert_formatter_is_disabled<std::filesystem::path, CharT>();
 #endif
   assert_formatter_is_disabled<std::shared_ptr<int>, CharT>();
-#ifndef _LIBCPP_HAS_NO_LOCALIZATION
+#ifndef TEST_HAS_NO_LOCALIZATION
   assert_formatter_is_disabled<std::sub_match<CharT*>, CharT>();
 #endif
-#ifndef _LIBCPP_HAS_NO_THREADS
+#ifndef TEST_HAS_NO_THREADS
   assert_formatter_is_disabled<std::thread::id, CharT>();
 #endif
   assert_formatter_is_disabled<std::unique_ptr<int>, CharT>();
