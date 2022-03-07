@@ -76,14 +76,12 @@ def : Pat<(store v512i1:$vx, ADDRrii:$addr),
 
 ///// Mask Arithmetic /////
 
-// Mask arithmetic
-multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
-  def : Pat<(MaskVT (and MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("ANDM"#MaskTag#MaskTag) $ma, $mb)>;
-  def : Pat<(MaskVT (or  MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("ORM"#MaskTag#MaskTag)  $ma, $mb)>;
-  def : Pat<(MaskVT (xor MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("XORM"#MaskTag#MaskTag) $ma, $mb)>;
-}
+class Mask_Binary<ValueType MaskVT, SDPatternOperator MaskOp, string InstName> :
+  Pat<(MaskVT (MaskOp MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>(InstName#"mm") $ma, $mb)>;
 
-defm: MaskArith<v256i1,"m">;
+def: Mask_Binary<v256i1, and, "ANDM">;
+def: Mask_Binary<v256i1, or,  "ORM">;
+def: Mask_Binary<v256i1, xor, "XORM">;
 
 // FIXME: Valid but very inefficient (incurs repetitive unpacking and packing).
 // split pattern (unpack splice, pack)
@@ -241,7 +239,6 @@ defm : vbrd_elem64<v512i32, i64, simm7, LO7>;
 defm : vbrd_elem64<v512f32, i64, simm7, LO7>;
 defm : vbrd_elem64<v512i32, f64, simm7fp, LO7FP>;
 defm : vbrd_elem64<v512f32, f64, simm7fp, LO7FP>;
-
 
 ///// vec_seq /////
 
@@ -440,3 +437,4 @@ def : Pat<(v512i1 (vec_broadcast (i32 0), (i32 512))),
 //   def : Pat<(store v256f64:$vx, I64:$addr),
 //             (VSTirvl 8, $addr, v256f64:$vx, (VLEN 256))>;
 // }
+
