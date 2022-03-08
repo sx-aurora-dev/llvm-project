@@ -93,8 +93,9 @@ public:
     OB_preallocated = 4,           // "preallocated"
     OB_gc_live = 5,                // "gc-live"
     OB_clang_arc_attachedcall = 6, // "clang.arc.attachedcall"
-    OB_cfp_round = 7,              // "cfp-round"
-    OB_cfp_except = 8,             // "cfp-except"
+    OB_ptrauth = 7,                // "ptrauth"
+    OB_cfp_round = 8,              // "cfp-round"
+    OB_cfp_except = 9,             // "cfp-except"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.
