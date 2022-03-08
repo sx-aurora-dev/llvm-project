@@ -38,6 +38,7 @@
 
 #include "elf_common.h"
 
+
 struct DynLibTy {
   char *FileName;
   uint64_t VeoLibHandle;
@@ -126,6 +127,7 @@ public:
   }
 
   ~RTLDeviceInfoTy() {
+    DP("Closing VEO contexts\n");
     for (auto &ctx : Contexts) {
       if (ctx != NULL) {
         if (veo_context_close(ctx) != 0) {
@@ -134,6 +136,7 @@ public:
       }
     }
 
+    DP("Destroying VEO process handles\n");
     for (auto &hdl : ProcHandles) {
       if (hdl != NULL) {
         veo_proc_destroy(hdl);

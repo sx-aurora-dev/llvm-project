@@ -14,22 +14,30 @@ define void @fun() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, data@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    st %s1, 8(, %s0)
-; CHECK-NEXT:    st %s1, 16(, %s0)
-; CHECK-NEXT:    st %s1, 24(, %s0)
+; CHECK-NEXT:    stl %s1, (, %s0)
+; CHECK-NEXT:    stl %s1, 4(, %s0)
+; CHECK-NEXT:    stl %s1, 8(, %s0)
+; CHECK-NEXT:    stl %s1, 12(, %s0)
+; CHECK-NEXT:    stl %s1, 16(, %s0)
+; CHECK-NEXT:    stl %s1, 20(, %s0)
+; CHECK-NEXT:    stl %s1, 24(, %s0)
+; CHECK-NEXT:    stl %s1, 28(, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
 ;
 ; VEC-LABEL: fun:
 ; VEC:       # %bb.0:
-; VEC-NEXT:    lea %s0, 8
+; VEC-NEXT:    lea %s0, data@lo
+; VEC-NEXT:    and %s0, %s0, (32)0
+; VEC-NEXT:    lea.sl %s0, data@hi(, %s0)
 ; VEC-NEXT:    or %s1, 0, (0)1
-; VEC-NEXT:    lvl %s0
-; VEC-NEXT:    vbrdl %v0, %s1
-; VEC-NEXT:    lea %s1, data@lo
-; VEC-NEXT:    and %s1, %s1, (32)0
-; VEC-NEXT:    lea.sl %s1, data@hi(, %s1)
-; VEC-NEXT:    vstl %v0, 4, %s1
+; VEC-NEXT:    stl %s1, (, %s0)
+; VEC-NEXT:    stl %s1, 4(, %s0)
+; VEC-NEXT:    stl %s1, 8(, %s0)
+; VEC-NEXT:    stl %s1, 12(, %s0)
+; VEC-NEXT:    stl %s1, 16(, %s0)
+; VEC-NEXT:    stl %s1, 20(, %s0)
+; VEC-NEXT:    stl %s1, 24(, %s0)
+; VEC-NEXT:    stl %s1, 28(, %s0)
 ; VEC-NEXT:    b.l.t (, %s10)
   store i32 0, i32* getelementptr inbounds ([16 x i32], [16 x i32]* @data, i64 0, i64 0), align 4
   store i32 0, i32* getelementptr inbounds ([16 x i32], [16 x i32]* @data, i64 0, i64 1), align 4

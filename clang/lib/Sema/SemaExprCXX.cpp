@@ -6049,12 +6049,14 @@ static bool ConvertForConditional(Sema &Self, ExprResult &E, QualType T) {
 // extension.
 static bool isValidVectorForConditionalCondition(ASTContext &Ctx,
                                                  QualType CondTy) {
-  if (!CondTy->isVectorType() && !CondTy->isExtVectorType())
+  const auto *VecVT = CondTy->getAs<VectorType>();
+  if (!VecVT || (VecVT->isExtVectorType() && !VecVT->isExtVectorBoolType()))
     return false;
   const QualType EltTy =
       cast<VectorType>(CondTy.getCanonicalType())->getElementType();
+
   assert(!EltTy->isEnumeralType() && "Vectors cant be enum types");
-  return EltTy->isIntegralType(Ctx);
+  return EltTy->isIntegralType(Ctx) || EltTy->isBooleanType();
 }
 
 QualType Sema::CheckVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,

@@ -16,6 +16,8 @@
 #include "llvm/Support/Path.h"
 #include <cstdlib> // ::getenv
 
+#include "llvm/Support/VirtualFileSystem.h"
+
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
 using namespace clang;
@@ -63,10 +65,6 @@ Tool *VEToolChain::buildLinker() const {
 }
 
 bool VEToolChain::isPICDefault() const { return false; }
-
-bool VEToolChain::isPIEDefault(const llvm::opt::ArgList &Args) const {
-  return false;
-}
 
 bool VEToolChain::isPICDefaultForced() const { return false; }
 

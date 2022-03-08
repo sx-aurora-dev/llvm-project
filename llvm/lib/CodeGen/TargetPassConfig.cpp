@@ -908,6 +908,9 @@ void TargetPassConfig::addIRPasses() {
   if (getOptLevel() != CodeGenOpt::None && !DisablePartialLibcallInlining)
     addPass(createPartiallyInlineLibCallsPass());
 
+  // Instrument function entry and exit, e.g. with calls to mcount().
+  addPass(createPostInlineEntryExitInstrumenterPass());
+
   // Expand vector predication intrinsics into standard IR instructions.
   // This pass has to run before ScalarizeMaskedMemIntrin and ExpandReduction
   // passes since it emits those kinds of intrinsics.

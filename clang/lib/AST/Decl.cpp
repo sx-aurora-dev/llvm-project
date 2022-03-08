@@ -913,6 +913,16 @@ LinkageComputer::getLVForNamespaceScopeDecl(const NamedDecl *D,
   if (!isExternallyVisible(LV.getLinkage()))
     return LinkageInfo(LV.getLinkage(), DefaultVisibility, false);
 
+  // FIXME: This is a workaround to have visible globals in `#pragma omp declare target` on VE.
+  bool VisibleTargetGlobals =
+      Context.getAuxTargetInfo() &&
+      (Context.getTargetInfo().getTriple().getArch() !=
+       Context.getAuxTargetInfo()->getTriple().getArch());
+
+  // Mark the symbols as hidden when compiling for the device.
+  if (!VisibleTargetGlobals && Context.getLangOpts().OpenMP && Context.getLangOpts().OpenMPIsDevice)
+    LV.mergeVisibility(HiddenVisibility, /*newExplicit=*/false);
+
   return LV;
 }
 

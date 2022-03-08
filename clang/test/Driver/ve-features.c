@@ -6,8 +6,8 @@
 // RUN: %clang -target ve-unknown-linux -### %s 2>&1 | FileCheck %s -check-prefix=DEFAULT
 
 // VEVPU: "-target-feature" "+vpu"
-// NO-VEVPU-NOT: "-target-feature" "+vpu"
+// NO-VEVPU: "-target-feature" "-vpu"
 // VEPACKED: "-target-feature" "+packed"
-// NO-VEPACKED-NOT: "-target-feature" "+packed"
-// VESIMD: "-target-feature" "-vpu" "-target-feature" "-packed" "-target-feature" "+simd"
-// DEFAULT: "-target-feature" "+vpu" "-target-feature" "+packed"
+// NO-VEPACKED: "-target-feature" "-packed"
+// VESIMD: "-target-feature" "+simd" "-target-feature" "-vpu" "-target-feature" "-packed"
+// DEFAULT-NOT: "-target-feature"

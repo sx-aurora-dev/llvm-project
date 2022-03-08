@@ -191,9 +191,13 @@ struct CachingVPExpander {
 
   /// \brief Lower this VP binary operator to a unpredicated binary operator.
   Value *expandPredicationInUnaryOperator(IRBuilder<> &Builder,
-                                           VPIntrinsic &PI);
+                                          VPIntrinsic &PI);
   Value *expandPredicationInBinaryOperator(IRBuilder<> &Builder,
                                            VPIntrinsic &PI);
+  Value *expandPredicationInCast(IRBuilder<> &Builder, VPIntrinsic &VPI);
+  Value *expandPredicationInCompare(IRBuilder<> &Builder, VPIntrinsic &VPI);
+  Value *expandPredicationInMemoryIntrinsic(IRBuilder<> &Builder,
+                                            VPIntrinsic &VPI);
   /// \brief Lower this VP reduction to a call to an unpredicated reduction
   /// intrinsic.
   Value *expandPredicationInReduction(IRBuilder<> &Builder,
@@ -289,8 +293,6 @@ CachingVPExpander::expandPredicationInBinaryOperator(IRBuilder<> &Builder,
       break;
 
     // Division operators need a safe divisor on masked-off lanes (1).
-    case Instruction::FDiv:
-    case Instruction::FRem:
     case Instruction::UDiv:
     case Instruction::SDiv:
     case Instruction::URem:
@@ -305,6 +307,99 @@ CachingVPExpander::expandPredicationInBinaryOperator(IRBuilder<> &Builder,
 
   replaceOperation(*NewBinOp, VPI);
   return NewBinOp;
+}
+
+Value *
+CachingVPExpander::expandPredicationInCast(IRBuilder<> &Builder,
+                                                     VPIntrinsic &VPI) {
+  assert((isSafeToSpeculativelyExecute(&VPI) ||
+          VPI.canIgnoreVectorLengthParam()) &&
+         "Implicitly dropping %evl in non-speculatable operator!");
+
+  auto OC = static_cast<Instruction::CastOps>(*VPI.getFunctionalOpcode());
+  assert(Instruction::isCast(OC));
+
+  Value *Op0 = VPI.getOperand(0);
+  Value *NewCastOp = Builder.CreateCast(OC, Op0, VPI.getType(), VPI.getName());
+
+  replaceOperation(*NewCastOp, VPI);
+  return NewCastOp;
+}
+
+Value *CachingVPExpander::expandPredicationInCompare(IRBuilder<> &Builder,
+                                                     VPIntrinsic &VPI) {
+  assert((isSafeToSpeculativelyExecute(&VPI) ||
+          VPI.canIgnoreVectorLengthParam()) &&
+         "Implicitly dropping %evl in non-speculatable operator!");
+
+  Value *Op0 = VPI.getOperand(0);
+  Value *Op1 = VPI.getOperand(1);
+  auto Pred = VPI.getCmpPredicate();
+  Value *NewCmpOp = Builder.CreateCmp(Pred, Op0, Op1, VPI.getName());
+
+  replaceOperation(*NewCmpOp, VPI);
+  return NewCmpOp;
+}
+
+/// \brief Lower this llvm.vp.(load|store|gather|scatter) to a non-vp
+/// instruction.
+Value *
+CachingVPExpander::expandPredicationInMemoryIntrinsic(IRBuilder<> &Builder,
+                                                      VPIntrinsic &VPI) {
+  assert(VPI.canIgnoreVectorLengthParam());
+  auto &I = cast<Instruction>(VPI);
+
+  auto MaskParam = VPI.getMaskParam();
+  auto PtrParam = VPI.getMemoryPointerParam();
+  auto DataParam = VPI.getMemoryDataParam();
+  bool IsUnmasked = isAllTrueMask(MaskParam);
+
+  MaybeAlign AlignOpt = VPI.getPointerAlignment();
+
+  Value *NewMemoryInst = nullptr;
+  switch (VPI.getIntrinsicID()) {
+  default:
+    abort(); // not a VP memory intrinsic
+
+  case Intrinsic::vp_store: {
+    if (IsUnmasked) {
+      StoreInst *NewStore = Builder.CreateStore(DataParam, PtrParam, false);
+      if (AlignOpt.hasValue())
+        NewStore->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewStore;
+    } else {
+      NewMemoryInst = Builder.CreateMaskedStore(
+          DataParam, PtrParam, AlignOpt.valueOrOne(), MaskParam);
+    }
+  } break;
+
+  case Intrinsic::vp_load: {
+    if (IsUnmasked) {
+      LoadInst *NewLoad = Builder.CreateLoad(VPI.getType(), PtrParam, false);
+      if (AlignOpt.hasValue())
+        NewLoad->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewLoad;
+    } else {
+      NewMemoryInst = Builder.CreateMaskedLoad(
+          VPI.getType(), PtrParam, AlignOpt.valueOrOne(), MaskParam);
+    }
+  } break;
+
+  case Intrinsic::vp_scatter: {
+    NewMemoryInst = Builder.CreateMaskedScatter(
+        DataParam, PtrParam, AlignOpt.valueOrOne(), MaskParam);
+  } break;
+
+  case Intrinsic::vp_gather: {
+    NewMemoryInst = Builder.CreateMaskedGather(VPI.getType(), PtrParam,
+                                               AlignOpt.valueOrOne(), MaskParam,
+                                               nullptr, I.getName());
+  } break;
+  }
+
+  assert(NewMemoryInst);
+  replaceOperation(*NewMemoryInst, VPI);
+  return NewMemoryInst;
 }
 
 static Value *getNeutralReductionElement(const VPReductionIntrinsic &VPI,
@@ -512,16 +607,29 @@ Value *CachingVPExpander::expandPredication(VPIntrinsic &VPI) {
       return expandPredicationInUnaryOperator(Builder, VPI);
     if (Instruction::isBinaryOp(*OC))
       return expandPredicationInBinaryOperator(Builder, VPI);
+    if (Instruction::isCast(*OC))
+      return expandPredicationInCast(Builder, VPI);
+    if (*OC == Instruction::ICmp || *OC == Instruction::FCmp)
+      return expandPredicationInCompare(Builder, VPI);
   }
 
   if (auto *VPR = dyn_cast<VPReductionIntrinsic>(&VPI))
     return expandPredicationInReduction(Builder, *VPR);
 
+  switch (VPI.getIntrinsicID()) {
+  default:
+    abort(); // unexpected intrinsic
+  case Intrinsic::vp_load:
+  case Intrinsic::vp_store:
+  case Intrinsic::vp_gather:
+  case Intrinsic::vp_scatter:
+    return expandPredicationInMemoryIntrinsic(Builder, VPI);
+    break;
+  }
+
+
   llvm::errs() << VPI << "\n";
   report_fatal_error("Missing expansion path for this VP intrinsic");
-
-  if (auto *VPRI = dyn_cast<VPReductionIntrinsic>(&VPI))
-    return expandPredicationInReduction(Builder, *VPRI);
 
   return &VPI;
 }

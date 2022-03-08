@@ -130,16 +130,23 @@ VectorType &VPBuilder::getVectorType(Type &ElementTy) {
   return *VectorType::get(&ElementTy, StaticVectorLength);
 }
 
-Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
-                                        MaybeAlign AlignOpt) {
-  auto &PointerTy = cast<PointerType>(*ElemPointer.getType());
+Value &VPBuilder::GetAsVectorPointer(Value &Ptr) {
+  auto *ElemTy = Ptr.getType()->getPointerElementType();
+  if (ElemTy->isVectorTy())
+    return Ptr;
+  auto &PointerTy = cast<PointerType>(*Ptr.getType());
   auto &VecTy = getVectorType(*PointerTy.getPointerElementType());
   auto *VecPtrTy = VecTy.getPointerTo(PointerTy.getAddressSpace());
-  auto *VecPtr = Builder.CreatePointerCast(&ElemPointer, VecPtrTy);
+  return *Builder.CreatePointerCast(&Ptr, VecPtrTy);
+}
 
+Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
+                                        MaybeAlign AlignOpt) {
+  auto &VecPtr = GetAsVectorPointer(ElemPointer);
+  auto *VecTy = VecPtr.getType()->getPointerElementType();
   auto *StoreFunc = Intrinsic::getDeclaration(&getModule(), Intrinsic::vp_store,
-                                              {&VecTy, VecPtrTy});
-  ShortValueVec Args{&Val, VecPtr, &RequestPred(), &RequestEVL()};
+                                              {VecTy, VecPtr.getType()});
+  ShortValueVec Args{&Val, &VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
@@ -153,9 +160,11 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
 Value &VPBuilder::CreateContiguousLoad(Type *ReturnTy,
                                        Value &ElemPointer,
                                        MaybeAlign AlignOpt) {
+  auto &VecPtr = GetAsVectorPointer(ElemPointer);
+
   auto *LoadFunc = VPIntrinsic::getDeclarationForParams(
-      &getModule(), Intrinsic::vp_load, ReturnTy, {&ElemPointer});
-  ShortValueVec Args{&ElemPointer, &RequestPred(), &RequestEVL()};
+      &getModule(), Intrinsic::vp_load, ReturnTy, {&VecPtr});
+  ShortValueVec Args{&VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
@@ -208,6 +217,15 @@ Value *VPBuilder::CreateVectorShift(Value *SrcVal, Value *Amount, Twine Name) {
       &getModule(), Intrinsic::vp_vshift, SrcVal->getType(), {SrcVal, Amount});
   return Builder.CreateCall(D, {SrcVal, Amount, &RequestPred(), &RequestEVL()},
                             Name);
+}
+
+Value &VPBuilder::createSelect(Value &OnTrue, Value &OnFalse, Value &Mask,
+                               Value &Pivot, Twine Name) {
+  auto D = VPIntrinsic::getDeclarationForParams(
+      &getModule(), Intrinsic::vp_select, OnTrue.getType(),
+      {&OnTrue, &OnFalse, &Mask, &Pivot});
+  return *Builder.CreateCall(
+      D, {&OnTrue, &OnFalse, &Mask, &Pivot, &RequestEVL()}, Name);
 }
 
 } // namespace llvm

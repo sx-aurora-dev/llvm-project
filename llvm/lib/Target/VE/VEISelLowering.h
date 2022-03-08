@@ -434,9 +434,11 @@ public:
   /// } Constant Info
   /// Returns true if the target allows unaligned memory accesses of the
   /// specified type.
+#if 0
   bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, Align A,
                                       MachineMemOperand::Flags Flags,
                                       bool *Fast) const override;
+#endif
 
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
   /// in Mask are known to be either zero or one and return them in the

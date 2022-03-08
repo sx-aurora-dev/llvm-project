@@ -195,6 +195,7 @@ def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 def vvp_fptrunc      : SDNode<"VEISD::VVP_FPTRUNC", SDTFPRoundOpVVP>;
 
 def vvp_frcp       : SDNode<"VEISD::VVP_FRCP", SDTFPUnaryOpVVP>;
+def vvp_frsqrt     : SDNode<"VEISD::VVP_FRSQRT", SDTFPUnaryOpVVP>;
 def vvp_ffloor     : SDNode<"VEISD::VVP_FFLOOR", SDTFPUnaryOpVVP>;
 // zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;

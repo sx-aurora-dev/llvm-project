@@ -213,8 +213,6 @@ define fastcc float @extract_ri_v512f32(<512 x float> %v) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 186
 ; CHECK-NEXT:    lvs %s0, %v0(%s0)
-; CHECK-NEXT:    srl %s0, %s0, 32
-; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = extractelement <512 x float> %v, i32 372
   ret float %ret

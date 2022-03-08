@@ -770,6 +770,11 @@ public:
     return VF;
   }
 
+  bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
+                             TTI::ReductionFlags Flags) const {
+    return false;
+  }
+
   bool preferInLoopReduction(unsigned Opcode, Type *Ty,
                              TTI::ReductionFlags Flags) const {
     return false;
@@ -788,6 +793,7 @@ public:
 
   bool enableScalableVectorization() const { return false; }
 
+  bool hasActiveVectorLength() const;
   bool hasActiveVectorLength(unsigned Opcode, Type *DataType,
                              Align Alignment) const {
     return false;

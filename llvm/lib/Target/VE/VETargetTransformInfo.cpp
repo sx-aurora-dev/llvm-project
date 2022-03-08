@@ -26,7 +26,7 @@
 
 namespace llvm {
 cl::opt<bool>
-    EnableVectorUnroll("ve-unroll-vector", cl::init(true), cl::NotHidden,
+    EnableVectorUnroll("ve-unroll-vector", cl::init(false), cl::NotHidden,
                        cl::desc("Unroll vector loops (work in progress)"));
 
 cl::opt<bool> ExpensiveVector(

@@ -1498,4 +1498,4 @@ namespace llvm {
 
 } // end namespace llvm
 
-#endif // LLVM_SUPPORT_MACHINEVALUETYPE_H
+#endif // LLVM_CODEGEN_MACHINEVALUETYPE_H

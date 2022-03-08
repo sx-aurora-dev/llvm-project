@@ -98,12 +98,12 @@ define fastcc void @test_vp_memory(<256 x i32>* %VecPtr, <256 x i32*> %PtrVec, <
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v2, (0)1, %v0
+; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldl.zx %v1, 4, %s0
-; CHECK-NEXT:    vgtl.zx %v0, %v2, 0, 0, %vm1
+; CHECK-NEXT:    vldl.zx %v2, 4, %s0
+; CHECK-NEXT:    vgtl.zx %v0, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vscl %v2, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vstl %v0, 4, %s0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)

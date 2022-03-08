@@ -18,12 +18,15 @@ define fastcc double @test_reduce_fmul(<256 x double> %v, <256 x i1> %m, i32 %n)
 ; CHECK-LABEL: test_reduce_fmul:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    lea.sl %s0, 1072693248
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lea.sl %s1, 1072693248
+; CHECK-NEXT:    vfim.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call double @llvm.vp.reduce.fmul.v256f64(double 1.0, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r
@@ -32,12 +35,31 @@ define fastcc double @test_reduce_fmul(<256 x double> %v, <256 x i1> %m, i32 %n)
 define fastcc double @test_reduce_fmul_start(double %s, <256 x double> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_start:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    adds.l %s11, -16, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB2_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB2_2:
+; CHECK-NEXT:    st %s1, 8(, %s11) # 8-byte Folded Spill
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    ld %s0, 8(, %s11) # 8-byte Folded Reload
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfim.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call double @llvm.vp.reduce.fmul.v256f64(double %s, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r
@@ -47,12 +69,15 @@ define fastcc double @test_reduce_fmul_fast(<256 x double> %v, <256 x i1> %m, i3
 ; CHECK-LABEL: test_reduce_fmul_fast:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    lea.sl %s0, 1072693248
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lea.sl %s1, 1072693248
+; CHECK-NEXT:    vfim.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast double @llvm.vp.reduce.fmul.v256f64(double 1.0, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r
@@ -61,12 +86,31 @@ define fastcc double @test_reduce_fmul_fast(<256 x double> %v, <256 x i1> %m, i3
 define fastcc double @test_reduce_fmul_start_fast(double %s, <256 x double> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_start_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    adds.l %s11, -16, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB4_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB4_2:
+; CHECK-NEXT:    st %s1, 8(, %s11) # 8-byte Folded Spill
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    ld %s0, 8(, %s11) # 8-byte Folded Reload
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfim.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast double @llvm.vp.reduce.fmul.v256f64(double %s, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r
@@ -77,12 +121,15 @@ define fastcc double @test_reduce_fadd(<256 x double> %v, <256 x i1> %m, i32 %n)
 ; CHECK-LABEL: test_reduce_fadd:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    vfia.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lea.sl %s1, 0
+; CHECK-NEXT:    vfia.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call double @llvm.vp.reduce.fadd.v256f64(double 0.0, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r
@@ -91,12 +138,31 @@ define fastcc double @test_reduce_fadd(<256 x double> %v, <256 x i1> %m, i32 %n)
 define fastcc double @test_reduce_fadd_start(double %s, <256 x double> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd_start:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    adds.l %s11, -16, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB6_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB6_2:
+; CHECK-NEXT:    st %s1, 8(, %s11) # 8-byte Folded Spill
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    ld %s0, 8(, %s11) # 8-byte Folded Reload
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    vfia.d %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfia.d %v0, %v0, %s1
+; CHECK-NEXT:    subu.w %s1, %s0, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call double @llvm.vp.reduce.fadd.v256f64(double %s, <256 x double> %v, <256 x i1> %m, i32 %n)
   ret double %r

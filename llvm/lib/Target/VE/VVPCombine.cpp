@@ -161,6 +161,15 @@ static bool match_AllowReciprocalDiv(SDNode *N, SDValue &VX, SDValue &VY,
   return true;
 }
 
+static bool match_Sqrt(SDNode *N, SDValue &VX, SDValue &Mask, SDValue &AVL) {
+  if (N->getOpcode() != VEISD::VVP_FSQRT)
+    return false;
+  VX = N->getOperand(0);
+  Mask = N->getOperand(1);
+  AVL = N->getOperand(2);
+  return true;
+}
+
 SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   if (!FuseOps)
     return SDValue();
@@ -196,9 +205,16 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   } break;
   // TODO FFP_FNEG match root
 
-  // TODO: Fuse recip(sqrt(vx))
+  // Fuse recip(sqrt(vx))
   case VEISD::VVP_FRCP: {
-    return SDValue();
+    if (!N->getFlags().hasAllowContract())
+      break;
+    SDValue VX, Mask, AVL;
+    if (!match_Sqrt(N->getOperand(0).getNode(), VX, Mask, AVL))
+      break;
+    MVT ResVT = N->getSimpleValueType(0);
+    auto N = CDAG.getNode(VEISD::VVP_FRSQRT, ResVT, {VX, Mask, AVL}, Flags);
+    return N;
   }
 
   // Fuse reciprocals.

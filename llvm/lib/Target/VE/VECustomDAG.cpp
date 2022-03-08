@@ -435,9 +435,22 @@ Optional<int> getMaskPos(unsigned Opc) {
   return None;
 }
 
+bool isLegalAVL(SDValue AVL) {
+  return AVL->getOpcode() == VEISD::LEGALAVL;
+}
+
 SDValue getNodeAVL(SDValue Op) {
   auto PosOpt = getAVLPos(Op->getOpcode());
   return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
+}
+
+std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue Op) {
+  SDValue AVL = getNodeAVL(Op);
+  if (!AVL)
+    return {SDValue(), true};
+  if (isLegalAVL(AVL))
+    return {AVL->getOperand(0), true};
+  return {AVL, false};
 }
 
 SDValue getNodeMask(SDValue Op) {
@@ -1067,17 +1080,6 @@ SDValue VECustomDAG::createUniformConstMask(Packing Packing, unsigned NumElement
   return DAG.getNOT(DL, Res, Res.getValueType());
 }
 
-bool isLegalAVL(SDValue AVL) { return AVL->getOpcode() == VEISD::LEGALAVL; }
-
-std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue Op) {
-  SDValue AVL = getNodeAVL(Op);
-  if (!AVL)
-    return {SDValue(), true};
-  if (isLegalAVL(AVL))
-    return {AVL->getOperand(0), true};
-  return {AVL, false};
-}
-
 SDValue VECustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
                                bool IsOpaque) const {
   return DAG.getConstant(Val, DL, VT, IsTarget, IsOpaque);
@@ -1242,13 +1244,22 @@ TargetMasks VECustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
     NewAVL = createTargetAVL(WidenInfo);
   } else if (RawAVL && !WidenInfo.PackedMode) {
     NewAVL = RawAVL;
-  } else {
+  } else if (RawAVL && WidenInfo.NeedsPackedMasking) {
+    // AVL may be odd - add one to add the 'odd' element in that case.
     assert(WidenInfo.PackedMode);
     assert(IsDynamicAVL);
-
     auto PlusOne = getNode(ISD::ADD, MVT::i32, {RawAVL, getConstEVL(1)});
     NewAVL = getNode(ISD::SRL, MVT::i32, {PlusOne, getConstEVL(1)});
+  } else {
+    // AVL is even - no plus one necessary.
+    NewAVL = getNode(ISD::SRL, MVT::i32, {RawAVL, getConstEVL(1)});
   }
+
+  // Pack-legalized AVL
+  NewAVL = annotateLegalAVL(NewAVL);
+
+  // FIXME: We currently ignore WidenInfo.NeedsPackedMasking for the mask
+  // (odd-position element in packed mode is not masked off!)
 
   // Legalize Mask (nothing to do here)
   SDValue NewMask;
@@ -1324,6 +1335,19 @@ SDValue VECustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue 
   SDValue V = getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
   V->setFlags(Flags);
   return V;
+}
+
+SDValue VECustomDAG::getLegalSelectOpVVP(EVT ResVT, SDValue OnTrue,
+                                       SDValue OnFalse, SDValue Mask,
+                                       SDValue Pivot) const {
+  if (ResVT.getVectorElementType() != MVT::i1)
+    return createSelect(ResVT, OnTrue, OnFalse, Mask, Pivot);
+
+  // Expand to boolean ops.
+  auto NotMask = createNot(Mask, ResVT);
+  auto MaskOnTrue = getNode(ISD::AND, ResVT, {Mask, OnTrue});
+  auto MaskOnFalse = getNode(ISD::AND, ResVT, {NotMask, OnFalse});
+  return getNode(ISD::OR, ResVT, {MaskOnTrue, MaskOnFalse});
 }
 
 SDValue VECustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,

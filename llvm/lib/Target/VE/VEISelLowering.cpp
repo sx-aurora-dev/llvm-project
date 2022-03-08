@@ -691,9 +691,10 @@ bool VETargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
 /// copy/move/set is converted to a sequence of store operations. Its use
 /// helps to ensure that such replacements don't generate code that causes an
 /// alignment error (trap) on the target machine.
+#if 0
 bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
                                                       unsigned AddrSpace,
-                                                      Align A,
+                                                      unsigned Align,
                                                       MachineMemOperand::Flags,
                                                       bool *Fast) const {
   if (Fast) {
@@ -702,6 +703,7 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
   }
   return true;
 }
+#endif
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                         const MachineFunction &MF) const {
@@ -3480,6 +3482,13 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
 
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
+  // Remove the 'LEGALAVL' wrapper once everything is legal.
+#if 0
+  if (DCI.isAfterLegalizeDAG())
+    if (N->getOpcode() == VEISD::LEGALAVL)
+      return N->getOperand(0);
+#endif
+
   SDLoc dl(N);
   unsigned Opcode = N->getOpcode();
   switch (Opcode) {

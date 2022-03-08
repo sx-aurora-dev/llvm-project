@@ -1,5 +1,7 @@
 // RUN: %clang_builtins %s %librt -o %t && %run %t
 
+// REQUIRES: target-supports-denormals
+
 #define SINGLE_PRECISION
 #include "fp_lib.h"
 #include "int_math.h"
