@@ -617,9 +617,11 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_reduce_umax:
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
+  case Intrinsic::experimental_vp_strided_load:
   case Intrinsic::vp_gather:
   case Intrinsic::vp_load:
     return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
+  case Intrinsic::experimental_vp_strided_store:
   case Intrinsic::vp_scatter:
   case Intrinsic::vp_store:
     return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy};

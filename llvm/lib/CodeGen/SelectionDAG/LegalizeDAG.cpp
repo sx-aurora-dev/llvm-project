@@ -1175,6 +1175,11 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
         cast<VPStoreSDNode>(Node)->getValue().getValueType());
     break;
   // FIXME add VP reductions
+  case ISD::EXPERIMENTAL_VP_STRIDED_STORE:
+    Action = TLI.getOperationAction(
+        Node->getOpcode(),
+        cast<VPStridedStoreSDNode>(Node)->getValue().getValueType());
+    break;
   case ISD::VECREDUCE_FADD:
   case ISD::VECREDUCE_FMUL:
   case ISD::VECREDUCE_ADD:
