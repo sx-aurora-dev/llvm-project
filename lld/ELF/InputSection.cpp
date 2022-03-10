@@ -620,6 +620,14 @@ static int64_t getTlsTpOffset(const Symbol &s) {
     return s.getVA(0) + (tls->p_vaddr & (tls->p_align - 1)) - 0x7000;
   case EM_RISCV:
     return s.getVA(0) + (tls->p_vaddr & (tls->p_align - 1));
+  case EM_VE:
+    // Adjusted Variant 1. TP is placed after a gap which is the size of
+    // 6 pointers.  This gap is defined as TCB_OFFSET (0x30) here,
+    // https://github.com/veos-sxarr-NEC/gdb-ve/blob/master/bfd/elf64-ve.c#L2512.
+    // This TCB_OFFSET is defined as tcbhead_t at
+    // https://github.com/veos-sxarr-NEC/glibc-ve/blob/master/sysdeps/ve/nptl/tls.h#L60-L68.
+    return s.getVA(0) + config->wordsize * 6 +
+           (tls->p_vaddr & (tls->p_align - 1));
 
     // Variant 2.
   case EM_HEXAGON:

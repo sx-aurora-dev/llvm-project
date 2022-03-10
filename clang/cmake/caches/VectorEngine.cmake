@@ -1,7 +1,7 @@
 # This file sets up a CMakeCache for the simple VE build.
 
 # The lld is not supported for VE yet.
-set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra" CACHE STRING "")
+set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi;libunwind;openmp" CACHE STRING "")
 
 # Compile for X86 and VE
@@ -55,6 +55,7 @@ set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
 set(LLVM_TOOLCHAIN_TOOLS
   dsymutil
   llc
+  lld
   llvm-ar
   llvm-cxxfilt
   llvm-cov
@@ -79,5 +80,3 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   runtimes
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")
-#  lld
-#  LTO
