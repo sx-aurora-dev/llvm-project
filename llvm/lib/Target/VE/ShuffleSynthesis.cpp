@@ -1173,7 +1173,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     }
 
     SDValue MaxVLV = CDAG.getConstEVL(MaxVL);
-    SDValue BasePtrV = CDAG.getBroadcast(PtrVecVT, VecSlotPtr);
+    SDValue BasePtrV = CDAG.getBroadcast(PtrVecVT, VecSlotPtr, MaxVLV);
     SDValue OffsetV = CDAG.getNode(
         ISD::BUILD_VECTOR, PtrVecVT,
         GatherOffsets); // TODO directly call into constant vector generation

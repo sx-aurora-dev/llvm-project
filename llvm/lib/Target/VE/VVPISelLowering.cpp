@@ -141,10 +141,10 @@ static bool OpNeedsSplitting(SDNode &Op) {
   return !supportsPackedMode(Op.getOpcode(), OpVecTy);
 #if 0
   unsigned OpVectorLength = OpVecTy.getVectorNumElements();
-  assert((OpVectorLength <= PackedWidth) &&
+  assert((OpVectorLength <= PackedVectorWidth) &&
          "Operation should have been split during legalization");
   return (OpVectorLength != StandardVectorWidth) &&
-         (OpVectorLength != PackedWidth);
+         (OpVectorLength != PackedVectorWidth);
 #endif
 }
 
@@ -441,7 +441,7 @@ void VETargetLowering::initVPUActions() {
   // Vector length legalization
   auto LegalizeVectorLength = [&](unsigned VL) -> unsigned {
     if (this->Subtarget->hasPackedMode()) {
-      return VL > StandardVectorWidth ? PackedWidth : StandardVectorWidth;
+      return VL > StandardVectorWidth ? PackedVectorWidth : StandardVectorWidth;
     } else {
       return StandardVectorWidth;
     }
@@ -590,7 +590,7 @@ void VETargetLowering::initVPUActions() {
     unsigned W = VT.getVectorMinNumElements();
 
     // Use default splitting for vlens > 512
-    if (W > PackedWidth)
+    if (W > PackedVectorWidth)
       continue;
 
     // Promotion rule, accept native element bit sizes
@@ -761,7 +761,7 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
   assert(ResTy.isVector());
   unsigned TargetWidth = (Subtarget->hasPackedMode() &&
                           ResTy.getVectorNumElements() > StandardVectorWidth)
-                             ? PackedWidth
+                             ? PackedVectorWidth
                              : StandardVectorWidth;
 
   // Use vXi1 as result type in native widening mode
@@ -1439,12 +1439,12 @@ VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
 
     if ((ElemTy != MVT::i1 && ElemTy != MVT::i32 && ElemTy != MVT::f32 &&
          ElemTy != MVT::f64 && ElemTy != MVT::i64) ||
-        (OpVectorLength > PackedWidth)) {
+        (OpVectorLength > PackedVectorWidth)) {
       LLVM_DEBUG(dbgs() << "\tToNative: Over-sized data type\n";);
       return VVPWideningInfo();
     }
 
-    VectorWidth = PackedWidth;
+    VectorWidth = PackedVectorWidth;
   } else {
     VectorWidth = StandardVectorWidth;
   }
