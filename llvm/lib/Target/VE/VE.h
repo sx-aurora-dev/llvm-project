@@ -38,7 +38,7 @@ namespace llvm {
 
 /// Target Constants {
 const unsigned StandardVectorWidth = 256;
-const unsigned PackedWidth = 512;
+const unsigned PackedVectorWidth = 512;
 /// } Target Constants
 
 // Enums corresponding to VE condition codes, both icc's and fcc's.  These

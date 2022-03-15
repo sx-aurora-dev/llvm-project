@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "VE.h"
 #include "VETargetMachine.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"

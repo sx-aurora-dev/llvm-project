@@ -195,6 +195,8 @@ SDValue getUnpackAVL(SDValue N);
 
 /// } Packing
 
+bool isMaskType(EVT SomeVT);
+
 bool isVVPOrVEC(unsigned);
 
 bool maySafelyIgnoreMask(unsigned Opc);
@@ -240,6 +242,12 @@ SDValue getNodeAVL(SDValue);
 std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue);
 
 /// } AVL Functions
+
+// Get the vector or mask register type for this packing and element type.
+MVT getLegalVectorType(Packing P, MVT ElemVT);
+
+// Whether this type belongs to a packed mask or vector register.
+Packing getTypePacking(EVT);
 
 /// Helper class for short hand custom node creation ///
 struct VECustomDAG {
@@ -292,7 +300,6 @@ struct VECustomDAG {
   SDValue foldAndUnpackMask(SDValue MaskVector, SDValue Mask, PackElem Part,
                             SDValue AVL) const;
   /// } Mask Insert/Extract
-  SDValue getBroadcast(EVT ResultVT, SDValue Scalar, SDValue AVL = SDValue()) const;
 
   // Extract an SX register from a mask
   SDValue createMaskExtract(SDValue MaskV, SDValue Idx) const;
@@ -525,6 +532,9 @@ struct VECustomDAG {
 
   raw_ostream &print(raw_ostream &, SDValue) const;
   void dump(SDValue) const;
+  SDValue getConstantMask(Packing Packing, bool AllTrue) const;
+  SDValue getMaskBroadcast(EVT ResultVT, SDValue Scalar, SDValue AVL) const;
+  SDValue getBroadcast(EVT ResultVT, SDValue Scalar, SDValue AVL) const;
 
   // Wrap AVL in a LEGALAVL node (unless it is one already).
   SDValue annotateLegalAVL(SDValue AVL) const;

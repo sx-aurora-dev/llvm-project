@@ -696,12 +696,20 @@ static SDValue supplementPackedReplication(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(VEISD::VEC_BROADCAST, DL, VT, {ReplOp, VLOp});
 }
 
-bool isMaskType(EVT VT) {
-  if (!VT.isVector())
-    return false;
+MVT getLegalVectorType(Packing P, MVT ElemVT) {
+  return MVT::getVectorVT(ElemVT, P == Packing::Normal ? StandardVectorWidth
+                                                       : PackedVectorWidth);
+}
 
-  // an actual bit mask type
-  return VT.getVectorElementType() == MVT::i1;
+Packing getTypePacking(EVT VT) {
+  assert(VT.isVector());
+  return isPackedVectorType(VT) ? Packing::Dense : Packing::Normal;
+}
+
+bool isMaskType(EVT SomeVT) {
+  if (!SomeVT.isVector())
+    return false;
+  return SomeVT.getVectorElementType() == MVT::i1;
 }
 
 bool maySafelyIgnoreMask(unsigned VVPOpcode) {
@@ -1085,6 +1093,48 @@ SDValue VECustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
 
 void VECustomDAG::dumpValue(SDValue V) const { V->print(dbgs(), &DAG); }
 
+SDValue VECustomDAG::getConstantMask(Packing Packing, bool AllTrue) const {
+  auto MaskVT = getLegalVectorType(Packing, MVT::i1);
+
+  // VEISelDAGtoDAG will replace this pattern with the constant-true VM.
+  auto TrueVal = DAG.getConstant(-1, DL, MVT::i32);
+  auto AVL = getConstant(MaskVT.getVectorNumElements(), MVT::i32);
+  auto Res = getNode(VEISD::VEC_BROADCAST, MaskVT, {TrueVal, AVL});
+  if (AllTrue)
+    return Res;
+
+  return DAG.getNOT(DL, Res, Res.getValueType());
+}
+
+SDValue VECustomDAG::getMaskBroadcast(EVT ResultVT, SDValue Scalar,
+                                      SDValue AVL) const {
+  // Constant mask splat.
+  if (auto BcConst = dyn_cast<ConstantSDNode>(Scalar))
+    return getConstantMask(getTypePacking(ResultVT),
+                           BcConst->getSExtValue() != 0);
+
+  // Expand the broadcast to a vector comparison.
+  auto ScalarBoolVT = Scalar.getSimpleValueType();
+  assert(ScalarBoolVT == MVT::i32);
+
+  // Cast to i32 ty.
+  SDValue CmpElem = DAG.getSExtOrTrunc(Scalar, DL, MVT::i32);
+  unsigned ElemCount = ResultVT.getVectorNumElements();
+  MVT CmpVecTy = MVT::getVectorVT(ScalarBoolVT, ElemCount);
+
+  // Broadcast to vector.
+  SDValue BCVec =
+      DAG.getNode(VEISD::VEC_BROADCAST, DL, CmpVecTy, {CmpElem, AVL});
+  SDValue ZeroVec =
+      getBroadcast(CmpVecTy, {DAG.getConstant(0, DL, ScalarBoolVT)}, AVL);
+
+  MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
+
+  // Broadcast(Data) != Broadcast(0)
+  // TODO: Use a VVP operation for this.
+  return DAG.getSetCC(DL, BoolVecTy, BCVec, ZeroVec, ISD::CondCode::SETNE);
+}
+
 SDValue VECustomDAG::getVectorExtract(SDValue VecV, SDValue IdxV) const {
   assert(VecV.getValueType().isVector());
   auto ElemVT = VecV.getValueType().getVectorElementType();
@@ -1167,7 +1217,7 @@ SDValue VECustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
   // we do not want to go through ::ReplaceNodeResults again only to have them
   // widened
   unsigned NativeVectorWidth =
-      WidenInfo.PackedMode ? PackedWidth : StandardVectorWidth;
+      WidenInfo.PackedMode ? PackedVectorWidth : StandardVectorWidth;
 
   // Generate a remainder mask for packed operations
   Packing PackFlag = WidenInfo.PackedMode ? Packing::Dense : Packing::Normal;
@@ -1182,7 +1232,7 @@ SDValue VECustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
     MaskBits.flip();
     size_t OddRemainderBitPos = WidenInfo.ActiveVectorLength;
     MaskBits[OddRemainderBitPos] = false;
-    return createConstMask<>(PackedWidth, MaskBits);
+    return createConstMask<>(PackedVectorWidth, MaskBits);
   }
 }
 
