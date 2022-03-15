@@ -580,6 +580,10 @@ Optional<unsigned> getVVPForVP(unsigned VPOC) {
 }
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {
+  // For memory ops -> the transfered data type
+  if (auto MemN = dyn_cast<MemSDNode>(Op))
+    return MemN->getMemoryVT();
+
   // For reductions -> the reduced vector type
   PosOpt RedVecPos = getReductionVectorParamPos(Op->getOpcode());
   if (RedVecPos)
@@ -597,9 +601,6 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   // translation code.
   switch (OC) {
   default:
-    // For memory ops -> the transfered data type
-    if (auto MemN = dyn_cast<MemSDNode>(Op))
-      return MemN->getMemoryVT();
     return None;
 
   // Standard ISD.

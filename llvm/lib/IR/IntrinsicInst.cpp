@@ -618,10 +618,14 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
   case Intrinsic::experimental_vp_strided_load:
+    return VPIntrinsic::ShortTypeVec{VecRetTy,
+                                     Type::getInt64Ty(VectorTy->getContext())};
   case Intrinsic::vp_gather:
   case Intrinsic::vp_load:
     return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
   case Intrinsic::experimental_vp_strided_store:
+    return VPIntrinsic::ShortTypeVec{VectorTy,
+                                     Type::getInt64Ty(VectorTy->getContext())};
   case Intrinsic::vp_scatter:
   case Intrinsic::vp_store:
     return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy};
@@ -657,6 +661,8 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
       (VPID == Intrinsic::experimental_vp_splice);
   bool IsMemoryOp =
       (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load) ||
+      (VPID == Intrinsic::experimental_vp_strided_store) ||
+      (VPID == Intrinsic::experimental_vp_strided_load) ||
       (VPID == Intrinsic::vp_scatter) || (VPID == Intrinsic::vp_gather);
   bool IsCastOp =
       (VPID == Intrinsic::vp_fptosi) || (VPID == Intrinsic::vp_fptoui) ||

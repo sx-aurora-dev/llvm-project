@@ -214,6 +214,11 @@ static SDValue getLoadStoreStride(SDValue Op, CustomDAG &CDAG) {
     return Op->getOperand(2);
   }
 
+  if (auto *StoreN = dyn_cast<VPStridedStoreSDNode>(Op.getNode()))
+    return StoreN->getStride();
+  if (auto *StoreN = dyn_cast<VPStridedLoadSDNode>(Op.getNode()))
+    return StoreN->getStride();
+
   if (isa<MemSDNode>(Op.getNode())) {
     // Regular MLOAD/MSTORE/LOAD/STORE
     // No stride argument -> use the contiguous element size as stride.
@@ -239,6 +244,8 @@ static SDValue getStoredValue(SDValue Op) {
   if (auto *StoreN = dyn_cast<VPStoreSDNode>(Op.getNode())) {
     return StoreN->getValue();
   }
+  if (auto *StoreN = dyn_cast<VPStridedStoreSDNode>(Op.getNode()))
+    return StoreN->getValue();
   if (auto *StoreN = dyn_cast<MaskedScatterSDNode>(Op.getNode())) {
     return StoreN->getValue();
   }
@@ -2089,6 +2096,8 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
 
   case ISD::VP_LOAD:
   case ISD::VP_STORE:
+  case ISD::EXPERIMENTAL_VP_STRIDED_STORE:
+  case ISD::EXPERIMENTAL_VP_STRIDED_LOAD:
     return lowerVVP_MLOAD_MSTORE(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   case ISD::VP_GATHER:
@@ -2207,8 +2216,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
     Mask = CDAG.createUniformConstMask(P, true);
   }
 
-  uint64_t ElemBytes = LegalDataVT.getVectorElementType().getStoreSize();
-  auto StrideV = CDAG.getConstant(ElemBytes, MVT::i64);
+  auto StrideV = getLoadStoreStride(Op, CDAG);
 
   if (IsLoad) {
     // Emit.
