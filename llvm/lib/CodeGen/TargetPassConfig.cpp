@@ -47,7 +47,6 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils.h"
-#include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include <cassert>
 #include <string>
 
@@ -922,6 +921,9 @@ void TargetPassConfig::addIRPasses() {
   // Allow disabling it for testing purposes.
   if (!DisableExpandReductions)
     addPass(createExpandReductionsPass());
+
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createTLSVariableHoistPass());
 }
 
 /// Turn exception handling constructs into something the code generators can

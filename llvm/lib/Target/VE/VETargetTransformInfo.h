@@ -25,6 +25,10 @@
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
 
+// Penalty cost factor to make vectorization unappealing (see
+// makeVectorOpsExpensive).
+static const unsigned ProhibitiveCost = 2048;
+
 static llvm::Type *GetVectorElementType(llvm::Type *Ty) {
   return llvm::cast<llvm::FixedVectorType>(Ty)->getElementType();
 }
@@ -38,15 +42,31 @@ static bool IsMaskType(llvm::Type *Ty) {
          GetVectorElementType(Ty)->getPrimitiveSizeInBits() == 1;
 }
 
-static llvm::Type *GetLaneType(llvm::Type *Ty) {
+static llvm::Type *getVectorElementType(llvm::Type *Ty) {
+  return llvm::cast<llvm::FixedVectorType>(Ty)->getElementType();
+}
+
+static llvm::Type *getLaneType(llvm::Type *Ty) {
   using namespace llvm;
   if (!isa<VectorType>(Ty))
     return Ty;
-  return GetVectorElementType(Ty);
+  return getVectorElementType(Ty);
 }
 
-
-static const unsigned ProhibitiveCost = 2048;
+static bool isVectorLaneType(llvm::Type &ElemTy) {
+  // check element sizes for vregs
+  if (ElemTy.isIntegerTy()) {
+    unsigned ScaBits = ElemTy.getScalarSizeInBits();
+    return ScaBits == 1 || ScaBits == 32 || ScaBits == 64;
+  }
+  if (ElemTy.isPointerTy()) {
+    return true;
+  }
+  if (ElemTy.isFloatTy() || ElemTy.isDoubleTy()) {
+    return true;
+  }
+  return false;
+}
 
 namespace llvm {
 
@@ -62,52 +82,37 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 
   static bool makeVectorOpsExpensive();
 
-  bool enableVPU() const {
-    return getST()->enableVPU();
-  }
-  bool hasPackedMode() const {
-    return getST()->hasPackedMode();
-  }
+  bool enableVPU() const { return getST()->enableVPU(); }
 
   static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
+#define VEC_VP_CASE(SUFFIX)                                                    \
+  case Intrinsic::vp_reduce_##SUFFIX:                                          \
+  case Intrinsic::vector_reduce_##SUFFIX:
+
     switch (ReductionID) {
-    ///// Fp reductions (iterative and ordered)
-    case Intrinsic::vp_reduce_fadd:
-    case Intrinsic::vector_reduce_fadd:
-    //
-    case Intrinsic::vp_reduce_fmin:
-    case Intrinsic::vector_reduce_fmin:
-    //
-    case Intrinsic::vp_reduce_fmax:
-    case Intrinsic::vector_reduce_fmax:
+      // FP
+      VEC_VP_CASE(fadd)
+      VEC_VP_CASE(fmin)
+      VEC_VP_CASE(fmax)
+      VEC_VP_CASE(fmul)
       return true;
 
-    ///// FP reduction (Ordered only)
-    case Intrinsic::vp_reduce_fmul:
-    case Intrinsic::vector_reduce_fmul:
+      // Int
+      VEC_VP_CASE(add)
+      VEC_VP_CASE(and)
+      VEC_VP_CASE(or)
+      VEC_VP_CASE(xor)
+      VEC_VP_CASE(smax)
       return true;
 
-    ///// int arith
-    case Intrinsic::vp_reduce_add:
-    case Intrinsic::vp_reduce_smax:
-      //
-      // TODO require custom lowering
-      // case Intrinsic::experimental_vector_reduce_smin: // TODO
-      // case Intrinsic::experimental_vector_reduce_umin: // TODO
-      // case Intrinsic::experimental_vector_reduce_umax: // TODO to smax
-      return true;
-
-    ///// bit arith
-    case Intrinsic::vp_reduce_or:
-    case Intrinsic::vp_reduce_and:
-    case Intrinsic::vp_reduce_xor:
-      return true;
-
-    // Otw, run standard reduction expansion
     default:
+      // TODO: Support more reductions by isel-legalizing into existing ones (eg
+      // smin -> smax, ..).
       return false;
     }
+#undef VEC_VP_CASE
   }
+
   // Experimental simd-style fixed length vectorization
   bool simd() const { return getST()->simd(); }
 
@@ -131,8 +136,9 @@ public:
       return TypeSize::getFixed(64);
     case TargetTransformInfo::RGK_FixedWidthVector:
       // TODO report vregs once vector isel is stable.
-      return makeVectorOpsExpensive() ? TypeSize::getFixed(0)
-                                      : TypeSize::getFixed(256 * 64);
+      return makeVectorOpsExpensive()
+                 ? TypeSize::getFixed(0)
+                 : TypeSize::getFixed(StandardVectorWidth * 64);
     case TargetTransformInfo::RGK_ScalableVector:
       return TypeSize::getScalable(0);
     }
@@ -141,18 +147,19 @@ public:
   }
 
   unsigned getMinVectorRegisterBitWidth() const {
-    return !makeVectorOpsExpensive() && (simd() || enableVPU()) ? 256 * 64 : 0;
+    return !makeVectorOpsExpensive() && (simd() || enableVPU())
+               ? StandardVectorWidth * 64
+               : 0;
   }
 
   static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
 
   unsigned getVRegCapacity(Type &ElemTy) const {
-    unsigned PackLimit = hasPackedMode() ? 512 : 256;
     if (ElemTy.isIntegerTy() && ElemTy.getPrimitiveSizeInBits() <= 32)
-      return PackLimit;
+      return PackedVectorWidth;
     if (ElemTy.isFloatTy())
-      return PackLimit;
-    return 256;
+      return PackedVectorWidth;
+    return StandardVectorWidth;
   }
 
   bool isBitVectorType(Type &DT) {
@@ -162,21 +169,6 @@ public:
     return isBoolTy(GetVectorElementType(VTy)) &&
            GetVectorNumElements(VTy) <=
                getVRegCapacity(*GetVectorElementType(VTy));
-  }
-
-  bool isVectorLaneType(Type &ElemTy) const {
-    // check element sizes for vregs
-    if (ElemTy.isIntegerTy()) {
-      unsigned ScaBits = ElemTy.getScalarSizeInBits();
-      return ScaBits == 1 || ScaBits == 32 || ScaBits == 64;
-    }
-    if (ElemTy.isPointerTy()) {
-      return true;
-    }
-    if (ElemTy.isFloatTy() || ElemTy.isDoubleTy()) {
-      return true;
-    }
-    return false;
   }
 
   bool isVectorRegisterType(Type &DT) const {
@@ -199,22 +191,22 @@ public:
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*GetLaneType(DataType));
+    return isVectorLaneType(*getLaneType(DataType));
   }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*GetLaneType(DataType));
+    return isVectorLaneType(*getLaneType(DataType));
   }
   bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*GetLaneType(DataType));
+    return isVectorLaneType(*getLaneType(DataType));
   };
   bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*GetLaneType(DataType));
+    return isVectorLaneType(*getLaneType(DataType));
   }
   // } Load & Store
 
@@ -268,8 +260,7 @@ public:
   getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                         unsigned AddressSpace,
                         TargetTransformInfo::TargetCostKind CostKind) const {
-    if (isa<FixedVectorType>(Src) &&
-        (!isVectorRegisterType(*Src)))
+    if (isa<FixedVectorType>(Src) && (!isVectorRegisterType(*Src)))
       return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;
   }
@@ -287,7 +278,9 @@ public:
   bool supportsScalableVectors() const { return false; }
 
   bool hasActiveVectorLength(unsigned Opcode, Type *DataType,
-                             Align Alignment) const { return true; }
+                             Align Alignment) const {
+    return true;
+  }
 
   TargetTransformInfo::VPLegalization
   getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
@@ -298,7 +291,6 @@ public:
         /* OperatorStrategy */ supportsVPOperation(PI) ? VPTransform::Legal
                                                        : VPTransform::Convert);
   }
-
 
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
@@ -315,7 +307,7 @@ public:
     if (EC.isScalable())
       return false;
 
-    if (EC.getFixedValue() > (hasPackedMode() ? 512 : 256))
+    if (EC.getFixedValue() > PackedVectorWidth)
       return false;
 
     // Bail on yet-unimplemented reductions
@@ -367,15 +359,6 @@ public:
 
   /// }
 
-  bool shouldExpandReduction(const IntrinsicInst *II) const {
-    if (!enableVPU())
-      return true;
-
-    auto FPRed = dyn_cast<FPMathOperator>(II);
-    bool Unordered = FPRed ? II->getFastMathFlags().allowReassoc() : true;
-    return !isSupportedReduction(II->getIntrinsicID(), Unordered);
-  }
-
   void getUnrollingPreferences(Loop *L, ScalarEvolution &,
                                TargetTransformInfo::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE);
@@ -388,6 +371,15 @@ public:
     //   /opt/nec/ve/bin/nld: final link failed: Nonrepresentable section on
     //   output
     return false;
+  }
+
+  bool shouldExpandReduction(const IntrinsicInst *II) const {
+    if (!enableVPU())
+      return true;
+
+    auto FPRed = dyn_cast<FPMathOperator>(II);
+    bool Unordered = FPRed ? II->getFastMathFlags().allowReassoc() : true;
+    return !isSupportedReduction(II->getIntrinsicID(), Unordered);
   }
 };
 

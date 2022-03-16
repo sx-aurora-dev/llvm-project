@@ -97,7 +97,7 @@ def: Mask_Binary<v256i1, xor, "XORM">;
 //             subreg_lo))>;
 // 
 // // mask unpacking
-// class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_lo, sub_vm_hi>;
+// class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_odd, sub_vm_even>;
 // 
 // def: SplitMaskPat<and, ANDMmm>;
 // def: SplitMaskPat<or,   ORMmm>;
@@ -272,71 +272,6 @@ defm: VMV_Patterns<v256i64>;
 defm: VMV_Patterns<v256f64>;
 
 
-///// Packing support /////
-
-
-/// Overpacked types: v512x64 ///
-// These are all lowered to subregister transfers.
-
-multiclass Packing_Overpack<ValueType PackVT, ValueType VecVT> {
-  // vec_pack
-  def : Pat<(PackVT (vec_pack VecVT:$vlo, VecVT:$vhi, (i32 srcvalue))),
-            (INSERT_SUBREG (INSERT_SUBREG
-                           (PackVT (IMPLICIT_DEF)),
-                           $vlo, sub_pack_lo),
-                           $vhi, sub_pack_hi)>;
-
-  // vec_unpack_lo/hi
-  def : Pat<(VecVT (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
-            (EXTRACT_SUBREG $vp, sub_pack_lo)>;
-  def : Pat<(VecVT (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
-            (EXTRACT_SUBREG $vp, sub_pack_hi)>;
-}
-
-defm : Packing_Overpack<v512i64, v256i64>;
-defm : Packing_Overpack<v512f64, v256f64>;
-
-///// vec_pack /////
-
-// Packing (type based)
-def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
-          (VSHFvvil $vlo, $vhi, 13, $avl)>;
-def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
-          (VSHFvvil $vlo, $vhi, 8, $avl)>;
-def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
-          (INSERT_SUBREG (INSERT_SUBREG
-                         (v512i1 (IMPLICIT_DEF)),
-                         $vlo, sub_vm_lo),
-                         $vhi, sub_vm_hi)>;
-
-///// vec_swap, vec_unpack_lo, vec_unpack_hi /////
-
-multiclass Unpack_Swap<ValueType PackVT> {
-  def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
-            (VSHFvvil $vp, $vp, 4, $avl)>; // exchange hi and lo
-
-  // no-op unpacks
-  def : Pat<(v256i32 (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
-            (COPY_TO_REGCLASS $vp, V64)>;
-  def : Pat<(v256f32 (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
-            (COPY_TO_REGCLASS $vp, V64)>;
-
-  // shuffle unpacks
-  def : Pat<(v256f32 (vec_unpack_lo PackVT:$vp, i32:$avl)),
-            (VSHFvvil $vp, $vp, 4, $avl)>; // always pick lo
-  def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
-            (VSHFvvil $vp, $vp, 0, $avl)>; // always pick hi
-}
-
-// mask unpacking
-def : Pat<(v256i1 (vec_unpack_lo v512i1:$vm, (i32 srcvalue))),
-          (EXTRACT_SUBREG $vm, sub_vm_lo)>;
-def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
-          (EXTRACT_SUBREG $vm, sub_vm_hi)>;
-
-defm: Unpack_Swap<v512i32>;
-defm: Unpack_Swap<v512f32>;
-
 
 ///// vec_tomask /////
 
@@ -438,3 +373,66 @@ def : Pat<(v512i1 (vec_broadcast (i32 0), (i32 512))),
 //             (VSTirvl 8, $addr, v256f64:$vx, (VLEN 256))>;
 // }
 
+///// Packing support /////
+
+/// Overpacked types: v512x64 ///
+// These are all lowered to subregister transfers.
+
+multiclass Packing_Overpack<ValueType PackVT, ValueType VecVT> {
+  // vec_pack
+  def : Pat<(PackVT (vec_pack VecVT:$vlo, VecVT:$vhi, (i32 srcvalue))),
+            (INSERT_SUBREG (INSERT_SUBREG
+                           (PackVT (IMPLICIT_DEF)),
+                           $vlo, sub_pack_lo),
+                           $vhi, sub_pack_hi)>;
+
+  // vec_unpack_lo/hi
+  def : Pat<(VecVT (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
+            (EXTRACT_SUBREG $vp, sub_pack_lo)>;
+  def : Pat<(VecVT (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
+            (EXTRACT_SUBREG $vp, sub_pack_hi)>;
+}
+
+defm : Packing_Overpack<v512i64, v256i64>;
+defm : Packing_Overpack<v512f64, v256f64>;
+
+///// vec_pack /////
+
+// Packing (type based)
+def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
+          (VSHFvvil $vlo, $vhi, 13, $avl)>;
+def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
+          (VSHFvvil $vlo, $vhi, 8, $avl)>;
+def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
+          (INSERT_SUBREG (INSERT_SUBREG
+                         (v512i1 (IMPLICIT_DEF)),
+                         $vlo, sub_vm_odd),
+                         $vhi, sub_vm_even)>;
+
+///// vec_swap, vec_unpack_lo, vec_unpack_hi /////
+
+multiclass Unpack_Swap<ValueType PackVT> {
+  def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
+            (VSHFvvil $vp, $vp, 4, $avl)>; // exchange hi and lo
+
+  // no-op unpacks
+  def : Pat<(v256i32 (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
+            (COPY_TO_REGCLASS $vp, V64)>;
+  def : Pat<(v256f32 (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
+            (COPY_TO_REGCLASS $vp, V64)>;
+
+  // shuffle unpacks
+  def : Pat<(v256f32 (vec_unpack_lo PackVT:$vp, i32:$avl)),
+            (VSHFvvil $vp, $vp, 4, $avl)>; // always pick lo
+  def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
+            (VSHFvvil $vp, $vp, 0, $avl)>; // always pick hi
+}
+
+// mask unpacking
+def : Pat<(v256i1 (vec_unpack_lo v512i1:$vm, (i32 srcvalue))),
+          (EXTRACT_SUBREG $vm, sub_vm_odd)>;
+def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
+          (EXTRACT_SUBREG $vm, sub_vm_even)>;
+
+defm: Unpack_Swap<v512i32>;
+defm: Unpack_Swap<v512f32>;

@@ -19,7 +19,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -30,7 +29,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include <cctype>
 using namespace llvm;
@@ -2486,6 +2484,46 @@ bool TargetLowering::SimplifyDemandedBits(
       return TLO.CombineTo(Op, NewOp);
     }
 
+    // Match a multiply with a disguised negated-power-of-2 and convert to a
+    // an equivalent shift-left amount.
+    // Example: (X * MulC) + Op1 --> Op1 - (X << log2(-MulC))
+    auto getShiftLeftAmt = [&HighMask](SDValue Mul) -> unsigned {
+      if (Mul.getOpcode() != ISD::MUL || !Mul.hasOneUse())
+        return 0;
+
+      // Don't touch opaque constants. Also, ignore zero and power-of-2
+      // multiplies. Those will get folded later.
+      ConstantSDNode *MulC = isConstOrConstSplat(Mul.getOperand(1));
+      if (MulC && !MulC->isOpaque() && !MulC->isZero() &&
+          !MulC->getAPIntValue().isPowerOf2()) {
+        APInt UnmaskedC = MulC->getAPIntValue() | HighMask;
+        if (UnmaskedC.isNegatedPowerOf2())
+          return (-UnmaskedC).logBase2();
+      }
+      return 0;
+    };
+
+    auto foldMul = [&](SDValue X, SDValue Y, unsigned ShlAmt) {
+      EVT ShiftAmtTy = getShiftAmountTy(VT, TLO.DAG.getDataLayout());
+      SDValue ShlAmtC = TLO.DAG.getConstant(ShlAmt, dl, ShiftAmtTy);
+      SDValue Shl = TLO.DAG.getNode(ISD::SHL, dl, VT, X, ShlAmtC);
+      SDValue Sub = TLO.DAG.getNode(ISD::SUB, dl, VT, Y, Shl);
+      return TLO.CombineTo(Op, Sub);
+    };
+
+    if (isOperationLegalOrCustom(ISD::SHL, VT)) {
+      if (Op.getOpcode() == ISD::ADD) {
+        // (X * MulC) + Op1 --> Op1 - (X << log2(-MulC))
+        if (unsigned ShAmt = getShiftLeftAmt(Op0))
+          return foldMul(Op0.getOperand(0), Op1, ShAmt);
+        // Op0 + (X * MulC) --> Op0 - (X << log2(-MulC))
+        if (unsigned ShAmt = getShiftLeftAmt(Op1))
+          return foldMul(Op1.getOperand(0), Op0, ShAmt);
+        // TODO:
+        // Op0 - (X * MulC) --> Op0 + (X << log2(-MulC))
+      }
+    }
+
     LLVM_FALLTHROUGH;
   }
   default:
@@ -3773,6 +3811,49 @@ static SDValue simplifySetCCWithCTPOP(const TargetLowering &TLI, EVT VT,
   return SDValue();
 }
 
+static SDValue foldSetCCWithRotate(EVT VT, SDValue N0, SDValue N1,
+                                   ISD::CondCode Cond, const SDLoc &dl,
+                                   SelectionDAG &DAG) {
+  if (Cond != ISD::SETEQ && Cond != ISD::SETNE)
+    return SDValue();
+
+  auto *C1 = isConstOrConstSplat(N1, /* AllowUndefs */ true);
+  if (!C1 || !(C1->isZero() || C1->isAllOnes()))
+    return SDValue();
+
+  auto getRotateSource = [](SDValue X) {
+    if (X.getOpcode() == ISD::ROTL || X.getOpcode() == ISD::ROTR)
+      return X.getOperand(0);
+    return SDValue();
+  };
+
+  // Peek through a rotated value compared against 0 or -1:
+  // (rot X, Y) == 0/-1 --> X == 0/-1
+  // (rot X, Y) != 0/-1 --> X != 0/-1
+  if (SDValue R = getRotateSource(N0))
+    return DAG.getSetCC(dl, VT, R, N1, Cond);
+
+  // Peek through an 'or' of a rotated value compared against 0:
+  // or (rot X, Y), Z ==/!= 0 --> (or X, Z) ==/!= 0
+  // or Z, (rot X, Y) ==/!= 0 --> (or X, Z) ==/!= 0
+  //
+  // TODO: Add the 'and' with -1 sibling.
+  // TODO: Recurse through a series of 'or' ops to find the rotate.
+  EVT OpVT = N0.getValueType();
+  if (N0.hasOneUse() && N0.getOpcode() == ISD::OR && C1->isZero()) {
+    if (SDValue R = getRotateSource(N0.getOperand(0))) {
+      SDValue NewOr = DAG.getNode(ISD::OR, dl, OpVT, R, N0.getOperand(1));
+      return DAG.getSetCC(dl, VT, NewOr, N1, Cond);
+    }
+    if (SDValue R = getRotateSource(N0.getOperand(1))) {
+      SDValue NewOr = DAG.getNode(ISD::OR, dl, OpVT, R, N0.getOperand(0));
+      return DAG.getSetCC(dl, VT, NewOr, N1, Cond);
+    }
+  }
+
+  return SDValue();
+}
+
 /// Try to simplify a setcc built with the specified operands and cc. If it is
 /// unable to simplify it, return a null SDValue.
 SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
@@ -3808,6 +3889,9 @@ SDValue TargetLowering::SimplifySetCC(EVT VT, SDValue N0, SDValue N1,
       DAG.doesNodeExist(ISD::SUB, DAG.getVTList(OpVT), {N1, N0}) &&
       !DAG.doesNodeExist(ISD::SUB, DAG.getVTList(OpVT), {N0, N1}))
     return DAG.getSetCC(dl, VT, N1, N0, SwappedCC);
+
+  if (SDValue V = foldSetCCWithRotate(VT, N0, N1, Cond, dl, DAG))
+    return V;
 
   if (auto *N1C = isConstOrConstSplat(N1)) {
     const APInt &C1 = N1C->getAPIntValue();
@@ -4981,8 +5065,8 @@ TargetLowering::ParseConstraints(const DataLayout &DL,
     if (OpInfo.CallOperandVal) {
       llvm::Type *OpTy = OpInfo.CallOperandVal->getType();
       if (OpInfo.isIndirect) {
-        OpTy = Call.getAttributes().getParamElementType(ArgNo);
-        assert(OpTy && "Indirect opernad must have elementtype attribute");
+        OpTy = Call.getParamElementType(ArgNo);
+        assert(OpTy && "Indirect operand must have elementtype attribute");
       }
 
       // Look for vector wrapped in a struct. e.g. { <16 x i8> }.
@@ -7502,13 +7586,13 @@ SDValue TargetLowering::expandABS(SDNode *N, SelectionDAG &DAG,
   SDValue Shift =
       DAG.getNode(ISD::SRA, dl, VT, Op,
                   DAG.getConstant(VT.getScalarSizeInBits() - 1, dl, ShVT));
-  if (!IsNegative) {
-    SDValue Add = DAG.getNode(ISD::ADD, dl, VT, Op, Shift);
-    return DAG.getNode(ISD::XOR, dl, VT, Add, Shift);
-  }
+  SDValue Xor = DAG.getNode(ISD::XOR, dl, VT, Op, Shift);
+
+  // abs(x) -> Y = sra (X, size(X)-1); sub (xor (X, Y), Y)
+  if (!IsNegative)
+    return DAG.getNode(ISD::SUB, dl, VT, Xor, Shift);
 
   // 0 - abs(x) -> Y = sra (X, size(X)-1); sub (Y, xor (X, Y))
-  SDValue Xor = DAG.getNode(ISD::XOR, dl, VT, Op, Shift);
   return DAG.getNode(ISD::SUB, dl, VT, Shift, Xor);
 }
 

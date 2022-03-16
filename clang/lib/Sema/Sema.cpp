@@ -114,6 +114,9 @@ PrintingPolicy Sema::getPrintingPolicy(const ASTContext &Context,
     }
   }
 
+  // Shorten the data output if needed
+  Policy.EntireContentsOfLargeArray = false;
+
   return Policy;
 }
 
@@ -230,6 +233,9 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   // Tell diagnostics how to render things from the AST library.
   Diags.SetArgToStringFn(&FormatASTNodeDiagnosticArgument, &Context);
 
+  // This evaluation context exists to ensure that there's always at least one
+  // valid evaluation context available. It is never removed from the
+  // evaluation stack.
   ExprEvalContexts.emplace_back(
       ExpressionEvaluationContext::PotentiallyEvaluated, 0, CleanupInfo{},
       nullptr, ExpressionEvaluationContextRecord::EK_Other);
@@ -242,6 +248,15 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   SemaPPCallbackHandler = Callbacks.get();
   PP.addPPCallbacks(std::move(Callbacks));
   SemaPPCallbackHandler->set(*this);
+  if (getLangOpts().getFPEvalMethod() == LangOptions::FEM_UnsetOnCommandLine)
+    // Use setting from TargetInfo.
+    PP.setCurrentFPEvalMethod(SourceLocation(),
+                              ctxt.getTargetInfo().getFPEvalMethod());
+  else
+    // Set initial value of __FLT_EVAL_METHOD__ from the command line.
+    PP.setCurrentFPEvalMethod(SourceLocation(),
+                              getLangOpts().getFPEvalMethod());
+  CurFPFeatures.setFPEvalMethod(PP.getCurrentFPEvalMethod());
 }
 
 // Anchor Sema's type info to this TU.
@@ -2629,4 +2644,16 @@ CapturedRegionScopeInfo *Sema::getCurCapturedRegion() {
 const llvm::MapVector<FieldDecl *, Sema::DeleteLocs> &
 Sema::getMismatchingDeleteExpressions() const {
   return DeleteExprs;
+}
+
+Sema::FPFeaturesStateRAII::FPFeaturesStateRAII(Sema &S)
+    : S(S), OldFPFeaturesState(S.CurFPFeatures),
+      OldOverrides(S.FpPragmaStack.CurrentValue),
+      OldEvalMethod(S.PP.getCurrentFPEvalMethod()),
+      OldFPPragmaLocation(S.PP.getLastFPEvalPragmaLocation()) {}
+
+Sema::FPFeaturesStateRAII::~FPFeaturesStateRAII() {
+  S.CurFPFeatures = OldFPFeaturesState;
+  S.FpPragmaStack.CurrentValue = OldOverrides;
+  S.PP.setCurrentFPEvalMethod(OldFPPragmaLocation, OldEvalMethod);
 }

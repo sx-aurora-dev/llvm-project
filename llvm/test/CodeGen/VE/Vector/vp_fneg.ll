@@ -4,15 +4,13 @@
 define fastcc <512 x float> @test_vp_fneg_512f32(<512 x float> %i0, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fneg_512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    or %s1, 1, (32)1
 ; CHECK-NEXT:    sll %s1, %s1, 31
-; CHECK-NEXT:    # kill: def $vm3 killed $vm3 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvxor %v0, %s1, %v0, %vm2
+; CHECK-NEXT:    pvxor %v0, %s1, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <512 x float> @llvm.vp.fneg.v512f32(<512 x float> %i0, <512 x i1> %m, i32 %n)
   ret <512 x float> %r0
@@ -23,7 +21,7 @@ define fastcc <256 x float> @test_vp_fneg_256f32(<256 x float> %i0, <256 x i1> %
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vxor %v0, (1)1, %v0, %vm1
+; CHECK-NEXT:    vxor %v0, (1)1, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x float> @llvm.vp.fneg.v256f32(<256 x float> %i0, <256 x i1> %m, i32 %n)
   ret <256 x float> %r0
@@ -34,7 +32,7 @@ define fastcc <256 x double> @test_vp_fneg_256f64(<256 x double> %i0, <256 x i1>
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vxor %v0, (1)1, %v0, %vm1
+; CHECK-NEXT:    vxor %v0, (1)1, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x double> @llvm.vp.fneg.v256f64(<256 x double> %i0, <256 x i1> %m, i32 %n)
   ret <256 x double> %r0

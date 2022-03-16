@@ -19,7 +19,59 @@
 //===----------------------------------------------------------------------===//
 
 ///// V(E) - VP internal nodes
-// fp node types
+
+// vvp_load(ptr, stride, mask, avl)
+def SDTLoadVVP : SDTypeProfile<1, 4, [
+  SDTCisVec<0>,
+  SDTCisPtrTy<1>,
+  SDTCisInt<2>,
+  SDTCisVec<3>,
+  IsVLVT<4>
+]>;
+
+// vvp_store(data, ptr, stride, mask, avl)
+def SDTStoreVVP: SDTypeProfile<0, 5, [
+  SDTCisVec<0>,
+  SDTCisPtrTy<1>,
+  SDTCisInt<2>,
+  SDTCisVec<3>,
+  IsVLVT<4>
+]>;
+
+// vvp_scatter(chain, data, addr, mask, avl)
+def SDTScatterVVP: SDTypeProfile<0, 4, [
+  SDTCisVec<0>,
+  SDTCisVec<1>,
+  SDTCisVec<2>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
+]>;
+
+// vvp_gather(chain, addr, mask, avl)
+def SDTGatherVVP: SDTypeProfile<1, 3, [
+  SDTCisVec<0>,
+  SDTCisVec<1>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
+]>;
+
+// BinaryOp(x,y,mask,vl)
+def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
+  SDTCisSameAs<0, 1>,
+  SDTCisSameAs<0, 2>,
+  SDTCisInt<0>,
+  SDTCisSameNumEltsAs<0, 3>,
+  IsVLVT<4>
+]>;
+
+// UnaryFPOp(x,mask,vl)
+def SDTFPUnaryOpVVP : SDTypeProfile<1, 3, [
+  SDTCisSameAs<0, 1>,
+  SDTCisFP<0>,
+  SDTCisInt<2>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
+]>;
 
 // BinaryFPOp(x,y,mask,vl)
 def SDTFPBinOpVVP : SDTypeProfile<1, 4, [      // vvp_fadd, etc.
@@ -31,37 +83,15 @@ def SDTFPBinOpVVP : SDTypeProfile<1, 4, [      // vvp_fadd, etc.
   IsVLVT<4>
 ]>;
 
-def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [  // vvp_ffma
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisFP<0>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
-]>;
-
-// int node types
-def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
-]>;
-
-// Special case (VX, VY, SX)
-def SDTSFAOpVVP : SDTypeProfile<1, 5, [     // vvp_sfa
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
-]>;
-
-// load store
-def SDTLoadVVP : SDTypeProfile<1, 4, [       // vvp load (ptr, stride, mask, avl) -> data
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, IsVLVT<4>
-]>;
-
-def SDTStoreVVP: SDTypeProfile<0, 5, [       // vvp store (data, ptr, stride, mask, avl)
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, IsVLVT<4>
-]>;
-
-// scatter (Chain, Value, PtrVec, Mask, Vlen)
-def SDTScatterVVP: SDTypeProfile<0, 4, [     // vvp scatter
-  SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
-]>;
-
-// gather (Chain, PtrVec, Mask, Vlen)
-def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
-  SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3> 
+// TernaryFPOp(x,y,z,mask,vl)
+def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [
+  SDTCisSameAs<0, 1>,
+  SDTCisSameAs<0, 2>,
+  SDTCisSameAs<0, 3>,
+  SDTCisFP<0>,
+  SDTCisInt<4>,
+  SDTCisSameNumEltsAs<0, 4>,
+  IsVLVT<5>
 ]>;
 
 // Select(OnTrue, OnFalse, SelMask, vl)
@@ -85,56 +115,86 @@ def SDTSetCCVVP : SDTypeProfile<1, 5, [        // vp_setcc
   IsVLVT<5>
 ]>;
 
-
+// vvp_reduce(vector, mask, vl)
+def SDTReduceVVP : SDTypeProfile<1, 3, [
+  SDTCisVec<1>,
+  SDTCisInt<2>,
+  SDTCisVec<2>,
+  SDTCisSameNumEltsAs<1,2>,
+  IsVLVT<3>
+]>;
+ 
+// vvp_reduce_with_start(start,vector, mask, vl)
+def SDTReduceStartVVP : SDTypeProfile<1, 4, [
+  SDTCisVec<2>,
+  SDTCisInt<3>,
+  SDTCisVec<3>,
+  SDTCisSameNumEltsAs<2,3>,
+  IsVLVT<4>
+]>;
 
 // s/uint_to_fp
-def SDTIntToFPOpVVP : SDTypeProfile<1, 3, [    // [su]int_to_fp
-  SDTCisFP<0>, SDTCisInt<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+def SDTIntToFPOpVVP : SDTypeProfile<1, 3, [
+  SDTCisFP<0>,
+  SDTCisInt<1>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
 ]>;
-def SDTFPToIntOpVVP : SDTypeProfile<1, 3, [    // fp_to_[su]int
-  SDTCisInt<0>, SDTCisFP<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+
+def SDTFPToIntOpVVP : SDTypeProfile<1, 3, [
+  SDTCisInt<0>,
+  SDTCisFP<1>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
 ]>;
 
 // fpext, fpround
 def SDTFPRoundOpVVP  : SDTypeProfile<1, 3, [   // fround
-  SDTCisFP<0>, SDTCisFP<1>, SDTCisOpSmallerThanOp<0, 1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
-]>;
-def SDTFPExtOpVVP  : SDTypeProfile<1, 3, [  // fextend
-  SDTCisFP<0>, SDTCisFP<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+  SDTCisFP<0>,
+  SDTCisFP<1>,
+  SDTCisOpSmallerThanOp<0, 1>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
 ]>;
 
-// unary FP
-def SDTFPUnaryOpVVP  : SDTypeProfile<1, 3, [   // fneg, fsqrt, etc
-  SDTCisSameAs<0, 1>, SDTCisFP<0>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+def SDTFPExtOpVVP  : SDTypeProfile<1, 3, [  // fextend
+  SDTCisFP<0>,
+  SDTCisFP<1>,
+  SDTCisOpSmallerThanOp<1, 0>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
 ]>;
 
 // unary int
 def SDTUnaryOpVVP  : SDTypeProfile<1, 3, [   // ctpop
-  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+  SDTCisSameAs<0, 1>,
+  SDTCisInt<0>,
+  SDTCisSameNumEltsAs<0, 2>,
+  IsVLVT<3>
 ]>;
-
-// gather scatter
-def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
-                        [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def vvp_gather  : SDNode<"VEISD::VVP_GATHER",  SDTGatherVVP,
-                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
 // sext, zext
 def SDTIntExtendOpVVP : SDTypeProfile<1, 3, [  // sext, zext, anyext
-  SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0,2>, IsVLVT<3>
+  SDTCisInt<0>,
+  SDTCisInt<1>,
+  SDTCisOpSmallerThanOp<1, 0>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0,2>,
+  IsVLVT<3>
 ]>;
 
 // trunc
 def SDTIntTruncOpVVP  : SDTypeProfile<1, 3, [  // trunc
-  SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<0, 1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0,2>, IsVLVT<3>
-]>;
-
-// reductions
-def SDTReduceStartVVP : SDTypeProfile<1, 4, [    // vvp_reduce (with start arg)
-  SDTCisVec<2>, SDTCisInt<3>, SDTCisVec<3>, SDTCisSameNumEltsAs<2,3>, IsVLVT<4>
-]>;
-def SDTReduceVVP : SDTypeProfile<1, 3, [    // vp_reduce (w/o start arg)
-  SDTCisVec<1>, SDTCisInt<2>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>, IsVLVT<3>
+  SDTCisInt<0>,
+  SDTCisInt<1>,
+  SDTCisOpSmallerThanOp<0, 1>,
+  SDTCisSameNumEltsAs<0, 1>,
+  SDTCisSameNumEltsAs<0,2>,
+  IsVLVT<3>
 ]>;
 
 
@@ -144,6 +204,11 @@ def SDTReduceVVP : SDTypeProfile<1, 3, [    // vp_reduce (w/o start arg)
 // For all other operations NumEls(Mask) == NumEls(IdiomaticVectorType).
 def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP,  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand ]>;
 def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+
+def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
+                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def vvp_gather  : SDNode<"VEISD::VVP_GATHER",  SDTGatherVVP,
+                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
 // int
 def vvp_and    : SDNode<"VEISD::VVP_AND",  SDTIntBinOpVVP>;
@@ -159,9 +224,6 @@ def vvp_udiv   : SDNode<"VEISD::VVP_UDIV", SDTIntBinOpVVP>;
 def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntBinOpVVP>;
 def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntBinOpVVP>;
 def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntBinOpVVP>;
-
-// fused
-def vvp_sfa    : SDNode<"VEISD::VVP_ADD",  SDTSFAOpVVP>;
 
 // fp
 def vvp_fneg    : SDNode<"VEISD::VVP_FNEG",  SDTFPUnaryOpVVP>;   // 0 - y
@@ -234,10 +296,10 @@ class vvp_commutative<SDNode RootOp> :
    (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
 
 class vvp_fma_commutative<SDNode RootOp> :
-  PatFrags<(ops node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
-                       [(RootOp node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
-                        (RootOp node:$X, node:$Z, node:$Y, node:$mask, node:$vlen)]>;
-
+  PatFrags<
+  (ops node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
+  [(RootOp node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
+   (RootOp node:$X, node:$Z, node:$Y, node:$mask, node:$vlen)]>;
 
 // commutative match
 def c_vvp_fadd        : vvp_commutative<vvp_fadd>;
@@ -254,5 +316,3 @@ def c_vvp_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 def c_vvp_ffma        : vvp_fma_commutative<vvp_ffma>;
 def c_vvp_ffms        : vvp_fma_commutative<vvp_ffms>;
 def c_vvp_ffmsn       : vvp_fma_commutative<vvp_ffmsn>;
-
-// } Binary Operators

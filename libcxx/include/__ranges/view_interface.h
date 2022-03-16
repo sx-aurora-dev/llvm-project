@@ -9,10 +9,10 @@
 #ifndef _LIBCPP___RANGES_VIEW_INTERFACE_H
 #define _LIBCPP___RANGES_VIEW_INTERFACE_H
 
+#include <__assert>
 #include <__concepts/derived_from.h>
 #include <__concepts/same_as.h>
 #include <__config>
-#include <__debug>
 #include <__iterator/concepts.h>
 #include <__iterator/iterator_traits.h>
 #include <__iterator/prev.h>
@@ -28,7 +28,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#if _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
 
 namespace ranges {
 
@@ -167,7 +167,7 @@ public:
 
 } // namespace ranges
 
-#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#endif // _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
 
 _LIBCPP_END_NAMESPACE_STD
 

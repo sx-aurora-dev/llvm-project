@@ -70,8 +70,8 @@ void Operations() {
   (void)(--eight_bools); // expected-error@70 {{cannot decrement value of type 'EightBools' (vector of 8 'bool' values)}}
 
   // No implicit promotion
-  (void)(eight_bools + eight_ints); // expected-error@73 {{cannot convert between vector type 'EightInts' (vector of 8 'int' values) and vector type 'EightBools' (vector of 8 'bool' values) as implicit conversion would cause truncation}}
-  (void)(eight_ints - eight_bools); // expected-error@74 {{cannot convert between vector type 'EightBools' (vector of 8 'bool' values) and vector type 'EightInts' (vector of 8 'int' values) as implicit conversion would cause truncation}}
+  (void)(eight_bools + eight_ints); // expected-error@73 {{invalid operands to binary expression ('EightBools' (vector of 8 'bool' values) and 'EightInts' (vector of 8 'int' values))}}
+  (void)(eight_ints - eight_bools); // expected-error@74 {{invalid operands to binary expression ('EightInts' (vector of 8 'int' values) and 'EightBools' (vector of 8 'bool' values))}}
 }
 
 // Allow scalar-to-vector broadcast. Do not allow bool vector conversions.

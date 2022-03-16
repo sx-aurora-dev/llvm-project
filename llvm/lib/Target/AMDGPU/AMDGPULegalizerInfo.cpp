@@ -1297,6 +1297,8 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     Atomic.legalFor({{S32, LocalPtr}, {S32, RegionPtr}});
     if (ST.hasGFX90AInsts())
       Atomic.legalFor({{S64, LocalPtr}});
+    if (ST.hasGFX940Insts())
+      Atomic.legalFor({{V2S16, LocalPtr}});
   }
   if (ST.hasAtomicFaddInsts())
     Atomic.legalFor({{S32, GlobalPtr}});
@@ -1510,7 +1512,7 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     .clampMaxNumElements(1, S16, 2) // TODO: Make 4?
     .clampMaxNumElements(0, S16, 64);
 
-  // TODO: Don't fully scalarize v2s16 pieces? Or combine out thosse
+  // TODO: Don't fully scalarize v2s16 pieces? Or combine out those
   // pre-legalize.
   if (ST.hasVOP3PInsts()) {
     getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
@@ -3706,9 +3708,9 @@ bool AMDGPULegalizerInfo::legalizeDSAtomicFPIntrinsic(LegalizerHelper &Helper,
   // The remaining operands were used to set fields in the MemOperand on
   // construction.
   for (int I = 6; I > 3; --I)
-    MI.RemoveOperand(I);
+    MI.removeOperand(I);
 
-  MI.RemoveOperand(1); // Remove the intrinsic ID.
+  MI.removeOperand(1); // Remove the intrinsic ID.
   Observer.changedInstr(MI);
   return true;
 }
@@ -4377,7 +4379,7 @@ static void convertImageAddrToPacked(MachineIRBuilder &B, MachineInstr &MI,
 ///
 /// We don't want to directly select image instructions just yet, but also want
 /// to exposes all register repacking to the legalizer/combiners. We also don't
-/// want a selected instrution entering RegBankSelect. In order to avoid
+/// want a selected instruction entering RegBankSelect. In order to avoid
 /// defining a multitude of intermediate image instructions, directly hack on
 /// the intrinsic's arguments. In cases like a16 addresses, this requires
 /// padding now unnecessary arguments with $noreg.
@@ -4625,7 +4627,7 @@ bool AMDGPULegalizerInfo::legalizeImageIntrinsic(
       return false;
 
     // TODO: Make sure the TFE operand bit is set.
-    MI.RemoveOperand(1);
+    MI.removeOperand(1);
 
     // Handle the easy case that requires no repack instructions.
     if (Ty == S32) {
@@ -4755,7 +4757,7 @@ bool AMDGPULegalizerInfo::legalizeSBufferLoad(
   // should be fixed to have a memory operand. Since it's readnone, we're not
   // allowed to add one.
   MI.setDesc(B.getTII().get(AMDGPU::G_AMDGPU_S_BUFFER_LOAD));
-  MI.RemoveOperand(1); // Remove intrinsic ID
+  MI.removeOperand(1); // Remove intrinsic ID
 
   // FIXME: When intrinsic definition is fixed, this should have an MMO already.
   // TODO: Should this use datalayout alignment?

@@ -64,13 +64,17 @@ enum NodeType : unsigned {
 
   /// VEC_ {
   // Packed mode support
-  VEC_UNPACK_LO, // unpack the lo (v256i32) slice of a packed v512.32
-  VEC_UNPACK_HI, // unpack the hi (v256f32) slice of a packed v512.32
-  VEC_PACK,      // pack a lo and a hi vector backinto one v512.32 vector
+  VEC_UNPACK_LO, // unpack the lo v256 slice of a packed v512 vector.
+  VEC_UNPACK_HI, // unpack the hi v256 slice of a packed v512 vector.
+                 //    0: v512 vector, 1: AVL
+  VEC_PACK,      // pack a lo and a hi vector into one v512 vector
+                 //    0: v256 lo vector, 1: v256 hi vector, 2: AVL
   VEC_SWAP, // exchange the odd-even positions (v256i32 <> v256f32) or (v512x32
             // <> v512y32) x != y
 
-  VEC_BROADCAST, // 0: scalar value, 1: VL
+  VEC_BROADCAST, // A vector broadcast instruction.
+                 //   0: scalar value, 1: VL
+
   VEC_GATHER,
   VEC_SCATTER,
 
@@ -105,7 +109,7 @@ enum NodeType : unsigned {
   LEGALAVL,
 
 // VVP_* nodes.
-#define REGISTER_VVP_OP(VVP_NAME) VVP_NAME,
+#define ADD_VVP_OP(VVP_NAME, ...) VVP_NAME,
 #include "VVPNodes.def"
   // TODO: Use 'FIRST_TARGET_MEMORY_OPCODE'
 };
@@ -324,12 +328,12 @@ public:
                                     VecLenOpt VecLenHint = None) const;
   SDValue lowerVVP_INSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
-                                    VVPExpansionMode Mode,
-                                    VecLenOpt VecLenHint = None) const;
-  SDValue lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
-                                VVPExpansionMode Mode,
-                                VecLenOpt VecLenHint = None) const;
+  SDValue lowerVVP_GATHER_SCATTER(SDValue Op, SelectionDAG &DAG,
+                                  VVPExpansionMode Mode,
+                                  VecLenOpt VecLenHint = None) const;
+  SDValue lowerVVP_LOAD_STORE(SDValue Op, SelectionDAG &DAG,
+                              VVPExpansionMode Mode,
+                              VecLenOpt VecLenHint = None) const;
   /// } Custom Lower for VVP
 
   EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,
@@ -369,22 +373,22 @@ public:
   SDValue synthesizeView(MaskView &MV, EVT LegalResVT, VECustomDAG &CDAG) const;
   SDValue splitVectorShuffle(SDValue Op, VECustomDAG &CDAG,
                              VVPExpansionMode Mode) const;
-  SDValue splitVectorOp(SDValue Op, SelectionDAG &DAG,
+  SDValue splitVectorOp(SDValue Op, VECustomDAG &CDAG,
                         VVPExpansionMode Mode) const;
   SDValue computeGatherScatterAddress(VECustomDAG &CDAG, SDValue BasePtr,
-                                           SDValue Scale, SDValue Index,
-                                           SDValue Mask, SDValue AVL) const;
-  SDValue splitGatherScatter(SDValue Op, SelectionDAG &DAG,
+                                      SDValue Scale, SDValue Index,
+                                      SDValue Mask, SDValue AVL) const;
+  SDValue splitGatherScatter(SDValue Op, VECustomDAG &CDAG,
                              VVPExpansionMode Mode) const;
-  SDValue splitLoadStore(SDValue Op, SelectionDAG &DAG,
-                         VVPExpansionMode Mode) const;
+  SDValue splitPackedLoadStore(SDValue Op, VECustomDAG &CDAG,
+                               VVPExpansionMode Mode) const;
   // Split this packed (vector) mask operation retaining the ISD opcode.
-  SDValue splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
+  SDValue splitMaskArithmetic(SDValue Op, SelectionDAG &DAG) const;
   /// } Packed Op Splitting
 
   /// VVP Lowering {
   SDValue lowerReduction_VPToVVP(SDValue Op, SelectionDAG &DAG,
-                       VVPExpansionMode Mode) const;
+                                 VVPExpansionMode Mode) const;
   SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                        VVPExpansionMode Mode) const;
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,
@@ -399,9 +403,13 @@ public:
   SDValue legalizePackedAVL(SDValue Op, VECustomDAG &CDAG) const;
 
   // Packed splitting, packed-mode AVL/mask legalization.
-  SDValue legalizeInternalLoadStoreOp(SDValue Op, VECustomDAG &CDAG) const;
-  SDValue legalizeInternalVectorOp(SDValue Op, SelectionDAG &DAG) const;
   SDValue legalizeVM_POPCOUNT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVVP_LOAD_STORE(SDValue Op, VECustomDAG &) const;
+  SDValue lowerVVP_GATHER_SCATTER(SDValue Op, VECustomDAG &) const;
+
+  SDValue legalizeInternalVectorOp(SDValue Op, SelectionDAG &DAG) const;
+  SDValue legalizeInternalLoadStoreOp(SDValue Op, VECustomDAG &CDAG) const;
   /// } VVPLowering
 
   /// Custom DAGCombine {

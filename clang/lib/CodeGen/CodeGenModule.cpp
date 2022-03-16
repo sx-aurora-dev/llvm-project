@@ -43,6 +43,7 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Version.h"
+#include "clang/CodeGen/BackendUtil.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -875,6 +876,9 @@ void CodeGenModule::Release() {
   getTargetCodeGenInfo().emitTargetMetadata(*this, MangledDeclNames);
 
   EmitBackendOptionsMetadata(getCodeGenOpts());
+
+  // If there is device offloading code embed it in the host now.
+  EmbedObject(&getModule(), CodeGenOpts, getDiags());
 
   // Set visibility from DLL storage class
   // We do this at the end of LLVM IR generation; after any operation
@@ -2059,6 +2063,13 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
       if (!ParsedAttr.Tune.empty() &&
           getTarget().isValidCPUName(ParsedAttr.Tune))
         TuneCPU = ParsedAttr.Tune;
+    }
+
+    if (SD) {
+      // Apply the given CPU name as the 'tune-cpu' so that the optimizer can
+      // favor this processor.
+      TuneCPU = getTarget().getCPUSpecificTuneName(
+          SD->getCPUName(GD.getMultiVersionIndex())->getName());
     }
   } else {
     // Otherwise just add the existing target cpu and target features to the
@@ -3593,16 +3604,28 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
   CGF.EmitMultiVersionResolver(ResolverFunc, Options);
 
   if (getTarget().supportsIFunc()) {
+    llvm::GlobalValue::LinkageTypes Linkage = getMultiversionLinkage(*this, GD);
+    auto *IFunc = cast<llvm::GlobalValue>(
+        GetOrCreateMultiVersionResolver(GD, DeclTy, FD));
+
+    // Fix up function declarations that were created for cpu_specific before
+    // cpu_dispatch was known
+    if (!dyn_cast<llvm::GlobalIFunc>(IFunc)) {
+      assert(cast<llvm::Function>(IFunc)->isDeclaration());
+      auto *GI = llvm::GlobalIFunc::create(DeclTy, 0, Linkage, "", ResolverFunc,
+                                           &getModule());
+      GI->takeName(IFunc);
+      IFunc->replaceAllUsesWith(GI);
+      IFunc->eraseFromParent();
+      IFunc = GI;
+    }
+
     std::string AliasName = getMangledNameImpl(
         *this, GD, FD, /*OmitMultiVersionMangling=*/true);
     llvm::Constant *AliasFunc = GetGlobalValue(AliasName);
     if (!AliasFunc) {
-      auto *IFunc = cast<llvm::GlobalIFunc>(GetOrCreateLLVMFunction(
-          AliasName, DeclTy, GD, /*ForVTable=*/false, /*DontDefer=*/true,
-          /*IsThunk=*/false, llvm::AttributeList(), NotForDefinition));
-      auto *GA = llvm::GlobalAlias::create(DeclTy, 0,
-                                           getMultiversionLinkage(*this, GD),
-                                           AliasName, IFunc, &getModule());
+      auto *GA = llvm::GlobalAlias::create(DeclTy, 0, Linkage, AliasName, IFunc,
+                                           &getModule());
       SetCommonAttributes(GD, GA);
     }
   }
@@ -3650,7 +3673,9 @@ llvm::Constant *CodeGenModule::GetOrCreateMultiVersionResolver(
     }
   }
 
-  if (getTarget().supportsIFunc()) {
+  // For cpu_specific, don't create an ifunc yet because we don't know if the
+  // cpu_dispatch will be emitted in this translation unit.
+  if (getTarget().supportsIFunc() && !FD->isCPUSpecificMultiVersion()) {
     llvm::Type *ResolverType = llvm::FunctionType::get(
         llvm::PointerType::get(
             DeclTy, getContext().getTargetAddressSpace(FD->getType())),
@@ -6431,7 +6456,8 @@ void CodeGenModule::EmitOMPThreadPrivateDecl(const OMPThreadPrivateDecl *D) {
         !VD->getAnyInitializer()->isConstantInitializer(getContext(),
                                                         /*ForRef=*/false);
 
-    Address Addr(GetAddrOfGlobalVar(VD), getContext().getDeclAlign(VD));
+    Address Addr = Address::deprecated(GetAddrOfGlobalVar(VD),
+                                       getContext().getDeclAlign(VD));
     if (auto InitFunction = getOpenMPRuntime().emitThreadPrivateVarDefinition(
             VD, Addr, RefExpr->getBeginLoc(), PerformInit))
       CXXGlobalInits.push_back(InitFunction);

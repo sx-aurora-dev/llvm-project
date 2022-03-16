@@ -20,7 +20,7 @@
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
-#include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
+#include "llvm/CodeGen/RegisterBankInfo.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -84,6 +84,10 @@ private:
   bool HasStdExtZve64d = false;
   bool HasStdExtZfhmin = false;
   bool HasStdExtZfh = false;
+  bool HasStdExtZfinx = false;
+  bool HasStdExtZdinx = false;
+  bool HasStdExtZhinxmin = false;
+  bool HasStdExtZhinx = false;
   bool HasStdExtZbkb = false;
   bool HasStdExtZbkc = false;
   bool HasStdExtZbkx = false;
@@ -172,6 +176,10 @@ public:
   bool hasStdExtZvl() const { return ZvlLen != ExtZvl::NotSet; }
   bool hasStdExtZfhmin() const { return HasStdExtZfhmin; }
   bool hasStdExtZfh() const { return HasStdExtZfh; }
+  bool hasStdExtZfinx() const { return HasStdExtZfinx; }
+  bool hasStdExtZdinx() const { return HasStdExtZdinx; }
+  bool hasStdExtZhinxmin() const { return HasStdExtZhinxmin; }
+  bool hasStdExtZhinx() const { return HasStdExtZhinx; }
   bool hasStdExtZbkb() const { return HasStdExtZbkb; }
   bool hasStdExtZbkc() const { return HasStdExtZbkc; }
   bool hasStdExtZbkx() const { return HasStdExtZbkx; }
@@ -198,6 +206,15 @@ public:
     return 0;
   }
   unsigned getMinVLen() const { return ZvlLen; }
+  unsigned getMaxVLen() const { return Zvl65536b; }
+  unsigned getRealMinVLen() const {
+    unsigned VLen = getMinRVVVectorSizeInBits();
+    return VLen == 0 ? getMinVLen() : VLen;
+  }
+  unsigned getRealMaxVLen() const {
+    unsigned VLen = getMaxRVVVectorSizeInBits();
+    return VLen == 0 ? getMaxVLen() : VLen;
+  }
   RISCVABI::ABI getTargetABI() const { return TargetABI; }
   bool isRegisterReservedByUser(Register i) const {
     assert(i < RISCV::NUM_TARGET_REGS && "Register out of range");

@@ -1541,19 +1541,16 @@ public:
   /// statements.
   class FPFeaturesStateRAII {
   public:
-    FPFeaturesStateRAII(Sema &S) : S(S), OldFPFeaturesState(S.CurFPFeatures) {
-      OldOverrides = S.FpPragmaStack.CurrentValue;
-    }
-    ~FPFeaturesStateRAII() {
-      S.CurFPFeatures = OldFPFeaturesState;
-      S.FpPragmaStack.CurrentValue = OldOverrides;
-    }
+    FPFeaturesStateRAII(Sema &S);
+    ~FPFeaturesStateRAII();
     FPOptionsOverride getOverrides() { return OldOverrides; }
 
   private:
     Sema& S;
     FPOptions OldFPFeaturesState;
     FPOptionsOverride OldOverrides;
+    LangOptions::FPEvalMethodKind OldEvalMethod;
+    SourceLocation OldFPPragmaLocation;
   };
 
   void addImplicitTypedef(StringRef Name, QualType T);
@@ -2213,6 +2210,7 @@ private:
     SourceLocation BeginLoc;
     clang::Module *Module = nullptr;
     bool ModuleInterface = false;
+    bool IsPartition = false;
     bool ImplicitGlobalModuleFragment = false;
     VisibleModuleSet OuterVisibleModules;
   };
@@ -2220,6 +2218,9 @@ private:
   llvm::SmallVector<ModuleScope, 16> ModuleScopes;
   /// The global module fragment of the current translation unit.
   clang::Module *GlobalModuleFragment = nullptr;
+
+  /// The modules we imported directly.
+  llvm::SmallPtrSet<clang::Module *, 8> DirectModuleImports;
 
   /// Namespace definitions that we will export when they finish.
   llvm::SmallPtrSet<const NamespaceDecl*, 8> DeferredExportedNamespaces;
@@ -2246,6 +2247,10 @@ public:
   /// Get the module owning an entity.
   Module *getOwningModule(const Decl *Entity) {
     return Entity->getOwningModule();
+  }
+
+  bool isModuleDirectlyImported(const Module *M) {
+    return DirectModuleImports.contains(M);
   }
 
   /// Make a merged definition of an existing hidden definition \p ND
@@ -2945,15 +2950,30 @@ public:
                               SourceLocation SemiLoc);
 
   enum class ModuleDeclKind {
-    Interface,      ///< 'export module X;'
-    Implementation, ///< 'module X;'
+    Interface,               ///< 'export module X;'
+    Implementation,          ///< 'module X;'
+    PartitionInterface,      ///< 'export module X:Y;'
+    PartitionImplementation, ///< 'module X:Y;'
+  };
+
+  /// An enumeration to represent the transition of states in parsing module
+  /// fragments and imports.  If we are not parsing a C++20 TU, or we find
+  /// an error in state transition, the state is set to NotACXX20Module.
+  enum class ModuleImportState {
+    FirstDecl,       ///< Parsing the first decl in a TU.
+    GlobalFragment,  ///< after 'module;' but before 'module X;'
+    ImportAllowed,   ///< after 'module X;' but before any non-import decl.
+    ImportFinished,  ///< after any non-import decl.
+    PrivateFragment, ///< after 'module :private;'.
+    NotACXX20Module  ///< Not a C++20 TU, or an invalid state was found.
   };
 
   /// The parser has processed a module-declaration that begins the definition
   /// of a module interface or implementation.
   DeclGroupPtrTy ActOnModuleDecl(SourceLocation StartLoc,
                                  SourceLocation ModuleLoc, ModuleDeclKind MDK,
-                                 ModuleIdPath Path, bool IsFirstDecl);
+                                 ModuleIdPath Path, ModuleIdPath Partition,
+                                 ModuleImportState &ImportState);
 
   /// The parser has processed a global-module-fragment declaration that begins
   /// the definition of the global module fragment of the current module unit.
@@ -2973,10 +2993,12 @@ public:
   ///        could be the location of an '@', 'export', or 'import'.
   /// \param ExportLoc The location of the 'export' keyword, if any.
   /// \param ImportLoc The location of the 'import' keyword.
-  /// \param Path The module access path.
+  /// \param Path The module toplevel name as an access path.
+  /// \param IsPartition If the name is for a partition.
   DeclResult ActOnModuleImport(SourceLocation StartLoc,
                                SourceLocation ExportLoc,
-                               SourceLocation ImportLoc, ModuleIdPath Path);
+                               SourceLocation ImportLoc, ModuleIdPath Path,
+                               bool IsPartition = false);
   DeclResult ActOnModuleImport(SourceLocation StartLoc,
                                SourceLocation ExportLoc,
                                SourceLocation ImportLoc, Module *M,
@@ -6913,6 +6935,14 @@ private:
   llvm::ContextualFoldingSet<ConstraintSatisfaction, const ASTContext &>
       SatisfactionCache;
 
+  /// Introduce the instantiated function parameters into the local
+  /// instantiation scope, and set the parameter names to those used
+  /// in the template.
+  bool addInstantiatedParametersToScope(
+      FunctionDecl *Function, const FunctionDecl *PatternDecl,
+      LocalInstantiationScope &Scope,
+      const MultiLevelTemplateArgumentList &TemplateArgs);
+
 public:
   const NormalizedConstraint *
   getNormalizedAssociatedConstraints(
@@ -8671,7 +8701,7 @@ public:
 
   bool DeduceFunctionTypeFromReturnExpr(FunctionDecl *FD,
                                         SourceLocation ReturnLoc,
-                                        Expr *&RetExpr, AutoType *AT);
+                                        Expr *&RetExpr, const AutoType *AT);
 
   FunctionTemplateDecl *getMoreSpecializedTemplate(
       FunctionTemplateDecl *FT1, FunctionTemplateDecl *FT2, SourceLocation Loc,
@@ -8725,11 +8755,9 @@ public:
   // C++ Template Instantiation
   //
 
-  MultiLevelTemplateArgumentList
-  getTemplateInstantiationArgs(NamedDecl *D,
-                               const TemplateArgumentList *Innermost = nullptr,
-                               bool RelativeToPrimary = false,
-                               const FunctionDecl *Pattern = nullptr);
+  MultiLevelTemplateArgumentList getTemplateInstantiationArgs(
+      const NamedDecl *D, const TemplateArgumentList *Innermost = nullptr,
+      bool RelativeToPrimary = false, const FunctionDecl *Pattern = nullptr);
 
   /// A context in which code is being synthesized (where a source location
   /// alone is not sufficient to identify the context). This covers template
@@ -10131,6 +10159,9 @@ public:
            !CurFPFeatures.getAllowApproxFunc();
   }
 
+  void ActOnPragmaFPEvalMethod(SourceLocation Loc,
+                               LangOptions::FPEvalMethodKind Value);
+
   /// ActOnPragmaFloatControl - Call on well-formed \#pragma float_control
   void ActOnPragmaFloatControl(SourceLocation Loc, PragmaMsStackAction Action,
                                PragmaFloatControlKind Value);
@@ -10675,6 +10706,10 @@ public:
   void finalizeOpenMPDelayedAnalysis(const FunctionDecl *Caller,
                                      const FunctionDecl *Callee,
                                      SourceLocation Loc);
+
+  /// Return true if currently in OpenMP task with untied clause context.
+  bool isInOpenMPTaskUntiedContext() const;
+
   /// Return true inside OpenMP declare target region.
   bool isInOpenMPDeclareTargetContext() const {
     return !DeclareTargetNesting.empty();
@@ -11905,6 +11940,10 @@ public:
                                       BinaryOperatorKind Opc);
   QualType CheckVectorLogicalOperands(ExprResult &LHS, ExprResult &RHS,
                                       SourceLocation Loc);
+
+  // type checking for sizeless vector binary operators.
+  QualType CheckSizelessVectorOperands(ExprResult &LHS, ExprResult &RHS,
+                                       SourceLocation Loc);
 
   /// Type checking for matrix binary operators.
   QualType CheckMatrixElementwiseOperands(ExprResult &LHS, ExprResult &RHS,

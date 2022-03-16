@@ -192,8 +192,10 @@ static unsigned AnalyzePart(BitMaskView &BitMV, unsigned DestPartBase,
 
 // Check whether this is a complete mask reversal and insertion.
 static bool AnalyzeReversal(BitMaskView &BitMV, unsigned DestPartBase,
-                            unsigned NumPartBits, MaskShuffleAnalysis::BitReverse & BitReverse) {
-  if (getenv("LLVMVE_NO_REVERSE")) return false;
+                            unsigned NumPartBits,
+                            MaskShuffleAnalysis::BitReverse &BitReverse) {
+  if (getenv("LLVMVE_NO_REVERSE"))
+    return false;
   if (NumPartBits != SXRegSize)
     return false; // FIXME: Should still work (junk tail.. so what!)
   SDValue SrcV;
@@ -234,7 +236,8 @@ static bool AnalyzeReversal(BitMaskView &BitMV, unsigned DestPartBase,
 MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, VECustomDAG &CDAG)
     : MV(MV) {
   // This view only reflects insertions of actual i1 bits (from other mask
-  // registers, or MVT::i32 constants). Insertion of SX register will be masked out.
+  // registers, or MVT::i32 constants). Insertion of SX register will be masked
+  // out.
   BitMaskView BitMV(MV, CDAG);
   const unsigned NumEls = BitMV.getNumElements();
   const unsigned SXRegSize = 64;
@@ -257,7 +260,8 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, VECustomDAG &CDAG)
     }
   }
 
-  // Loop over SX chunks of the destination mask and piece it together with mask & shift operations
+  // Loop over SX chunks of the destination mask and piece it together with mask
+  // & shift operations
   for (unsigned PartIdx = 0; PartIdx * SXRegSize < NumEls; ++PartIdx) {
     const unsigned DestPartBase = PartIdx * SXRegSize;
     const unsigned NumPartBits = std::min(SXRegSize, NumEls - DestPartBase);
@@ -278,7 +282,8 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, VECustomDAG &CDAG)
     std::vector<bool> MappedPartBits(SXRegSize, false);
     while (NumMissingBits > 0) {
       BitSelect Sel;
-      NumMissingBits = AnalyzePart(BitMV, DestPartBase, NumPartBits, NumMissingBits, MappedPartBits, Sel);
+      NumMissingBits = AnalyzePart(BitMV, DestPartBase, NumPartBits,
+                                   NumMissingBits, MappedPartBits, Sel);
       if (Sel.SrcVal) {
         Part.Selects.push_back(Sel);
       }
@@ -307,8 +312,8 @@ SDValue MaskShuffleAnalysis::synthesize(SDValue Passthru, BitSelect &BSel,
   }
 
   // shift (trivial 0 case handled internally)
-  SDValue ShiftV = CDAG.createElementShift(MaskedV.getValueType(), MaskedV,
-                                           BSel.ShiftAmount, SDValue());
+  SDValue ShiftV = CDAG.getElementShift(MaskedV.getValueType(), MaskedV,
+                                        BSel.ShiftAmount, SDValue());
 
   // OR-in passthru
   SDValue ResV = ShiftV;
@@ -379,7 +384,7 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
     assert(Res == ShuffleAnalysis::CanSynthesize);
     SDValue VecSourceV =
         VSA.synthesize(CDAG, CDAG.getVectorVT(MVT::i32, LegalNumElems));
-    BlendV = CDAG.createMaskCast(VecSourceV, AVL);
+    BlendV = CDAG.getMaskCast(VecSourceV, AVL);
   }
 
   // Check whether this is an all-zero or all-one constant mask (except for
@@ -395,7 +400,7 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
     // Must not have spurious `1` entries since what is undefined for the
     // vector/constant sources could be the defined insertion of a bit from a
     // scalar register. Short cut when the only occuring constant is a '1'
-    VMAccu = CDAG.createUniformConstMask(PackFlag, LegalNumElems, true);
+    VMAccu = CDAG.getUniformConstMask(PackFlag, LegalNumElems, true);
 
   } else if (AllFalseBackground) {
     // Don't need to check for spurious `1` bits here since
@@ -417,14 +422,14 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
     for (auto &ResPart : Segments) {
       if (ResPart.BitReversal.isValid()) {
         // TODO de-dup
-        auto & BitRev = ResPart.BitReversal;
+        auto &BitRev = ResPart.BitReversal;
         auto Key =
             std::pair<SDValue, unsigned>(BitRev.SrcVal, BitRev.SrcValPart);
         if (SourceParts.find(Key) != SourceParts.end())
           continue;
 
         SDValue PartIdxC = CDAG.getConstant(Key.second, MVT::i64);
-        auto SXPart = CDAG.createMaskExtract(Key.first, PartIdxC);
+        auto SXPart = CDAG.getMaskExtract(Key.first, PartIdxC);
         SourceParts[Key] = SXPart;
         continue;
       }
@@ -436,7 +441,7 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
           continue;
 
         SDValue PartIdxC = CDAG.getConstant(Key.second, MVT::i64);
-        auto SXPart = CDAG.createMaskExtract(Key.first, PartIdxC);
+        auto SXPart = CDAG.getMaskExtract(Key.first, PartIdxC);
         SourceParts[Key] = SXPart;
       }
     }
@@ -446,11 +451,11 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
       SDValue SXAccu; // synthesized chunk.
 
       if (ResPart.BitReversal.isValid()) {
-        auto & BitRev = ResPart.BitReversal;
+        auto &BitRev = ResPart.BitReversal;
         auto ItExtractedSrc = SourceParts.find(
             std::pair<SDValue, unsigned>(BitRev.SrcVal, BitRev.SrcValPart));
         assert(ItExtractedSrc != SourceParts.end());
-        SXAccu = CDAG.createBitReverse(ItExtractedSrc->second);
+        SXAccu = CDAG.getBitReverse(ItExtractedSrc->second);
 
       } else {
         // Synthesize the constant background
@@ -472,7 +477,7 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
       }
 
       // finally, insert the SX part into the the actual VM
-      VMAccu = CDAG.createMaskInsert(
+      VMAccu = CDAG.getMaskInsert(
           VMAccu, CDAG.getConstant(ResPart.ResPartIdx, MVT::i64), SXAccu);
     }
   }
@@ -485,7 +490,7 @@ SDValue MaskShuffleAnalysis::synthesize(VECustomDAG &CDAG, EVT LegalMaskVT) {
     return BlendV;
   if (VMAccu)
     return VMAccu;
-  return CDAG.createUniformConstMask(PackFlag, LegalNumElems, false);
+  return CDAG.getUniformConstMask(PackFlag, LegalNumElems, false);
 }
 
 /// } MaskShuffleAnalysis
@@ -584,7 +589,8 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
   unsigned getAVL() const { return DestStartPos + SubVectorLength; }
 
   // transfer all insert positions to their destination
-  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
+                     SDValue PartialV) override {
     // noop VMV
     if (ShiftAmount == 0 && PartialV->isUndef())
       return SrcVector;
@@ -596,13 +602,13 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
       VMVMask[i] =
           (i >= (size_t)DestStartPos) && ((i - DestStartPos) < SubVectorLength);
     }
-    SDValue MaskV = CDAG.createConstMask(getAVL(), VMVMask);
-    SDValue VL = CDAG.getConstEVL(getAVL());
+    SDValue MaskV = CDAG.getConstMask(getAVL(), VMVMask);
+    SDValue VL = CDAG.getConstant(getAVL(), MVT::i32);
     SDValue ShiftV = CDAG.getConstant(ShiftAmount, MVT::i32);
 
     SDValue ResV =
-        CDAG.createVMV(PartialV.getValueType(), SrcVector, ShiftV, MaskV, VL);
-    return CDAG.createSelect(ResV.getValueType(), ResV, PartialV, MaskV, VL);
+        CDAG.getVMV(PartialV.getValueType(), SrcVector, ShiftV, MaskV, VL);
+    return CDAG.getSelect(ResV.getValueType(), ResV, PartialV, MaskV, VL);
   }
 };
 
@@ -737,7 +743,8 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
   }
 
   // transfer all insert positions to their destination
-  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
+                     SDValue PartialV) override {
     EVT LegalResVT =
         PartialV.getValueType(); // LegalizeVectorType(Op.getValueType(),
                                  // Op, DAG, Mode);
@@ -747,11 +754,11 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     EVT ElemTy = PartialV.getValueType().getVectorElementType();
 
     // Include the last defined element in the broadcast
-    SDValue AVL = CDAG.getConstEVL(LastDef + 1);
-        // CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
+    SDValue AVL = CDAG.getConstant(LastDef + 1, MVT::i32);
+    // CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
 
     Packing P = Packed ? Packing::Dense : Packing::Normal;
-    SDValue TrueMask = CDAG.createUniformConstMask(P, NativeNumElems, true);
+    SDValue TrueMask = CDAG.getUniformConstMask(P, NativeNumElems, true);
 
     switch (PatternKind) {
 
@@ -775,15 +782,15 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     case BVKind::Seq: {
       LLVM_DEBUG(dbgs() << "::Seq\n");
       // detected a proper stride pattern
-      SDValue SeqV = CDAG.createSeq(LegalResVT, AVL);
+      SDValue SeqV = CDAG.getSeq(LegalResVT, AVL);
       if (Stride == 1) {
         LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
         LLVM_DEBUG(CDAG.dumpValue(SeqV));
         return SeqV;
       }
 
-      SDValue StrideV = CDAG.getBroadcast(
-          LegalResVT, CDAG.getConstant(Stride, ElemTy), AVL);
+      SDValue StrideV =
+          CDAG.getBroadcast(LegalResVT, CDAG.getConstant(Stride, ElemTy), AVL);
       SDValue ret = CDAG.getNode(VEISD::VVP_MUL, LegalResVT,
                                  {SeqV, StrideV, TrueMask, AVL});
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
@@ -796,14 +803,12 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       LLVM_DEBUG(dbgs() << "::SeqBlock\n");
       // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
       // constant == VSEQ % blockLength
-      SDValue sequence = CDAG.createSeq(LegalResVT, AVL);
+      SDValue sequence = CDAG.getSeq(LegalResVT, AVL);
       SDValue modulobroadcast = CDAG.getBroadcast(
-          LegalResVT, CDAG.getConstant(BlockLength - 1, ElemTy),
-          AVL);
+          LegalResVT, CDAG.getConstant(BlockLength - 1, ElemTy), AVL);
 
-      SDValue modulo =
-          CDAG.getNode(VEISD::VVP_AND, LegalResVT,
-                       {sequence, modulobroadcast, TrueMask, AVL});
+      SDValue modulo = CDAG.getNode(VEISD::VVP_AND, LegalResVT,
+                                    {sequence, modulobroadcast, TrueMask, AVL});
 
       LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
       LLVM_DEBUG(CDAG.dumpValue(sequence));
@@ -817,13 +822,12 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
       // constant == VSEQ >> log2(blockLength)
       int64_t blockLengthLog = log2(BlockLength);
-      SDValue sequence = CDAG.createSeq(LegalResVT, AVL);
+      SDValue sequence = CDAG.getSeq(LegalResVT, AVL);
       SDValue shiftbroadcast = CDAG.getBroadcast(
           LegalResVT, CDAG.getConstant(blockLengthLog, ElemTy), AVL);
 
-      SDValue shift =
-          CDAG.getNode(VEISD::VVP_SRL, LegalResVT,
-                       {sequence, shiftbroadcast, TrueMask, AVL});
+      SDValue shift = CDAG.getNode(VEISD::VVP_SRL, LegalResVT,
+                                   {sequence, shiftbroadcast, TrueMask, AVL});
       LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
       LLVM_DEBUG(sequence.dump());
       LLVM_DEBUG(shiftbroadcast.dump());
@@ -902,7 +906,8 @@ struct BroadcastOp final : public AbstractShuffleOp {
 
   ~BroadcastOp() {}
 
-  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
+                     SDValue PartialV) override {
     SDValue ScalarSrcV;
     if (SourceElem.isElemInsert()) {
       ScalarSrcV = SourceElem.V;
@@ -913,10 +918,10 @@ struct BroadcastOp final : public AbstractShuffleOp {
     EVT VecTy = PartialV.getValueType();
     const unsigned NumElems = VecTy.getVectorNumElements();
 
-    const SDValue PivotV = CDAG.getConstEVL(MaxAVL);
-    SDValue BlendMaskV = CDAG.createConstMask(NumElems, TargetLanes);
+    const SDValue PivotV = CDAG.getConstant(MaxAVL, MVT::i32);
+    SDValue BlendMaskV = CDAG.getConstMask(NumElems, TargetLanes);
     SDValue BroadcastV = CDAG.getBroadcast(VecTy, ScalarSrcV, PivotV);
-    return CDAG.createSelect(VecTy, BroadcastV, PartialV, BlendMaskV, PivotV);
+    return CDAG.getSelect(VecTy, BroadcastV, PartialV, BlendMaskV, PivotV);
   }
 
   void print(raw_ostream &out) const override {
@@ -996,7 +1001,8 @@ struct ConstantElemOp final : public AbstractShuffleOp {
   ConstantElemOp(Constant *VecConstant) : VecConstant(VecConstant) {}
   ~ConstantElemOp() {}
 
-  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
+                     SDValue PartialV) override {
     EVT LegalResVT = PartialV.getValueType();
     const EVT PtrVT = MVT::i64;
     // const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
@@ -1014,11 +1020,12 @@ struct ConstantElemOp final : public AbstractShuffleOp {
           cast<FixedVectorType>(VecConstant->getType())->getElementType();
       uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
                         8; // FIXME should be using datala
-      Packing P = isPackedVectorType(LegalResVT) ? Packing::Dense : Packing::Normal;
-      SDValue MaskV = CDAG.createUniformConstMask(
-          P, LegalResVT.getVectorNumElements(), true);
+      Packing P =
+          isPackedVectorType(LegalResVT) ? Packing::Dense : Packing::Normal;
+      SDValue MaskV =
+          CDAG.getUniformConstMask(P, LegalResVT.getVectorNumElements(), true);
       SDValue StrideV = CDAG.getConstant(Stride, MVT::i64);
-      SDValue AVL = CDAG.getConstEVL(NumBufferElems);
+      SDValue AVL = CDAG.getConstant(NumBufferElems, MVT::i32);
       ResultV =
           CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, StrideV, MaskV, AVL);
 #else
@@ -1113,7 +1120,8 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
 
   ~GatherShuffleOp() {}
 
-  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG, SDValue PartialV) override {
+  SDValue synthesize(MaskView &MV, VECustomDAG &CDAG,
+                     SDValue PartialV) override {
     // Spill the requires elements of \p SrcVectorV to the stack
     EVT LegalizedSrcVT =
         CDAG.legalizeVectorType(SrcVectorV, VVPExpansionMode::ToNextWidth);
@@ -1149,10 +1157,9 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
 
     // Compute gahter indices
     SDValue TrueMaskV =
-        CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, true);
-    SDValue MaskV = PartialV.isUndef()
-                        ? TrueMaskV
-                        : CDAG.createConstMask(MaxVL, TargetLanes);
+        CDAG.getUniformConstMask(Packing::Normal, LegalNumElems, true);
+    SDValue MaskV =
+        PartialV.isUndef() ? TrueMaskV : CDAG.getConstMask(MaxVL, TargetLanes);
 
     std::vector<SDValue> GatherOffsets;
     for (unsigned Idx = 0; Idx < MaxVL; ++Idx) {
@@ -1172,7 +1179,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
       GatherOffsets.push_back(CDAG.getUndef(PtrVT));
     }
 
-    SDValue MaxVLV = CDAG.getConstEVL(MaxVL);
+    SDValue MaxVLV = CDAG.getConstant(MaxVL, MVT::i32);
     SDValue BasePtrV = CDAG.getBroadcast(PtrVecVT, VecSlotPtr, MaxVLV);
     SDValue OffsetV = CDAG.getNode(
         ISD::BUILD_VECTOR, PtrVecVT,
@@ -1189,7 +1196,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     if (PartialV.isUndef()) {
       return ElemV;
     }
-    return CDAG.createSelect(LegalResVT, ElemV, PartialV, MaskV, MaxVLV);
+    return CDAG.getSelect(LegalResVT, ElemV, PartialV, MaskV, MaxVLV);
   }
 
   void print(raw_ostream &out) const override {

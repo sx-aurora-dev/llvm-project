@@ -17,6 +17,7 @@
 
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/IR/FMF.h"
 
 namespace llvm {
 class StringRef;
@@ -72,6 +73,12 @@ inline bool isDefaultFPEnvironment(fp::ExceptionBehavior EB, RoundingMode RM) {
 /// at run time.
 inline bool canRoundingModeBe(RoundingMode RM, RoundingMode QRM) {
   return RM == QRM || RM == RoundingMode::Dynamic;
+}
+
+/// Returns true if the possibility of a signaling NaN can be safely
+/// ignored.
+inline bool canIgnoreSNaN(fp::ExceptionBehavior EB, FastMathFlags FMF) {
+  return (EB == fp::ebIgnore || FMF.noNaNs());
 }
 }
 #endif

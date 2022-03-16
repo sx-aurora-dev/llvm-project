@@ -32,28 +32,6 @@
 #define END_REGISTER_VP_INTRINSIC(VPID)
 #endif
 
-#ifndef END_REGISTER_VP_SDNODE
-#define END_REGISTER_VP_SDNODE(VPISD)
-#endif
-
-///// REGISTER macros /////
-// These always have to come first
-// This VP Intrinsic is a memory operation
-// The pointer arg is at POINTERPOS and the data arg is at DATAPOS.
-#ifndef VP_PROPERTY_MEMOP
-#define VP_PROPERTY_MEMOP(POINTERPOS, DATAPOS)
-#endif
-
-/// This VP Intrinsic lowers to this VP SDNode.
-#ifndef VP_PROPERTY_FUNCTIONAL_SDNODE
-#define VP_PROPERTY_FUNCTIONAL_SDNODE(VPISD)
-#endif
-
-// helper macro to end VP brackes with a 1:1 ISD<>IntrinsicID mapping
-#define END_REGISTER_CASES(VPID, VPISD)                                        \
-  END_REGISTER_VP_INTRINSIC(VPID)                                              \
-  END_REGISTER_VP_SDNODE(VPISD)
-
 // Register a new VP SDNode and begin its property scope.
 // When the SDNode scope is nested within a VP intrinsic scope, it is
 // implicitly registered as the canonical SDNode for this VP intrinsic. There
@@ -110,29 +88,6 @@
 #define VP_PROPERTY_FUNCTIONAL_OPC(OPC)
 #endif
 
-// The intrinsic and/or SDNode is the cannonical VP representation for the
-// SDNode with Opcode \p SDOPC.
-#ifndef VP_PROPERTY_FUNCTIONAL_SDNODE
-#define VP_PROPERTY_FUNCTIONAL_SDNODE(SDOPC)
-#endif
-
-// End the property scope of a VP intrinsic.
-#ifndef END_REGISTER_VP_INTRINSIC
-#define END_REGISTER_VP_INTRINSIC(VPID)
-#endif
-
-// This VP Intrinsic is a comparison
-// (only count data params)
-#ifndef VP_PROPERTY_XCMP
-#define VP_PROPERTY_XCMP
-#endif
-
-// FIXME!!!
-// link this VP ID to a relaxed (fp semantics) VP OC
-// #ifndef VP_PROPERTY_RELAXEDSD
-// #define VP_PROPERTY_RELAXEDSD(RELAXEDSD)
-// #endif
-
 // Whether the intrinsic may have a rounding mode or exception behavior operand
 // bundle.
 // \p HASROUND   '1' if the intrinsic can have a rounding mode operand bundle,
@@ -158,20 +113,33 @@
 
 // Map this VP reduction intrinsic to its reduction operand positions.
 #ifndef VP_PROPERTY_REDUCTION
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, SCALAROPC, SCALARINTRIN, SCALARSD)
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS)
 #endif
 
-// A property to infer VP binary-op SDNode opcodes automatically.
+// A property to infer VP unary-op SDNode opcodes automatically.
 #ifndef VP_PROPERTY_UNARYOP
 #define VP_PROPERTY_UNARYOP
 #endif
 
+// A property to infer VP binary-op SDNode opcodes automatically.
 #ifndef VP_PROPERTY_BINARYOP
 #define VP_PROPERTY_BINARYOP
 #endif
 
+// A property to infer VP ternary-op SDNode opcodes automatically.
 #ifndef VP_PROPERTY_TERNARYOP
 #define VP_PROPERTY_TERNARYOP
+#endif
+
+// A property to infer VP type casts automatically.
+#ifndef VP_PROPERTY_CASTOP
+#define VP_PROPERTY_CASTOP
+#endif
+
+// This VP Intrinsic is a comparison
+// (only count data params)
+#ifndef VP_PROPERTY_XCMP
+#define VP_PROPERTY_XCMP
 #endif
 
 /// } Property Macros
@@ -183,60 +151,52 @@
 #error                                                                         \
     "The internal helper macro HELPER_REGISTER_BINARY_INT_VP is already defined!"
 #endif
-#define HELPER_REGISTER_BINARY_INT_VP(VPID, VPSD, IROPC, FUNCSD)                       \
+#define HELPER_REGISTER_BINARY_INT_VP(VPID, VPSD, IROPC)                       \
   BEGIN_REGISTER_VP(VPID, 2, 3, VPSD, -1)                                      \
   VP_PROPERTY_FUNCTIONAL_OPC(IROPC)                                            \
-  VP_PROPERTY_FUNCTIONAL_SDNODE(FUNCSD)                                        \
   VP_PROPERTY_BINARYOP                                                         \
   END_REGISTER_VP(VPID, VPSD)
 
 // llvm.vp.add(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_add, VP_ADD, Add, ADD)
+HELPER_REGISTER_BINARY_INT_VP(vp_add, VP_ADD, Add)
 
 // llvm.vp.and(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_and, VP_AND, And, AND)
+HELPER_REGISTER_BINARY_INT_VP(vp_and, VP_AND, And)
 
 // llvm.vp.ashr(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_ashr, VP_ASHR, AShr, SRA)
+HELPER_REGISTER_BINARY_INT_VP(vp_ashr, VP_ASHR, AShr)
 
 // llvm.vp.lshr(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_lshr, VP_LSHR, LShr, SRL)
+HELPER_REGISTER_BINARY_INT_VP(vp_lshr, VP_LSHR, LShr)
 
 // llvm.vp.mul(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_mul, VP_MUL, Mul, MUL)
+HELPER_REGISTER_BINARY_INT_VP(vp_mul, VP_MUL, Mul)
 
 // llvm.vp.or(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_or, VP_OR, Or, OR)
+HELPER_REGISTER_BINARY_INT_VP(vp_or, VP_OR, Or)
 
 // llvm.vp.sdiv(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_sdiv, VP_SDIV, SDiv, SDIV)
+HELPER_REGISTER_BINARY_INT_VP(vp_sdiv, VP_SDIV, SDiv)
 
 // llvm.vp.shl(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_shl, VP_SHL, Shl, SHL)
+HELPER_REGISTER_BINARY_INT_VP(vp_shl, VP_SHL, Shl)
 
 // llvm.vp.srem(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_srem, VP_SREM, SRem, SREM)
+HELPER_REGISTER_BINARY_INT_VP(vp_srem, VP_SREM, SRem)
 
 // llvm.vp.sub(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_sub, VP_SUB, Sub, SUB)
+HELPER_REGISTER_BINARY_INT_VP(vp_sub, VP_SUB, Sub)
 
 // llvm.vp.udiv(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_udiv, VP_UDIV, UDiv, UDIV)
+HELPER_REGISTER_BINARY_INT_VP(vp_udiv, VP_UDIV, UDiv)
 
 // llvm.vp.urem(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_urem, VP_UREM, URem, UREM)
+HELPER_REGISTER_BINARY_INT_VP(vp_urem, VP_UREM, URem)
 
 // llvm.vp.xor(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_xor, VP_XOR, Xor, XOR)
+HELPER_REGISTER_BINARY_INT_VP(vp_xor, VP_XOR, Xor)
 
 #undef HELPER_REGISTER_BINARY_INT_VP
-
-// llvm.vp.ctpop(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_ctpop, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_CTPOP, -1, vp_ctpop, 1, 2)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(ctpop)
-VP_PROPERTY_UNARYOP
-END_REGISTER_CASES(vp_ctpop, VP_CTPOP)
 
 ///// } Integer Arithmetic
 
@@ -271,157 +231,40 @@ HELPER_REGISTER_BINARY_FP_VP(fdiv, VP_FDIV, FDiv)
 HELPER_REGISTER_BINARY_FP_VP(frem, VP_FREM, FRem)
 
 #undef HELPER_REGISTER_BINARY_FP_VP
+// llvm.vp.maxnum(x,y,mask,vlen)
+BEGIN_REGISTER_VP(vp_maxnum, 2, 3, VP_FMAXNUM, -1)
+VP_PROPERTY_BINARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_maxnum)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(maxnum)
+END_REGISTER_VP(vp_maxnum, VP_FMAXNUM)
+
+// llvm.vp.minnum(x,y,mask,vlen)
+BEGIN_REGISTER_VP(vp_minnum, 2, 3, VP_FMINNUM, -1)
+VP_PROPERTY_BINARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_minnum)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(minnum)
+END_REGISTER_VP(vp_minnum, VP_FMINNUM)
 
 // llvm.vp.fneg(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_fneg, 1, 2, VP_FNEG, -1)
 VP_PROPERTY_FUNCTIONAL_OPC(FNeg)
-VP_PROPERTY_FUNCTIONAL_SDNODE(FNEG)
-VP_PROPERTY_CONSTRAINEDFP(1, 0, not_intrinsic) // experimental_constrained_fneg
-VP_PROPERTY_UNARYOP
 END_REGISTER_VP(vp_fneg, VP_FNEG)
+
+// llvm.vp.sqrt(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_sqrt, 1, 2, VP_FSQRT, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_sqrt)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(sqrt)
+END_REGISTER_VP(vp_sqrt, VP_FSQRT)
 
 // llvm.vp.fma(x,y,z,mask,vlen)
 BEGIN_REGISTER_VP(vp_fma, 3, 4, VP_FMA, -1)
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_fma)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(fma)
-VP_PROPERTY_FUNCTIONAL_SDNODE(FMA)
-VP_PROPERTY_TERNARYOP
-END_REGISTER_CASES(vp_fma, VP_FMA)
+END_REGISTER_VP(vp_fma, VP_FMA)
 
 ///// } Floating-Point Arithmetic
 
-///// Cast, Extend & Round /////
-
-// llvm.vp.ceil(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_ceil, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FCEIL, -1, vp_fceil, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
-END_REGISTER_CASES(vp_ceil, VP_FCEIL)
-
-// Truncate fp to nearest integer.
-// llvm.vp.trunc(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_trunc, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_TRUNC, -1, vp_trunc, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_trunc)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(trunc)
-END_REGISTER_CASES(vp_trunc, VP_TRUNC)
-
-// Truncate high bits in an integer (isel only)
-// BEGIN_REGISTER_VP_SDNODE(VP_ITRUNC, -1, vp_itrunc, 1, 2)
-// VP_PROPERTY_FUNCTIONAL_OPC(Trunc)
-// END_REGISTER_VP_SDNODE(VP_ITRUNC)
-
-// llvm.vp.floor(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_floor, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FFLOOR, -1, vp_ffloor, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
-END_REGISTER_CASES(vp_floor, VP_FFLOOR)
-
-// llvm.vp.fpext(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fpext, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FP_EXTEND, -1, vp_fpext, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fpext)
-VP_PROPERTY_FUNCTIONAL_OPC(FPExt)
-END_REGISTER_CASES(vp_fpext, VP_FP_EXTEND)
-
-// Truncate double-to-float
-// llvm.vp.fptrunc(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fptrunc, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FP_TRUNC, -1, vp_fptrunc, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_fptrunc)
-VP_PROPERTY_FUNCTIONAL_OPC(FPTrunc)
-END_REGISTER_CASES(vp_fptrunc, VP_FP_TRUNC)
-
-// llvm.vp.fptoui(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fptoui, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FP_TO_UINT, -1, vp_fp_to_uint, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fptoui)
-VP_PROPERTY_FUNCTIONAL_OPC(FPToUI)
-END_REGISTER_CASES(vp_fptoui, VP_FP_TO_UINT)
-
-// llvm.vp.fptosi(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fptosi, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FP_TO_SINT, -1, vp_fp_to_sint, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fptosi)
-VP_PROPERTY_FUNCTIONAL_OPC(FPToSI)
-END_REGISTER_CASES(vp_fptosi, VP_FP_TO_SINT)
-
-// llvm.vp.uitofp(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_uitofp, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_UINT_TO_FP, -1, vp_uint_to_fp, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_FUNCTIONAL_OPC(UIToFP)
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_uitofp)
-END_REGISTER_CASES(vp_uitofp, VP_UINT_TO_FP)
-
-// llvm.vp.sitofp(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_sitofp, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_SINT_TO_FP, -1, vp_sint_to_fp, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_FUNCTIONAL_OPC(SIToFP)
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_sitofp)
-END_REGISTER_CASES(vp_sitofp, VP_SINT_TO_FP)
-
-// llvm.vp.round(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_round, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FROUND, -1, vp_fround, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
-END_REGISTER_CASES(vp_round, VP_FROUND)
-
-// llvm.vp.rint(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_rint, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FRINT, -1, vp_frint, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
-END_REGISTER_CASES(vp_rint, VP_FRINT)
-
-// llvm.vp.nearbyint(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_nearbyint, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FNEARBYINT, -1, vp_fnearbyint, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
-END_REGISTER_CASES(vp_nearbyint, VP_FNEARBYINT)
-
-///// Math Funcs /////
-
-// llvm.vp.sqrt(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_sqrt, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FSQRT, -1, vp_fsqrt, 1, 2)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_sqrt)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(sqrt)
-END_REGISTER_CASES(vp_sqrt, VP_FSQRT)
-
-// llvm.vp.maxnum(x,y,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_maxnum, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_FMAXNUM, -1, vp_fmaxnum, 2, 3)
-VP_PROPERTY_BINARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_maxnum)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(maxnum)
-END_REGISTER_CASES(vp_maxnum, VP_FMAXNUM)
-
-// llvm.vp.minnum(x,y,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_minnum, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_FMINNUM, -1, vp_fminnum, 2, 3)
-VP_PROPERTY_BINARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_minnum)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(minnum)
-END_REGISTER_CASES(vp_minnum, VP_FMINNUM)
-
-///// Comparison /////
+///// Comparison {
 
 // llvm.vp.fcmp(x,y,pred,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fcmp, 3, 4)
@@ -439,18 +282,82 @@ END_REGISTER_VP_INTRINSIC(vp_icmp)
 BEGIN_REGISTER_VP_SDNODE(VP_SETCC, -1, vp_setcc, 3, 4)
 END_REGISTER_VP_SDNODE(VP_SETCC)
 
-///// Memory Operations /////
+///// } Comparison
 
-// llvm.vp.scatter(ptr,val,mask,vlen)
-// VP gather and scatter - load and store operations for a vector of
-// random addresses with additional mask and vector length operand that
-// prevents memory accesses to the masked-off lanes.
-//
-// Val, OutChain = VP_GATHER(InChain, BasePtr, Index, Scale, Mask, EVL)
-// OutChain = VP_SCATTER(InChain, Value, BasePtr, Index, Scale, Mask, EVL)
-//
-// The Index operand can have more vector elements than the other operands
-// due to type legalization. The extra elements are ignored.
+///// Type Casts {
+// Specialized helper macro for type conversions.
+// <operation>(%x, %mask, %evl).
+#ifdef HELPER_REGISTER_CAST_VP
+#error                                                                         \
+    "The internal helper macro HELPER_REGISTER_CAST_VP is already defined!"
+#endif
+#define HELPER_REGISTER_CAST_VP(OPSUFFIX, VPSD, IROPC, HASROUND)                    \
+  BEGIN_REGISTER_VP(vp_##OPSUFFIX, 1, 2, VPSD, -1)                             \
+  VP_PROPERTY_FUNCTIONAL_OPC(IROPC)                                            \
+  VP_PROPERTY_CONSTRAINEDFP(HASROUND, 1, experimental_constrained_##OPSUFFIX)         \
+  VP_PROPERTY_CASTOP                                                         \
+  END_REGISTER_VP(vp_##OPSUFFIX, VPSD)
+
+// llvm.vp.fptosi(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(fptosi, VP_FPTOSI, FPToSI, 0)
+
+// llvm.vp.sitofp(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(sitofp, VP_SITOFP, SIToFP, 1)
+
+// llvm.vp.fptoui(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(fptoui, VP_FPTOUI, FPToUI, 0)
+
+// llvm.vp.uitofp(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(uitofp, VP_UITOFP, UIToFP, 1)
+
+// llvm.vp.fpext(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(fpext, VP_FP_EXTEND, FPExt, 0)
+
+// llvm.vp.trunc(x,mask,vlen)
+HELPER_REGISTER_CAST_VP(fptrunc, VP_FP_TRUNC, FPTrunc, 1)
+
+#undef HELPER_REGISTER_CAST_VP
+
+///// } Type Casts
+
+///// Rounding {
+
+// llvm.vp.ceil(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
+END_REGISTER_VP(vp_ceil, VP_FCEIL)
+
+// llvm.vp.floor(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
+END_REGISTER_VP(vp_floor, VP_FFLOOR)
+
+// llvm.vp.round(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_round, 1, 2, VP_FROUND, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
+END_REGISTER_VP(vp_round, VP_FROUND)
+
+// llvm.vp.rint(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
+END_REGISTER_VP(vp_rint, VP_FRINT)
+
+// llvm.vp.nearbyint(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
+END_REGISTER_VP(vp_nearbyint, VP_FNEARBYINT)
+
+///// } Rounding
 
 ///// Memory Operations {
 // llvm.vp.store(val,ptr,mask,vlen)
@@ -461,6 +368,13 @@ VP_PROPERTY_FUNCTIONAL_OPC(Store)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(masked_store)
 VP_PROPERTY_MEMOP(1, 0)
 END_REGISTER_VP(vp_store, VP_STORE)
+
+// llvm.experimental.vp.strided.store(val,ptr,stride,mask,vlen)
+BEGIN_REGISTER_VP_INTRINSIC(experimental_vp_strided_store, 3, 4)
+// chain = EXPERIMENTAL_VP_STRIDED_STORE chain,val,base,offset,stride,mask,evl
+BEGIN_REGISTER_VP_SDNODE(EXPERIMENTAL_VP_STRIDED_STORE, 0, experimental_vp_strided_store, 5, 6)
+VP_PROPERTY_MEMOP(1, 0)
+END_REGISTER_VP(experimental_vp_strided_store, EXPERIMENTAL_VP_STRIDED_STORE)
 
 // llvm.vp.scatter(ptr,val,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_scatter, 2, 3)
@@ -479,6 +393,13 @@ VP_PROPERTY_FUNCTIONAL_INTRINSIC(masked_load)
 VP_PROPERTY_MEMOP(0, None)
 END_REGISTER_VP(vp_load, VP_LOAD)
 
+// llvm.experimental.vp.strided.load(ptr,stride,mask,vlen)
+BEGIN_REGISTER_VP_INTRINSIC(experimental_vp_strided_load, 2, 3)
+// chain = EXPERIMENTAL_VP_STRIDED_LOAD chain,base,offset,stride,mask,evl
+BEGIN_REGISTER_VP_SDNODE(EXPERIMENTAL_VP_STRIDED_LOAD, -1, experimental_vp_strided_load, 4, 5)
+VP_PROPERTY_MEMOP(0, None)
+END_REGISTER_VP(experimental_vp_strided_load, EXPERIMENTAL_VP_STRIDED_LOAD)
+
 // llvm.vp.gather(ptr,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_gather, 1, 2)
 // val,chain = VP_GATHER chain,base,indices,scale,mask,evl
@@ -496,55 +417,55 @@ END_REGISTER_VP(vp_gather, VP_GATHER)
 #error                                                                         \
     "The internal helper macro HELPER_REGISTER_REDUCTION_VP is already defined!"
 #endif
-#define HELPER_REGISTER_REDUCTION_VP(VPID, VPSD, VECINTRIN, SCALAROPC, SCALARINTRIN, SCALARSD)                       \
+#define HELPER_REGISTER_REDUCTION_VP(VPID, VPSD, INTRIN)                       \
   BEGIN_REGISTER_VP(VPID, 2, 3, VPSD, -1)                                      \
-  VP_PROPERTY_FUNCTIONAL_INTRINSIC(VECINTRIN)                                     \
-  VP_PROPERTY_REDUCTION(0, 1, SCALAROPC, SCALARINTRIN, SCALARSD)                                                  \
+  VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRIN)                                     \
+  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   END_REGISTER_VP(VPID, VPSD)
 
 // llvm.vp.reduce.add(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_add, VP_REDUCE_ADD,
-                             vector_reduce_add, Add, None, ADD)
+                             vector_reduce_add)
 
 // llvm.vp.reduce.mul(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_mul, VP_REDUCE_MUL,
-                             vector_reduce_mul, Mul, None, MUL)
+                             vector_reduce_mul)
 
 // llvm.vp.reduce.and(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_and, VP_REDUCE_AND,
-                             vector_reduce_and, And, None, AND)
+                             vector_reduce_and)
 
 // llvm.vp.reduce.or(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_or, VP_REDUCE_OR,
-                             vector_reduce_or, Or, None, OR)
+                             vector_reduce_or)
 
 // llvm.vp.reduce.xor(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_xor, VP_REDUCE_XOR,
-                             vector_reduce_xor, Xor, None, XOR)
+                             vector_reduce_xor)
 
 // llvm.vp.reduce.smax(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_smax, VP_REDUCE_SMAX,
-                             vector_reduce_smax, None, int_smax, SMAX)
+                             vector_reduce_smax)
 
 // llvm.vp.reduce.smin(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_smin, VP_REDUCE_SMIN,
-                             vector_reduce_smin, None, int_smin, SMIN)
+                             vector_reduce_smin)
 
 // llvm.vp.reduce.umax(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_umax, VP_REDUCE_UMAX,
-                             vector_reduce_umax, None, int_umax, UMAX)
+                             vector_reduce_umax)
 
 // llvm.vp.reduce.umin(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_umin, VP_REDUCE_UMIN,
-                             vector_reduce_umin, None, int_umin, UMIN)
+                             vector_reduce_umin)
 
 // llvm.vp.reduce.fmax(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_fmax, VP_REDUCE_FMAX,
-                             vector_reduce_fmax, None, int_maxnum, FMAXNUM)
+                             vector_reduce_fmax)
 
 // llvm.vp.reduce.fmin(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_VP(vp_reduce_fmin, VP_REDUCE_FMIN,
-                             vector_reduce_fmin, None, int_minnum, FMINNUM)
+                             vector_reduce_fmin)
 
 #undef HELPER_REGISTER_REDUCTION_VP
 
@@ -556,26 +477,26 @@ HELPER_REGISTER_REDUCTION_VP(vp_reduce_fmin, VP_REDUCE_FMIN,
 #error                                                                         \
     "The internal helper macro HELPER_REGISTER_REDUCTION_SEQ_VP is already defined!"
 #endif
-#define HELPER_REGISTER_REDUCTION_SEQ_VP(VPID, VPSD, SEQ_VPSD, VECINTRIN, SCALAROPC, SCALARSD)         \
+#define HELPER_REGISTER_REDUCTION_SEQ_VP(VPID, VPSD, SEQ_VPSD, INTRIN)         \
   BEGIN_REGISTER_VP_INTRINSIC(VPID, 2, 3)                                      \
   BEGIN_REGISTER_VP_SDNODE(VPSD, -1, VPID, 2, 3)                               \
-  VP_PROPERTY_REDUCTION(0, 1, SCALAROPC, None, SCALARSD)                                                  \
+  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   END_REGISTER_VP_SDNODE(VPSD)                                                 \
   BEGIN_REGISTER_VP_SDNODE(SEQ_VPSD, -1, VPID, 2, 3)                           \
-  VP_PROPERTY_REDUCTION(0, 1, SCALAROPC, None, STRICT_## SCALARSD)                                                  \
+  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   END_REGISTER_VP_SDNODE(SEQ_VPSD)                                             \
-  VP_PROPERTY_FUNCTIONAL_INTRINSIC(VECINTRIN)                                     \
+  VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRIN)                                     \
   END_REGISTER_VP_INTRINSIC(VPID)
 
 // llvm.vp.reduce.fadd(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_SEQ_VP(vp_reduce_fadd, VP_REDUCE_FADD,
                                  VP_REDUCE_SEQ_FADD,
-                                 vector_reduce_fadd, FAdd, FADD)
+                                 vector_reduce_fadd)
 
 // llvm.vp.reduce.fmul(start,x,mask,vlen)
 HELPER_REGISTER_REDUCTION_SEQ_VP(vp_reduce_fmul, VP_REDUCE_FMUL,
                                  VP_REDUCE_SEQ_FMUL,
-                                 vector_reduce_fmul, FMul, FMUL)
+                                 vector_reduce_fmul)
 
 #undef HELPER_REGISTER_REDUCTION_SEQ_VP
 
@@ -583,36 +504,33 @@ HELPER_REGISTER_REDUCTION_SEQ_VP(vp_reduce_fmul, VP_REDUCE_FMUL,
 
 ///// Shuffles {
 
-// llvm.vp.select(mask,on_true,on_false,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_select, 0, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_SELECT, -1, vp_select, 0, 3)
-END_REGISTER_CASES(vp_select, VP_SELECT)
+// llvm.vp.select(cond,on_true,on_false,vlen)
+BEGIN_REGISTER_VP(vp_select, None, 3, VP_SELECT, -1)
+VP_PROPERTY_FUNCTIONAL_OPC(Select)
+END_REGISTER_VP(vp_select, VP_SELECT)
+
+// llvm.vp.merge(cond,on_true,on_false,pivot)
+BEGIN_REGISTER_VP(vp_merge, None, 3, VP_MERGE, -1)
+END_REGISTER_VP(vp_merge, VP_MERGE)
 
 // llvm.vp.compress(x,mask,vlen)
 /// VP_COMPRESS(VEC1, MASK, VLEN) - Returns a vector, of the same type as
 /// VEC1.
-BEGIN_REGISTER_VP_INTRINSIC(vp_compress, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_COMPRESS, -1, vp_compress, 1, 2)
-END_REGISTER_CASES(vp_compress, VP_COMPRESS)
+BEGIN_REGISTER_VP(vp_compress, 1, 2, VP_COMPRESS, -1)
+END_REGISTER_VP(vp_compress, VP_COMPRESS)
 
 // llvm.vp.expand(x,mask,vlen)
 /// VP_EXPAND(VEC1, MASK, VLEN) - Returns a vector, of the same type as
 /// VEC1.
-BEGIN_REGISTER_VP_INTRINSIC(vp_expand, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_EXPAND, -1, vp_expand, 1, 2)
-END_REGISTER_CASES(vp_expand, VP_EXPAND)
+BEGIN_REGISTER_VP(vp_expand, 1, 2, VP_EXPAND, -1)
+END_REGISTER_VP(vp_expand, VP_EXPAND)
 
 // llvm.vp.vshift(x,amount,mask,vlen)
 /// VP_VSHIFT(VEC1, AMOUNT, MASK, VLEN) - Returns a vector, of the same type as
 /// VEC1. AMOUNT is an integer value. The returned vector is equivalent
 /// to VEC1 shifted by AMOUNT (RETURNED_VEC[idx] = VEC1[idx + AMOUNT]).
-BEGIN_REGISTER_VP_INTRINSIC(vp_vshift, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_VSHIFT, -1, vp_vshift, 2, 3)
-END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
-
-// llvm.vp.merge(mask,on_true,on_false,pivot)
-BEGIN_REGISTER_VP(vp_merge, 0, 3, VP_MERGE, -1)
-END_REGISTER_VP(vp_merge, VP_MERGE)
+BEGIN_REGISTER_VP(vp_vshift, 2, 3, VP_VSHIFT, -1)
+END_REGISTER_VP(vp_vshift, VP_VSHIFT)
 
 BEGIN_REGISTER_VP(experimental_vp_splice, 3, 5, EXPERIMENTAL_VP_SPLICE, -1)
 END_REGISTER_VP(experimental_vp_splice, EXPERIMENTAL_VP_SPLICE)
@@ -622,17 +540,16 @@ END_REGISTER_VP(experimental_vp_splice, EXPERIMENTAL_VP_SPLICE)
 #undef BEGIN_REGISTER_VP
 #undef BEGIN_REGISTER_VP_INTRINSIC
 #undef BEGIN_REGISTER_VP_SDNODE
-#undef END_REGISTER_CASES
 #undef END_REGISTER_VP
 #undef END_REGISTER_VP_INTRINSIC
 #undef END_REGISTER_VP_SDNODE
+#undef VP_PROPERTY_UNARYOP
 #undef VP_PROPERTY_BINARYOP
+#undef VP_PROPERTY_TERNARYOP
+#undef VP_PROPERTY_CASTOP
 #undef VP_PROPERTY_CONSTRAINEDFP
 #undef VP_PROPERTY_FUNCTIONAL_INTRINSIC
 #undef VP_PROPERTY_FUNCTIONAL_OPC
-#undef VP_PROPERTY_FUNCTIONAL_SDNODE
 #undef VP_PROPERTY_MEMOP
 #undef VP_PROPERTY_REDUCTION
-#undef VP_PROPERTY_TERNARYOP
-#undef VP_PROPERTY_UNARYOP
 #undef VP_PROPERTY_XCMP

@@ -22,10 +22,6 @@ def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Enable the VPU">;
 
-def FeaturePackedMode
-  : SubtargetFeature<"packed", "PackedMode", "true",
-                     "Enable v512 packed mode (experimental)",[FeatureEnableVPU]>;
-
 def FeatureSimd
   : SubtargetFeature<"simd", "Simd", "true",
                      "Enable simd-style fixed length vectorize (experimental)">;
@@ -64,7 +60,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"generic", [FeaturePackedMode]>;
+def : Proc<"generic", [FeatureEnableVPU]>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing
