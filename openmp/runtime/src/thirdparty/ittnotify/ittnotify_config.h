@@ -179,6 +179,14 @@
 #define ITT_ARCH ITT_ARCH_ARM64
 #elif defined __powerpc64__
 #define ITT_ARCH ITT_ARCH_PPC64
+#elif defined __aarch64__
+#define ITT_ARCH ITT_ARCH_AARCH64
+#elif defined __mips__ && !defined __mips64
+#define ITT_ARCH ITT_ARCH_MIPS
+#elif defined __mips__ && defined __mips64
+#define ITT_ARCH ITT_ARCH_MIPS64
+#elif defined __riscv && __riscv_xlen == 64
+#define ITT_ARCH ITT_ARCH_RISCV64
 #elif defined __ve__
 #define ITT_ARCH ITT_ARCH_VE
 #endif

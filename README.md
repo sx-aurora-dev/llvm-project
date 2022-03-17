@@ -50,8 +50,6 @@ This is an example work-flow and configuration to get and build the LLVM source:
 
      * ``cd llvm-project``
 
-     * ``cmake -S llvm -B build -G <generator> [options]``
-
         Some common build system generators are:
 
         * ``Ninja`` --- for generating [Ninja](https://ninja-build.org)

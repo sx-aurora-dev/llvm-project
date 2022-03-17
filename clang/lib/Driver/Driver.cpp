@@ -37,6 +37,7 @@
 #include "ToolChains/MipsLinux.h"
 #include "ToolChains/Myriad.h"
 #include "ToolChains/NaCl.h"
+#include "ToolChains/NECAuroraOffload.h"
 #include "ToolChains/NetBSD.h"
 #include "ToolChains/OpenBSD.h"
 #include "ToolChains/PPCFreeBSD.h"
@@ -806,10 +807,11 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
           std::string NormalizedName = TT.normalize();
 
           // Always use the 've-linux' triple for OpenMP offloading
-          // FIXME: In clean code, ToolChains would do this normalization
-          // themselves
-          if (TT.getArch() == llvm::Triple::ve)
-            TT.setOS(llvm::Triple::Linux);
+          // FIXME: In clean code, ToolChains would do this normalization themselves
+          if (TT.getArch() == llvm::Triple::ve) {
+	    TT.setVendor(llvm::Triple::UnknownVendor);
+	    TT.setOS(llvm::Triple::Linux);
+	  }
 
           // Make sure we don't have a duplicate triple.
           auto Duplicate = FoundNormalizedTriples.find(NormalizedName);
@@ -828,9 +830,21 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
             Diag(clang::diag::err_drv_invalid_omp_target) << Val;
           else {
             const ToolChain *TC;
+            //MR_MARKER: TODO: use Arch + OS (not Environment)
+            if (TT.getArch() == llvm::Triple::aurora) {
+              const ToolChain *HostTC =
+                C.getSingleOffloadToolChain<Action::OFK_Host>();
+              assert(HostTC && "Host toolchain should be always defined.");
+              auto &AuroraTC =
+                ToolChains[TT.str() + "/" + HostTC->getTriple().normalize()];
+              if (!AuroraTC)
+                AuroraTC = std::make_unique<toolchains::NECAuroraOffloadToolChain>(
+                  *this, TT, *HostTC, C.getInputArgs());
+              TC = AuroraTC.get();
+            }
             // Device toolchains have to be selected differently. They pair host
             // and device in their implementation.
-            if (TT.isNVPTX() || TT.isAMDGCN()) {
+            else if (TT.isNVPTX() || TT.isAMDGCN()) {
               const ToolChain *HostTC =
                   C.getSingleOffloadToolChain<Action::OFK_Host>();
               assert(HostTC && "Host toolchain should be always defined.");

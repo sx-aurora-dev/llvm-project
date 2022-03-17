@@ -242,9 +242,18 @@ public:
     return VecTy->getNumElements();
   }
 
-  unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                            unsigned VF) const {
-    return Args.size() * VF;
+  static unsigned getVF(ArrayRef<Type *> Tys) {
+    for (auto *Ty : Tys) {
+      auto *VecTy = dyn_cast<FixedVectorType>(Ty);
+      if (!VecTy)
+        continue;
+      return VecTy->getNumElements();
+    }
+    return 1;
+  }
+
+  unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args, ArrayRef<Type *> Tys) const {
+    return Args.size() * getVF(Tys);
   }
 #endif
 
@@ -362,6 +371,11 @@ public:
     }
 
     // be optimistic by default
+    return true;
+  }
+
+  bool hasActiveVectorLength() const {
+    // FIXME: This implicitly deactivates the LLVM LoopVectorizer (use RV instead).
     return true;
   }
 

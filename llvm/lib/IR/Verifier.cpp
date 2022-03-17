@@ -3340,9 +3340,9 @@ void Verifier::visitCallBase(CallBase &Call) {
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
        FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
-       FoundPtrauthBundle = false,
-       FoundAttachedCallBundle = false, FoundCFPExceptBundle = false,
-       FoundCFPRoundBundle = false;
+       FoundPtrauthBundle = false, FoundAttachedCallBundle = false,
+       FoundCFPExceptBundle = false, FoundCFPRoundBundle = false;
+  ;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
     uint32_t Tag = BU.getTagID();

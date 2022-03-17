@@ -620,10 +620,29 @@ ISD::CondCode ISD::getSetCCAndOperation(ISD::CondCode Op1, ISD::CondCode Op2,
 
 Optional<unsigned> ISD::GetFunctionOpCodeForVP(unsigned OpCode,
                                                bool hasFPExcept) {
+  switch (OpCode) {
+  default:
+    break;
+  case VP_FNEG:
+    return ISD::FNEG;
+  case VP_FADD:
+    return hasFPExcept ? ISD::STRICT_FADD : ISD::FADD;
+  case VP_FSUB:
+    return hasFPExcept ? ISD::STRICT_FSUB : ISD::FSUB;
+  case VP_FMUL:
+    return hasFPExcept ? ISD::STRICT_FMUL : ISD::FMUL;
+  case VP_FDIV:
+    return hasFPExcept ? ISD::STRICT_FDIV : ISD::FDIV;
+  case VP_FREM:
+    return hasFPExcept ? ISD::STRICT_FREM : ISD::FREM;
+  case VP_FMA:
+    return hasFPExcept ? ISD::STRICT_FMA : ISD::FMA;
+  }
+
   // FIXME: Return strict opcodes in case of fp exceptions.
   switch (OpCode) {
   default:
-    return None;
+    break;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
 #define VP_PROPERTY_FUNCTIONAL(SDOPC) return ISD::SDOPC;
 #define END_REGISTER_VP_SDNODE(VPOPC) break;

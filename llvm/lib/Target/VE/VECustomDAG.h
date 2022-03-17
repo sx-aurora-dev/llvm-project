@@ -83,7 +83,15 @@ SDValue getNodeMask(SDValue Op);
 
 // Return the AVL operand position for this VVP or VEC op.
 Optional<int> getAVLPos(unsigned Opc);
+// Plainly, the AVL operand of Op.
 SDValue getNodeAVL(SDValue Op);
+// Return the AVL of this operation, unwrap it from 'LEGALAVL'.
+// The bool is true, if the AVL is wrapped in a 'LEGALAVL' node.
+// If Op is a LEGALVL node, the return value is the unwrapped AVL operand of that node.
+std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue Op);
+
+// Whether this AVL is a 'LEGALAVL' node.
+bool isLegalAVL(SDValue);
 
 VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B);
 
@@ -481,6 +489,8 @@ struct VECustomDAG {
   SDValue getLegalConvOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
                             SDValue Mask, SDValue AVL,
                             SDNodeFlags Flags = SDNodeFlags()) const;
+  SDValue getLegalSelectOpVVP(EVT ResVT, SDValue OnTrue, SDValue OnFalse,
+                              SDValue Mask, SDValue Pivot) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
                         SDNodeFlags Flags = SDNodeFlags()) const {
@@ -500,6 +510,8 @@ struct VECustomDAG {
     if (isVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3], Flags);
+    if (VVPOpcode == VEISD::VVP_SELECT)
+      return getLegalSelectOpVVP(ResVT, Ops[0], Ops[1], Ops[2], Ops[3]);
     return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
 

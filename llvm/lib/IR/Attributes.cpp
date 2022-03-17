@@ -1808,7 +1808,7 @@ AttributeMask AttributeFuncs::typeIncompatible(Type *Ty) {
         .addAttribute(Attribute::ByRef)
         .addAttribute(Attribute::ElementType);
 
-  if (!Ty->isPtrOrPtrVectorTy())
+  if (!Ty->isPtrOrPtrVectorTy() && !Ty->isIntOrIntVectorTy())
     // Attributes that only apply to pointers or vectors of pointers.
     Incompatible.addAttribute(Attribute::Alignment);
 

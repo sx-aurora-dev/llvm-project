@@ -262,6 +262,10 @@ static cl::opt<unsigned> ForceTargetNumVectorRegs(
     "force-target-num-vector-regs", cl::init(0), cl::Hidden,
     cl::desc("A flag that overrides the target's number of vector registers."));
 
+static cl::opt<bool> ForceDisableLV(
+    "force-disable-lv", cl::init(false), cl::Hidden,
+    cl::desc("Never run LV."));
+
 static cl::opt<unsigned> ForceTargetMaxScalarInterleaveFactor(
     "force-target-max-scalar-interleave", cl::init(0), cl::Hidden,
     cl::desc("A flag that overrides the target's max interleave factor for "
@@ -10696,6 +10700,10 @@ LoopVectorizeResult LoopVectorizePass::runImpl(
   DB = &DB_;
   ORE = &ORE_;
   PSI = PSI_;
+
+  // FIXME: Use RV for all loop vectorization on VE.
+  if (TTI->hasActiveVectorLength() || ForceDisableLV)
+    return LoopVectorizeResult(false, false);
 
   // Don't attempt if
   // 1. the target claims to have no vector registers, and

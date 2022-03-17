@@ -10,8 +10,10 @@ define fastcc <512 x float> @vec_load_v512f32(<512 x float>* %P) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    vldu %v0, 8, %s0
+; CHECK-NEXT:    lea %s0, 4(, %s0)
+; CHECK-NEXT:    vldu %v1, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = load <512 x float>, <512 x float>* %P, align 4
   ret <512 x float> %ret

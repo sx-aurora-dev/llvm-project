@@ -4410,6 +4410,24 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
   setValue(&I, StoreNode);
 }
 
+static SDValue attachVectorLengthAlignment(const VPIntrinsic &VPI, SDValue VL,
+                                           SelectionDAG &DAG, SDLoc DL) {
+  if (!VPI.getVectorLengthParam())
+    return VL;
+
+  // Redundant.
+  if (isa<ConstantSDNode>(VL))
+    return VL;
+
+  // Attach alignment info.
+  auto EVLAlign = VPI.getParamAlign(
+      *VPIntrinsic::getVectorLengthParamPos(VPI.getIntrinsicID()));
+  auto EVLAlignValue = EVLAlign.valueOrOne();
+  if (EVLAlignValue > 1)
+    return DAG.getAssertAlign(DL, VL, EVLAlignValue);
+  return VL;
+}
+
 // Get a uniform base for the Gather/Scatter intrinsic.
 // The first argument of the Gather/Scatter intrinsic is a vector of pointers.
 // We try to represent it as a base pointer + vector of indices.
@@ -7405,9 +7423,13 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
          "Unexpected target EVL type");
   VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
 
+  VLen = attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG,
+                                     getCurSDLoc());
+
   EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
                                                         I.getType());
-  setValue(&I, DAG.getVPSetCC(DL, DestVT, Op1, Op2, Condition, MaskOp, VLen));
+  setValue(&I, DAG.getVPSetCC(getCurSDLoc(), DestVT, Op1, Op2, Condition,
+                              MaskOp, VLen));
 }
 
 static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
@@ -7466,7 +7488,18 @@ void SelectionDAGBuilder::visitVPLoadGather(const VPIntrinsic &VPIntrin, EVT VT,
     MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
         MachinePointerInfo(PtrOperand), MachineMemOperand::MOLoad,
         MemoryLocation::UnknownSize, *Alignment, AAInfo, Ranges);
-    LD = DAG.getLoadVP(VT, DL, InChain, OpValues[0], OpValues[1], OpValues[2],
+
+    // Extend to native EVL type.
+    MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+    assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+           "Unexpected target EVL type");
+    SDValue VLen = OpValues[2];
+    VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
+  
+    // Attach alignment info.
+    VLen = attachVectorLengthAlignment(VPIntrin, VLen, DAG, DL);
+
+    LD = DAG.getLoadVP(VT, DL, InChain, OpValues[0], OpValues[1], VLen,
                        MMO, false /*IsExpanding */);
   } else {
     if (!Alignment)
@@ -7493,9 +7526,20 @@ void SelectionDAGBuilder::visitVPLoadGather(const VPIntrinsic &VPIntrin, EVT VT,
       EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
       Index = DAG.getNode(ISD::SIGN_EXTEND, DL, NewIdxVT, Index);
     }
+    // Extend to native EVL type.
+    MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+    assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+           "Unexpected target EVL type");
+    SDValue VLen = OpValues[2];
+    VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
+  
+    // Attach alignment info.
+    VLen =
+        attachVectorLengthAlignment(VPIntrin, VLen, DAG, DL);
+
     LD = DAG.getGatherVP(
         DAG.getVTList(VT, MVT::Other), VT, DL,
-        {DAG.getRoot(), Base, Index, Scale, OpValues[1], OpValues[2]}, MMO,
+        {DAG.getRoot(), Base, Index, Scale, OpValues[1], VLen}, MMO,
         IndexType);
   }
   if (AddToChain)
@@ -7580,8 +7624,6 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   ComputeValueVTs(TLI, DAG.getDataLayout(), VPIntrin.getType(), ValueVTs);
   SDVTList VTs = DAG.getVTList(ValueVTs);
 
-  // ValueVTs.push_back(MVT::Other); // Out chain
-
   // Request Operands
   // TODO: Constrained FP.
   // auto ExceptPosOpt = None;
@@ -7599,8 +7641,11 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   SmallVector<SDValue, 7> OpValues;
   for (unsigned I = 0; I < VPIntrin.arg_size(); ++I) {
     auto Op = getValue(VPIntrin.getArgOperand(I));
-    if (I == EVLParamPos)
+    if (I == EVLParamPos) {
+      Op = attachVectorLengthAlignment(VPIntrin, Op, DAG, getCurSDLoc());
       Op = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, Op);
+    }
+
     OpValues.push_back(Op);
   }
 

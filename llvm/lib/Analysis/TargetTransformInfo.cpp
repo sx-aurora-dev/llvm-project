@@ -1055,6 +1055,11 @@ unsigned TargetTransformInfo::getStoreVectorFactor(unsigned VF,
   return TTIImpl->getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
 }
 
+bool TargetTransformInfo::useReductionIntrinsic(unsigned Opcode, Type *Ty,
+                                                ReductionFlags Flags) const {
+  return TTIImpl->useReductionIntrinsic(Opcode, Ty, Flags);
+}
+
 bool TargetTransformInfo::preferInLoopReduction(unsigned Opcode, Type *Ty,
                                                 ReductionFlags Flags) const {
   return TTIImpl->preferInLoopReduction(Opcode, Ty, Flags);
@@ -1080,6 +1085,10 @@ unsigned TargetTransformInfo::getGISelRematGlobalCost() const {
 
 bool TargetTransformInfo::supportsScalableVectors() const {
   return TTIImpl->supportsScalableVectors();
+}
+
+bool TargetTransformInfo::hasActiveVectorLength() const {
+  return TTIImpl->hasActiveVectorLength();
 }
 
 bool TargetTransformInfo::enableScalableVectorization() const {

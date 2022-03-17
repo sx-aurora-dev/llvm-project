@@ -52,6 +52,7 @@ public:
     aarch64_be,     // AArch64 (big endian): aarch64_be
     aarch64_32,     // AArch64 (little endian) ILP32: aarch64_32
     arc,            // ARC: Synopsys ARC
+    aurora,         // Aurora: NEC's Aurora vector engine
     avr,            // AVR: Atmel AVR microcontroller
     bpfel,          // eBPF or extended BPF or 64-bit BPF (little endian)
     bpfeb,          // eBPF or extended BPF or 64-bit BPF (big endian)
@@ -160,6 +161,7 @@ public:
     IBM,
     ImaginationTechnologies,
     MipsTechnologies,
+    NEC,
     NVIDIA,
     CSR,
     Myriad,
@@ -199,6 +201,7 @@ public:
     PS4,
     ELFIAMCU,
     TvOS,       // Apple tvOS
+    VEORT,      // NEC Aurora Vector Engine Offload
     WatchOS,    // Apple watchOS
     Mesa3D,
     Contiki,

@@ -88,11 +88,11 @@ define fastcc <256 x i32> @insert_ri8_v256i32(i32 signext %s) {
 define fastcc <512 x i32> @insert_ri_v512i32(i32 signext %s) {
 ; CHECK-LABEL: insert_ri_v512i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 186
-; CHECK-NEXT:    lvs %s2, %v0(%s1)
-; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    # kill: def $sw0 killed $sx0 killed $sx0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
-; CHECK-NEXT:    or %s0, %s2, %s0
+; CHECK-NEXT:    lea %s1, 186
 ; CHECK-NEXT:    lsv %v0(%s1), %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = insertelement <512 x i32> undef, i32 %s, i32 372
@@ -200,12 +200,10 @@ define fastcc <256 x float> @insert_ri8_v256f32(float %s) {
 define fastcc <512 x float> @insert_ri_v512f32(float %s) {
 ; CHECK-LABEL: insert_ri_v512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    sra.l %s0, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    # kill: def $sf0 killed $sx0 killed $sx0 def $sx0
+; CHECK-NEXT:    and %s0, %s0, (32)1
 ; CHECK-NEXT:    lea %s1, 186
-; CHECK-NEXT:    lvs %s2, %v0(%s1)
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    sll %s0, %s0, 32
-; CHECK-NEXT:    or %s0, %s2, %s0
 ; CHECK-NEXT:    lsv %v0(%s1), %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = insertelement <512 x float> undef, float %s, i32 372

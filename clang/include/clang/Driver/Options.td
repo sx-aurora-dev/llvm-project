@@ -2457,6 +2457,8 @@ def fopenmp_cuda_force_full_runtime : Flag<["-"], "fopenmp-cuda-force-full-runti
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fno_openmp_cuda_force_full_runtime : Flag<["-"], "fno-openmp-cuda-force-full-runtime">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>;
+def fopenmp_nec_compiler_EQ : Joined<["-"], "fopenmp-nec-compiler=">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>, HelpText<"Offloading compiler for NEC SX-Aurora ('clang' [default],'rvclang' or 'ncc')">;
 def fopenmp_cuda_number_of_sm_EQ : Joined<["-"], "fopenmp-cuda-number-of-sm=">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fopenmp_cuda_blocks_per_sm_EQ : Joined<["-"], "fopenmp-cuda-blocks-per-sm=">, Group<f_Group>,

@@ -26,6 +26,9 @@ class VPBuilder {
   Value& RequestPred();
   Value& RequestEVL();
 
+  // Cast to vector of element type.
+  Value& GetAsVectorPointer(Value& Ptr);
+
 public:
   VPBuilder(IRBuilder<> &_builder)
       : Builder(_builder), Mask(nullptr), ExplicitVectorLength(nullptr),
@@ -66,10 +69,14 @@ public:
   Value* CreateVectorShift(Value *SrcVal, Value *Amount, Twine Name="");
 
   // Memory
-  Value& CreateContiguousStore(Value & Val, Value & Pointer, MaybeAlign Alignment);
-  Value& CreateContiguousLoad(Type *ReturnTy, Value & Pointer, MaybeAlign Alignment);
-  Value& CreateScatter(Value & Val, Value & PointerVec, MaybeAlign Alignment);
-  Value& CreateGather(Type *ReturnTy, Value & PointerVec, MaybeAlign Alignment);
+  Value &CreateContiguousStore(Value &Val, Value &Pointer,
+                               MaybeAlign Alignment);
+  Value &CreateContiguousLoad(Type *ReturnTy, Value &Pointer,
+                              MaybeAlign Alignment);
+  Value &CreateScatter(Value &Val, Value &PointerVec, MaybeAlign Alignment);
+  Value &CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignOpt);
+  Value &createSelect(Value &OnTrue, Value &OnFalse, Value &Mask, Value &Pivot,
+                      Twine Name = "");
 };
 
 

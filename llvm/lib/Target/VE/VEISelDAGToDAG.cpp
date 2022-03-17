@@ -402,6 +402,11 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   default:
     break;
 
+  // Late eliminate the LEGALAVL wrapper
+  case VEISD::LEGALAVL:
+    ReplaceNode(N, N->getOperand(0).getNode());
+    return;
+
   // Lower (broadcast 1) and (broadcast 0) to VM[P]0
   case VEISD::VEC_BROADCAST: {
     MVT SplatResTy = N->getSimpleValueType(0);
@@ -431,11 +436,6 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     ReplaceNode(N, New.getNode());
      return;
    }
-
-  // Late eliminate the LEGALAVL wrapper
-  case VEISD::LEGALAVL:
-    ReplaceNode(N, N->getOperand(0).getNode());
-    return;
 
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());

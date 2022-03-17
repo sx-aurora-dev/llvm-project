@@ -1,0 +1,14 @@
+@AUTO_GEN_COMMENT@
+
+config.test_compiler = '@SOTOC_TEST_COMPILER@'
+config.test_sotoc = '@SOTOC_EXECUTABLE@'
+config.sotoc_obj_root = '@SOTOC_OBJ_ROOT@'
+config.library_dir = "@SOTOC_LIBOMP_LIBRARY_DIR@"
+config.ompt_library_dir = "@SOTOC_LIBOMPT_LIBRARY_DIR@"
+config.omp_header_directory = "@SOTOC_OMP_HEADER_DIR@"
+config.operating_system = "@CMAKE_SYSTEM_NAME@"
+config.filecheck = "@SOTOC_FILECHECK_EXE@"
+
+# Let the main config do the real work.
+lit_config.load_config(config, '@SOTOC_TEST_DIR@/lit.cfg')
+

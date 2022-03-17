@@ -48,6 +48,10 @@
 using namespace llvm;
 
 // VE has no masked VLD. Ignore the mask, keep the AVL.
+static cl::opt<bool> AssumeBestAlignment("ve-assume-best-alignment", cl::init(false),
+                                         cl::desc("Assume optimal alignment for all vector load/stores (ie packed float ptrs are aligned to 8 bytes"),
+                                         cl::Hidden);
+
 static cl::opt<bool> OptimizeVectorMemory("ve-fast-mem", cl::init(true),
                                           cl::desc("Drop VLD masks"),
                                           cl::Hidden);
@@ -297,17 +301,47 @@ static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
   return false;
 }
 
-static bool isEvenNumber(SDValue AVL) {
-  auto ConstAVL = dyn_cast<ConstantSDNode>(AVL);
-  if (!ConstAVL)
+static bool maySafelyIgnoreMask(unsigned VVPOpcode) {
+  if (!IgnoreMasks)
     return false;
 
-  return (ConstAVL->getZExtValue() % 2 == 0);
+  // Most arithmetic is safe without mask.
+  if (isVVPTernaryOp(VVPOpcode))
+    return VVPOpcode != VEISD::VVP_SELECT;
+  if (isVVPBinaryOp(VVPOpcode)) {
+    switch (VVPOpcode) {
+    default:
+      return true;
+    case VEISD::VVP_UREM:
+    case VEISD::VVP_SREM:
+    case VEISD::VVP_UDIV:
+    case VEISD::VVP_SDIV:
+    case VEISD::VVP_FDIV:
+      return false;
+    }
+  }
+  return false;
 }
 
+static Align getAlign(SDValue Op) {
+  auto ConstN = dyn_cast<ConstantSDNode>(Op);
+  // TODO: Not being fancy here, only need to know whether AVL is even or odd.
+  if (ConstN)
+    return Align((ConstN->getZExtValue() % 2 == 0) ? 2 : 1);
+
+  auto AAN = dyn_cast<AssertAlignSDNode>(Op);
+  if (!AAN)
+    return Align(1);
+  return AAN->getAlign();
+}
+
+static bool isEvenNumber(SDValue AVL) { return getAlign(AVL).value() % 2 == 0; }
+
 static bool isPackableLoadStore(SDValue Op) {
-  SDValue AVL = getNodeAVL(Op);
+  SDValue AVL = getAnnotatedNodeAVL(Op).first;
   SDValue Mask = getNodeMask(Op);
+
+  // Ignore the mask and odd-valued AVL when optimizing memops.
   if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
     return true;
 
@@ -744,6 +778,7 @@ void VETargetLowering::initVPUActions() {
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not
   // generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
+  setOperationAction(ISD::VSELECT, MVT::v512i1, Custom);
 }
 
 EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
@@ -1053,8 +1088,6 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
   SDValue AVL = getNodeAVL(Op);
   assert(AVL);
 
-  std::vector<SDValue> Created;
-
   for (int i = 0; i < (int)Op->getNumOperands(); ++i) {
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
@@ -1165,7 +1198,7 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
 
   // analyze the operation
   SDValue PackedMask = getNodeMask(Op);
-  SDValue PackedAVL = getNodeAVL(Op);
+  SDValue PackedAVL = getAnnotatedNodeAVL(Op).first;
   SDValue PackPtr = getMemoryPtr(Op);
   SDValue PackData = getStoredValue(Op);
   SDValue PackStride = getLoadStoreStride(Op, CDAG);
@@ -1260,16 +1293,17 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op,
     return Op;
 
   // Operation already has a legal AVL.
-  auto AVL = getNodeAVL(Op);
-  if (isLegalAVL(AVL))
+  auto AVLPair = getAnnotatedNodeAVL(Op);
+  if (AVLPair.second)
     return Op;
+  auto AVL = AVLPair.first;
 
   // Legalize mask & avl.
   auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
   auto MaskPos = getMaskPos(Op->getOpcode());
   auto AVLPos = getAVLPos(Op->getOpcode());
   auto TargetMasks =
-      CDAG.createTargetMask(WidenInfo, getNodeMask(Op), getNodeAVL(Op));
+      CDAG.createTargetMask(WidenInfo, getNodeMask(Op), AVL);
 
   // Check whether we can safely drop the mask.
   if (MaskPos && IgnoreMasks && maySafelyIgnoreMask(Op->getOpcode()))
@@ -1319,7 +1353,9 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
   // analyze the operation
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
   SDValue PackedMask = getNodeMask(Op);
-  SDValue PackedAVL = getNodeAVL(Op);
+  SDValue PackedAVL = getAnnotatedNodeAVL(Op).first;
+  auto AVLPos = getAVLPos(Op->getOpcode());
+  auto MaskPos = getMaskPos(Op->getOpcode());
 
   // request the parts
   SDValue PartOps[2];
@@ -1345,9 +1381,9 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
     for (unsigned i = 0; i < Op.getNumOperands(); ++i) {
       SDValue OpV = Op.getOperand(i);
 
-      if (OpV == PackedAVL)
+      if (AVLPos && ((int)i) == *AVLPos)
         continue;
-      if (OpV == PackedMask)
+      if (MaskPos && ((int)i) == *MaskPos)
         continue;
 
       // Ignore some metataoperands.
@@ -1480,9 +1516,7 @@ VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
   //// Does this expansion imply packed mode? /////
   LLVM_DEBUG(dbgs() << "\tSelected target width: " << VectorWidth << "\n";);
   bool PackedMode = false;
-  bool NeedsPackedMasking = false;
   if (VectorWidth > StandardVectorWidth) {
-    NeedsPackedMasking = (OpVectorLength % 2 != 0);
     PackedMode = true;
     if (!Subtarget->hasPackedMode()) {
       LLVM_DEBUG(dbgs() << "\tPacked operations not enabled (set "
@@ -1491,10 +1525,20 @@ VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
     }
   }
 
-  // Do we need to fold the predicating effect of the AVL into the mask (due to
-  // the coarse-grained nature of AVL in packed mode)?
-  // TODO: Does not need masking if AVL is a power-of-two.
-  NeedsPackedMasking |= PackedMode && (bool)getNodeAVL(Op);
+  // Analyze whether/how the AVL needs to be folded (odd-values AVL possible).
+  bool NeedsPackedMasking = false;
+  if (PackedMode) {
+    // Do we need to fold the predicating effect of the AVL into the mask (due to
+    // the coarse-grained nature of AVL in packed mode)?
+    auto AVL = getAnnotatedNodeAVL(Op).first;
+    if (AVL) {
+      NeedsPackedMasking = PackedMode && !isEvenNumber(AVL);
+      LLVM_DEBUG(dbgs() << "\tAVL: "; CDAG.print(dbgs(), AVL) << "\n";);
+    } else {
+      NeedsPackedMasking = (OpVectorLength % 2 != 0);
+    }
+    LLVM_DEBUG(dbgs() << "\tPacked Masking: " << NeedsPackedMasking << "\n";);
+  }
 
   return VVPWideningInfo(ResultVT, OpVectorLength, PackedMode,
                          NeedsPackedMasking);
@@ -1742,7 +1786,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   }
 
   // TODO: Get better at inferring 'even' AVLs and all true masks.
-  SDValue AVL = getNodeAVL(Op);
+  SDValue AVL = getAnnotatedNodeAVL(Op).first;
   SDValue Mask = getNodeMask(Op);
   // TODO: this can be refined.. the mask has to be compactable for stores.
   bool IsPackable = isPackableLoadStore(Op);
@@ -1843,7 +1887,7 @@ SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
 
   VECustomDAG CDAG(*this, DAG, Op);
 
-  SDValue PackAVL = getNodeAVL(Op);
+  SDValue PackAVL = getAnnotatedNodeAVL(Op).first;
   SDValue Chain = getNodeChain(Op);
   SDValue BasePtr = getMemoryPtr(Op);
   SDValue Scale = getGatherScatterScale(Op);
@@ -1953,7 +1997,7 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   EVT OldDataVT = MemN->getMemoryVT();
   EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
 
-  SDValue AVL = getNodeAVL(Op);
+  SDValue AVL = getAnnotatedNodeAVL(Op).first;
   SDValue Index = getGatherScatterIndex(Op);
   SDValue BasePtr = getMemoryPtr(Op);
   SDValue Mask = getNodeMask(Op);
@@ -2178,7 +2222,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   SDValue BasePtr = getMemoryPtr(Op);
   SDValue Mask = getNodeMask(Op);
   SDValue Chain = getNodeChain(Op);
-  SDValue AVL = getNodeAVL(Op);
+  SDValue AVL = getAnnotatedNodeAVL(Op).first;
   // Store specific.
   SDValue Data = getStoredValue(Op);
   // Load specific.
@@ -2193,6 +2237,14 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   // Eagerly split over-packed vectors.
   if (isOverPackedType(OldDataVT))
     return splitLoadStore(Op, DAG, Mode);
+
+  // Eagerly split un-aligned vector loads.
+  if (!AssumeBestAlignment) {
+    // FIXME: This only catches the un-aligned packed-mode case.
+    auto Align = MemN.getAlign();
+    if (isPackedVectorType(OldDataVT) && Align.value() < 8) 
+      return splitLoadStore(Op, DAG, Mode);
+  }
 
   // Infer a AVL value from all available hints.
   AVL = CDAG.inferAVL(AVL, Mask, OldDataVT);
@@ -2262,22 +2314,80 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
   SDValue SrcV = Op.getOperand(0);
   SDValue ElemV = Op.getOperand(1);
   SDValue IndexV = Op.getOperand(2);
+  VECustomDAG CDAG(*this, DAG, Op);
+
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
     // FIXME: Need to translate index!
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
-    VECustomDAG CDAG(*this, DAG, Op);
     return CDAG.createInsertMask(ActualMaskV, ElemV, IndexV);
+  }
+
+  // FIXME: Fallback to dynamic index implementation.
+  if (!isa<ConstantSDNode>(IndexV)) {
+    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  }
+
+  uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+
+  // Packed insert.
+  if (VecVT == MVT::v512i32 || VecVT == MVT::v512f32) {
+    // ZExt Idx to i64.
+    auto IdxVT = IndexV.getValueType();
+    if (IdxVT == MVT::i32)
+      IndexV = CDAG.getNode(ISD::ZERO_EXTEND, MVT::i64, IndexV);
+
+    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+    SDValue HalfConstIdx = CDAG.getConstant(ConstIdx / 2, MVT::i64);
+
+    MVT ElemVT = ElemV.getSimpleValueType();
+    bool InsertFromLo = ElemVT == MVT::i32;
+    bool InsertIntoLo = ConstIdx % 2;
+
+    // Upcast Val to i64.
+    auto ElemSubRegIdx = (ElemVT == MVT::f32) ? VE::sub_f32 : VE::sub_i32;
+    ElemV = CDAG.getTargetInsertSubreg(ElemSubRegIdx, MVT::i64, ElemV,
+                                       CDAG.getUndef(MVT::i64));
+
+    // TODO: Factor into CustomDAG {
+    // Move to right position and zero-fill opposing 32bit subreg
+    bool ShiftUp = (!InsertIntoLo && InsertFromLo);
+    bool ShiftDown = (InsertIntoLo && !InsertFromLo);
+    if (ShiftUp) {
+      ElemV = CDAG.getNode(ISD::SHL, MVT::i64, {ElemV, CDAG.getConstant(32, MVT::i32)});
+    } else if (ShiftDown) {
+      ElemV = CDAG.getNode(ISD::SRL, MVT::i64, {ElemV, CDAG.getConstant(32, MVT::i32)});
+    } else {
+      // Right position -> only zero fill.
+      // Inverted mask to keep the passthru element.
+      SDValue ElemMask = CDAG.getConstant(
+          InsertFromLo  ? 0x00000000FFFFFFFFUL : 0xFFFFFFFF00000000UL, MVT::i64);
+      ElemV = CDAG.getNode(ISD::AND, MVT::i64, {ElemV, ElemMask});
+    }
+    // } TODO: Factor into CustomDAG
+
+    // Re-cast SrcV (passthru) to v256i64.
+    SDValue Passthru = DAG.getBitcast(MVT::v256i64, SrcV);
+    SDValue PackedElt = CDAG.getNode(ISD::EXTRACT_VECTOR_ELT, MVT::i64, {Passthru, HalfConstIdx});
+    
+    // Extract element and zero out opposing part.
+    SDValue PTMask = CDAG.getConstant(
+        InsertIntoLo ? 0xFFFFFFFF00000000UL : 0x00000000FFFFFFFFUL, MVT::i64);
+    SDValue MaskedPT = CDAG.getNode(ISD::AND, MVT::i64, {PackedElt, PTMask});
+
+    // Blend passthru and new elements
+    PackedElt = CDAG.getNode(ISD::OR, MVT::i64, {ElemV, MaskedPT});
+
+    // Re-insert modifier 64 bit chunk
+    SDValue WithElement = CDAG.getNode(ISD::INSERT_VECTOR_ELT, MVT::v256i64,
+                                       {Passthru, PackedElt, HalfConstIdx});
+
+    // Re-cast to original type.
+    return DAG.getBitcast(VecVT, WithElement);
   }
 
   // Overpacked operation.
   if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
-    if (!isa<ConstantSDNode>(IndexV)) {
-      errs() << "TODO: Cannot lower dynamic index element insert!\n";
-      abort();
-    }
-    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
     auto Part = getPartForLane(ConstIdx);
-    VECustomDAG CDAG(*this, DAG, Op);
 
     // Meaningful AVL, unused in codegen.
     SDValue AVL = CDAG.getConstEVL(256);
@@ -2300,14 +2410,14 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     return CDAG.createPack(VecVT, NewLo, NewHi, AVL);
   }
 
-  return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  llvm_unreachable("Unsupported insert_vector_elt");
 }
 
 SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDValue SrcV = Op->getOperand(0);
   SDValue IndexV = Op->getOperand(1);
-  EVT VecVT = SrcV.getValueType();
+  MVT VecVT = SrcV.getSimpleValueType();
 
   // Lowering to VM_EXTRACT
   if (SDValue MaskV = PeekForMask(SrcV)) {
@@ -2348,6 +2458,54 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     return CDAG.DAG.getAnyExtOrTrunc(ResV, CDAG.DL, Op.getValueType());
   }
 
+  if (!isa<ConstantSDNode>(IndexV)) {
+    // Dynamic extraction or packed extract.
+    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  }
+
+  uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+  VECustomDAG CDAG(*this, DAG, Op);
+  
+  // Packed extract.
+  if (VecVT == MVT::v512i32 || VecVT == MVT::v512f32) {
+    bool ExtractLo = ConstIdx % 2;
+
+    // ZExt Idx to i64.
+    auto IdxVT = IndexV.getValueType();
+    if (IdxVT == MVT::i32)
+      IndexV = CDAG.getNode(ISD::ZERO_EXTEND, MVT::i64, IndexV);
+
+    MVT ElemVT = VecVT.getVectorElementType();
+    SDValue HalfConstIdx = CDAG.getConstant(ConstIdx / 2, MVT::i64);
+
+    // Re-cast SrcV (passthru) to v256i64.
+    SDValue Passthru = DAG.getBitcast(MVT::v256i64, SrcV);
+    SDValue PackedElt = CDAG.getNode(ISD::EXTRACT_VECTOR_ELT, MVT::i64, {Passthru, HalfConstIdx});
+
+    // FIXME: Redundant  
+    // Shift to right position
+    bool ImplicitZExt = false;
+    bool ShiftUp = (ExtractLo && ElemVT == MVT::f32);
+    if (ShiftUp) {
+      PackedElt = CDAG.getNode(ISD::SHL, MVT::i64, {PackedElt, CDAG.getConstant(32, MVT::i32)});
+    }
+    bool ShiftDown = (!ExtractLo && ElemVT == MVT::i32);
+    if (ShiftDown) {
+      PackedElt = CDAG.getNode(ISD::SRL, MVT::i64, {PackedElt, CDAG.getConstant(32, MVT::i32)});
+      ImplicitZExt = true;
+    }
+
+    // Convert type
+    auto ElemSubRegIdx = (ElemVT == MVT::f32) ? VE::sub_f32 : VE::sub_i32;
+    SDValue Res = CDAG.getTargetExtractSubreg(ElemVT, ElemSubRegIdx, PackedElt);
+    if (ElemVT == MVT::i32 && !ImplicitZExt) {
+      // ABI assumes zext i32 in scalar registers.
+      Res = DAG.getZExtOrTrunc(Res, CDAG.DL, MVT::i64);
+      return CDAG.getTargetExtractSubreg(ElemVT, VE::sub_i32, Res);
+    }
+    return Res;
+  }
+
   // Overpacked operation.
   if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
     if (!isa<ConstantSDNode>(IndexV)) {
@@ -2373,8 +2531,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     return lowerSIMD_EXTRACT_VECTOR_ELT(ExtractFromPart, DAG);
   }
 
-  // Dynamic extraction or packed extract.
-  return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  llvm_unreachable("Unsupported extract_vector_element");
 }
 
 SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
@@ -2509,11 +2666,13 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_BROADCAST:
   case VEISD::VEC_VMV:
-  case VEISD::VEC_SEQ:
-    // AVL already legalized.
+  case VEISD::VEC_SEQ: {
     if (getAnnotatedNodeAVL(Op).second)
       return Op;
-    return legalizeInternalVectorOp(Op, DAG);
+    SDValue LegalVecOp =
+        legalizeInternalVectorOp(lowerSETCCInVectorArithmetic(Op, DAG), DAG);
+    return LegalVecOp;
+  }
 
   // "forget" about the narrowing
   case VEISD::VEC_NARROW:

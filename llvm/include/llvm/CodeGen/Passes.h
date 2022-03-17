@@ -476,14 +476,14 @@ namespace llvm {
   /// shuffles.
   FunctionPass *createExpandReductionsPass();
 
-  // This pass replaces intrinsics operating on vector operands with calls to
-  // the corresponding function in a vector library (e.g., SVML, libmvec).
-  FunctionPass *createReplaceWithVeclibLegacyPass();
-
   /// This pass expands the vector predication intrinsics into unpredicated
   /// instructions with selects or just the explicit vector length into the
   /// predicate mask.
   FunctionPass *createExpandVectorPredicationPass();
+
+  // This pass replaces intrinsics operating on vector operands with calls to
+  // the corresponding function in a vector library (e.g., SVML, libmvec).
+  FunctionPass *createReplaceWithVeclibLegacyPass();
 
   // This pass expands memcmp() to load/stores.
   FunctionPass *createExpandMemCmpPass();

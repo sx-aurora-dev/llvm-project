@@ -35,10 +35,10 @@ defm : VectorGather<v256i32, v256i64, v256i1, "VGTLZX">;
 multiclass VectorScatter<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string SCPrefix> {
   // Unmasked.
   def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(SCPrefix#"vizvl") $data, 0, 0, $addr, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvl") $addr, 0, 0, $data, $avl)>;
   // Masked.
   def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(SCPrefix#"vizvml") $data, 0, 0, $addr, $mask, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvml") $addr, 0, 0, $data, $mask, $avl)>;
 }
 
 defm : VectorScatter<v256f64, v256i64, v256i1, "VSC">;
@@ -436,6 +436,8 @@ defm : Binary_vr_vv_ShortLong<vvp_srl,
 // Floating-point arithmetic (256 elements)
 defm : Unary_ShortLong<vvp_frcp,
                        f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_frsqrt,
+                       f64, v256f64, "VRSQRTD", f32, v256f32, "VRSQRTS">; 
 defm : Unary_ShortLong<vvp_fsqrt,
                        f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
 defm : Binary_rv_vv_ShortLong<c_vvp_fadd,
@@ -450,7 +452,6 @@ defm : Binary_rv_vv_ShortLong<vvp_fsub,
 defm : Binary_rv_vr_vv_ShortLong<vvp_fdiv,
                               f64, v256f64, "VFDIVD",
                               f32, v256f32, "VFDIVS">;
-
 defm : Binary_rv_vv_ShortLong<c_vvp_fminnum,
                               f64, v256f64, "VFMIND",
                               f32, v256f32, "VFMINS">;
@@ -639,6 +640,7 @@ defm : Binary_vr_vv<vvp_shl,
 
 // Floating-point arithmetic (512 elements)
 defm : Unary<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
+defm : Unary<vvp_frsqrt,  i64, v512f32, v512i1, "PVRSQRT">;
 
 defm : Binary_rv_vv<c_vvp_fadd,
                     i64, v512f32, v512i1, "PVFADD">;
@@ -689,21 +691,25 @@ defm: IExtend_Mask_ForRes<v256i64>;
 
 multiclass Reduce_Sequenced<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken, SDPatternOperator neutral_elem> {
   // ordered & unmasked
-  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
+  // def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+  //            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vrl") $vx, $sy, $vl), 0), ResRC)>;
+             (COPY_TO_REGCLASS
+               (!cast<Instruction>("LVSvr")
+                 (!cast<Instruction>(VEInst#FPToken#"vrl") $vx, $sy, $vl),
+                 (i2l (SUBUWrm $vl, 127))),
+              ResRC)>;
   
   // ordered & masked
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi")
+             (COPY_TO_REGCLASS
+               (!cast<Instruction>("LVSvr")
                  (!cast<Instruction>(VEInst#FPToken#"vrl")
-                     (VMRGivml 0, $vx, $vm, $vl),
-                     $sy,
-                     $vl
-                 ),
-                 0
-             ), ResRC)>;
+                   (VMRGivml 0, $vx, $vm, $vl),
+                   $sy,
+                   $vl),
+                 (i2l (SUBUWrm $vl, 127))),
+               ResRC)>;
 }
 
 multiclass Reduce_Unordered<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken> {
