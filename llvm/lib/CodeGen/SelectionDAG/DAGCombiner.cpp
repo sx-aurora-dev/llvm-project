@@ -466,6 +466,7 @@ namespace {
     SDValue visitFREEZE(SDNode *N);
     SDValue visitBUILD_PAIR(SDNode *N);
     SDValue visitFADD(SDNode *N);
+    SDValue visitFADD_VP(SDNode *N);
     SDValue visitSTRICT_FADD(SDNode *N);
     SDValue visitFSUB(SDNode *N);
     SDValue visitFMUL(SDNode *N);
@@ -513,6 +514,7 @@ namespace {
     SDValue visitVECREDUCE(SDNode *N);
     SDValue visitVPOp(SDNode *N);
 
+    template<class MatchContextClass>
     SDValue visitFADDForFMACombine(SDNode *N);
     SDValue visitFSUBForFMACombine(SDNode *N);
     SDValue visitFMULForFMADistributiveCombine(SDNode *N);
@@ -817,6 +819,161 @@ public:
   // FIXME: Ideally we could add N to the worklist, but this causes exponential
   //        compile time costs in large DAGs, e.g. Halide.
   void NodeInserted(SDNode *N) override { DC.ConsiderForPruning(N); }
+};
+
+struct EmptyMatchContext {
+  SelectionDAG & DAG;
+
+  EmptyMatchContext(SelectionDAG & DAG, SDNode * Root)
+  : DAG(DAG)
+  {}
+
+  bool match(SDValue OpN, unsigned OpCode) const { return  OpCode == OpN->getOpcode(); }
+
+  unsigned getFunctionOpCode(SDValue N) const {
+    return N->getOpcode();
+  }
+
+  bool isCompatible(SDValue OpVal) const { return true; }
+
+  // Specialize based on number of operands.
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT) { return DAG.getNode(Opcode, DL, VT); }
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
+                  Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, Operand, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, Operand);
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, N1, N2, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, N1, N2);
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, SDValue N3,
+                  Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, N1, N2, N3, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, N1, N2, N3);
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, SDValue N3, SDValue N4) {
+    return DAG.getNode(Opcode, DL, VT, N1, N2, N3, N4);
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, SDValue N3, SDValue N4, SDValue N5) {
+    return DAG.getNode(Opcode, DL, VT, N1, N2, N3, N4, N5);
+  }
+};
+
+struct
+VPMatchContext {
+  SelectionDAG & DAG;
+  SDNode * Root;
+  SDValue RootMaskOp;
+  SDValue RootVectorLenOp;
+
+  VPMatchContext(SelectionDAG & DAG, SDNode * Root)
+  : DAG(DAG)
+  , Root(Root)
+  , RootMaskOp()
+  , RootVectorLenOp()
+  {
+    if (Root->isVP()) {
+      auto RootMaskPos = ISD::getVPMaskIdx(Root->getOpcode());
+      if (RootMaskPos) {
+        RootMaskOp = Root->getOperand(*RootMaskPos);
+      }
+
+      auto RootVLenPos = ISD::getVPExplicitVectorLengthIdx(Root->getOpcode());
+      if (RootVLenPos) {
+        RootVectorLenOp = Root->getOperand(*RootVLenPos);
+      }
+    }
+  }
+
+  unsigned getFunctionOpCode(SDValue N) const {
+    unsigned VPOpCode = N->getOpcode();
+    auto FuncOpc = ISD::GetFunctionOpCodeForVP(VPOpCode, !N->getFlags().hasNoFPExcept());
+    if (!FuncOpc) return VPOpCode;
+    return *FuncOpc;
+  }
+
+  bool isCompatible(SDValue OpVal) const {
+    if (!OpVal->isVP()) {
+      return !Root->isVP();
+
+    } else {
+      unsigned VPOpCode = OpVal->getOpcode();
+      auto MaskPos = ISD::getVPMaskIdx(VPOpCode);
+      if (MaskPos && RootMaskOp != OpVal.getOperand(*MaskPos)) {
+        return false;
+      }
+
+      auto VLenPos = ISD::getVPExplicitVectorLengthIdx(VPOpCode);
+      if (VLenPos && RootVectorLenOp != OpVal.getOperand(*VLenPos)) {
+        return false;
+      }
+
+      return true;
+    }
+  }
+
+  /// whether \p OpN is a node that is functionally compatible with the NodeType \p OpNodeTy
+  bool match(SDValue OpVal, unsigned OpNT) const {
+    return isCompatible(OpVal) && getFunctionOpCode(OpVal) == OpNT;
+  }
+
+  // Specialize based on number of operands.
+  // TODO emit VP intrinsics where MaskOp/VectorLenOp != null
+  // SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT) { return DAG.getNode(Opcode, DL, VT); }
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
+                  Optional<SDNodeFlags> Flags = None) {
+    unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
+    assert(MaskPos == 1 && VLenPos == 2);
+
+    if (Flags)
+      return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp}, *Flags);
+    else 
+      return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp});
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, Optional<SDNodeFlags> Flags = None) {
+    unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
+    assert(MaskPos == 2 && VLenPos == 3);
+
+    if (Flags) 
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp}, *Flags);
+    else
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp});
+  }
+
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, SDValue N3,
+                  Optional<SDNodeFlags> Flags = None) {
+    unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
+    assert(MaskPos == 3 && VLenPos == 4);
+
+    if (Flags)
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp}, *Flags);
+    else
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp});
+  }
 };
 
 } // end anonymous namespace
@@ -13699,11 +13856,15 @@ static bool hasNoInfs(const TargetOptions &Options, SDValue N) {
 }
 
 /// Try to perform FMA combining on a given FADD node.
+template<class MatchContextClass>
 SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   SDValue N1 = N->getOperand(1);
   EVT VT = N->getValueType(0);
   SDLoc SL(N);
+
+  MatchContextClass matcher(DAG, N);
+  if (!matcher.isCompatible(N0) || !matcher.isCompatible(N1)) return SDValue();
 
   const TargetOptions &Options = DAG.getTarget().Options;
 
@@ -13735,14 +13896,13 @@ SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
   bool Aggressive = TLI.enableAggressiveFMAFusion(VT);
 
   auto isFusedOp = [&](SDValue N) {
-    unsigned Opcode = N.getOpcode();
-    return Opcode == ISD::FMA || Opcode == ISD::FMAD;
+    return matcher.match(N, ISD::FMA) || matcher.match(N, ISD::FMAD);
   };
 
   // Is the node an FMUL and contractable either due to global flags or
   // SDNodeFlags.
-  auto isContractableFMUL = [AllowFusionGlobally](SDValue N) {
-    if (N.getOpcode() != ISD::FMUL)
+  auto isContractableFMUL = [AllowFusionGlobally, &matcher](SDValue N) {
+    if (!matcher.match(N, ISD::FMUL))
       return false;
     return AllowFusionGlobally || N->getFlags().hasAllowContract();
   };
@@ -13755,15 +13915,15 @@ SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
 
   // fold (fadd (fmul x, y), z) -> (fma x, y, z)
   if (isContractableFMUL(N0) && (Aggressive || N0->hasOneUse())) {
-    return DAG.getNode(PreferredFusedOpcode, SL, VT, N0.getOperand(0),
-                       N0.getOperand(1), N1);
+    return matcher.getNode(PreferredFusedOpcode, SL, VT,
+                       N0.getOperand(0), N0.getOperand(1), N1);
   }
 
   // fold (fadd x, (fmul y, z)) -> (fma y, z, x)
   // Note: Commutes FADD operands.
   if (isContractableFMUL(N1) && (Aggressive || N1->hasOneUse())) {
-    return DAG.getNode(PreferredFusedOpcode, SL, VT, N1.getOperand(0),
-                       N1.getOperand(1), N0);
+    return matcher.getNode(PreferredFusedOpcode, SL, VT,
+                       N1.getOperand(0), N1.getOperand(1), N0);
   }
 
   // fadd (fma A, B, (fmul C, D)), E --> fma A, B, (fma C, D, E)
@@ -13793,29 +13953,31 @@ SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
   // Look through FP_EXTEND nodes to do more combining.
 
   // fold (fadd (fpext (fmul x, y)), z) -> (fma (fpext x), (fpext y), z)
-  if (N0.getOpcode() == ISD::FP_EXTEND) {
+  if ((N0.getOpcode() == ISD::FP_EXTEND) && matcher.isCompatible(N0.getOperand(0))) {
     SDValue N00 = N0.getOperand(0);
     if (isContractableFMUL(N00) &&
         TLI.isFPExtFoldable(DAG, PreferredFusedOpcode, VT,
                             N00.getValueType())) {
-      return DAG.getNode(PreferredFusedOpcode, SL, VT,
-                         DAG.getNode(ISD::FP_EXTEND, SL, VT, N00.getOperand(0)),
-                         DAG.getNode(ISD::FP_EXTEND, SL, VT, N00.getOperand(1)),
-                         N1);
+      return matcher.getNode(PreferredFusedOpcode, SL, VT,
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT,
+                                     N00.getOperand(0)),
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT,
+                                     N00.getOperand(1)), N1);
     }
   }
 
   // fold (fadd x, (fpext (fmul y, z))) -> (fma (fpext y), (fpext z), x)
   // Note: Commutes FADD operands.
-  if (N1.getOpcode() == ISD::FP_EXTEND) {
+  if (matcher.match(N1, ISD::FP_EXTEND)) {
     SDValue N10 = N1.getOperand(0);
     if (isContractableFMUL(N10) &&
         TLI.isFPExtFoldable(DAG, PreferredFusedOpcode, VT,
                             N10.getValueType())) {
-      return DAG.getNode(PreferredFusedOpcode, SL, VT,
-                         DAG.getNode(ISD::FP_EXTEND, SL, VT, N10.getOperand(0)),
-                         DAG.getNode(ISD::FP_EXTEND, SL, VT, N10.getOperand(1)),
-                         N0);
+      return matcher.getNode(PreferredFusedOpcode, SL, VT,
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT,
+                                     N10.getOperand(0)),
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT,
+                                     N10.getOperand(1)), N0);
     }
   }
 
@@ -13823,17 +13985,17 @@ SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
   if (Aggressive) {
     // fold (fadd (fma x, y, (fpext (fmul u, v))), z)
     //   -> (fma x, y, (fma (fpext u), (fpext v), z))
-    auto FoldFAddFMAFPExtFMul = [&](SDValue X, SDValue Y, SDValue U, SDValue V,
-                                    SDValue Z) {
-      return DAG.getNode(PreferredFusedOpcode, SL, VT, X, Y,
-                         DAG.getNode(PreferredFusedOpcode, SL, VT,
-                                     DAG.getNode(ISD::FP_EXTEND, SL, VT, U),
-                                     DAG.getNode(ISD::FP_EXTEND, SL, VT, V),
+    auto FoldFAddFMAFPExtFMul = [&] (
+      SDValue X, SDValue Y, SDValue U, SDValue V, SDValue Z) {
+      return matcher.getNode(PreferredFusedOpcode, SL, VT, X, Y,
+                         matcher.getNode(PreferredFusedOpcode, SL, VT,
+                                     matcher.getNode(ISD::FP_EXTEND, SL, VT, U),
+                                     matcher.getNode(ISD::FP_EXTEND, SL, VT, V),
                                      Z));
     };
     if (isFusedOp(N0)) {
       SDValue N02 = N0.getOperand(2);
-      if (N02.getOpcode() == ISD::FP_EXTEND) {
+      if (matcher.match(N02, ISD::FP_EXTEND)) {
         SDValue N020 = N02.getOperand(0);
         if (isContractableFMUL(N020) &&
             TLI.isFPExtFoldable(DAG, PreferredFusedOpcode, VT,
@@ -13850,14 +14012,15 @@ SDValue DAGCombiner::visitFADDForFMACombine(SDNode *N) {
     // FIXME: This turns two single-precision and one double-precision
     // operation into two double-precision operations, which might not be
     // interesting for all targets, especially GPUs.
-    auto FoldFAddFPExtFMAFMul = [&](SDValue X, SDValue Y, SDValue U, SDValue V,
-                                    SDValue Z) {
-      return DAG.getNode(
-          PreferredFusedOpcode, SL, VT, DAG.getNode(ISD::FP_EXTEND, SL, VT, X),
-          DAG.getNode(ISD::FP_EXTEND, SL, VT, Y),
-          DAG.getNode(PreferredFusedOpcode, SL, VT,
-                      DAG.getNode(ISD::FP_EXTEND, SL, VT, U),
-                      DAG.getNode(ISD::FP_EXTEND, SL, VT, V), Z));
+    auto FoldFAddFPExtFMAFMul = [&] (
+      SDValue X, SDValue Y, SDValue U, SDValue V, SDValue Z) {
+      return matcher.getNode(PreferredFusedOpcode, SL, VT,
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT, X),
+                         matcher.getNode(ISD::FP_EXTEND, SL, VT, Y),
+                         matcher.getNode(PreferredFusedOpcode, SL, VT,
+                                     matcher.getNode(ISD::FP_EXTEND, SL, VT, U),
+                                     matcher.getNode(ISD::FP_EXTEND, SL, VT, V),
+                                     Z));
     };
     if (N0.getOpcode() == ISD::FP_EXTEND) {
       SDValue N00 = N0.getOperand(0);
@@ -14320,6 +14483,17 @@ SDValue DAGCombiner::visitFMULForFMADistributiveCombine(SDNode *N) {
   return SDValue();
 }
 
+SDValue DAGCombiner::visitFADD_VP(SDNode *N) {
+  SelectionDAG::FlagInserter FlagsInserter(DAG, N);
+
+  // FADD -> FMA combines:
+  if (SDValue Fused = visitFADDForFMACombine<VPMatchContext>(N)) {
+    AddToWorklist(Fused.getNode());
+    return Fused;
+  }
+  return SDValue();
+}
+
 SDValue DAGCombiner::visitFADD(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   SDValue N1 = N->getOperand(1);
@@ -14494,7 +14668,7 @@ SDValue DAGCombiner::visitFADD(SDNode *N) {
   } // enable-unsafe-fp-math
 
   // FADD -> FMA combines:
-  if (SDValue Fused = visitFADDForFMACombine(N)) {
+  if (SDValue Fused = visitFADDForFMACombine<EmptyMatchContext>(N)) {
     AddToWorklist(Fused.getNode());
     return Fused;
   }
@@ -22854,8 +23028,16 @@ SDValue DAGCombiner::visitVPOp(SDNode *N) {
         ISD::isConstantSplatVectorAllZeros(N->getOperand(*MaskIdx).getNode());
 
   // This is the only generic VP combine we support for now.
-  if (!AreAllEltsDisabled)
+  if (!AreAllEltsDisabled) {
+    // FMA fusion.
+    switch (N->getOpcode()) {
+    default:
+      break;
+    case ISD::VP_FADD:
+      return visitFADD_VP(N);
+    }
     return SDValue();
+  }
 
   // Binary operations can be replaced by UNDEF.
   if (ISD::isVPBinaryOp(N->getOpcode()))

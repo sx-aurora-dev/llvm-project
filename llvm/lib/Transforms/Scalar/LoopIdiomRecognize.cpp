@@ -2252,8 +2252,13 @@ template <typename SubPattern_t> struct match_LoopInvariant {
   match_LoopInvariant(const SubPattern_t &SP, const Loop *L)
       : SubPattern(SP), L(L) {}
 
+  template <typename ITy, typename MatcherContext> bool match_context(ITy *V, MatcherContext &MC) {
+    return L->isLoopInvariant(V) && SubPattern.match_context(V, MC);
+  }
+
   template <typename ITy> bool match(ITy *V) {
-    return L->isLoopInvariant(V) && SubPattern.match(V);
+    PatternMatch::EmptyContext EC;
+    return match_context(V, EC);
   }
 };
 

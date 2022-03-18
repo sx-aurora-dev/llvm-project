@@ -41,13 +41,68 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/IR/MatcherCast.h"
+
 #include <cstdint>
+
 
 namespace llvm {
 namespace PatternMatch {
 
+// Use verbatim types in default (empty) context.
+struct EmptyContext {
+  static constexpr bool IsEmpty = true;
+
+  EmptyContext() {}
+
+  EmptyContext(const Value *) {}
+
+  EmptyContext(const EmptyContext & E) {}
+
+  // reset this match context to be rooted at \p V
+  void reset(Value * V) {}
+
+  // accept a match where \p Val is in a non-leaf position in a match pattern
+  bool acceptInnerNode(const Value * Val) const { return true; }
+
+  // accept a match where \p Val is bound to a free variable.
+  bool acceptBoundNode(const Value * Val) const { return true; }
+
+  // whether this context is compatiable with \p E.
+  bool acceptContext(EmptyContext E) const { return true; }
+
+  // merge the context \p E into this context and return whether the resulting context is valid.
+  bool mergeContext(EmptyContext E) { return true; }
+
+  // reset this context to \p Val.
+  template <typename Val, typename Pattern> bool reset_match(Val *V, const Pattern &P) {
+    reset(V);
+    return const_cast<Pattern &>(P).match_context(V, *this);
+  }
+
+  // match in the current context
+  template <typename Val, typename Pattern> bool try_match(Val *V, const Pattern &P) {
+    return const_cast<Pattern &>(P).match_context(V, *this);
+  }
+};
+
+template<typename DestClass>
+struct MatcherCast<EmptyContext, DestClass> { using ActualCastType = DestClass; };
+
+
+
+
+
+
+// match without (== empty) context
 template <typename Val, typename Pattern> bool match(Val *V, const Pattern &P) {
-  return const_cast<Pattern &>(P).match(V);
+  EmptyContext ECtx;
+  return const_cast<Pattern &>(P).match_context(V, ECtx);
+}
+
+// match pattern in a given context
+template <typename Val, typename Pattern, typename MatchContext> bool match(Val *V, const Pattern &P, MatchContext & MContext) {
+  return const_cast<Pattern &>(P).match_context(V, MContext);
 }
 
 template <typename Pattern> bool match(ArrayRef<int> Mask, const Pattern &P) {
@@ -60,7 +115,11 @@ template <typename SubPattern_t> struct OneUse_match {
   OneUse_match(const SubPattern_t &SP) : SubPattern(SP) {}
 
   template <typename OpTy> bool match(OpTy *V) {
-    return V->hasOneUse() && SubPattern.match(V);
+    EmptyContext EContext; return match_context(V, EContext);
+  }
+
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    return V->hasOneUse() && SubPattern.match_context(V, MContext);
   }
 };
 
@@ -69,7 +128,11 @@ template <typename T> inline OneUse_match<T> m_OneUse(const T &SubPattern) {
 }
 
 template <typename Class> struct class_match {
-  template <typename ITy> bool match(ITy *V) { return isa<Class>(V); }
+  template <typename ITy> bool match(ITy *V) {
+    EmptyContext EContext; return match_context<ITy, EmptyContext>(V, EContext);
+  }
+  template <typename ITy, typename MatchContext>
+  bool match_context(ITy *V, MatchContext & MContext) { return match_isa<MatchContext, Class>(V); }
 };
 
 /// Match an arbitrary value and ignore it.
@@ -128,6 +191,10 @@ struct undef_match {
     return true;
   }
   template <typename ITy> bool match(ITy *V) { return check(V); }
+  template <typename ITy, typename MatcherContext>
+  bool match_context(ITy *V, MatcherContext &MC) {
+    return check(V);
+  }
 };
 
 /// Match an arbitrary undef constant. This matches poison as well.
@@ -167,7 +234,14 @@ template <typename Ty> struct match_unless {
 
   match_unless(const Ty &Matcher) : M(Matcher) {}
 
-  template <typename ITy> bool match(ITy *V) { return !M.match(V); }
+  template <typename ITy, typename MatcherContext>
+  bool match_context(ITy *V, MatcherContext &MC) {
+    return !M.match_context(V, MC);
+  }
+  template <typename ITy> bool match(ITy *V) {
+    EmptyContext EC;
+    return match_context(V, EC);
+  }
 };
 
 /// Match if the inner matcher does *NOT* match.
@@ -182,11 +256,17 @@ template <typename LTy, typename RTy> struct match_combine_or {
 
   match_combine_or(const LTy &Left, const RTy &Right) : L(Left), R(Right) {}
 
-  template <typename ITy> bool match(ITy *V) {
-    if (L.match(V))
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
+    MatchContext SubContext;
+
+    if (L.match_context(V, SubContext) && MContext.acceptContext(SubContext)) {
+      MContext.mergeContext(SubContext);
       return true;
-    if (R.match(V))
+    }
+    if (R.match_context(V, MContext)) {
       return true;
+    }
     return false;
   }
 };
@@ -197,9 +277,10 @@ template <typename LTy, typename RTy> struct match_combine_and {
 
   match_combine_and(const LTy &Left, const RTy &Right) : L(Left), R(Right) {}
 
-  template <typename ITy> bool match(ITy *V) {
-    if (L.match(V))
-      if (R.match(V))
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
+    if (L.match_context(V, MContext))
+      if (R.match_context(V, MContext))
         return true;
     return false;
   }
@@ -224,7 +305,8 @@ struct apint_match {
   apint_match(const APInt *&Res, bool AllowUndef)
     : Res(Res), AllowUndef(AllowUndef) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (auto *CI = dyn_cast<ConstantInt>(V)) {
       Res = &CI->getValue();
       return true;
@@ -249,7 +331,8 @@ struct apfloat_match {
   apfloat_match(const APFloat *&Res, bool AllowUndef)
       : Res(Res), AllowUndef(AllowUndef) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (auto *CI = dyn_cast<ConstantFP>(V)) {
       Res = &CI->getValueAPF();
       return true;
@@ -300,7 +383,8 @@ inline apfloat_match m_APFloatForbidUndef(const APFloat *&Res) {
 }
 
 template <int64_t Val> struct constantint_match {
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (const auto *CI = dyn_cast<ConstantInt>(V)) {
       const APInt &CIV = CI->getValue();
       if (Val >= 0)
@@ -319,14 +403,15 @@ template <int64_t Val> inline constantint_match<Val> m_ConstantInt() {
   return constantint_match<Val>();
 }
 
-/// This helper class is used to match constant scalars, vector splats,
-/// and fixed width vectors that satisfy a specified predicate.
-/// For fixed width vector constants, undefined elements are ignored.
+/// This helper class is used to match scalar and fixed width vector integer
+/// constants that satisfy a specified predicate.
+/// For vector constants, undefined elements are ignored.
 template <typename Predicate, typename ConstantVal>
 struct cstval_pred_ty : public Predicate {
-  template <typename ITy> bool match(ITy *V) {
-    if (const auto *CV = dyn_cast<ConstantVal>(V))
-      return this->isValue(CV->getValue());
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
+    if (const auto *CI = dyn_cast<ConstantVal>(V))
+      return this->isValue(CI->getValue());
     if (const auto *VTy = dyn_cast<VectorType>(V->getType())) {
       if (const auto *C = dyn_cast<Constant>(V)) {
         if (const auto *CV = dyn_cast_or_null<ConstantVal>(C->getSplatValue()))
@@ -374,7 +459,8 @@ template <typename Predicate> struct api_pred_ty : public Predicate {
 
   api_pred_ty(const APInt *&R) : Res(R) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (const auto *CI = dyn_cast<ConstantInt>(V))
       if (this->isValue(CI->getValue())) {
         Res = &CI->getValue();
@@ -401,6 +487,12 @@ template <typename Predicate> struct apf_pred_ty : public Predicate {
   apf_pred_ty(const APFloat *&R) : Res(R) {}
 
   template <typename ITy> bool match(ITy *V) {
+    EmptyContext Empty;
+    return match_context(V, Empty);
+  }
+
+  template <typename ITy, typename MatchContext>
+  bool match_context(ITy *V, MatchContext &MContext) {
     if (const auto *CI = dyn_cast<ConstantFP>(V))
       if (this->isValue(CI->getValue())) {
         Res = &CI->getValue();
@@ -524,7 +616,8 @@ inline cst_pred_ty<is_zero_int> m_ZeroInt() {
 }
 
 struct is_zero {
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     auto *C = dyn_cast<Constant>(V);
     // FIXME: this should be able to do something for scalable vectors
     return C && (C->isNullValue() || cst_pred_ty<is_zero_int>().match(C));
@@ -709,8 +802,11 @@ template <typename Class> struct bind_ty {
 
   bind_ty(Class *&V) : VR(V) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (auto *CV = dyn_cast<Class>(V)) {
+      if (!MContext.acceptBoundNode(V)) return false;
+
       VR = CV;
       return true;
     }
@@ -773,7 +869,8 @@ struct specificval_ty {
 
   specificval_ty(const Value *V) : Val(V) {}
 
-  template <typename ITy> bool match(ITy *V) { return V == Val; }
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) { return V == Val; }
 };
 
 /// Match if we have a specific specified value.
@@ -786,7 +883,8 @@ template <typename Class> struct deferredval_ty {
 
   deferredval_ty(Class *const &V) : Val(V) {}
 
-  template <typename ITy> bool match(ITy *const V) { return V == Val; }
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *const V, MatchContext & MContext) { return V == Val; }
 };
 
 /// Like m_Specific(), but works if the specific value to match is determined
@@ -807,7 +905,8 @@ struct specific_fpval {
 
   specific_fpval(double V) : Val(V) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (const auto *CFP = dyn_cast<ConstantFP>(V))
       return CFP->isExactlyValue(Val);
     if (V->getType()->isVectorTy())
@@ -830,7 +929,8 @@ struct bind_const_intval_ty {
 
   bind_const_intval_ty(uint64_t &V) : VR(V) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (const auto *CV = dyn_cast<ConstantInt>(V))
       if (CV->getValue().ule(UINT64_MAX)) {
         VR = CV->getZExtValue();
@@ -848,7 +948,8 @@ struct specific_intval {
 
   specific_intval(APInt V) : Val(std::move(V)) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     const auto *CI = dyn_cast<ConstantInt>(V);
     if (!CI && V->getType()->isVectorTy())
       if (const auto *C = dyn_cast<Constant>(V))
@@ -886,7 +987,8 @@ struct specific_bbval {
 
   specific_bbval(BasicBlock *Val) : Val(Val) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EC; return match_context(V, EC); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     const auto *BB = dyn_cast<BasicBlock>(V);
     return BB && BB == Val;
   }
@@ -918,11 +1020,16 @@ struct AnyBinaryOp_match {
   // The LHS is always matched first.
   AnyBinaryOp_match(const LHS_t &LHS, const RHS_t &RHS) : L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *I = dyn_cast<BinaryOperator>(V))
-      return (L.match(I->getOperand(0)) && R.match(I->getOperand(1))) ||
-             (Commutable && L.match(I->getOperand(1)) &&
-              R.match(I->getOperand(0)));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto * I = match_dyn_cast<MatchContext, BinaryOperator>(V);
+    if (!I) return false;
+
+    if (!MContext.acceptInnerNode(I)) return false;
+
+    MatchContext LRContext(MContext);
+    if (L.match_context(I->getOperand(0), LRContext) && R.match_context(I->getOperand(1), LRContext) && MContext.mergeContext(LRContext)) return true;
+    if (Commutable && (L.match_context(I->getOperand(1), MContext) && R.match_context(I->getOperand(0), MContext))) return true;
     return false;
   }
 };
@@ -941,9 +1048,15 @@ template <typename OP_t> struct AnyUnaryOp_match {
 
   AnyUnaryOp_match(const OP_t &X) : X(X) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *I = dyn_cast<UnaryOperator>(V))
-      return X.match(I->getOperand(0));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto * I = match_dyn_cast<MatchContext, UnaryOperator>(V);
+    if (!I) return false;
+
+    if (!MContext.acceptInnerNode(I)) return false;
+
+    MatchContext XContext(MContext);
+    if (X.match_context(I->getOperand(0), XContext) && MContext.mergeContext(XContext)) return true;
     return false;
   }
 };
@@ -966,12 +1079,29 @@ struct BinaryOp_match {
   // The LHS is always matched first.
   BinaryOp_match(const LHS_t &LHS, const RHS_t &RHS) : L(LHS), R(RHS) {}
 
-  template <typename OpTy> inline bool match(unsigned Opc, OpTy *V) {
-    if (V->getValueID() == Value::InstructionVal + Opc) {
-      auto *I = cast<BinaryOperator>(V);
-      return (L.match(I->getOperand(0)) && R.match(I->getOperand(1))) ||
-             (Commutable && L.match(I->getOperand(1)) &&
-              R.match(I->getOperand(0)));
+  template <typename OpTy> bool match(unsigned Opc, OpTy *V) {
+    EmptyContext EContext;
+    return match_context(Opc, V, EContext);
+  }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
+    return match_context<>(Opcode, V, MContext);
+  }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(unsigned Opc, OpTy *V, MatchContext &MContext) {
+    auto *I = match_dyn_cast<MatchContext, const BinaryOperator>(V);
+    if (I && I->getOpcode() == Opc) {
+      MatchContext LRContext(MContext);
+      if (!MContext.acceptInnerNode(I))
+        return false;
+      if (L.match_context(I->getOperand(0), LRContext) &&
+          R.match_context(I->getOperand(1), LRContext) &&
+          MContext.mergeContext(LRContext))
+        return true;
+      if (Commutable && (L.match_context(I->getOperand(1), MContext) &&
+                         R.match_context(I->getOperand(0), MContext)))
+        return true;
+      return false;
     }
     if (auto *CE = dyn_cast<ConstantExpr>(V))
       return CE->getOpcode() == Opc &&
@@ -981,7 +1111,10 @@ struct BinaryOp_match {
     return false;
   }
 
-  template <typename OpTy> bool match(OpTy *V) { return match(Opcode, V); }
+  template <typename OpTy> bool match(OpTy *V) {
+    EmptyContext EC;
+    return match_context<>(Opcode, V, EC);
+  }
 };
 
 template <typename LHS, typename RHS>
@@ -1012,25 +1145,26 @@ template <typename Op_t> struct FNeg_match {
   Op_t X;
 
   FNeg_match(const Op_t &Op) : X(Op) {}
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     auto *FPMO = dyn_cast<FPMathOperator>(V);
     if (!FPMO) return false;
 
-    if (FPMO->getOpcode() == Instruction::FNeg)
+    if (match_cast<MatchContext, const Operator>(V)->getOpcode() == Instruction::FNeg)
       return X.match(FPMO->getOperand(0));
 
-    if (FPMO->getOpcode() == Instruction::FSub) {
+    if (match_cast<MatchContext, const Operator>(V)->getOpcode() == Instruction::FSub) {
       if (FPMO->hasNoSignedZeros()) {
         // With 'nsz', any zero goes.
-        if (!cstfp_pred_ty<is_any_zero_fp>().match(FPMO->getOperand(0)))
+        if (!cstfp_pred_ty<is_any_zero_fp>().match_context(FPMO->getOperand(0), MContext))
           return false;
       } else {
         // Without 'nsz', we need fsub -0.0, X exactly.
-        if (!cstfp_pred_ty<is_neg_zero_fp>().match(FPMO->getOperand(0)))
+        if (!cstfp_pred_ty<is_neg_zero_fp>().match_context(FPMO->getOperand(0), MContext))
           return false;
       }
 
-      return X.match(FPMO->getOperand(1));
+      return X.match_context(FPMO->getOperand(1), MContext);
     }
 
     return false;
@@ -1144,7 +1278,8 @@ struct OverflowingBinaryOp_match {
   OverflowingBinaryOp_match(const LHS_t &LHS, const RHS_t &RHS)
       : L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     if (auto *Op = dyn_cast<OverflowingBinaryOperator>(V)) {
       if (Op->getOpcode() != Opcode)
         return false;
@@ -1154,7 +1289,7 @@ struct OverflowingBinaryOp_match {
       if ((WrapFlags & OverflowingBinaryOperator::NoSignedWrap) &&
           !Op->hasNoSignedWrap())
         return false;
-      return L.match(Op->getOperand(0)) && R.match(Op->getOperand(1));
+      return L.match_context(Op->getOperand(0), MContext) && R.match_context(Op->getOperand(1), MContext);
     }
     return false;
   }
@@ -1237,6 +1372,12 @@ struct SpecificBinaryOp_match
   template <typename OpTy> bool match(OpTy *V) {
     return BinaryOp_match<LHS_t, RHS_t, 0, Commutable>::match(Opcode, V);
   }
+
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
+    return BinaryOp_match<LHS_t, RHS_t, 0, Commutable>::match_context(Opcode, V,
+                                                                      MContext);
+  }
 };
 
 /// Matches a specific opcode.
@@ -1256,10 +1397,11 @@ struct BinOpPred_match : Predicate {
 
   BinOpPred_match(const LHS_t &LHS, const RHS_t &RHS) : L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *I = dyn_cast<Instruction>(V))
-      return this->isOpType(I->getOpcode()) && L.match(I->getOperand(0)) &&
-             R.match(I->getOperand(1));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (auto *I = match_dyn_cast<MatchContext, Instruction>(V))
+      return this->isOpType(I->getOpcode()) && L.match_context(I->getOperand(0), MContext) &&
+             R.match_context(I->getOperand(1), MContext);
     if (auto *CE = dyn_cast<ConstantExpr>(V))
       return this->isOpType(CE->getOpcode()) && L.match(CE->getOperand(0)) &&
              R.match(CE->getOperand(1));
@@ -1351,9 +1493,10 @@ template <typename SubPattern_t> struct Exact_match {
 
   Exact_match(const SubPattern_t &SP) : SubPattern(SP) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     if (auto *PEO = dyn_cast<PossiblyExactOperator>(V))
-      return PEO->isExact() && SubPattern.match(V);
+      return PEO->isExact() && SubPattern.match_context(V, MContext);
     return false;
   }
 };
@@ -1378,13 +1521,27 @@ struct CmpClass_match {
   CmpClass_match(PredicateTy &Pred, const LHS_t &LHS, const RHS_t &RHS)
       : Predicate(Pred), L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *I = dyn_cast<Class>(V)) {
-      if (L.match(I->getOperand(0)) && R.match(I->getOperand(1))) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (auto *I = match_dyn_cast<MatchContext, Class>(V)) {
+      if (!MContext.acceptInnerNode(I))
+        return false;
+
+      MatchContext LRContext(MContext);
+      if (L.match_context(I->getOperand(0), LRContext) &&
+          R.match_context(I->getOperand(1), LRContext) &&
+          MContext.mergeContext(LRContext)) {
         Predicate = I->getPredicate();
         return true;
-      } else if (Commutable && L.match(I->getOperand(1)) &&
-           R.match(I->getOperand(0))) {
+      }
+
+      if (!Commutable)
+        return false;
+
+      MatchContext RLContext(MContext);
+      if (L.match_context(I->getOperand(1), RLContext) &&
+          R.match_context(I->getOperand(0), RLContext) &&
+          MContext.mergeContext(RLContext)) {
         Predicate = I->getSwappedPredicate();
         return true;
       }
@@ -1421,10 +1578,11 @@ template <typename T0, unsigned Opcode> struct OneOps_match {
 
   OneOps_match(const T0 &Op1) : Op1(Op1) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (V->getValueID() == Value::InstructionVal + Opcode) {
-      auto *I = cast<Instruction>(V);
-      return Op1.match(I->getOperand(0));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto *I = match_dyn_cast<MatchContext, Instruction>(V);
+    if (I && I->getOpcode() == Opcode && MContext.acceptInnerNode(I)) {
+      return Op1.match_context(I->getOperand(0), MContext);
     }
     return false;
   }
@@ -1437,10 +1595,12 @@ template <typename T0, typename T1, unsigned Opcode> struct TwoOps_match {
 
   TwoOps_match(const T0 &Op1, const T1 &Op2) : Op1(Op1), Op2(Op2) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (V->getValueID() == Value::InstructionVal + Opcode) {
-      auto *I = cast<Instruction>(V);
-      return Op1.match(I->getOperand(0)) && Op2.match(I->getOperand(1));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto *I = match_dyn_cast<MatchContext, Instruction>(V);
+    if (I && I->getOpcode() == Opcode && MContext.acceptInnerNode(I)) {
+      return Op1.match_context(I->getOperand(0), MContext) &&
+             Op2.match_context(I->getOperand(1), MContext);
     }
     return false;
   }
@@ -1456,11 +1616,13 @@ struct ThreeOps_match {
   ThreeOps_match(const T0 &Op1, const T1 &Op2, const T2 &Op3)
       : Op1(Op1), Op2(Op2), Op3(Op3) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (V->getValueID() == Value::InstructionVal + Opcode) {
-      auto *I = cast<Instruction>(V);
-      return Op1.match(I->getOperand(0)) && Op2.match(I->getOperand(1)) &&
-             Op3.match(I->getOperand(2));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    auto *I = match_dyn_cast<MatchContext, Instruction>(V);
+    if (I && I->getOpcode() == Opcode && MContext.acceptInnerNode(I)) {
+      return Op1.match_context(I->getOperand(0), MContext) &&
+             Op2.match_context(I->getOperand(1), MContext) &&
+             Op3.match_context(I->getOperand(2), MContext);
     }
     return false;
   }
@@ -1512,9 +1674,12 @@ template <typename T0, typename T1, typename T2> struct Shuffle_match {
   Shuffle_match(const T0 &Op1, const T1 &Op2, const T2 &Mask)
       : Op1(Op1), Op2(Op2), Mask(Mask) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EC; return match_context<OpTy, EmptyContext>(V, EC); }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MC) {
     if (auto *I = dyn_cast<ShuffleVectorInst>(V)) {
-      return Op1.match(I->getOperand(0)) && Op2.match(I->getOperand(1)) &&
+      return Op1.match_context(I->getOperand(0), MC) &&
+             Op2.match_context(I->getOperand(1), MC) &&
              Mask.match(I->getShuffleMask());
     }
     return false;
@@ -1591,9 +1756,10 @@ template <typename Op_t, unsigned Opcode> struct CastClass_match {
 
   CastClass_match(const Op_t &OpMatch) : Op(OpMatch) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *O = dyn_cast<Operator>(V))
-      return O->getOpcode() == Opcode && Op.match(O->getOperand(0));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (auto O = match_dyn_cast<MatchContext, Operator>(V))
+      return O->getOpcode() == Opcode && MContext.acceptInnerNode(O) && Op.match_context(O->getOperand(0), MContext);
     return false;
   }
 };
@@ -1707,8 +1873,9 @@ struct br_match {
 
   br_match(BasicBlock *&Succ) : Succ(Succ) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *BI = dyn_cast<BranchInst>(V))
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (auto *BI = match_dyn_cast<MatchContext, BranchInst>(V))
       if (BI->isUnconditional()) {
         Succ = BI->getSuccessor(0);
         return true;
@@ -1728,10 +1895,12 @@ struct brc_match {
   brc_match(const Cond_t &C, const TrueBlock_t &t, const FalseBlock_t &f)
       : Cond(C), T(t), F(f) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (auto *BI = dyn_cast<BranchInst>(V))
-      if (BI->isConditional() && Cond.match(BI->getCondition()))
-        return T.match(BI->getSuccessor(0)) && F.match(BI->getSuccessor(1));
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (auto *BI = match_dyn_cast<MatchContext, BranchInst>(V))
+      if (BI->isConditional() && Cond.match(BI->getCondition())) {
+        return T.match_context(BI->getSuccessor(0), MContext) && F.match_context(BI->getSuccessor(1), MContext);
+      }
     return false;
   }
 };
@@ -1764,7 +1933,8 @@ struct MaxMin_match {
   // The LHS is always matched first.
   MaxMin_match(const LHS_t &LHS, const RHS_t &RHS) : L(LHS), R(RHS) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     if (auto *II = dyn_cast<IntrinsicInst>(V)) {
       Intrinsic::ID IID = II->getIntrinsicID();
       if ((IID == Intrinsic::smax && Pred_t::match(ICmpInst::ICMP_SGT)) ||
@@ -1772,16 +1942,18 @@ struct MaxMin_match {
           (IID == Intrinsic::umax && Pred_t::match(ICmpInst::ICMP_UGT)) ||
           (IID == Intrinsic::umin && Pred_t::match(ICmpInst::ICMP_ULT))) {
         Value *LHS = II->getOperand(0), *RHS = II->getOperand(1);
+        if (!MContext.acceptInnerNode(LHS) || !MContext.acceptInnerNode(RHS))
+          return false;
         return (L.match(LHS) && R.match(RHS)) ||
                (Commutable && L.match(RHS) && R.match(LHS));
       }
     }
     // Look for "(x pred y) ? x : y" or "(x pred y) ? y : x".
-    auto *SI = dyn_cast<SelectInst>(V);
-    if (!SI)
+    auto *SI = match_dyn_cast<MatchContext, SelectInst>(V);
+    if (!SI || !MContext.acceptInnerNode(SI))
       return false;
-    auto *Cmp = dyn_cast<CmpInst_t>(SI->getCondition());
-    if (!Cmp)
+    auto *Cmp = match_dyn_cast<MatchContext, CmpInst_t>(SI->getCondition());
+    if (!Cmp || !MContext.acceptInnerNode(Cmp))
       return false;
     // At this point we have a select conditioned on a comparison.  Check that
     // it is the values returned by the select that are being compared.
@@ -1797,9 +1969,12 @@ struct MaxMin_match {
     // Does "(x pred y) ? x : y" represent the desired max/min operation?
     if (!Pred_t::match(Pred))
       return false;
+
     // It does!  Bind the operands.
-    return (L.match(LHS) && R.match(RHS)) ||
-           (Commutable && L.match(RHS) && R.match(LHS));
+    MatchContext LRContext(MContext);
+    if (L.match_context(LHS, LRContext) && R.match_context(RHS, LRContext) && MContext.mergeContext(LRContext)) return true;
+    if (Commutable && (L.match_context(RHS, MContext) && R.match_context(LHS, MContext))) return true;
+    return false;
   }
 };
 
@@ -1968,7 +2143,8 @@ struct UAddWithOverflow_match {
   UAddWithOverflow_match(const LHS_t &L, const RHS_t &R, const Sum_t &S)
       : L(L), R(R), S(S) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     Value *ICmpLHS, *ICmpRHS;
     ICmpInst::Predicate Pred;
     if (!m_ICmp(Pred, m_Value(ICmpLHS), m_Value(ICmpRHS)).match(V))
@@ -2034,9 +2210,10 @@ template <typename Opnd_t> struct Argument_match {
 
   Argument_match(unsigned OpIdx, const Opnd_t &V) : OpI(OpIdx), Val(V) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     // FIXME: Should likely be switched to use `CallBase`.
-    if (const auto *CI = dyn_cast<CallInst>(V))
+    if (const auto *CI = match_dyn_cast<MatchContext, CallInst>(V))
       return Val.match(CI->getArgOperand(OpI));
     return false;
   }
@@ -2054,8 +2231,9 @@ struct IntrinsicID_match {
 
   IntrinsicID_match(Intrinsic::ID IntrID) : ID(IntrID) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
-    if (const auto *CI = dyn_cast<CallInst>(V))
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
+    if (const auto *CI = match_dyn_cast<MatchContext, CallInst>(V))
       if (const auto *F = CI->getCalledFunction())
         return F->getIntrinsicID() == ID;
     return false;
@@ -2292,16 +2470,17 @@ template <typename ValTy> struct NotForbidUndef_match {
   ValTy Val;
   NotForbidUndef_match(const ValTy &V) : Val(V) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     // We do not use m_c_Xor because that could match an arbitrary APInt that is
     // not -1 as C and then fail to match the other operand if it is -1.
     // This code should still work even when both operands are constants.
     Value *X;
     const APInt *C;
-    if (m_Xor(m_Value(X), m_APIntForbidUndef(C)).match(V) && C->isAllOnes())
-      return Val.match(X);
-    if (m_Xor(m_APIntForbidUndef(C), m_Value(X)).match(V) && C->isAllOnes())
-      return Val.match(X);
+    if (m_Xor(m_Value(X), m_APIntForbidUndef(C)).match_context(V, MContext) && C->isAllOnes())
+      return Val.match_context(X, MContext);
+    if (m_Xor(m_APIntForbidUndef(C), m_Value(X)).match_context(V, MContext) && C->isAllOnes())
+      return Val.match_context(X, MContext);
     return false;
   }
 };
@@ -2367,7 +2546,8 @@ template <typename Opnd_t> struct Signum_match {
   Opnd_t Val;
   Signum_match(const Opnd_t &V) : Val(V) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     unsigned TypeSize = V->getType()->getScalarSizeInBits();
     if (TypeSize == 0)
       return false;
@@ -2407,13 +2587,14 @@ template <int Ind, typename Opnd_t> struct ExtractValue_match {
   Opnd_t Val;
   ExtractValue_match(const Opnd_t &V) : Val(V) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EC; return match_context(V, EC); }
+  template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     if (auto *I = dyn_cast<ExtractValueInst>(V)) {
       // If Ind is -1, don't inspect indices
       if (Ind != -1 &&
           !(I->getNumIndices() == 1 && I->getIndices()[0] == (unsigned)Ind))
         return false;
-      return Val.match(I->getAggregateOperand());
+      return Val.match_context(I->getAggregateOperand(), MContext);
     }
     return false;
   }
@@ -2440,9 +2621,12 @@ template <int Ind, typename T0, typename T1> struct InsertValue_match {
 
   InsertValue_match(const T0 &Op0, const T1 &Op1) : Op0(Op0), Op1(Op1) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EC; return match_context(V, EC); }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
     if (auto *I = dyn_cast<InsertValueInst>(V)) {
-      return Op0.match(I->getOperand(0)) && Op1.match(I->getOperand(1)) &&
+      return Op0.match_context(I->getOperand(0), MContext) &&
+             Op1.match_context(I->getOperand(1), MContext) &&
              I->getNumIndices() == 1 && Ind == I->getIndices()[0];
     }
     return false;
@@ -2464,7 +2648,8 @@ struct VScaleVal_match {
   const DataLayout &DL;
   VScaleVal_match(const DataLayout &DL) : DL(DL) {}
 
-  template <typename ITy> bool match(ITy *V) {
+  template <typename ITy> bool match(ITy *V) { EmptyContext EC; return match_context(V, EC); }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (m_Intrinsic<Intrinsic::vscale>().match(V))
       return true;
 
@@ -2496,7 +2681,10 @@ struct LogicalOp_match {
   LogicalOp_match(const LHS &L, const RHS &R) : L(L), R(R) {}
 
   template <typename T> bool match(T *V) {
-    auto *I = dyn_cast<Instruction>(V);
+    EmptyContext EC; return match_context(V, EC);
+  }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
+    auto *I = match_dyn_cast<MatchContext, Instruction>(V);
     if (!I || !I->getType()->isIntOrIntVectorTy(1))
       return false;
 
@@ -2507,21 +2695,25 @@ struct LogicalOp_match {
              (Commutable && L.match(Op1) && R.match(Op0));
     }
 
-    if (auto *Select = dyn_cast<SelectInst>(I)) {
+    if (auto *Select = match_dyn_cast<MatchContext, SelectInst>(I)) {
       auto *Cond = Select->getCondition();
       auto *TVal = Select->getTrueValue();
       auto *FVal = Select->getFalseValue();
       if (Opcode == Instruction::And) {
         auto *C = dyn_cast<Constant>(FVal);
         if (C && C->isNullValue())
-          return (L.match(Cond) && R.match(TVal)) ||
-                 (Commutable && L.match(TVal) && R.match(Cond));
+          return (L.match_context(Cond, MContext) &&
+                  R.match_context(TVal, MContext)) ||
+                 (Commutable && L.match_context(TVal, MContext) &&
+                  R.match_context(Cond, MContext));
       } else {
         assert(Opcode == Instruction::Or);
         auto *C = dyn_cast<Constant>(TVal);
         if (C && C->isOneValue())
-          return (L.match(Cond) && R.match(FVal)) ||
-                 (Commutable && L.match(FVal) && R.match(Cond));
+          return (L.match_context(Cond, MContext) &&
+                  R.match_context(FVal, MContext)) ||
+                 (Commutable && L.match_context(FVal, MContext) &&
+                  R.match_context(Cond, MContext));
       }
     }
 
