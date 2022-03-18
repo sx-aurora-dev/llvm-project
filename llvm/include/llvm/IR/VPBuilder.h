@@ -69,6 +69,8 @@ public:
   Value& CreateContiguousLoad(Type *ReturnTy, Value & Pointer, MaybeAlign Alignment);
   Value& CreateScatter(Value & Val, Value & PointerVec, MaybeAlign Alignment);
   Value& CreateGather(Type *ReturnTy, Value & PointerVec, MaybeAlign Alignment);
+  Value &createSelect(Value &OnTrue, Value &OnFalse, Value &Mask, Value &Pivot,
+                      Twine Name = "");
 };
 
 } // namespace llvm
