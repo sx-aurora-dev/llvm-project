@@ -21,11 +21,6 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
-#include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/PredicatedInst.h"
-#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Debug.h"
@@ -96,8 +91,6 @@ public:
   Value *OptimizePointerDifference(
       Value *LHS, Value *RHS, Type *Ty, bool isNUW);
   Instruction *visitSub(BinaryOperator &I);
-  template<typename BinaryOpTy, typename MatcherType> Instruction *visitFSubGeneric(BinaryOpTy &I);
-  Instruction *visitPredicatedFSub(PredicatedBinaryOperator &I);
   Instruction *visitFSub(BinaryOperator &I);
   Instruction *visitMul(BinaryOperator &I);
   Instruction *visitFMul(BinaryOperator &I);
@@ -181,16 +174,6 @@ public:
   Value *pushFreezeToPreventPoisonFromPropagating(FreezeInst &FI);
   bool freezeDominatedUses(FreezeInst &FI);
   Instruction *visitFreeze(FreezeInst &I);
-
-  // Entry point to VPIntrinsic
-  Instruction *visitPredicatedInstruction(PredicatedInstruction * PI) {
-    switch (PI->getOpcode()) {
-      default:
-        return nullptr;
-      case Instruction::FSub:
-        return visitPredicatedFSub(cast<PredicatedBinaryOperator>(*PI));
-    }
-  }
 
   /// Specify what to return for unhandled instructions.
   Instruction *visitInstruction(Instruction &I) { return nullptr; }

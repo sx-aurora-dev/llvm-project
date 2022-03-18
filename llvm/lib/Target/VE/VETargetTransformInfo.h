@@ -22,7 +22,6 @@
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
 
 // Penalty cost factor to make vectorization unappealing (see
@@ -285,25 +284,20 @@ public:
   TargetTransformInfo::VPLegalization
   getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
     using VPTransform = TargetTransformInfo::VPLegalization;
-    auto &PI = cast<PredicatedInstruction>(VPI);
     return TargetTransformInfo::VPLegalization(
         /* EVLParamStrategy */ VPTransform::Legal,
-        /* OperatorStrategy */ supportsVPOperation(PI) ? VPTransform::Legal
+        /* OperatorStrategy */ supportsVPOperation(VPI) ? VPTransform::Legal
                                                        : VPTransform::Convert);
   }
 
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
-  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+  bool supportsVPOperation(const VPIntrinsic &VPI) const {
     if (!enableVPU())
       return false;
 
-    auto VPI = dyn_cast<VPIntrinsic>(&PredInst);
-    if (!VPI)
-      return true;
-
     // Cannot be widened into a legal VVP op
-    auto EC = VPI->getStaticVectorLength();
+    auto EC = VPI.getStaticVectorLength();
     if (EC.isScalable())
       return false;
 
@@ -312,12 +306,15 @@ public:
 
     // Bail on yet-unimplemented reductions
     if (isa<VPReductionIntrinsic>(VPI)) {
-      auto FPRed = dyn_cast<FPMathOperator>(VPI);
-      bool Unordered = FPRed ? VPI->getFastMathFlags().allowReassoc() : true;
-      return isSupportedReduction(VPI->getIntrinsicID(), Unordered);
+      auto FPRed = dyn_cast<FPMathOperator>(&VPI);
+      bool Unordered = FPRed ? VPI.getFastMathFlags().allowReassoc() : true;
+      return isSupportedReduction(VPI.getIntrinsicID(), Unordered);
     }
 
-    switch (PredInst.getOpcode()) {
+    Optional<unsigned> OpCodeOpt = VPI.getFunctionalOpcode();
+    unsigned OpCode = OpCodeOpt ? *OpCodeOpt : Instruction::Call;
+
+    switch (OpCode) {
     default:
       break;
 
@@ -329,30 +326,29 @@ public:
     // Non-opcode VP ops
     case Instruction::Call:
       // vp mask operations unsupported
-      if (PredInst.isVectorReduction())
-        return !PredInst.getType()->isIntOrIntVectorTy(1);
+      if (isa<VPReductionIntrinsic>(VPI))
+        return !VPI.getType()->isIntOrIntVectorTy(1);
       break;
 
     // TODO mask scatter&gather
     // vp mask load/store unsupported (FIXME)
     case Instruction::Load:
-      return !IsMaskType(PredInst.getType());
+      return !IsMaskType(VPI.getType());
 
     case Instruction::Store:
-      return !IsMaskType(PredInst.getOperand(0)->getType());
+      return !IsMaskType(VPI.getOperand(0)->getType());
 
     // vp mask operations unsupported
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor:
-      auto ITy = PredInst.getType();
+      auto ITy = VPI.getType();
       if (!ITy->isVectorTy())
         break;
       if (!ITy->isIntOrIntVectorTy(1))
         break;
       return false;
     }
-
     // be optimistic by default
     return true;
   }
