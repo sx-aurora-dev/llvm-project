@@ -787,8 +787,8 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
       }
 
       if (D->getBody())
-        D->getBody()->printPretty(Out, StmtHelper, SubPolicy, Indentation, "\n",
-                                  &Context);
+        D->getBody()->printPrettyControlled(Out, StmtHelper, SubPolicy,
+                                            Indentation, "\n", &Context);
     } else {
       if (!Policy.TerseOutput && isa<CXXConstructorDecl>(*D))
         Out << " {}";
