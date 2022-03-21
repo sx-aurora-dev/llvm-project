@@ -14089,6 +14089,8 @@ SDValue DAGCombiner::visitFMULForFMADistributiveCombine(SDNode *N) {
 }
 
 SDValue DAGCombiner::visitFADD_VP(SDNode *N) {
+  return SDValue();
+#if 0
   SelectionDAG::FlagInserter FlagsInserter(DAG, N);
 
   // FADD -> FMA combines:
@@ -14097,6 +14099,7 @@ SDValue DAGCombiner::visitFADD_VP(SDNode *N) {
     return Fused;
   }
   return SDValue();
+#endif
 }
 
 SDValue DAGCombiner::visitFADD(SDNode *N) {
