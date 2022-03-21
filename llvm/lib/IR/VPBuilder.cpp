@@ -178,11 +178,10 @@ Value &VPBuilder::CreateStridedLoad(Type *ReturnTy, Value &Ptr,
                                     MaybeAlign AlignOpt, int64_t Stride) {
   auto &ElemPtr = GetAsElementPointer(Ptr);
   // auto &VecTy = getVectorType(*ElemPtr.getType()->getPointerElementType());
-  auto *LoadFunc = VPIntrinsic::getDeclarationForParams(
-      &getModule(), Intrinsic::experimental_vp_strided_load, ReturnTy,
-      {&ElemPtr});
   auto *StrideConst = Builder.getInt64((uint64_t)Stride);
   ShortValueVec Args{&ElemPtr, StrideConst, &RequestPred(), &RequestEVL()};
+  auto *LoadFunc = VPIntrinsic::getDeclarationForParams(
+      &getModule(), Intrinsic::experimental_vp_strided_load, ReturnTy, Args);
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
