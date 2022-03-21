@@ -130,6 +130,19 @@ VectorType &VPBuilder::getVectorType(Type &ElementTy) {
   return *VectorType::get(&ElementTy, StaticVectorLength);
 }
 
+Value &VPBuilder::GetAsElementPointer(Value &Ptr) {
+  auto *ElemTy = Ptr.getType()->getPointerElementType();
+  if (!ElemTy->isVectorTy())
+    return Ptr;
+  auto &PointerTy = cast<PointerType>(*Ptr.getType());
+  if (auto *VecTy = dyn_cast<VectorType>(PointerTy.getPointerElementType())) {
+    auto *ElemPtrTy =
+        VecTy->getElementType()->getPointerTo(PointerTy.getAddressSpace());
+    return *Builder.CreatePointerCast(&Ptr, ElemPtrTy);
+  }
+  return Ptr;
+}
+
 Value &VPBuilder::GetAsVectorPointer(Value &Ptr) {
   auto *ElemTy = Ptr.getType()->getPointerElementType();
   if (ElemTy->isVectorTy())
@@ -138,6 +151,46 @@ Value &VPBuilder::GetAsVectorPointer(Value &Ptr) {
   auto &VecTy = getVectorType(*PointerTy.getPointerElementType());
   auto *VecPtrTy = VecTy.getPointerTo(PointerTy.getAddressSpace());
   return *Builder.CreatePointerCast(&Ptr, VecPtrTy);
+}
+
+Value &VPBuilder::CreateStridedStore(Value &Val, Value &Ptr,
+                                     MaybeAlign AlignOpt, int64_t Stride) {
+  auto &ElemPtr = GetAsElementPointer(Ptr);
+  auto &VecTy = getVectorType(*ElemPtr.getType()->getPointerElementType());
+  auto *StoreFunc = Intrinsic::getDeclaration(
+      &getModule(), Intrinsic::experimental_vp_strided_store,
+      {&VecTy, Type::getInt64Ty(Builder.getContext())});
+  auto *StrideConst = Builder.getInt64((uint64_t)Stride);
+
+  ShortValueVec Args{&Val, &ElemPtr, StrideConst, &RequestPred(),
+                     &RequestEVL()};
+  CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos =
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_store).getValue();
+    StoreCall.addParamAttr(
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
+  return StoreCall;
+}
+
+Value &VPBuilder::CreateStridedLoad(Type *ReturnTy, Value &Ptr,
+                                    MaybeAlign AlignOpt, int64_t Stride) {
+  auto &ElemPtr = GetAsElementPointer(Ptr);
+  // auto &VecTy = getVectorType(*ElemPtr.getType()->getPointerElementType());
+  auto *LoadFunc = VPIntrinsic::getDeclarationForParams(
+      &getModule(), Intrinsic::experimental_vp_strided_load, ReturnTy,
+      {&ElemPtr});
+  auto *StrideConst = Builder.getInt64((uint64_t)Stride);
+  ShortValueVec Args{&ElemPtr, StrideConst, &RequestPred(), &RequestEVL()};
+  CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos =
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_load).getValue();
+    LoadCall.addParamAttr(
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
+  return LoadCall;
 }
 
 Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,

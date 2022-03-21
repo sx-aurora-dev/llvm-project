@@ -26,8 +26,10 @@ class VPBuilder {
   Value& RequestPred();
   Value& RequestEVL();
 
-  // Cast to vector of element type.
+  // Cast to pointer to vector of \p Ptr/
   Value& GetAsVectorPointer(Value& Ptr);
+  // Cast to pointer of element of vector type.
+  Value& GetAsElementPointer(Value &Ptr);
 
 public:
   VPBuilder(IRBuilder<> &_builder)
@@ -73,6 +75,10 @@ public:
                                MaybeAlign Alignment);
   Value &CreateContiguousLoad(Type *ReturnTy, Value &Pointer,
                               MaybeAlign Alignment);
+  Value &CreateStridedStore(Value &Val, Value &Pointer, MaybeAlign Alignment,
+                            int64_t Stride);
+  Value &CreateStridedLoad(Type *ReturnTy, Value &Pointer, MaybeAlign Alignment,
+                           int64_t Stride);
   Value &CreateScatter(Value &Val, Value &PointerVec, MaybeAlign Alignment);
   Value &CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignOpt);
   Value &createSelect(Value &OnTrue, Value &OnFalse, Value &Mask, Value &Pivot,

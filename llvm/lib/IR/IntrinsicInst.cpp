@@ -618,13 +618,13 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
     return VPIntrinsic::ShortTypeVec{VectorTy};
 
   case Intrinsic::experimental_vp_strided_load:
-    return VPIntrinsic::ShortTypeVec{VecRetTy,
+    return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy,
                                      Type::getInt64Ty(VectorTy->getContext())};
   case Intrinsic::vp_gather:
   case Intrinsic::vp_load:
     return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
   case Intrinsic::experimental_vp_strided_store:
-    return VPIntrinsic::ShortTypeVec{VectorTy,
+    return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy,
                                      Type::getInt64Ty(VectorTy->getContext())};
   case Intrinsic::vp_scatter:
   case Intrinsic::vp_store:
