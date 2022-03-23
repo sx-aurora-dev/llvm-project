@@ -61,7 +61,6 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
@@ -2253,13 +2252,8 @@ template <typename SubPattern_t> struct match_LoopInvariant {
   match_LoopInvariant(const SubPattern_t &SP, const Loop *L)
       : SubPattern(SP), L(L) {}
 
-  template <typename ITy, typename MatcherContext> bool match_context(ITy *V, MatcherContext &MC) {
-    return L->isLoopInvariant(V) && SubPattern.match_context(V, MC);
-  }
-
   template <typename ITy> bool match(ITy *V) {
-    PatternMatch::EmptyContext EC;
-    return match_context(V, EC);
+    return L->isLoopInvariant(V) && SubPattern.match(V);
   }
 };
 

@@ -31,8 +31,8 @@
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
@@ -83,22 +83,20 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
-static const MVT WholeVectorVTs[] =
-    { MVT::v512i32, MVT::v512f32,
-      MVT::v256i32, MVT::v256f32, MVT::v256i64, MVT::v256f64,
-      MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
-      MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,
-      MVT::v32i32,  MVT::v32f32,  MVT::v32i64,  MVT::v32f64,
-      MVT::v16i32,  MVT::v16f32,  MVT::v16i64,  MVT::v16f64,
-      MVT::v8i32,   MVT::v8f32,   MVT::v8i64,   MVT::v8f64,
-      MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
-      MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
-    };
+static const MVT WholeVectorVTs[] = {
+    MVT::v512i32, MVT::v512f32, MVT::v256i32, MVT::v256f32, MVT::v256i64,
+    MVT::v256f64, MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
+    MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,  MVT::v32i32,
+    MVT::v32f32,  MVT::v32i64,  MVT::v32f64,  MVT::v16i32,  MVT::v16f32,
+    MVT::v16i64,  MVT::v16f64,  MVT::v8i32,   MVT::v8f32,   MVT::v8i64,
+    MVT::v8f64,   MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
+    MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
+};
 
-static const MVT All256MaskVTs[] =
-    { MVT::v256i1, MVT::v128i1, MVT::v64i1,  MVT::v32i1,
-      MVT::v16i1,  MVT::v8i1,   MVT::v4i1,   MVT::v2i1,
-    };
+static const MVT All256MaskVTs[] = {
+    MVT::v256i1, MVT::v128i1, MVT::v64i1, MVT::v32i1,
+    MVT::v16i1,  MVT::v8i1,   MVT::v4i1,  MVT::v2i1,
+};
 
 void VETargetLowering::initRegisterClasses() {
   // Scalar registers.
@@ -189,8 +187,8 @@ SDValue VETargetLowering::LowerFormalArguments(
         SDValue ArgLo = DAG.getCopyFromReg(Chain, DL, VRegLo, PartVT);
         SDValue ArgHi = DAG.getCopyFromReg(Chain, DL, VRegHi, PartVT);
         VECustomDAG CDAG(*this, DAG, DL);
-        Arg = CDAG.createPack(ValVT, ArgLo, ArgHi,
-                              CDAG.getConstEVL(StandardVectorWidth));
+        Arg = CDAG.getPack(ValVT, ArgLo, ArgHi,
+                           CDAG.getConstant(StandardVectorWidth, MVT::i32));
 
       } else {
         // Create a virtual register for the promoted live-in value.
@@ -707,8 +705,7 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                         const MachineFunction &MF) const {
   // Do not merge to float value size (128 bytes) if no implicit
   // float attribute is set.
-  bool NoFloat = MF.getFunction().hasFnAttribute(
-      Attribute::NoImplicitFloat);
+  bool NoFloat = MF.getFunction().hasFnAttribute(Attribute::NoImplicitFloat);
 
   if (NoFloat) {
     unsigned MaxIntSize = 64;
@@ -727,7 +724,6 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
 //     }
 //   }
 // }
-
 
 void VETargetLowering::initSPUActions() {
   const auto &TM = getTargetMachine();
@@ -1005,9 +1001,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanContents(ZeroOrOneBooleanContent);
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
-  LLVM_DEBUG(dbgs() << "VPU MODE:       " << Subtarget->enableVPU() << "\n";
-             dbgs() << "PACKED MODE:    " << Subtarget->hasPackedMode() << "\n"
-                    << "\n";);
+  LLVM_DEBUG(dbgs() << "VPU MODE:       " << Subtarget->enableVPU() << "\n";);
   initRegisterClasses();
   initSPUActions();
 
@@ -1095,7 +1089,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(LEGALAVL)
 
     // Register the VVP_* SDNodes.
-#define REGISTER_VVP_OP(VVP_NAME) TARGET_NODE_CASE(VVP_NAME)
+#define ADD_VVP_OP(VVP_NAME, ...) TARGET_NODE_CASE(VVP_NAME)
 #include "VVPNodes.def"
   }
   return nullptr;
@@ -1601,6 +1595,10 @@ SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   if (MemVT.isVector() && !isVectorMaskType(MemVT))
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
+  // Dispatch to vector isel.
+  if (MemVT.isVector() && !isMaskType(MemVT))
+    return lowerToVVP(Op, DAG);
+
   SDValue BasePtr = LdNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
     // Do not expand store instruction with frame index here because of
@@ -1974,6 +1972,16 @@ SDValue VETargetLowering::lowerINTRINSIC_W_CHAIN(SDValue Op,
   }
 }
 
+SDValue VETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  switch (IntNo) {
+  default:
+    return SDValue(); // Don't custom lower most intrinsics.
+  }
+}
+
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "::LowerOperation"; Op->print(dbgs()););
   unsigned Opcode = Op.getOpcode();
@@ -2025,16 +2033,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return lowerVASTART(Op, DAG);
   case ISD::VAARG:
     return lowerVAARG(Op, DAG);
-  }
-}
-
-SDValue VETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
-                                              SelectionDAG &DAG) const {
-  SDLoc dl(Op);
-  unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
-  switch (IntNo) {
-  default:
-    return SDValue(); // Don't custom lower most intrinsics.
   }
 }
 
@@ -3813,11 +3811,11 @@ VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
   // Only use packed mode when surpassing the regular (256 elements) vector
   // size.
   const bool RequiresPackedRegister =
-      isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256);
+      isOverPackedType(VT) ||
+      (isPackableElemVT(ElemVT) && NumElems > StandardVectorWidth);
 
   // Already a legal type.
-  if (isVectorRegisterVT(VT) &&
-      (!RequiresPackedRegister || Subtarget->hasPackedMode()))
+  if (isVectorRegisterVT(VT))
     return None;
 
   // Promote small elements to i/f32.
@@ -3828,13 +3826,9 @@ VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
   if (ElemBits > 64)
     return None; // Defer to builtin expansion for oversized vectors.
 
-  // Only use packed mode when surpassing the regular (256 elements) vector
-  // size.
-  const bool UsePackedRegister =
-      Subtarget->hasPackedMode() && RequiresPackedRegister;
-
   // Widen to register width.
-  const unsigned RegisterNumElems = UsePackedRegister ? 512 : 256;
+  const unsigned RegisterNumElems =
+      RequiresPackedRegister ? PackedVectorWidth : StandardVectorWidth;
   if (NumElems < RegisterNumElems)
     return getWidenVectorConversion(Context, ElemVT, RegisterNumElems);
 
@@ -3872,15 +3866,7 @@ unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
         Context, CC, VT, IntermediateVT, NumIntermediates, RegisterVT);
   };
 
-  auto ElemVT = VT.getVectorElementType();
-  unsigned NumElems = VT.isScalableVector() ? 0 : VT.getVectorNumElements();
-  const bool RequiresPackedRegister =
-      !VT.isScalableVector() &&
-      (isOverPackedType(VT) || (isPackableElemVT(ElemVT) && NumElems > 256));
-
-  if (CC != CallingConv::Fast || VT.isScalableVector() ||
-      (isVectorRegisterVT(VT) &&
-       !(Subtarget->hasPackedMode() && RequiresPackedRegister)))
+  if (CC != CallingConv::Fast || VT.isScalableVector())
     return DefaultImpl();
 
   // fastcc - map everything to vregs.

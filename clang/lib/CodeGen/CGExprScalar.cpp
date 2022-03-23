@@ -420,7 +420,7 @@ public:
 
     if (Value *Result = ConstantEmitter(CGF).tryEmitConstantExpr(E)) {
       if (E->isGLValue())
-        return CGF.Builder.CreateLoad(Address(
+        return CGF.Builder.CreateLoad(Address::deprecated(
             Result, CGF.getContext().getTypeAlignInChars(E->getType())));
       return Result;
     }
@@ -2039,11 +2039,16 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     }
 
     if (CGF.SanOpts.has(SanitizerKind::CFIUnrelatedCast)) {
-      if (auto PT = DestTy->getAs<PointerType>())
-        CGF.EmitVTablePtrCheckForCast(PT->getPointeeType(), Src,
-                                      /*MayBeNull=*/true,
-                                      CodeGenFunction::CFITCK_UnrelatedCast,
-                                      CE->getBeginLoc());
+      if (auto *PT = DestTy->getAs<PointerType>()) {
+        CGF.EmitVTablePtrCheckForCast(
+            PT->getPointeeType(),
+            Address(Src,
+                    CGF.ConvertTypeForMem(
+                        E->getType()->castAs<PointerType>()->getPointeeType()),
+                    CGF.getPointerAlign()),
+            /*MayBeNull=*/true, CodeGenFunction::CFITCK_UnrelatedCast,
+            CE->getBeginLoc());
+      }
     }
 
     if (CGF.CGM.getCodeGenOpts().StrictVTablePointers) {
@@ -2142,7 +2147,6 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
       DestLV.setTBAAInfo(TBAAAccessInfo::getMayAliasInfo());
       return EmitLoadOfLValue(DestLV, CE->getExprLoc());
     }
-
     return Builder.CreateBitCast(Src, DstTy);
   }
   case CK_AddressSpaceConversion: {
@@ -2198,10 +2202,10 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
                         Derived.getPointer(), DestTy->getPointeeType());
 
     if (CGF.SanOpts.has(SanitizerKind::CFIDerivedCast))
-      CGF.EmitVTablePtrCheckForCast(
-          DestTy->getPointeeType(), Derived.getPointer(),
-          /*MayBeNull=*/true, CodeGenFunction::CFITCK_DerivedCast,
-          CE->getBeginLoc());
+      CGF.EmitVTablePtrCheckForCast(DestTy->getPointeeType(), Derived,
+                                    /*MayBeNull=*/true,
+                                    CodeGenFunction::CFITCK_DerivedCast,
+                                    CE->getBeginLoc());
 
     return Derived.getPointer();
   }
@@ -2943,8 +2947,8 @@ Value *ScalarExprEmitter::VisitOffsetOfExpr(OffsetOfExpr *E) {
       CurrentType = ON.getBase()->getType();
 
       // Compute the offset to the base.
-      const RecordType *BaseRT = CurrentType->getAs<RecordType>();
-      CXXRecordDecl *BaseRD = cast<CXXRecordDecl>(BaseRT->getDecl());
+      auto *BaseRT = CurrentType->castAs<RecordType>();
+      auto *BaseRD = cast<CXXRecordDecl>(BaseRT->getDecl());
       CharUnits OffsetInt = RL.getBaseClassOffset(BaseRD);
       Offset = llvm::ConstantInt::get(ResultType, OffsetInt.getQuantity());
       break;
@@ -4814,9 +4818,8 @@ Value *ScalarExprEmitter::VisitAsTypeExpr(AsTypeExpr *E) {
           : 0;
 
   // Use bit vector expansion for ext_vector_type boolean vectors.
-  if (E->getType()->isExtVectorBoolType()) {
+  if (E->getType()->isExtVectorBoolType())
     return CGF.emitBoolVecConversion(Src, NumElementsDst, "astype");
-  }
 
   // Going from vec3 to non-vec3 is a special case and requires a shuffle
   // vector to get a vec4, then a bitcast if the target type is different.
@@ -4901,7 +4904,7 @@ LValue CodeGenFunction::EmitObjCIsaExpr(const ObjCIsaExpr *E) {
   Expr *BaseExpr = E->getBase();
   Address Addr = Address::invalid();
   if (BaseExpr->isPRValue()) {
-    Addr = Address(EmitScalarExpr(BaseExpr), getPointerAlign());
+    Addr = Address::deprecated(EmitScalarExpr(BaseExpr), getPointerAlign());
   } else {
     Addr = EmitLValue(BaseExpr).getAddress(*this);
   }

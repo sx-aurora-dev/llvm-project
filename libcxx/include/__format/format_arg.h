@@ -10,6 +10,7 @@
 #ifndef _LIBCPP___FORMAT_FORMAT_ARG_H
 #define _LIBCPP___FORMAT_FORMAT_ARG_H
 
+#include <__assert>
 #include <__concepts/arithmetic.h>
 #include <__config>
 #include <__format/format_error.h>
@@ -28,12 +29,6 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 #if _LIBCPP_STD_VER > 17
-
-// TODO FMT Remove this once we require compilers with proper C++20 support.
-// If the compiler has no concepts support, the format header will be disabled.
-// Without concepts support enable_if needs to be used and that too much effort
-// to support compilers with partial C++20 support.
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
 
 namespace __format {
 /// The type stored in @ref basic_format_arg.
@@ -277,8 +272,6 @@ private:
           __ctx.advance_to(__f.format(*static_cast<const _Tp*>(__ptr), __ctx));
         }) {}
 };
-
-#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS)
 
 #endif //_LIBCPP_STD_VER > 17
 

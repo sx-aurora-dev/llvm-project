@@ -27,15 +27,15 @@ define fastcc void @test_vp_memory_i64(<256 x i64>* %VecPtr, <256 x i64*> %PtrVe
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v2, (0)1, %v0
+; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
 ; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
 ; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
-; CHECK-NEXT:    vgt %v1, %v0, 0, 0, %vm1
-; CHECK-NEXT:    vgt %v0, %v2, 0, 0, %vm1
+; CHECK-NEXT:    vgt %v2, %v0, 0, 0, %vm1
+; CHECK-NEXT:    vgt %v0, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vsc %v2, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vst %v0, 8, %s0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -44,12 +44,12 @@ define fastcc void @test_vp_memory_i64(<256 x i64>* %VecPtr, <256 x i64*> %PtrVe
 ; FAST:       # %bb.0:
 ; FAST-NEXT:    lea %s16, 256
 ; FAST-NEXT:    lvl %s16
-; FAST-NEXT:    vor %v2, (0)1, %v0
+; FAST-NEXT:    vor %v1, (0)1, %v0
 ; FAST-NEXT:    and %s1, %s1, (32)0
 ; FAST-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; FAST-NEXT:    lvl %s1
-; FAST-NEXT:    vld %v1, 8, %s0
-; FAST-NEXT:    vgt %v0, %v2, 0, 0, %vm1
+; FAST-NEXT:    vld %v2, 8, %s0
+; FAST-NEXT:    vgt %v0, %v1, 0, 0, %vm1
 ; FAST-NEXT:    vsc %v2, %v1, 0, 0, %vm1
 ; FAST-NEXT:    vst %v0, 8, %s0, %vm1
 ; FAST-NEXT:    b.l.t (, %s10)
@@ -65,15 +65,15 @@ define fastcc void @test_vp_memory_f64(<256 x double>* %VecPtr, <256 x double*> 
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v2, (0)1, %v0
+; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
 ; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
 ; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
-; CHECK-NEXT:    vgt %v1, %v0, 0, 0, %vm1
-; CHECK-NEXT:    vgt %v0, %v2, 0, 0, %vm1
+; CHECK-NEXT:    vgt %v2, %v0, 0, 0, %vm1
+; CHECK-NEXT:    vgt %v0, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vsc %v2, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vst %v0, 8, %s0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -82,12 +82,12 @@ define fastcc void @test_vp_memory_f64(<256 x double>* %VecPtr, <256 x double*> 
 ; FAST:       # %bb.0:
 ; FAST-NEXT:    lea %s16, 256
 ; FAST-NEXT:    lvl %s16
-; FAST-NEXT:    vor %v2, (0)1, %v0
+; FAST-NEXT:    vor %v1, (0)1, %v0
 ; FAST-NEXT:    and %s1, %s1, (32)0
 ; FAST-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; FAST-NEXT:    lvl %s1
-; FAST-NEXT:    vld %v1, 8, %s0
-; FAST-NEXT:    vgt %v0, %v2, 0, 0, %vm1
+; FAST-NEXT:    vld %v2, 8, %s0
+; FAST-NEXT:    vgt %v0, %v1, 0, 0, %vm1
 ; FAST-NEXT:    vsc %v2, %v1, 0, 0, %vm1
 ; FAST-NEXT:    vst %v0, 8, %s0, %vm1
 ; FAST-NEXT:    b.l.t (, %s10)

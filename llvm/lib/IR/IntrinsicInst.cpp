@@ -300,7 +300,8 @@ ElementCount VPIntrinsic::getStaticVectorLength() const {
   };
 
   Value *VPMask = getMaskParam();
-  assert(VPMask && "No mask param?");
+  if (!VPMask)
+    return GetVectorLengthOfType(getType());
   return GetVectorLengthOfType(VPMask->getType());
 }
 
@@ -532,181 +533,60 @@ Optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
   return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
 }
 
-enum class VPTypeToken : int8_t {
-  Returned = 0,  // vectorized return type.
-  Vector = 1,    // vector operand type
-  Pointer = 2,   // vector pointer-operand type (memory op)
-};
-using VPTypeTokenVec = SmallVector<VPTypeToken, 4>;
+Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
+                                               Type *ReturnType,
+                                               ArrayRef<Value *> Params) {
+  assert(isVPIntrinsic(VPID) && "not a VP intrinsic");
+  Function *VPFunc;
+  switch (VPID) {
+  default: {
+    Type *OverloadTy = Params[0]->getType();
+    if (VPReductionIntrinsic::isVPReduction(VPID))
+      OverloadTy =
+          Params[*VPReductionIntrinsic::getVectorParamPos(VPID)]->getType();
 
-/// \brief Generate the disambiguating type vec for this VP Intrinsic.
-/// \returns A disamguating type vector to instantiate this intrinsic.
-/// \p ID
-///     The VPIntrinsic ID
-/// \p VecRetTy
-///     The return type of the intrinsic (optional)
-/// \p VecPtrTy
-///     The pointer operand type (optional)
-/// \p VectorTy
-///     The vector data type of the operation.
-static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
-                                                 Type *VecRetTy, Type *VecPtrTy,
-                                                 Type *VectorTy) {
-  if (VPReductionIntrinsic::isVPReduction(ID))
-    return VPIntrinsic::ShortTypeVec{VectorTy};
-
-  switch (ID) {
-  default:
-    llvm_unreachable("not implemented!");
-
-  case Intrinsic::vp_cos:
-  case Intrinsic::vp_sin:
-  case Intrinsic::vp_exp:
-  case Intrinsic::vp_exp2:
-
-  case Intrinsic::vp_log:
-  case Intrinsic::vp_log2:
-  case Intrinsic::vp_log10:
-  case Intrinsic::vp_sqrt:
-  case Intrinsic::vp_ceil:
-  case Intrinsic::vp_floor:
-  case Intrinsic::vp_round:
-  case Intrinsic::vp_trunc:
-  case Intrinsic::vp_rint:
-  case Intrinsic::vp_nearbyint:
-
-  case Intrinsic::vp_and:
-  case Intrinsic::vp_ctpop:
-  case Intrinsic::vp_or:
-  case Intrinsic::vp_xor:
-  case Intrinsic::vp_ashr:
-  case Intrinsic::vp_lshr:
-  case Intrinsic::vp_shl:
-  case Intrinsic::vp_add:
-  case Intrinsic::vp_sub:
-  case Intrinsic::vp_mul:
-  case Intrinsic::vp_sdiv:
-  case Intrinsic::vp_udiv:
-  case Intrinsic::vp_srem:
-  case Intrinsic::vp_urem:
-
-  case Intrinsic::vp_fneg:
-  case Intrinsic::vp_fadd:
-  case Intrinsic::vp_fma:
-  case Intrinsic::vp_fsub:
-  case Intrinsic::vp_fmul:
-  case Intrinsic::vp_fdiv:
-  case Intrinsic::vp_frem:
-  case Intrinsic::vp_pow:
-  case Intrinsic::vp_powi:
-  case Intrinsic::vp_maxnum:
-  case Intrinsic::vp_minnum:
-  case Intrinsic::vp_vshift:
-    return VPIntrinsic::ShortTypeVec{VectorTy};
-
-  case Intrinsic::vp_merge:
-  case Intrinsic::vp_select:
-  case Intrinsic::experimental_vp_splice:
-  case Intrinsic::vp_compress:
-  case Intrinsic::vp_expand:
-    assert(VecRetTy);
-    return VPIntrinsic::ShortTypeVec{VecRetTy};
-
-  case Intrinsic::vp_reduce_and:
-  case Intrinsic::vp_reduce_or:
-  case Intrinsic::vp_reduce_xor:
-
-  case Intrinsic::vp_reduce_add:
-  case Intrinsic::vp_reduce_mul:
-  case Intrinsic::vp_reduce_fadd:
-  case Intrinsic::vp_reduce_fmul:
-
-  case Intrinsic::vp_reduce_fmin:
-  case Intrinsic::vp_reduce_fmax:
-  case Intrinsic::vp_reduce_smin:
-  case Intrinsic::vp_reduce_smax:
-  case Intrinsic::vp_reduce_umin:
-  case Intrinsic::vp_reduce_umax:
-    return VPIntrinsic::ShortTypeVec{VectorTy};
-
-  case Intrinsic::vp_gather:
-  case Intrinsic::vp_load:
-    return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
-  case Intrinsic::vp_scatter:
-  case Intrinsic::vp_store:
-    return VPIntrinsic::ShortTypeVec{VectorTy, VecPtrTy};
-
-  case Intrinsic::vp_fpext:
-  case Intrinsic::vp_fptrunc:
+    VPFunc = Intrinsic::getDeclaration(M, VPID, OverloadTy);
+    break;
+  }
   case Intrinsic::vp_fptoui:
+  case Intrinsic::vp_uitofp:
   case Intrinsic::vp_fptosi:
   case Intrinsic::vp_sitofp:
-  case Intrinsic::vp_uitofp:
-    assert(VecRetTy);
-    return VPIntrinsic::ShortTypeVec{VecRetTy, VectorTy};
-
-  case Intrinsic::vp_icmp:
-  case Intrinsic::vp_fcmp:
-    return VPIntrinsic::ShortTypeVec{VectorTy};
+  case Intrinsic::vp_fpext:
+  case Intrinsic::vp_fptrunc:
+    VPFunc =
+        Intrinsic::getDeclaration(M, VPID, {ReturnType, Params[0]->getType()});
+    break;
+  case Intrinsic::vp_merge:
+  case Intrinsic::vp_select:
+    VPFunc = Intrinsic::getDeclaration(M, VPID, {Params[1]->getType()});
+    break;
+  case Intrinsic::vp_load:
+    VPFunc = Intrinsic::getDeclaration(
+        M, VPID, {ReturnType, Params[0]->getType()});
+    break;
+  case Intrinsic::experimental_vp_strided_load:
+    VPFunc =
+        Intrinsic::getDeclaration(M, VPID, {ReturnType, Params[1]->getType()});
+    break;
+  case Intrinsic::vp_gather:
+    VPFunc = Intrinsic::getDeclaration(
+        M, VPID, {ReturnType, Params[0]->getType()});
+    break;
+  case Intrinsic::vp_store:
+    VPFunc = Intrinsic::getDeclaration(
+        M, VPID, {Params[0]->getType(), Params[1]->getType()});
+    break;
+  case Intrinsic::experimental_vp_strided_store:
+    VPFunc = Intrinsic::getDeclaration(
+        M, VPID, {Params[0]->getType(), Params[2]->getType()});
+    break;
+  case Intrinsic::vp_scatter:
+    VPFunc = Intrinsic::getDeclaration(
+        M, VPID, {Params[0]->getType(), Params[1]->getType()});
+    break;
   }
-}
-
-Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
-                                               Type *VecRetTy,
-                                               ArrayRef<Value *> Params) {
-  assert(VPID != Intrinsic::not_intrinsic && "todo dispatch to default insts");
-
-  bool IsArithOp = VPIntrinsic::IsBinaryVPOp(VPID) ||
-                   VPIntrinsic::IsUnaryVPOp(VPID) ||
-                   VPIntrinsic::IsTernaryVPOp(VPID);
-  bool IsCmpOp = VPIntrinsic::IsCompareVPOp(VPID);
-  bool IsReduceOp = VPReductionIntrinsic::isVPReduction(VPID);
-  bool IsShuffleOp =
-      (VPID == Intrinsic::vp_compress) || (VPID == Intrinsic::vp_expand) ||
-      (VPID == Intrinsic::vp_vshift) || (VPID == Intrinsic::vp_select) || 
-      (VPID == Intrinsic::experimental_vp_splice);
-  bool IsMemoryOp =
-      (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load) ||
-      (VPID == Intrinsic::vp_scatter) || (VPID == Intrinsic::vp_gather);
-  bool IsCastOp =
-      (VPID == Intrinsic::vp_fptosi) || (VPID == Intrinsic::vp_fptoui) ||
-      (VPID == Intrinsic::vp_sitofp) || (VPID == Intrinsic::vp_uitofp) ||
-      (VPID == Intrinsic::vp_fpext) || (VPID == Intrinsic::vp_fptrunc);
-
-  Type *VecTy = nullptr;
-  Type *VecPtrTy = nullptr;
-
-  if (IsArithOp || IsCmpOp || IsCastOp) {
-    Value &FirstOp = *Params[0];
-
-    // Fetch the VP intrinsic
-    VecTy = cast<VectorType>(FirstOp.getType());
-
-  } else if (IsReduceOp) {
-    auto VectorPosOpt = VPReductionIntrinsic::getVectorParamPos(VPID);
-    Value *VectorParam = Params[VectorPosOpt.getValue()];
-
-    VecTy = VectorParam->getType();
-
-  } else if (IsMemoryOp) {
-    auto DataPosOpt = VPIntrinsic::getMemoryDataParamPos(VPID);
-    auto PtrPosOpt = VPIntrinsic::getMemoryPointerParamPos(VPID);
-    VecPtrTy = Params[PtrPosOpt.getValue()]->getType();
-
-    if (DataPosOpt.hasValue()) {
-      // store-kind operation
-      VecTy = Params[DataPosOpt.getValue()]->getType();
-    }
-
-  } else if (IsShuffleOp) {
-    VecTy = (VPID == Intrinsic::vp_select) ? Params[1]->getType()
-                                           : Params[0]->getType();
-  }
-
-  auto IntrinTypeVec = getVPIntrinsicTypes(VPID, VecRetTy, VecPtrTy, VecTy);
-  auto *VPFunc = Intrinsic::getDeclaration(M, VPID, IntrinTypeVec);
-  assert(VPFunc && "not a VP intrinsic");
-
+  assert(VPFunc && "Could not declare VP intrinsic");
   return VPFunc;
 }
 
@@ -851,6 +731,18 @@ bool VPReductionIntrinsic::isVPReduction(Intrinsic::ID ID) {
   return false;
 }
 
+bool VPCastIntrinsic::isVPCast(Intrinsic::ID ID) {
+  switch (ID) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define VP_PROPERTY_CASTOP return true;
+#define END_REGISTER_VP_INTRINSIC(VPID) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return false;
+}
+
 unsigned VPReductionIntrinsic::getVectorParamPos() const {
   return *VPReductionIntrinsic::getVectorParamPos(getIntrinsicID());
 }
@@ -862,7 +754,7 @@ unsigned VPReductionIntrinsic::getStartParamPos() const {
 Optional<unsigned> VPReductionIntrinsic::getVectorParamPos(Intrinsic::ID ID) {
   switch (ID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return VECTORPOS;
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) return VECTORPOS;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   default:
@@ -874,7 +766,7 @@ Optional<unsigned> VPReductionIntrinsic::getVectorParamPos(Intrinsic::ID ID) {
 Optional<unsigned> VPReductionIntrinsic::getStartParamPos(Intrinsic::ID ID) {
   switch (ID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS, ...) return STARTPOS;
+#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) return STARTPOS;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   default:

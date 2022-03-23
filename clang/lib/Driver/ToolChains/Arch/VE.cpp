@@ -59,20 +59,12 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
 
   // Defaults.
   bool EnableVPU = true;
-  bool EnablePacked = true;
   bool EnableSIMD = false;
 
-  // Whether to enable v256 VPU registers and isel.
+  // Whether to enable VPU registers and isel.
   if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
     if (A->getOption().matches(options::OPT_mno_vevpu))
       EnableVPU = false;
-  }
-
-  // Whether to enable v512 VPU registers and isel.
-  if (auto *A =
-          Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
-    if (A->getOption().matches(options::OPT_mno_vepacked))
-      EnablePacked = false;
   }
 
   // Whether to enable fixed-SIMD patterns
@@ -81,14 +73,12 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
     if (A->getOption().matches(options::OPT_mvesimd)) {
       EnableSIMD = true;
       EnableVPU = false;
-      EnablePacked = false;
     }
   }
 
   // Fixed SIMD
   if (EnableSIMD) {
     Features.push_back("-vpu");
-    Features.push_back("-packed");
     Features.push_back("+simd");
     return;
   }
@@ -96,6 +86,4 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   // VVP
   if (EnableVPU)
     Features.push_back("+vpu");
-  if (EnableVPU && EnablePacked)
-    Features.push_back("+packed");
 }

@@ -6,15 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <__assert>
 #include <__utility/unreachable.h>
-#include "filesystem"
-#include "array"
-#include "iterator"
-#include "string_view"
-#include "type_traits"
-#include "vector"
-#include "cstdlib"
-#include "climits"
+#include <array>
+#include <climits>
+#include <cstdlib>
+#include <filesystem>
+#include <iterator>
+#include <string_view>
+#include <type_traits>
+#include <vector>
 
 #include "filesystem_common.h"
 
@@ -40,7 +41,7 @@
 # include <copyfile.h>
 # define _LIBCPP_FILESYSTEM_USE_COPYFILE
 #else
-# include "fstream"
+# include <fstream>
 # define _LIBCPP_FILESYSTEM_USE_FSTREAM
 #endif
 
@@ -1415,12 +1416,14 @@ uintmax_t remove_all_impl(int parent_directory, const path& p, error_code& ec) {
   if (fd != -1) {
     // If that worked, iterate over the contents of the directory and
     // remove everything in it, recursively.
-    scope_exit close_fd([=] { ::close(fd); });
     DIR* stream = ::fdopendir(fd);
     if (stream == nullptr) {
+      ::close(fd);
       ec = detail::capture_errno();
       return 0;
     }
+    // Note: `::closedir` will also close the associated file descriptor, so
+    // there should be no call to `close(fd)`.
     scope_exit close_stream([=] { ::closedir(stream); });
 
     uintmax_t count = 0;

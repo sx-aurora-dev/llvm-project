@@ -212,10 +212,13 @@ uint32_t mapping::getThreadIdInBlock() {
 
 uint32_t mapping::getWarpSize() { return impl::getWarpSize(); }
 
-uint32_t mapping::getBlockSize() {
+uint32_t mapping::getBlockSize(bool IsSPMD) {
   uint32_t BlockSize = mapping::getNumberOfProcessorElements() -
-                       (!mapping::isSPMDMode() * impl::getWarpSize());
+                       (!IsSPMD * impl::getWarpSize());
   return BlockSize;
+}
+uint32_t mapping::getBlockSize() {
+  return mapping::getBlockSize(mapping::isSPMDMode());
 }
 
 uint32_t mapping::getKernelSize() { return impl::getKernelSize(); }
@@ -255,7 +258,10 @@ uint32_t mapping::getNumberOfProcessorElements() {
 /// Execution mode
 ///
 ///{
-static int SHARED(IsSPMDMode);
+
+// TODO: This is a workaround for initialization coming from kernels outside of
+//       the TU. We will need to solve this more correctly in the future.
+int __attribute__((used, retain, weak)) SHARED(IsSPMDMode);
 
 void mapping::init(bool IsSPMD) {
   if (mapping::isInitialThreadInLevel0(IsSPMD))

@@ -354,8 +354,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_integer_comparison_functions",
     "values": { "c++20": 202002 },
     "headers": ["utility"],
-    "test_suite_guard": "defined(__cpp_concepts) && __cpp_concepts >= 201907L",
-    "libcxx_guard": "!defined(_LIBCPP_HAS_NO_CONCEPTS)",
   }, {
     "name": "__cpp_lib_integer_sequence",
     "values": { "c++14": 201304 },
@@ -464,8 +462,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_math_constants",
     "values": { "c++20": 201907 },
     "headers": ["numbers"],
-    "test_suite_guard": "defined(__cpp_concepts) && __cpp_concepts >= 201907L",
-    "libcxx_guard": "!defined(_LIBCPP_HAS_NO_CONCEPTS)",
   }, {
     "name": "__cpp_lib_math_special_functions",
     "values": { "c++17": 201603 },
@@ -664,6 +660,7 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_stdatomic_h",
     "values": { "c++2b": 202011 },
     "headers": ["stdatomic.h"],
+    "unimplemented": True,
   }, {
     "name": "__cpp_lib_string_contains",
     "values": { "c++2b": 202011 },
@@ -785,8 +782,7 @@ lit_markup = {
   "regex": ["UNSUPPORTED: libcpp-has-no-localization"],
   "semaphore": ["UNSUPPORTED: libcpp-has-no-threads"],
   "shared_mutex": ["UNSUPPORTED: libcpp-has-no-threads"],
-  "stdatomic.h": ["UNSUPPORTED: libcpp-has-no-threads"],
-  "thread": ["UNSUPPORTED: libcpp-has-no-threads"],
+  "thread": ["UNSUPPORTED: libcpp-has-no-threads"]
 }
 
 def get_std_dialects():

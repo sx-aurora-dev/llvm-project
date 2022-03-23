@@ -381,8 +381,8 @@ void VERegisterInfo::eliminateFrameIndex_VM512(MachineInstr &MI, MIBuilder &MIB,
   LLVM_DEBUG(dbgs() << "eliminateFI_VM512: "; MI.dump());
   if (MI.getOpcode() == VE::STVM512rii) {
     Register SrcReg = MI.getOperand(3).getReg();
-    Register SrcLoReg = MIB.getSubReg(SrcReg, VE::sub_vm_lo);
-    Register SrcHiReg = MIB.getSubReg(SrcReg, VE::sub_vm_hi);
+    Register SrcLoReg = MIB.getSubReg(SrcReg, VE::sub_vm_odd);
+    Register SrcHiReg = MIB.getSubReg(SrcReg, VE::sub_vm_even);
     bool isKill = MI.getOperand(3).isKill();
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
@@ -421,8 +421,8 @@ void VERegisterInfo::eliminateFrameIndex_VM512(MachineInstr &MI, MIBuilder &MIB,
   }
   if (MI.getOpcode() == VE::LDVM512rii) {
     Register DestReg = MI.getOperand(0).getReg();
-    Register DestLoReg = getSubReg(DestReg, VE::sub_vm_lo);
-    Register DestHiReg = getSubReg(DestReg, VE::sub_vm_hi);
+    Register DestLoReg = getSubReg(DestReg, VE::sub_vm_odd);
+    Register DestHiReg = getSubReg(DestReg, VE::sub_vm_even);
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
     Register TmpReg = VE::SX16;
@@ -502,7 +502,7 @@ void VERegisterInfo::eliminateFrameIndex_V64(MachineInstr &MI, MIBuilder &MIB,
   MI.getOperand(StrideIdx).ChangeToImmediate(8);
   MI.getOperand(PtrRegIdx).ChangeToRegister(Tmp1, false, false, true);
   MI.getOperand(AVLRegIdx).ChangeToRegister(LVL.VLReg, false, false, true);
-  MI.RemoveOperand(4); // TODO: Discarding trailing memory operands????
+  MI.removeOperand(4); // TODO: Discarding trailing memory operands????
 
   if (LVL.IsKillSuper)
     MI.addRegisterKilled(LVL.SuperReg, this, true);
@@ -570,7 +570,7 @@ void VERegisterInfo::eliminateFrameIndex_VP(MachineInstr &MI, MIBuilder &MIB,
   MI.getOperand(StrideIdx).ChangeToImmediate(16);
   MI.getOperand(PtrRegIdx).ChangeToRegister(PtrReg, false, false, true);
   MI.getOperand(AVLRegIdx).ChangeToRegister(LVL.VLReg, false, false, true);
-  MI.RemoveOperand(4);
+  MI.removeOperand(4);
 
   if (LVL.IsKillSuper)
     MI.addRegisterKilled(LVL.SuperReg, &MIB.TRI, true);

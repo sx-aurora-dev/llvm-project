@@ -9,8 +9,8 @@
 #ifndef _LIBCPP___ITERATOR_COUNTED_ITERATOR_H
 #define _LIBCPP___ITERATOR_COUNTED_ITERATOR_H
 
+#include <__assert>
 #include <__config>
-#include <__debug>
 #include <__iterator/concepts.h>
 #include <__iterator/default_sentinel.h>
 #include <__iterator/incrementable_traits.h>
@@ -30,7 +30,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#if _LIBCPP_STD_VER > 17
 
 template<class>
 struct __counted_iterator_concept {};
@@ -296,7 +296,7 @@ struct iterator_traits<counted_iterator<_Iter>> : iterator_traits<_Iter> {
                                 add_pointer_t<iter_reference_t<_Iter>>, void>;
 };
 
-#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

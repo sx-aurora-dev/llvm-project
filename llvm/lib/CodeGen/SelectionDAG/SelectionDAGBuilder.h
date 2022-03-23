@@ -570,6 +570,10 @@ private:
                          SmallVector<SDValue, 7> &OpValues, bool IsGather);
   void visitVPStoreScatter(const VPIntrinsic &VPIntrin,
                            SmallVector<SDValue, 7> &OpValues, bool IsScatter);
+  void visitVPStridedLoad(const VPIntrinsic &VPIntrin, EVT VT,
+                          SmallVectorImpl<SDValue> &OpValues);
+  void visitVPStridedStore(const VPIntrinsic &VPIntrin,
+                           SmallVectorImpl<SDValue> &OpValues);
   void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin);
   void visitCmpVP(const VPIntrinsic &I);
 

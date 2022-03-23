@@ -2716,15 +2716,20 @@ def vm_extract     : SDNode<"VEISD::VM_EXTRACT",  SDTypeProfile<1, 2,    [SDTCis
 def vm_insert      : SDNode<"VEISD::VM_INSERT",   SDTypeProfile<1, 3,    [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, SDTCisVT<2,i64>, SDTCisVT<3,i64>]>>;
 def vm_popcount    : SDNode<"VEISD::VM_POPCOUNT", SDTypeProfile<1, 2,    [SDTCisVT<0,i64>, SDTCisVec<1>, IsVLVT<2>]>>;
 
-///// packed mode support /////
-// unpack the v256i32 part of this vector
-def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
-// unpack the v256f32 part of this vector
-def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_HI", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
+///// Packed mode Support /////
+// unpack the lo part of this vector
+def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 2,
+                             [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
+// unpack the hipart of this vector
+def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_HI", SDTypeProfile<1, 2,
+                             [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
 // re-pack v256i32, v256f32 back into tone v512.32
-def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 3,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>, IsVLVT<3>]>>;
-// exchange the odd-even pairs in a v512.32
-def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, IsVLVT<2>]>>;
+def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 3,
+                             [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>,
+                              SDTCisSameNumEltsAs<1,2>, IsVLVT<3>]>>;
+def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 2,
+                             [SDTCisVec<0>, SDTCisVec<1>,
+                              SDTCisSameNumEltsAs<0,1>, IsVLVT<2>]>>;
 
 // replicate lower 32bit to upper 32bit (f32 scalar replication).
 def repl_f32            : SDNode<"VEISD::REPL_F32",
@@ -2768,17 +2773,11 @@ include "VVPInstrInfo.td"
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"
 
-// VE Vector Predicated ISel (Dynamic VL and VP support).
-def packed_fneg_imm       : OutPatFrag<(ins ),
-                            (i64 (SLLri (i64 (ORim 1, (i32 32))), 31))>;
+// Patterns and intermediate SD nodes (VEC_*).
+include "VEInstrPatternsVec.td"
 
-let Predicates = [UseVVP] in {
-  // Patterns and intermediate SD nodes (VEC_*).
-  include "VEInstrPatternsVec.td"
-
-  // Patterns and intermediate SD nodes (VVP_*).
-  include "VVPInstrPatternsVec.td"
-}
+// Patterns and intermediate SD nodes (VVP_*).
+include "VVPInstrPatternsVec.td"
 
 // Patterns and intermediate SD nodes for fixed length vector instructions.
 // let Predicates = [IsSimdSubTarget] in {

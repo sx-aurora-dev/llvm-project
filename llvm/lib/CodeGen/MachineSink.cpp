@@ -16,14 +16,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SparseBitVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
@@ -428,6 +430,16 @@ bool MachineSinking::runOnMachineFunction(MachineFunction &MF) {
   MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
   AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
   RegClassInfo.runOnMachineFunction(MF);
+
+  // MachineSink currently uses MachineLoopInfo, which only recognizes natural
+  // loops. As such, we could sink instructions into irreducible cycles, which
+  // would be non-profitable.
+  // WARNING: The current implementation of hasStoreBetween() is incorrect for
+  // sinking into irreducible cycles (PR53990), this bailout is currently
+  // necessary for correctness, not just profitability.
+  ReversePostOrderTraversal<MachineBasicBlock *> RPOT(&*MF.begin());
+  if (containsIrreducibleCFG<MachineBasicBlock *>(RPOT, *LI))
+    return false;
 
   bool EverMadeChange = false;
 
@@ -1272,7 +1284,8 @@ bool MachineSinking::SinkIntoLoop(MachineLoop *L, MachineInstr &I) {
   }
 
   LLVM_DEBUG(dbgs() << "LoopSink: Sinking instruction!\n");
-  SinkBlock->splice(SinkBlock->getFirstNonPHI(), Preheader, I);
+  SinkBlock->splice(SinkBlock->SkipPHIsAndLabels(SinkBlock->begin()), Preheader,
+                    I);
 
   // The instruction is moved from its basic block, so do not retain the
   // debug information.
@@ -1392,9 +1405,8 @@ bool MachineSinking::SinkInstruction(MachineInstr &MI, bool &SawStore,
   }
 
   // Determine where to insert into. Skip phi nodes.
-  MachineBasicBlock::iterator InsertPos = SuccToSinkTo->begin();
-  while (InsertPos != SuccToSinkTo->end() && InsertPos->isPHI())
-    ++InsertPos;
+  MachineBasicBlock::iterator InsertPos =
+      SuccToSinkTo->SkipPHIsAndLabels(SuccToSinkTo->begin());
 
   // Collect debug users of any vreg that this inst defines.
   SmallVector<MIRegs, 4> DbgUsersToSink;
@@ -1796,7 +1808,8 @@ bool PostRAMachineSinking::tryToSinkCopy(MachineBasicBlock &CurBB,
     // Clear the kill flag if SrcReg is killed between MI and the end of the
     // block.
     clearKillFlags(&MI, CurBB, UsedOpsInCopy, UsedRegUnits, TRI);
-    MachineBasicBlock::iterator InsertPos = SuccBB->getFirstNonPHI();
+    MachineBasicBlock::iterator InsertPos =
+        SuccBB->SkipPHIsAndLabels(SuccBB->begin());
     performSink(MI, *SuccBB, InsertPos, DbgValsToSink);
     updateLiveIn(&MI, SuccBB, UsedOpsInCopy, DefedRegsInCopy);
 

@@ -69,7 +69,6 @@ public:
   bool enableMachineScheduler() const override;
 
   bool enableVPU() const { return EnableVPU && !simd(); }
-  bool hasPackedMode() const { return enableVPU() && PackedMode; }
   bool simd() const { return Simd; }
 
   /// ParseSubtargetFeatures - Parses features string setting specified

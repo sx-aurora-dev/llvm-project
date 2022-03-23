@@ -1,5 +1,5 @@
-#include "VECustomDAG.h"
 #include "MaskView.h"
+#include "VECustomDAG.h"
 
 #define DEBUG_TYPE "ve-maskview"
 
@@ -163,7 +163,8 @@ struct SynthShuffle : public MaskView {
   virtual unsigned getNumElements() const override { return Mask.size(); }
 };
 
-static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, VECustomDAG &CDAG) {
+static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN,
+                                    VECustomDAG &CDAG) {
   EVT OrigVT = SVN.getValueType(0);
   EVT LegalResVT = CDAG.legalizeVectorType(SDValue(&SVN, 0),
                                            VVPExpansionMode::ToNativeWidth);
@@ -214,7 +215,7 @@ static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, VECustomDAG &CDAG)
       if (ItCache != UnpackCache.end())
         UnpackedV = ItCache->second;
       else {
-        UnpackedV = CDAG.createUnpack(LegalSplitVT, SrcVal, SrcPart, AVL);
+        UnpackedV = CDAG.getUnpack(LegalSplitVT, SrcVal, SrcPart, AVL);
         UnpackCache[CacheKey] = UnpackedV;
       }
 
