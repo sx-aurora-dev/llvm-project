@@ -1,3 +1,11 @@
+/*===---- velintrin_approx.h - VEL intrinsics helper for VE ----------------===
+ *
+ * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+ * See https://llvm.org/LICENSE.txt for license information.
+ * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ *
+ *===-----------------------------------------------------------------------===
+ */
 #ifndef __VEL_INTRIN_APPROX_H__
 #define __VEL_INTRIN_APPROX_H__
 
@@ -56,8 +64,7 @@ static inline __vr _vel_approx_vfdivs_vvsl(__vr v0, float s0, int l) {
   return v0;
 }
 
-static inline __vr _vel_approx_vfdivd_vsvl(double s0, __vr v0, int l)
-{
+static inline __vr _vel_approx_vfdivd_vsvl(double s0, __vr v0, int l) {
   __vr v1, v2, v3;
   v2 = _vel_vrcpd_vvl(v0, l);
   double s1 = 1.0;
@@ -74,8 +81,7 @@ static inline __vr _vel_approx_vfdivd_vsvl(double s0, __vr v0, int l)
   return v0;
 }
 
-static inline __vr _vel_approx_vfsqrtd_vvl(__vr v0, int l)
-{
+static inline __vr _vel_approx_vfsqrtd_vvl(__vr v0, int l) {
   double s0, s1;
   __vr v1, v2, v3;
   v2 = _vel_vrsqrtdnex_vvl(v0, l);
@@ -92,8 +98,7 @@ static inline __vr _vel_approx_vfsqrtd_vvl(__vr v0, int l)
   return v0;
 }
 
-static inline __vr _vel_approx_vfsqrts_vvl(__vr v0, int l)
-{
+static inline __vr _vel_approx_vfsqrts_vvl(__vr v0, int l) {
   float s0, s1;
   __vr v1, v2, v3;
   v0 = _vel_vcvtds_vvl(v0, l);
