@@ -376,9 +376,10 @@ protected:
                       "StopInfoBreakpoint::PerformAction - in expression, "
                       "continuing: %s.",
                       m_should_stop ? "true" : "false");
-            process->GetTarget().GetDebugger().GetAsyncOutputStream()->Printf(
-                "Warning: hit breakpoint while running function, skipping "
-                "commands and conditions to prevent recursion.\n");
+            Debugger::ReportWarning(
+                "hit breakpoint while running function, skipping commands and "
+                "conditions to prevent recursion",
+                process->GetTarget().GetDebugger().GetID());
             return;
           }
 
@@ -450,21 +451,20 @@ protected:
                   bp_loc_sp->ConditionSaysStop(exe_ctx, condition_error);
 
               if (!condition_error.Success()) {
-                Debugger &debugger = exe_ctx.GetTargetRef().GetDebugger();
-                StreamSP error_sp = debugger.GetAsyncErrorStream();
-                error_sp->Printf("Stopped due to an error evaluating condition "
-                                 "of breakpoint ");
-                bp_loc_sp->GetDescription(error_sp.get(),
-                                          eDescriptionLevelBrief);
-                error_sp->Printf(": \"%s\"", bp_loc_sp->GetConditionText());
-                error_sp->EOL();
                 const char *err_str =
-                    condition_error.AsCString("<Unknown Error>");
+                    condition_error.AsCString("<unknown error>");
                 LLDB_LOGF(log, "Error evaluating condition: \"%s\"\n", err_str);
 
-                error_sp->PutCString(err_str);
-                error_sp->EOL();
-                error_sp->Flush();
+                StreamString strm;
+                strm << "stopped due to an error evaluating condition of "
+                        "breakpoint ";
+                bp_loc_sp->GetDescription(&strm, eDescriptionLevelBrief);
+                strm << ": \"" << bp_loc_sp->GetConditionText() << "\"\n";
+                strm << err_str;
+
+                Debugger::ReportError(
+                    strm.GetString().str(),
+                    exe_ctx.GetTargetRef().GetDebugger().GetID());
               } else {
                 LLDB_LOGF(log,
                           "Condition evaluated for breakpoint %s on thread "
@@ -859,20 +859,18 @@ protected:
               }
             }
           } else {
-            StreamSP error_sp = debugger.GetAsyncErrorStream();
-            error_sp->Printf(
-                "Stopped due to an error evaluating condition of watchpoint ");
-            wp_sp->GetDescription(error_sp.get(), eDescriptionLevelBrief);
-            error_sp->Printf(": \"%s\"", wp_sp->GetConditionText());
-            error_sp->EOL();
-            const char *err_str = error.AsCString("<Unknown Error>");
+            const char *err_str = error.AsCString("<unknown error>");
             LLDB_LOGF(log, "Error evaluating condition: \"%s\"\n", err_str);
 
-            error_sp->PutCString(err_str);
-            error_sp->EOL();
-            error_sp->Flush();
-            // If the condition fails to be parsed or run, we should stop.
-            m_should_stop = true;
+            StreamString strm;
+            strm << "stopped due to an error evaluating condition of "
+                    "watchpoint ";
+            wp_sp->GetDescription(&strm, eDescriptionLevelBrief);
+            strm << ": \"" << wp_sp->GetConditionText() << "\"\n";
+            strm << err_str;
+
+            Debugger::ReportError(strm.GetString().str(),
+                                  exe_ctx.GetTargetRef().GetDebugger().GetID());
           }
         }
 
