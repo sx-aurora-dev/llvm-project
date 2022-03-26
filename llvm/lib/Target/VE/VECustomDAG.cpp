@@ -20,7 +20,7 @@
 #include "llvm/CodeGen/TargetLowering.h"
 
 #ifndef DEBUG_TYPE
-#define DEBUG_TYPE "customdag"
+#define DEBUG_TYPE "vecustomdag"
 #endif
 
 namespace llvm {

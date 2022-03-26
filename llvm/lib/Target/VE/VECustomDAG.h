@@ -1,4 +1,4 @@
-//===-- VECustomDAG.h - VE Custom DAG Nodes ------------*- C++ -*-===//
+//===------------ VECustomDAG.h - VE Custom DAG Nodes -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the interfaces that VE uses to lower LLVM code into a
-// selection DAG.
+// This file defines the helper functions that VE uses to lower LLVM code into a
+// selection DAG.  For example, hiding SDLoc, and easy to use SDNodeFlags.
 //
 //===----------------------------------------------------------------------===//
 

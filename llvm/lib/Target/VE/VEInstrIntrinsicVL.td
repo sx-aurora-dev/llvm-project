@@ -16,16 +16,16 @@ def : Pat<(i64 (int_ve_vl_pack_f32a ADDRrii:$addr)),
 
 // The extract/insert patterns.
 def : Pat<(v256i1 (int_ve_vl_extract_vm512u v512i1:$vm)),
-          (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_even))>;
+          (EXTRACT_SUBREG v512i1:$vm, sub_vm_even)>;
 
 def : Pat<(v256i1 (int_ve_vl_extract_vm512l v512i1:$vm)),
-          (v256i1 (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd))>;
+          (EXTRACT_SUBREG v512i1:$vm, sub_vm_odd)>;
 
 def : Pat<(v512i1 (int_ve_vl_insert_vm512u v512i1:$vmx, v256i1:$vmy)),
-          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_even))>;
+          (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_even)>;
 
 def : Pat<(v512i1 (int_ve_vl_insert_vm512l v512i1:$vmx, v256i1:$vmy)),
-          (v512i1 (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_odd))>;
+          (INSERT_SUBREG v512i1:$vmx, v256i1:$vmy, sub_vm_odd)>;
 
 // VMRG patterns.
 def : Pat<(int_ve_vl_vmrgw_vsvMl i32:$sy, v256f64:$vz, v512i1:$vm, i32:$vl),

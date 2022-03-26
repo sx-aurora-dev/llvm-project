@@ -12591,8 +12591,6 @@ QualType Sema::GetSignedVectorType(QualType V) {
     return Context.getExtVectorType(Context.LongLongTy, VTy->getNumElements());
   }
 
-  if (VTy->isExtVectorBoolType())
-    return Context.getExtVectorType(Context.BoolTy, VTy->getNumElements());
   if (TypeSize == Context.getTypeSize(Context.Int128Ty))
     return Context.getVectorType(Context.Int128Ty, VTy->getNumElements(),
                                  VectorType::GenericVector);

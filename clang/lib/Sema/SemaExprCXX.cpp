@@ -6111,6 +6111,7 @@ QualType Sema::CheckVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
 
   QualType ResultType;
 
+
   if (LHSVT && RHSVT) {
     if (isa<ExtVectorType>(CondVT) != isa<ExtVectorType>(LHSVT)) {
       Diag(QuestionLoc, diag::err_conditional_vector_cond_result_mismatch)
