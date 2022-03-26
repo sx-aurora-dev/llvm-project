@@ -2,6 +2,7 @@
 #include <llvm/IR/FPEnv.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/PredicatedInst.h>
 #include <llvm/IR/VPBuilder.h>
 
 namespace {
