@@ -323,6 +323,10 @@ int main() {
   f1<const unsigned _BitInt(5)>();
   f1<void(t1<>, t1<>)>();
   f1<int t1<>::*>();
+  void fcc() __attribute__((swiftcall));
+  f1<decltype(fcc)>();
+  int fnrt() __attribute__((noreturn));
+  f1<decltype(fnrt)>();
 }
 void t8::mem() {
   struct t7 { };

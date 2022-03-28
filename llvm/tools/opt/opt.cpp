@@ -13,7 +13,6 @@
 
 #include "BreakpointPrinter.h"
 #include "NewPMDriver.h"
-#include "PassPrinters.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
@@ -32,6 +31,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/InitializePasses.h"
@@ -197,10 +197,6 @@ static cl::list<std::string>
 DisableBuiltins("disable-builtin",
                 cl::desc("Disable specific target library builtin function"),
                 cl::ZeroOrMore);
-
-static cl::opt<bool>
-    AnalyzeOnly("analyze", cl::desc("Only perform analysis, no optimization. "
-                                    "Legacy pass manager only."));
 
 static cl::opt<bool> EnableDebugify(
     "enable-debugify",
@@ -602,11 +598,6 @@ int main(int argc, char **argv) {
 
   LLVMContext Context;
 
-  if (AnalyzeOnly && NoOutput) {
-    errs() << argv[0] << ": analyze mode conflicts with no-output mode.\n";
-    return 1;
-  }
-
   // If `-passes=` is specified, use NPM.
   // If `-enable-new-pm` is specified and there are no codegen passes, use NPM.
   // e.g. `-enable-new-pm -sroa` will use NPM.
@@ -755,7 +746,7 @@ int main(int argc, char **argv) {
   // If the output is set to be emitted to standard out, and standard out is a
   // console, print out a warning message and refuse to do it.  We don't
   // impress anyone by spewing tons of binary goo to a terminal.
-  if (!Force && !NoOutput && !AnalyzeOnly && !OutputAssembly)
+  if (!Force && !NoOutput && !OutputAssembly)
     if (CheckBitcodeOutputToConsole(Out->os()))
       NoOutput = true;
 
@@ -782,13 +773,6 @@ int main(int argc, char **argv) {
   }
 
   if (UseNPM) {
-    if (AnalyzeOnly) {
-      errs() << "Cannot specify -analyze under new pass manager, either "
-                "specify '-enable-new-pm=0', or use the corresponding new pass "
-                "manager pass, e.g. '-passes=print<scalar-evolution>'. For a "
-                "full list of passes, see the '--print-passes' flag.\n";
-      return 1;
-    }
     if (legacy::debugPassSpecified()) {
       errs()
           << "-debug-pass does not work with the new PM, either use "
@@ -857,13 +841,13 @@ int main(int argc, char **argv) {
   // the (-check)-debugify passes.
   DebugifyCustomPassManager Passes;
   DebugifyStatsMap DIStatsMap;
-  DebugInfoPerPassMap DIPreservationMap;
+  DebugInfoPerPass DebugInfoBeforePass;
   if (DebugifyEach) {
     Passes.setDebugifyMode(DebugifyMode::SyntheticDebugInfo);
     Passes.setDIStatsMap(DIStatsMap);
   } else if (VerifyEachDebugInfoPreserve) {
     Passes.setDebugifyMode(DebugifyMode::OriginalDebugInfo);
-    Passes.setDIPreservationMap(DIPreservationMap);
+    Passes.setDebugInfoBeforePass(DebugInfoBeforePass);
     if (!VerifyDIPreserveExport.empty())
       Passes.setOrigDIVerifyBugsReportFilePath(VerifyDIPreserveExport);
   }
@@ -883,10 +867,10 @@ int main(int argc, char **argv) {
       Passes.setDIStatsMap(DIStatsMap);
       Passes.add(createDebugifyModulePass());
     } else if (VerifyDebugInfoPreserve) {
-      Passes.setDIPreservationMap(DIPreservationMap);
+      Passes.setDebugInfoBeforePass(DebugInfoBeforePass);
       Passes.add(createDebugifyModulePass(
           DebugifyMode::OriginalDebugInfo, "",
-          &(Passes.getDebugInfoPerPassMap())));
+          &(Passes.getDebugInfoPerPass())));
     }
   }
 
@@ -962,30 +946,8 @@ int main(int argc, char **argv) {
     else
       errs() << argv[0] << ": cannot create pass: "
              << PassInf->getPassName() << "\n";
-    if (P) {
-      PassKind Kind = P->getPassKind();
+    if (P)
       addPass(Passes, P);
-
-      if (AnalyzeOnly) {
-        switch (Kind) {
-        case PT_Region:
-          Passes.add(createRegionPassPrinter(PassInf, Out->os()));
-          break;
-        case PT_Loop:
-          Passes.add(createLoopPassPrinter(PassInf, Out->os()));
-          break;
-        case PT_Function:
-          Passes.add(createFunctionPassPrinter(PassInf, Out->os()));
-          break;
-        case PT_CallGraphSCC:
-          Passes.add(createCallGraphPassPrinter(PassInf, Out->os()));
-          break;
-        default:
-          Passes.add(createModulePassPrinter(PassInf, Out->os()));
-          break;
-        }
-      }
-    }
   }
 
   if (OptLevelO0)
@@ -1025,7 +987,7 @@ int main(int argc, char **argv) {
         Passes.setOrigDIVerifyBugsReportFilePath(VerifyDIPreserveExport);
       Passes.add(createCheckDebugifyModulePass(
           false, "", nullptr, DebugifyMode::OriginalDebugInfo,
-          &(Passes.getDebugInfoPerPassMap()), VerifyDIPreserveExport));
+          &(Passes.getDebugInfoPerPass()), VerifyDIPreserveExport));
     }
   }
 
@@ -1038,7 +1000,7 @@ int main(int argc, char **argv) {
   std::unique_ptr<raw_svector_ostream> BOS;
   raw_ostream *OS = nullptr;
 
-  const bool ShouldEmitOutput = !NoOutput && !AnalyzeOnly;
+  const bool ShouldEmitOutput = !NoOutput;
 
   // Write bitcode or assembly to the output as the last step...
   if (ShouldEmitOutput || RunTwice) {

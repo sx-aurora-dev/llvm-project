@@ -71,7 +71,9 @@
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
+#ifdef EXPENSIVE_CHECKS
 #include "llvm/IR/Verifier.h"
+#endif
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
@@ -778,12 +780,13 @@ static bool areAllOperandsNonInsts(Value *V) {
   auto *I = dyn_cast<Instruction>(V);
   if (!I)
     return true;
-  return !I->mayReadOrWriteMemory() && all_of(I->operands(), [I](Value *V) {
-    auto *IO = dyn_cast<Instruction>(V);
-    if (!IO)
-      return true;
-    return isa<PHINode>(IO) || IO->getParent() != I->getParent();
-  });
+  return !mayHaveNonDefUseDependency(*I) &&
+    all_of(I->operands(), [I](Value *V) {
+      auto *IO = dyn_cast<Instruction>(V);
+      if (!IO)
+        return true;
+      return isa<PHINode>(IO) || IO->getParent() != I->getParent();
+    });
 }
 
 /// Checks if the provided value does not require scheduling. It does not
@@ -1135,6 +1138,11 @@ public:
 
     /// Loads from consecutive memory addresses, e.g. load(A[i]), load(A[i+1]).
     static const int ScoreConsecutiveLoads = 4;
+    /// The same load multiple times. This should have a better score than
+    /// `ScoreSplat` because it in x86 for a 2-lane vector we can represent it
+    /// with `movddup (%reg), xmm0` which has a throughput of 0.5 versus 0.5 for
+    /// a vector load and 1.0 for a broadcast.
+    static const int ScoreSplatLoads = 3;
     /// Loads from reversed memory addresses, e.g. load(A[i+1]), load(A[i]).
     static const int ScoreReversedLoads = 3;
     /// ExtractElementInst from same vector and consecutive indexes.
@@ -1161,9 +1169,18 @@ public:
     /// MainAltOps.
     static int getShallowScore(Value *V1, Value *V2, const DataLayout &DL,
                                ScalarEvolution &SE, int NumLanes,
-                               ArrayRef<Value *> MainAltOps) {
-      if (V1 == V2)
+                               ArrayRef<Value *> MainAltOps,
+                               const TargetTransformInfo *TTI) {
+      if (V1 == V2) {
+        if (isa<LoadInst>(V1)) {
+          // A broadcast of a load can be cheaper on some targets.
+          // TODO: For now accept a broadcast load with no other internal uses.
+          if (TTI->isLegalBroadcastLoad(V1->getType(), NumLanes) &&
+              (int)V1->getNumUses() == NumLanes)
+            return VLOperands::ScoreSplatLoads;
+        }
         return VLOperands::ScoreSplat;
+      }
 
       auto *LI1 = dyn_cast<LoadInst>(V1);
       auto *LI2 = dyn_cast<LoadInst>(V2);
@@ -1342,7 +1359,7 @@ public:
 
       // Get the shallow score of V1 and V2.
       int ShallowScoreAtThisLevel =
-          getShallowScore(LHS, RHS, DL, SE, getNumLanes(), MainAltOps);
+          getShallowScore(LHS, RHS, DL, SE, getNumLanes(), MainAltOps, R.TTI);
 
       // If reached MaxLevel,
       //  or if V1 and V2 are not instructions,
@@ -1956,7 +1973,7 @@ private:
   /// Check if the operands on the edges \p Edges of the \p UserTE allows
   /// reordering (i.e. the operands can be reordered because they have only one
   /// user and reordarable).
-  /// \param NonVectorized List of all gather nodes that require reordering
+  /// \param ReorderableGathers List of all gather nodes that require reordering
   /// (e.g., gather of extractlements or partially vectorizable loads).
   /// \param GatherOps List of gather operand nodes for \p UserTE that require
   /// reordering, subset of \p NonVectorized.
@@ -2625,6 +2642,7 @@ private:
       Dependencies = InvalidDeps;
       resetUnscheduledDeps();
       MemoryDependencies.clear();
+      ControlDependencies.clear();
     }
 
     int unscheduledDepsInBundle() const {
@@ -2678,6 +2696,12 @@ private:
     /// The dependent memory instructions.
     /// This list is derived on demand in calculateDependencies().
     SmallVector<ScheduleData *, 4> MemoryDependencies;
+
+    /// List of instructions which this instruction could be control dependent
+    /// on.  Allowing such nodes to be scheduled below this one could introduce
+    /// a runtime fault which didn't exist in the original program.
+    /// ex: this is a load or udiv following a readonly call which inf loops
+    SmallVector<ScheduleData *, 4> ControlDependencies;
 
     /// This ScheduleData is in the current scheduling region if this matches
     /// the current SchedulingRegionID of BlockScheduling.
@@ -2863,6 +2887,20 @@ private:
                        << "SLP:    gets ready (mem): " << *DepBundle << "\n");
           }
         }
+        // Handle the control dependencies.
+        for (ScheduleData *DepSD : BundleMember->ControlDependencies) {
+          if (DepSD->incrementUnscheduledDeps(-1) == 0) {
+            // There are no more unscheduled dependencies after decrementing,
+            // so we can put the dependent instruction into the ready list.
+            ScheduleData *DepBundle = DepSD->FirstInBundle;
+            assert(!DepBundle->IsScheduled &&
+                   "already scheduled bundle gets ready");
+            ReadyList.insert(DepBundle);
+            LLVM_DEBUG(dbgs()
+                       << "SLP:    gets ready (ctl): " << *DepBundle << "\n");
+          }
+        }
+
       }
     }
 
@@ -3350,7 +3388,7 @@ void BoUpSLP::reorderTopToBottom() {
   for_each(VectorizableTree, [this, &VFToOrderedEntries, &GathersToOrders](
                                  const std::unique_ptr<TreeEntry> &TE) {
     if (Optional<OrdersType> CurrentOrder =
-            getReorderingData(*TE.get(), /*TopToBottom=*/true)) {
+            getReorderingData(*TE, /*TopToBottom=*/true)) {
       // Do not include ordering for nodes used in the alt opcode vectorization,
       // better to reorder them during bottom-to-top stage. If follow the order
       // here, it causes reordering of the whole graph though actually it is
@@ -3547,7 +3585,7 @@ void BoUpSLP::reorderBottomToTop(bool IgnoreReorder) {
     if (TE->State != TreeEntry::Vectorize)
       NonVectorized.push_back(TE.get());
     if (Optional<OrdersType> CurrentOrder =
-            getReorderingData(*TE.get(), /*TopToBottom=*/false)) {
+            getReorderingData(*TE, /*TopToBottom=*/false)) {
       OrderedEntries.insert(TE.get());
       if (TE->State != TreeEntry::Vectorize)
         GathersToOrders.try_emplace(TE.get(), *CurrentOrder);
@@ -3914,6 +3952,7 @@ static LoadsState canVectorizeLoads(ArrayRef<Value *> VL, const Value *VL0,
 
 /// \return true if the specified list of values has only one instruction that
 /// requires scheduling, false otherwise.
+#ifndef NDEBUG
 static bool needToScheduleSingleInstruction(ArrayRef<Value *> VL) {
   Value *NeedsScheduling = nullptr;
   for (Value *V : VL) {
@@ -3927,6 +3966,7 @@ static bool needToScheduleSingleInstruction(ArrayRef<Value *> VL) {
   }
   return NeedsScheduling;
 }
+#endif
 
 void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
                             const EdgeInfo &UserTreeIdx) {
@@ -3998,16 +4038,6 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
     LLVM_DEBUG(dbgs() << "SLP: Gathering due to vector type.\n");
     newTreeEntry(VL, None /*not vectorized*/, S, UserTreeIdx);
     return;
-  }
-
-  // Avoid attempting to schedule allocas; there are unmodeled dependencies
-  // for "static" alloca status and for reordering with stacksave calls.
-  for (Value *V : VL) {
-    if (isa<AllocaInst>(V)) {
-      LLVM_DEBUG(dbgs() << "SLP: Gathering due to alloca.\n");
-      newTreeEntry(VL, None /*not vectorized*/, S, UserTreeIdx);
-      return;
-    }
   }
 
   if (StoreInst *SI = dyn_cast<StoreInst>(S.OpValue))
@@ -4108,7 +4138,7 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
   if (!BSRef)
     BSRef = std::make_unique<BlockScheduling>(BB);
 
-  BlockScheduling &BS = *BSRef.get();
+  BlockScheduling &BS = *BSRef;
 
   Optional<ScheduleData *> Bundle = BS.tryScheduleBundle(VL, this, S);
 #ifdef EXPENSIVE_CHECKS
@@ -5223,7 +5253,9 @@ InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
       // broadcast.
       assert(VecTy == FinalVecTy &&
              "No reused scalars expected for broadcast.");
-      return TTI->getShuffleCost(TargetTransformInfo::SK_Broadcast, VecTy);
+      return TTI->getShuffleCost(TargetTransformInfo::SK_Broadcast, VecTy,
+                                 /*Mask=*/None, /*Index=*/0,
+                                 /*SubTp=*/nullptr, /*Args=*/VL);
     }
     InstructionCost ReuseShuffleCost = 0;
     if (NeedToShuffleReuses)
@@ -6072,7 +6104,7 @@ InstructionCost BoUpSLP::getTreeCost(ArrayRef<Value *> VectorizedVals) {
   unsigned BundleWidth = VectorizableTree[0]->Scalars.size();
 
   for (unsigned I = 0, E = VectorizableTree.size(); I < E; ++I) {
-    TreeEntry &TE = *VectorizableTree[I].get();
+    TreeEntry &TE = *VectorizableTree[I];
 
     InstructionCost C = getEntryCost(&TE, VectorizedVals);
     Cost += C;
@@ -8037,6 +8069,59 @@ void BoUpSLP::BlockScheduling::calculateDependencies(ScheduleData *SD,
         }
       }
 
+      // Any instruction which isn't safe to speculate at the begining of the
+      // block is control dependend on any early exit or non-willreturn call
+      // which proceeds it.
+      if (!isGuaranteedToTransferExecutionToSuccessor(BundleMember->Inst)) {
+        for (Instruction *I = BundleMember->Inst->getNextNode();
+             I != ScheduleEnd; I = I->getNextNode()) {
+          if (isSafeToSpeculativelyExecute(I, &*BB->begin()))
+            continue;
+
+          // Add the dependency
+          auto *DepDest = getScheduleData(I);
+          assert(DepDest && "must be in schedule window");
+          DepDest->ControlDependencies.push_back(BundleMember);
+          BundleMember->Dependencies++;
+          ScheduleData *DestBundle = DepDest->FirstInBundle;
+          if (!DestBundle->IsScheduled)
+            BundleMember->incrementUnscheduledDeps(1);
+          if (!DestBundle->hasValidDependencies())
+            WorkList.push_back(DestBundle);
+
+          if (!isGuaranteedToTransferExecutionToSuccessor(I))
+            // Everything past here must be control dependent on I.
+            break;
+        }
+      }
+
+      // If we have an inalloc alloca instruction, it needs to be scheduled
+      // after any preceeding stacksave.
+      if (match(BundleMember->Inst, m_Intrinsic<Intrinsic::stacksave>())) {
+        for (Instruction *I = BundleMember->Inst->getNextNode();
+             I != ScheduleEnd; I = I->getNextNode()) {
+          if (match(I, m_Intrinsic<Intrinsic::stacksave>()))
+            // Any allocas past here must be control dependent on I, and I
+            // must be memory dependend on BundleMember->Inst.
+            break;
+
+          if (!isa<AllocaInst>(I))
+            continue;
+
+          // Add the dependency
+          auto *DepDest = getScheduleData(I);
+          assert(DepDest && "must be in schedule window");
+          DepDest->ControlDependencies.push_back(BundleMember);
+          BundleMember->Dependencies++;
+          ScheduleData *DestBundle = DepDest->FirstInBundle;
+          if (!DestBundle->IsScheduled)
+            BundleMember->incrementUnscheduledDeps(1);
+          if (!DestBundle->hasValidDependencies())
+            WorkList.push_back(DestBundle);
+        }
+      }
+
+
       // Handle the memory dependencies (if any).
       ScheduleData *DepDest = BundleMember->NextLoadStore;
       if (!DepDest)
@@ -8131,6 +8216,8 @@ void BoUpSLP::scheduleBlock(BlockScheduling *BS) {
   // For the real scheduling we use a more sophisticated ready-list: it is
   // sorted by the original instruction location. This lets the final schedule
   // be as  close as possible to the original instruction order.
+  // WARNING: If changing this order causes a correctness issue, that means
+  // there is some missing dependence edge in the schedule data graph.
   struct ScheduleDataCompare {
     bool operator()(ScheduleData *SD1, ScheduleData *SD2) const {
       return SD2->SchedulingPriority < SD1->SchedulingPriority;

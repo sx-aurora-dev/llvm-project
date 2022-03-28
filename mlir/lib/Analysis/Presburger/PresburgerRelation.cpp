@@ -37,7 +37,7 @@ const IntegerRelation &PresburgerRelation::getDisjunct(unsigned index) const {
 /// Mutate this set, turning it into the union of this set and the given
 /// IntegerRelation.
 void PresburgerRelation::unionInPlace(const IntegerRelation &disjunct) {
-  assert(PresburgerSpace::isEqual(disjunct) && "Spaces should match");
+  assert(isSpaceCompatible(disjunct) && "Spaces should match");
   integerRelations.push_back(disjunct);
 }
 
@@ -46,7 +46,7 @@ void PresburgerRelation::unionInPlace(const IntegerRelation &disjunct) {
 /// This is accomplished by simply adding all the disjuncts of the given set
 /// to this set.
 void PresburgerRelation::unionInPlace(const PresburgerRelation &set) {
-  assert(PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(isSpaceCompatible(set) && "Spaces should match");
   for (const IntegerRelation &disjunct : set.integerRelations)
     unionInPlace(disjunct);
 }
@@ -54,7 +54,7 @@ void PresburgerRelation::unionInPlace(const PresburgerRelation &set) {
 /// Return the union of this set and the given set.
 PresburgerRelation
 PresburgerRelation::unionSet(const PresburgerRelation &set) const {
-  assert(PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(isSpaceCompatible(set) && "Spaces should match");
   PresburgerRelation result = *this;
   result.unionInPlace(set);
   return result;
@@ -91,43 +91,18 @@ PresburgerRelation PresburgerRelation::getEmpty(unsigned numDomain,
 // variables of both.
 PresburgerRelation
 PresburgerRelation::intersect(const PresburgerRelation &set) const {
-  assert(PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(isSpaceCompatible(set) && "Spaces should match");
 
   PresburgerRelation result(getNumDomainIds(), getNumRangeIds(),
                             getNumSymbolIds());
   for (const IntegerRelation &csA : integerRelations) {
     for (const IntegerRelation &csB : set.integerRelations) {
-      IntegerRelation csACopy = csA, csBCopy = csB;
-      csACopy.mergeLocalIds(csBCopy);
-      csACopy.append(csBCopy);
-      if (!csACopy.isEmpty())
-        result.unionInPlace(csACopy);
+      IntegerRelation intersection = csA.intersect(csB);
+      if (!intersection.isEmpty())
+        result.unionInPlace(intersection);
     }
   }
   return result;
-}
-
-/// Return `coeffs` with all the elements negated.
-static SmallVector<int64_t, 8> getNegatedCoeffs(ArrayRef<int64_t> coeffs) {
-  SmallVector<int64_t, 8> negatedCoeffs;
-  negatedCoeffs.reserve(coeffs.size());
-  for (int64_t coeff : coeffs)
-    negatedCoeffs.emplace_back(-coeff);
-  return negatedCoeffs;
-}
-
-/// Return the complement of the given inequality.
-///
-/// The complement of a_1 x_1 + ... + a_n x_ + c >= 0 is
-/// a_1 x_1 + ... + a_n x_ + c < 0, i.e., -a_1 x_1 - ... - a_n x_ - c - 1 >= 0,
-/// since all the variables are constrained to be integers.
-static SmallVector<int64_t, 8> getComplementIneq(ArrayRef<int64_t> ineq) {
-  SmallVector<int64_t, 8> coeffs;
-  coeffs.reserve(ineq.size());
-  for (int64_t coeff : ineq)
-    coeffs.emplace_back(-coeff);
-  --coeffs.back();
-  return coeffs;
 }
 
 /// Return the set difference b \ s and accumulate the result into `result`.
@@ -178,16 +153,12 @@ static void subtractRecursively(IntegerRelation &b, Simplex &simplex,
   // rollback b to its initial state before returning, which we will do by
   // removing all constraints beyond the original number of inequalities
   // and equalities, so we store these counts first.
-  const unsigned bInitNumIneqs = b.getNumInequalities();
-  const unsigned bInitNumEqs = b.getNumEqualities();
-  const unsigned bInitNumLocals = b.getNumLocalIds();
+  const IntegerRelation::CountsSnapshot bCounts = b.getCounts();
   // Similarly, we also want to rollback simplex to its original state.
   const unsigned initialSnapshot = simplex.getSnapshot();
 
   auto restoreState = [&]() {
-    b.removeIdRange(IdKind::Local, bInitNumLocals, b.getNumLocalIds());
-    b.removeInequalityRange(bInitNumIneqs, b.getNumInequalities());
-    b.removeEqualityRange(bInitNumEqs, b.getNumEqualities());
+    b.truncate(bCounts);
     simplex.rollback(initialSnapshot);
   };
 
@@ -223,7 +194,8 @@ static void subtractRecursively(IntegerRelation &b, Simplex &simplex,
   }
 
   unsigned offset = simplex.getNumConstraints();
-  unsigned numLocalsAdded = b.getNumLocalIds() - bInitNumLocals;
+  unsigned numLocalsAdded =
+      b.getNumLocalIds() - bCounts.getSpace().getNumLocalIds();
   simplex.appendVariable(numLocalsAdded);
 
   unsigned snapshotBeforeIntersect = simplex.getSnapshot();
@@ -260,12 +232,11 @@ static void subtractRecursively(IntegerRelation &b, Simplex &simplex,
   // inequality, s_{i,j+1}. This function recurses into the next level i + 1
   // with the part b ^ s_i1 ^ s_i2 ^ ... ^ s_ij ^ ~s_{i,j+1}.
   auto recurseWithInequality = [&, i](ArrayRef<int64_t> ineq) {
-    size_t snapshot = simplex.getSnapshot();
+    SimplexRollbackScopeExit scopeExit(simplex);
     b.addInequality(ineq);
     simplex.addInequality(ineq);
     subtractRecursively(b, simplex, s, i + 1, result);
     b.removeInequality(b.getNumInequalities() - 1);
-    simplex.rollback(snapshot);
   };
 
   // For each inequality ineq, we first recurse with the part where ineq
@@ -310,7 +281,7 @@ static void subtractRecursively(IntegerRelation &b, Simplex &simplex,
 /// returning from that function.
 static PresburgerRelation getSetDifference(IntegerRelation disjunct,
                                            const PresburgerRelation &set) {
-  assert(disjunct.PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(disjunct.isSpaceCompatible(set) && "Spaces should match");
   if (disjunct.isEmptyByGCDTest())
     return PresburgerRelation::getEmpty(disjunct.getNumDomainIds(),
                                         disjunct.getNumRangeIds(),
@@ -336,7 +307,7 @@ PresburgerRelation PresburgerRelation::complement() const {
 /// return `this \ set`.
 PresburgerRelation
 PresburgerRelation::subtract(const PresburgerRelation &set) const {
-  assert(PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(isSpaceCompatible(set) && "Spaces should match");
   PresburgerRelation result(getNumDomainIds(), getNumRangeIds(),
                             getNumSymbolIds());
   // We compute (U_i t_i) \ (U_i set_i) as U_i (t_i \ V_i set_i).
@@ -354,7 +325,7 @@ bool PresburgerRelation::isSubsetOf(const PresburgerRelation &set) const {
 
 /// Two sets are equal iff they are subsets of each other.
 bool PresburgerRelation::isEqual(const PresburgerRelation &set) const {
-  assert(PresburgerSpace::isEqual(set) && "Spaces should match");
+  assert(isSpaceCompatible(set) && "Spaces should match");
   return this->isSubsetOf(set) && set.isSubsetOf(*this);
 }
 
@@ -437,9 +408,9 @@ private:
   /// within `a`.
   bool isFacetContained(ArrayRef<int64_t> ineq, Simplex &simp);
 
-  /// Adds `disjunct` to `disjuncts` and removes the disjuncts at position `i`
-  /// and `j`. Updates `simplices` to reflect the changes. `i` and `j` cannot
-  /// be equal.
+  /// Removes redundant constraints from `disjunct`, adds it to `disjuncts` and
+  /// removes the disjuncts at position `i` and `j`. Updates `simplices` to
+  /// reflect the changes. `i` and `j` cannot be equal.
   void addCoalescedDisjunct(unsigned i, unsigned j,
                             const IntegerRelation &disjunct);
 
@@ -488,6 +459,7 @@ SetCoalescer::SetCoalescer(const PresburgerRelation &s) {
   simplices.reserve(s.getNumDisjuncts());
   // Note that disjuncts.size() changes during the loop.
   for (unsigned i = 0; i < disjuncts.size();) {
+    disjuncts[i].removeRedundantConstraints();
     Simplex simp(disjuncts[i]);
     if (simp.isEmpty()) {
       disjuncts[i] = disjuncts[disjuncts.size() - 1];
@@ -546,16 +518,11 @@ PresburgerRelation SetCoalescer::coalesce() {
 /// that all inequalities of `cuttingIneqsB` are redundant for the facet of
 /// `simp` where `ineq` holds as an equality is contained within `a`.
 bool SetCoalescer::isFacetContained(ArrayRef<int64_t> ineq, Simplex &simp) {
-  unsigned snapshot = simp.getSnapshot();
+  SimplexRollbackScopeExit scopeExit(simp);
   simp.addEquality(ineq);
-  if (llvm::any_of(cuttingIneqsB, [&simp](ArrayRef<int64_t> curr) {
-        return !simp.isRedundantInequality(curr);
-      })) {
-    simp.rollback(snapshot);
-    return false;
-  }
-  simp.rollback(snapshot);
-  return true;
+  return llvm::all_of(cuttingIneqsB, [&simp](ArrayRef<int64_t> curr) {
+    return simp.isRedundantInequality(curr);
+  });
 }
 
 void SetCoalescer::addCoalescedDisjunct(unsigned i, unsigned j,
@@ -569,10 +536,11 @@ void SetCoalescer::addCoalescedDisjunct(unsigned i, unsigned j,
     disjuncts[i] = disjuncts[n - 2];
     disjuncts.pop_back();
     disjuncts[n - 2] = disjunct;
+    disjuncts[n - 2].removeRedundantConstraints();
 
     simplices[i] = simplices[n - 2];
     simplices.pop_back();
-    simplices[n - 2] = Simplex(disjunct);
+    simplices[n - 2] = Simplex(disjuncts[n - 2]);
 
   } else {
     // Other possible edge cases are correct since for `j` or `i` == `n` -
@@ -584,11 +552,12 @@ void SetCoalescer::addCoalescedDisjunct(unsigned i, unsigned j,
     disjuncts[j] = disjuncts[n - 2];
     disjuncts.pop_back();
     disjuncts[n - 2] = disjunct;
+    disjuncts[n - 2].removeRedundantConstraints();
 
     simplices[i] = simplices[n - 1];
     simplices[j] = simplices[n - 2];
     simplices.pop_back();
-    simplices[n - 2] = Simplex(disjunct);
+    simplices[n - 2] = Simplex(disjuncts[n - 2]);
   }
 }
 
