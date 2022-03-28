@@ -9,9 +9,6 @@ pipeline {
         // Job pool
         COMPILE_THREADS = 24
         LINK_THREADS = 8
-        // Need to use either gcc-10 or clang to compile recent llvm
-        CC = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang"
-        CXX = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang++"
         REPO_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*\$::'").trim()
@@ -44,8 +41,7 @@ pipeline {
                 dir('llvm-dev') {
                     sh """
                         make clean
-                        CC="${CC}" CXX="${CXX}" make \
-                            SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
                             COMPILE_THREADS=${COMPILE_THREADS} \
                             LINK_THREADS=${LINK_THREADS} cmake build
                     """
