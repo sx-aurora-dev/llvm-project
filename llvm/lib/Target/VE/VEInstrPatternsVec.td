@@ -1,6 +1,14 @@
+//===-- VEInstrPatternsVec.td - VEC_-type SDNodes and isel for VE Target --===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
 //===----------------------------------------------------------------------===//
-// Vector Instruction Patterns for non vectorize subtarget which supports
-// intrinsics and v256f64 vector regisetr only.
+//
+// This file describes the VEC_* prefixed intermediate SDNodes and their
+// isel patterns.
+//
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//

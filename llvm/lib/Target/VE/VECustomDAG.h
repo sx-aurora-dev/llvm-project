@@ -1,4 +1,4 @@
-//===-- VECustomDAG.h - VE Custom DAG Nodes ------------*- C++ -*-===//
+//===------------ VECustomDAG.h - VE Custom DAG Nodes -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the interfaces that VE uses to lower LLVM code into a
-// selection DAG.
+// This file defines the helper functions that VE uses to lower LLVM code into a
+// selection DAG.  For example, hiding SDLoc, and easy to use SDNodeFlags.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,12 +42,6 @@ template <typename ElemT> ElemT &ref_to(std::unique_ptr<ElemT> &UP) {
   return *(UP.get());
 }
 /// } Helpers
-
-class VESubtarget;
-
-using PosOpt = Optional<unsigned>;
-
-/// } Broadcast, Shuffle, Mask Analysis
 
 /// Packing {
 using LaneBits = std::bitset<256>;
@@ -125,6 +119,8 @@ SDValue getUnpackAVL(SDValue N);
 
 /// } Packing
 
+using PosOpt = Optional<unsigned>;
+
 //// VVP Machinery {
 // VVP property queries
 PosOpt getVVPOpcode(unsigned OpCode);
@@ -142,8 +138,8 @@ bool isVVP(unsigned Opcode);
 bool isVVPTernaryOp(unsigned Opcode);
 bool isVVPBinaryOp(unsigned Opcode);
 bool isVVPUnaryOp(unsigned Opcode);
-bool isVVPConversionOp(unsigned VVPOC);
-bool isVVPReductionOp(unsigned VVPOC);
+bool isVVPConversionOp(unsigned Opcode);
+bool isVVPReductionOp(unsigned Opcode);
 
 MVT splitVectorType(MVT VT);
 EVT splitType(LLVMContext &Ctx, EVT PackedVT, PackElem P);

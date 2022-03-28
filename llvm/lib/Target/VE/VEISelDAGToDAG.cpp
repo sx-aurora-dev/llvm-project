@@ -238,7 +238,6 @@ bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
     return false;
   }
   if (matchADDRrr(Addr, LHS, RHS)) {
-    // Move a frameiindex to LHS:
     // If the input is a pair of a frame-index and a register, move a
     // frame-index to LHS.  This generates MI with following operands.
     //    %dest, #FI, %reg, offset
@@ -399,8 +398,11 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   }
 
   switch (N->getOpcode()) {
-  default:
-    break;
+
+  // Late eliminate the LEGALAVL wrapper
+  case VEISD::LEGALAVL:
+    ReplaceNode(N, N->getOperand(0).getNode());
+    return;
 
   // Lower (broadcast 1) and (broadcast 0) to VM[P]0
   case VEISD::VEC_BROADCAST: {
@@ -408,7 +410,7 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     if (SplatResTy.getVectorElementType() != MVT::i1)
       break;
 
-    // broadcasting true?
+    // Constant non-zero broadcast.
     auto BConst = dyn_cast<ConstantSDNode>(N->getOperand(0));
     if (!BConst)
       break;
@@ -416,26 +418,21 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     if (!BCTrueMask)
       break;
 
-    // Decode the register
+    // Packed or non-packed.
     SDValue New;
-    if (SplatResTy.getVectorNumElements() == 256) {
+    if (SplatResTy.getVectorNumElements() == StandardVectorWidth) {
       New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VM0,
                                    MVT::v256i1);
-    } else if (SplatResTy.getVectorNumElements() == 512) {
+    } else if (SplatResTy.getVectorNumElements() == PackedVectorWidth) {
       New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VMP0,
                                    MVT::v512i1);
     } else
       break;
 
-    // ok replace
+    // Replace.
     ReplaceNode(N, New.getNode());
-     return;
-   }
-
-  // Late eliminate the LEGALAVL wrapper
-  case VEISD::LEGALAVL:
-    ReplaceNode(N, N->getOperand(0).getNode());
     return;
+  }
 
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());

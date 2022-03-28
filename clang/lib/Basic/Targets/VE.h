@@ -76,25 +76,25 @@ public:
 
   ArrayRef<const char *> getGCCRegNames() const override {
     static const char *const GCCRegNames[] = {
-      // Regular registers
+        // Regular registers
         "sx0",  "sx1",  "sx2",  "sx3",  "sx4",  "sx5",  "sx6",  "sx7",
-        "sx8",  "sx9", "sx10", "sx11", "sx12", "sx13", "sx14", "sx15",
-       "sx16", "sx17", "sx18", "sx19", "sx20", "sx21", "sx22", "sx23",
-       "sx24", "sx25", "sx26", "sx27", "sx28", "sx29", "sx30", "sx31",
-       "sx32", "sx33", "sx34", "sx35", "sx36", "sx37", "sx38", "sx39",
-       "sx40", "sx41", "sx42", "sx43", "sx44", "sx45", "sx46", "sx47",
-       "sx48", "sx49", "sx50", "sx51", "sx52", "sx53", "sx54", "sx55",
-       "sx56", "sx57", "sx58", "sx59", "sx60", "sx61", "sx62", "sx63",
-      // Vector registers
+        "sx8",  "sx9",  "sx10", "sx11", "sx12", "sx13", "sx14", "sx15",
+        "sx16", "sx17", "sx18", "sx19", "sx20", "sx21", "sx22", "sx23",
+        "sx24", "sx25", "sx26", "sx27", "sx28", "sx29", "sx30", "sx31",
+        "sx32", "sx33", "sx34", "sx35", "sx36", "sx37", "sx38", "sx39",
+        "sx40", "sx41", "sx42", "sx43", "sx44", "sx45", "sx46", "sx47",
+        "sx48", "sx49", "sx50", "sx51", "sx52", "sx53", "sx54", "sx55",
+        "sx56", "sx57", "sx58", "sx59", "sx60", "sx61", "sx62", "sx63",
+        // Vector registers
         "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",
         "v8",  "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-       "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
-       "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
-       "v32", "v33", "v34", "v35", "v36", "v37", "v38", "v39",
-       "v40", "v41", "v42", "v43", "v44", "v45", "v46", "v47",
-       "v48", "v49", "v50", "v51", "v52", "v53", "v54", "v55",
-       "v56", "v57", "v58", "v59", "v60", "v61", "v62", "v63",
-      // Special registers
+        "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",
+        "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",
+        "v32", "v33", "v34", "v35", "v36", "v37", "v38", "v39",
+        "v40", "v41", "v42", "v43", "v44", "v45", "v46", "v47",
+        "v48", "v49", "v50", "v51", "v52", "v53", "v54", "v55",
+        "v56", "v57", "v58", "v59", "v60", "v61", "v62", "v63",
+        // Special registers
         "vl",  "vixr",  "ucc", "psw", "sar", "pmmr",
         "pmcr0", "pmcr1", "pmcr2", "pmcr3",
         "pmc0", "pmc1", "pmc2", "pmc3", "pmc4", "pmc5", "pmc6", "pmc7",

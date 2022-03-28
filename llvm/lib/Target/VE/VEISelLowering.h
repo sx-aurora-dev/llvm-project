@@ -181,8 +181,9 @@ public:
                       const SmallVectorImpl<SDValue> &OutVals, const SDLoc &dl,
                       SelectionDAG &DAG) const override;
 
+  /// Helper functions for atomic operations.
   bool shouldInsertFencesForAtomic(const Instruction *I) const override {
-    // VE uses Release consistency, so need fence for each atomics.
+    // VE uses release consistency, so need fence for each atomics.
     return true;
   }
   Instruction *emitLeadingFence(IRBuilderBase &Builder, Instruction *Inst,
@@ -227,27 +228,26 @@ public:
   /// } Custom CC Mapping
 
   /// Custom Lower {
-  Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
-                                                 EVT VT) const override;
-
-  const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
-                                          const MachineBasicBlock *MBB,
-                                          unsigned uid,
-                                          MCContext &Ctx) const override;
-  unsigned getJumpTableEncoding() const override;
-
-  // overrides
   TargetLoweringBase::LegalizeAction
   getCustomOperationAction(SDNode &) const override;
-  TargetLowering::LegalizeAction
-  getActionForExtendedType(unsigned Op, EVT VT) const override;
+
+  SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+  unsigned getJumpTableEncoding() const override;
+  const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
+                                          const MachineBasicBlock *MBB,
+                                          unsigned Uid,
+                                          MCContext &Ctx) const override;
 
   // Lowering hooks.
   // Only used by VVP layer to intercept EVT-typed nodes before MVT widening
   // kicks in.
-  SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
-  void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
-                          SelectionDAG &DAG) const override;
+  // TODO: Clean these hooks implemented in
+  //       `include/llvm/CodeGen/TargetLowering.h`
+  TargetLowering::LegalizeAction
+  getActionForExtendedType(unsigned Op, EVT VT) const override;
+  Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
+                                                 EVT VT) const override;
+
   void LowerOperationWrapper(
       SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
       std::function<SDValue(SDValue)> PromotedopCB,
@@ -290,6 +290,12 @@ public:
   SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
+
+  /// Replace the results of node with an illegal result
+  /// type with new values built out of custom code.
+  ///
+  void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
+                          SelectionDAG &DAG) const override;
 
   /// Custom Lower for SIMD {
   SDValue LowerOperation_SIMD(SDValue Op, SelectionDAG &DAG) const;

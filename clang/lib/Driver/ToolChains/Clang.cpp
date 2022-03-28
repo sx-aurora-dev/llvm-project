@@ -1465,8 +1465,6 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
 #endif
   }
 
-
-
   // Add system include arguments for all targets but IAMCU.
   if (!IsIAMCU)
     forAllAssociatedToolChains(C, JA, getToolChain(),
