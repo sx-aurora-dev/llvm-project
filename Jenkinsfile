@@ -107,11 +107,9 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
-                                # Use sed since CMakeLists.txt does not use option command.
-                                sed -e 's:linux/libclang_rt.builtins-ve.a:ve-unknown-linux-gnu/libclang_rt.builtins.a:' -i ../CMakeLists.txt
                                 ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
-                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/14.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
+                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/15.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
                                 # make -j often crash
                                 make -j${COMPILE_THREADS}
