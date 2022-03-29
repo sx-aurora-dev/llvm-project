@@ -9,9 +9,6 @@ pipeline {
         // Job pool
         COMPILE_THREADS = 24
         LINK_THREADS = 8
-        // Need to use either gcc-10 or clang to compile recent llvm
-        CC = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang"
-        CXX = "/opt/nec/nosupport/llvm-ve-1.16.0/bin/clang++"
         REPO_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*\$::'").trim()
@@ -44,8 +41,7 @@ pipeline {
                 dir('llvm-dev') {
                     sh """
                         make clean
-                        CC="${CC}" CXX="${CXX}" make \
-                            SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
+                        make SRCDIR=${TOP}/llvm-project CMAKE=${CMAKE} \
                             COMPILE_THREADS=${COMPILE_THREADS} \
                             LINK_THREADS=${LINK_THREADS} cmake build
                     """
@@ -107,11 +103,9 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
-                                # Use sed since CMakeLists.txt does not use option command.
-                                sed -e 's:linux/libclang_rt.builtins-ve.a:ve-unknown-linux-gnu/libclang_rt.builtins.a:' -i ../CMakeLists.txt
                                 ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
-                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/14.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
+                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/15.0.0/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
                                 # make -j often crash
                                 make -j${COMPILE_THREADS}
