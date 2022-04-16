@@ -107,6 +107,20 @@ using namespace options;
 using namespace llvm::opt;
 
 //===----------------------------------------------------------------------===//
+// Helpers.
+//===----------------------------------------------------------------------===//
+
+// Parse misexpect tolerance argument value.
+// Valid option values are integers in the range [0, 100)
+inline Expected<Optional<uint64_t>> parseToleranceOption(StringRef Arg) {
+  int64_t Val;
+  if (Arg.getAsInteger(10, Val))
+    return llvm::createStringError(llvm::inconvertibleErrorCode(),
+                                   "Not an integer: %s", Arg.data());
+  return Val;
+}
+
+//===----------------------------------------------------------------------===//
 // Initialization.
 //===----------------------------------------------------------------------===//
 
@@ -1535,6 +1549,9 @@ void CompilerInvocation::GenerateCodeGenArgs(
                   : "auto",
               SA);
 
+  GenerateArg(Args, OPT_fdiagnostics_misexpect_tolerance_EQ,
+              Twine(*Opts.DiagnosticsMisExpectTolerance), SA);
+
   for (StringRef Sanitizer : serializeSanitizerKinds(Opts.SanitizeRecover))
     GenerateArg(Args, OPT_fsanitize_recover_EQ, Sanitizer, SA);
 
@@ -1949,6 +1966,23 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
           !UsingProfile)
         Diags.Report(diag::warn_drv_diagnostics_hotness_requires_pgo)
             << "-fdiagnostics-hotness-threshold=";
+    }
+  }
+
+  if (auto *arg =
+          Args.getLastArg(options::OPT_fdiagnostics_misexpect_tolerance_EQ)) {
+    auto ResultOrErr = parseToleranceOption(arg->getValue());
+
+    if (!ResultOrErr) {
+      Diags.Report(diag::err_drv_invalid_diagnotics_misexpect_tolerance)
+          << "-fdiagnostics-misexpect-tolerance=";
+    } else {
+      Opts.DiagnosticsMisExpectTolerance = *ResultOrErr;
+      if ((!Opts.DiagnosticsMisExpectTolerance.hasValue() ||
+           Opts.DiagnosticsMisExpectTolerance.getValue() > 0) &&
+          !UsingProfile)
+        Diags.Report(diag::warn_drv_diagnostics_misexpect_requires_pgo)
+            << "-fdiagnostics-misexpect-tolerance=";
     }
   }
 
@@ -2623,6 +2657,9 @@ static void GenerateFrontendArgs(const FrontendOptions &Opts,
     case Language::LLVM_IR:
       Lang = "ir";
       break;
+    case Language::HLSL:
+      Lang = "hlsl";
+      break;
     }
 
     GenerateArg(Args, OPT_x,
@@ -2809,6 +2846,7 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
                 .Case("objective-c", Language::ObjC)
                 .Case("objective-c++", Language::ObjCXX)
                 .Case("renderscript", Language::RenderScript)
+                .Case("hlsl", Language::HLSL)
                 .Default(Language::Unknown);
 
     // "objc[++]-cpp-output" is an acceptable synonym for
@@ -3220,6 +3258,9 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     case Language::HIP:
       LangStd = LangStandard::lang_hip;
       break;
+    case Language::HLSL:
+      LangStd = LangStandard::lang_hlsl2021;
+      break;
     }
   }
 
@@ -3241,6 +3282,8 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   Opts.HexFloats = Std.hasHexFloats();
   Opts.ImplicitInt = Std.hasImplicitInt();
 
+  Opts.HLSL = IK.getLanguage() == Language::HLSL;
+
   // Set OpenCL Version.
   Opts.OpenCL = Std.isOpenCL();
   if (LangStd == LangStandard::lang_opencl10)
@@ -3257,6 +3300,18 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.OpenCLCPlusPlusVersion = 100;
   else if (LangStd == LangStandard::lang_openclcpp2021)
     Opts.OpenCLCPlusPlusVersion = 202100;
+  else if (LangStd == LangStandard::lang_hlsl2015)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_2015;
+  else if (LangStd == LangStandard::lang_hlsl2016)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_2016;
+  else if (LangStd == LangStandard::lang_hlsl2017)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_2017;
+  else if (LangStd == LangStandard::lang_hlsl2018)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_2018;
+  else if (LangStd == LangStandard::lang_hlsl2021)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_2021;
+  else if (LangStd == LangStandard::lang_hlsl202x)
+    Opts.HLSLVersion = (unsigned)LangOptions::HLSL_202x;
 
   // OpenCL has some additional defaults.
   if (Opts.OpenCL) {
@@ -3341,6 +3396,9 @@ static bool IsInputCompatibleWithStandard(InputKind IK,
     // FIXME: The -std= value is not ignored; it affects the tokenization
     // and preprocessing rules if we're preprocessing this asm input.
     return true;
+
+  case Language::HLSL:
+    return S.getLanguage() == Language::HLSL;
   }
 
   llvm_unreachable("unexpected input language");
@@ -3372,6 +3430,9 @@ static StringRef GetInputKindName(InputKind IK) {
     return "Asm";
   case Language::LLVM_IR:
     return "LLVM IR";
+
+  case Language::HLSL:
+    return "HLSL";
 
   case Language::Unknown:
     break;
@@ -4550,6 +4611,13 @@ bool CompilerInvocation::CreateFromArgsImpl(
                 Diags);
   if (Res.getFrontendOpts().ProgramAction == frontend::RewriteObjC)
     LangOpts.ObjCExceptions = 1;
+
+  for (auto Warning : Res.getDiagnosticOpts().Warnings) {
+    if (Warning == "misexpect" &&
+        !Diags.isIgnored(diag::warn_profile_data_misexpect, SourceLocation())) {
+      Res.getCodeGenOpts().MisExpect = true;
+    }
+  }
 
   if (LangOpts.CUDA) {
     // During CUDA device-side compilation, the aux triple is the
