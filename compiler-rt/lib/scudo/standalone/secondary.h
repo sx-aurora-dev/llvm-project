@@ -113,6 +113,19 @@ void mapSecondary(Options Options, uptr CommitBase, uptr CommitSize,
   }
 }
 
+// Template specialization to avoid producing zero-length array
+template <typename T, size_t Size> class NonZeroLengthArray {
+public:
+  T &operator[](uptr Idx) { return values[Idx]; }
+
+private:
+  T values[Size];
+};
+template <typename T> class NonZeroLengthArray<T, 0> {
+public:
+  T &operator[](uptr UNUSED Idx) { UNREACHABLE("Unsupported!"); }
+};
+
 template <typename Config> class MapAllocatorCache {
 public:
   // Ensure the default maximum specified fits the array.
@@ -362,18 +375,6 @@ private:
     u64 Time;
   };
 
-  // Template specialization to avoid producing zero-length array
-  template <size_t Size> class QuarantineBlocks {
-  public:
-    CachedBlock &operator[](uptr Idx) { return Blocks[Idx]; }
-  private:
-    CachedBlock Blocks[Size];
-  };
-  template <> class QuarantineBlocks<0> {
-  public:
-    CachedBlock &operator[](uptr UNUSED Idx) { UNREACHABLE("Unsupported!"); }
-  };
-
   void releaseIfOlderThan(CachedBlock &Entry, u64 Time) {
     if (!Entry.CommitBase || !Entry.Time)
       return;
@@ -407,7 +408,8 @@ private:
   atomic_s32 ReleaseToOsIntervalMs = {};
 
   CachedBlock Entries[Config::SecondaryCacheEntriesArraySize] = {};
-  QuarantineBlocks<Config::SecondaryCacheQuarantineSize> Quarantine = {};
+  NonZeroLengthArray<CachedBlock, Config::SecondaryCacheQuarantineSize>
+      Quarantine = {};
 };
 
 template <typename Config> class MapAllocator {
