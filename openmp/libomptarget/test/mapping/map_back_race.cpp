@@ -1,6 +1,10 @@
-// RUN: %libomptarget-compilexx-run-and-check-generic
+// RUN: %libomptarget-compilexx-and-run-generic
 
 // Taken from https://github.com/llvm/llvm-project/issues/54216
+
+
+// UNSUPPORTED: x86_64-pc-linux-gnu
+// UNSUPPORTED: x86_64-pc-linux-gnu-newDriver
 
 #include <algorithm>
 #include <cstdlib>
