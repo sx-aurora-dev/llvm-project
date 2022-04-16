@@ -1782,7 +1782,7 @@ AttributeMask AttributeFuncs::typeIncompatible(Type *Ty) {
         .addAttribute(Attribute::ZExt)
         .addAttribute(Attribute::AllocAlign);
 
-  if (!Ty->isPtrOrPtrVectorTy())
+  if (!Ty->isPointerTy())
     // Attributes that only apply to pointers.
     Incompatible.addAttribute(Attribute::Nest)
         .addAttribute(Attribute::NoAlias)
