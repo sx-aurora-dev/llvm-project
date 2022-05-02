@@ -1122,8 +1122,10 @@ static void VerifySDNode(SDNode *N) {
 /// verification and other common operations when a new node is allocated.
 void SelectionDAG::InsertNode(SDNode *N) {
   AllNodes.push_back(N);
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   N->PersistentId = NextPersistentId++;
+#endif
+#ifndef NDEBUG
   VerifySDNode(N);
 #endif
   for (DAGUpdateListener *DUL = UpdateListeners; DUL; DUL = DUL->Next)
@@ -1327,7 +1329,7 @@ void SelectionDAG::allnodes_clear() {
   AllNodes.remove(AllNodes.begin());
   while (!AllNodes.empty())
     DeallocateNode(&AllNodes.front());
-#ifndef NDEBUG
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   NextPersistentId = 0;
 #endif
 }
@@ -5114,6 +5116,8 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     break;
   case ISD::FREEZE:
     assert(VT == Operand.getValueType() && "Unexpected VT!");
+    if (isGuaranteedNotToBeUndefOrPoison(Operand))
+      return Operand;
     break;
   case ISD::TokenFactor:
   case ISD::MERGE_VALUES:
@@ -10453,6 +10457,11 @@ bool llvm::isAllOnesConstant(SDValue V) {
 bool llvm::isOneConstant(SDValue V) {
   ConstantSDNode *Const = dyn_cast<ConstantSDNode>(V);
   return Const != nullptr && Const->isOne();
+}
+
+bool llvm::isMinSignedConstant(SDValue V) {
+  ConstantSDNode *Const = dyn_cast<ConstantSDNode>(V);
+  return Const != nullptr && Const->isMinSignedValue();
 }
 
 SDValue llvm::peekThroughBitcasts(SDValue V) {

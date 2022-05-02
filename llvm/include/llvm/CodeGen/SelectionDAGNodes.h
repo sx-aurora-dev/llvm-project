@@ -621,7 +621,9 @@ private:
 public:
   /// Unique and persistent id per SDNode in the DAG.
   /// Used for debug printing.
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
   uint16_t PersistentId;
+#endif
 
   //===--------------------------------------------------------------------===//
   //  Accessors
@@ -1273,7 +1275,9 @@ public:
     : SDNode(ISD::HANDLENODE, 0, DebugLoc(), getSDVTList(MVT::Other)) {
     // HandleSDNodes are never inserted into the DAG, so they won't be
     // auto-numbered. Use ID 65535 as a sentinel.
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
     PersistentId = 0xffff;
+#endif
 
     // Manually set up the operand list. This node type is special in that it's
     // always stack allocated and SelectionDAG does not manage its operands.
@@ -1720,6 +1724,9 @@ bool isAllOnesConstant(SDValue V);
 
 /// Returns true if \p V is a constant integer one.
 bool isOneConstant(SDValue V);
+
+/// Returns true if \p V is a constant min signed integer value.
+bool isMinSignedConstant(SDValue V);
 
 /// Return the non-bitcasted source operand of \p V if it exists.
 /// If \p V is not a bitcasted value, it is returned as-is.

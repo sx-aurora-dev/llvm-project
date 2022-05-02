@@ -113,14 +113,17 @@ string(TOUPPER "${LLVM_ABI_BREAKING_CHECKS}" uppercase_LLVM_ABI_BREAKING_CHECKS)
 if( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "WITH_ASSERTS" )
   if( LLVM_ENABLE_ASSERTIONS )
     set( LLVM_ENABLE_ABI_BREAKING_CHECKS 1 )
+  else()
+    set( LLVM_ENABLE_ABI_BREAKING_CHECKS 0 )
   endif()
 elseif( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "FORCE_ON" )
   set( LLVM_ENABLE_ABI_BREAKING_CHECKS 1 )
 elseif( uppercase_LLVM_ABI_BREAKING_CHECKS STREQUAL "FORCE_OFF" )
-  # We don't need to do anything special to turn off ABI breaking checks.
+  set( LLVM_ENABLE_ABI_BREAKING_CHECKS 0 )
 elseif( NOT DEFINED LLVM_ABI_BREAKING_CHECKS )
   # Treat LLVM_ABI_BREAKING_CHECKS like "FORCE_OFF" when it has not been
   # defined.
+  set( LLVM_ENABLE_ABI_BREAKING_CHECKS 0 )
 else()
   message(FATAL_ERROR "Unknown value for LLVM_ABI_BREAKING_CHECKS: \"${LLVM_ABI_BREAKING_CHECKS}\"!")
 endif()
@@ -972,16 +975,6 @@ option(LLVM_ENABLE_EH "Enable Exception handling" OFF)
 option(LLVM_ENABLE_RTTI "Enable run time type information" OFF)
 if(LLVM_ENABLE_EH AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Exception handling requires RTTI. You must set LLVM_ENABLE_RTTI to ON")
-endif()
-
-option(LLVM_USE_NEWPM "Build LLVM using the experimental new pass manager" Off)
-mark_as_advanced(LLVM_USE_NEWPM)
-if (LLVM_USE_NEWPM)
-  append("-fexperimental-new-pass-manager"
-    CMAKE_CXX_FLAGS
-    CMAKE_C_FLAGS
-    CMAKE_EXE_LINKER_FLAGS
-    CMAKE_SHARED_LINKER_FLAGS)
 endif()
 
 option(LLVM_ENABLE_IR_PGO "Build LLVM and tools with IR PGO instrumentation (deprecated)" Off)

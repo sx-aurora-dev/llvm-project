@@ -569,11 +569,6 @@ protected:
                     Value *CountRoundDown, Value *EndValue,
                     BasicBlock *MiddleBlock, BasicBlock *VectorHeader);
 
-  /// Introduce a conditional branch (on true, condition to be set later) at the
-  /// end of the header=latch connecting it to itself (across the backedge) and
-  /// to the exit block of \p L.
-  void createHeaderBranch(Loop *L);
-
   /// Handle all cross-iteration phis in the header.
   void fixCrossIterationPHIs(VPTransformState &State);
 
@@ -630,9 +625,8 @@ protected:
   BasicBlock *emitMemRuntimeChecks(BasicBlock *Bypass);
 
   /// Emit basic blocks (prefixed with \p Prefix) for the iteration check,
-  /// vector loop preheader, middle block and scalar preheader. Also
-  /// allocate a loop object for the new vector loop and return it.
-  Loop *createVectorLoopSkeleton(StringRef Prefix);
+  /// vector loop preheader, middle block and scalar preheader.
+  void createVectorLoopSkeleton(StringRef Prefix);
 
   /// Create new phi nodes for the induction variables to resume iteration count
   /// in the scalar epilogue, from where the vectorized loop left off.
@@ -912,7 +906,9 @@ public:
       BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
       GeneratedRTChecks &Checks)
       : InnerLoopAndEpilogueVectorizer(OrigLoop, PSE, LI, DT, TLI, TTI, AC, ORE,
-                                       EPI, LVL, CM, BFI, PSI, Checks) {}
+                                       EPI, LVL, CM, BFI, PSI, Checks) {
+    TripCount = EPI.TripCount;
+  }
   /// Implements the interface for creating a vectorized skeleton using the
   /// *epilogue loop* strategy (ie the second pass of vplan execution).
   std::pair<BasicBlock *, Value *>
@@ -2834,23 +2830,6 @@ void InnerLoopVectorizer::scalarizeInstruction(Instruction *Instr,
     PredicatedInstructions.push_back(Cloned);
 }
 
-void InnerLoopVectorizer::createHeaderBranch(Loop *L) {
-  BasicBlock *Header = L->getHeader();
-  assert(!L->getLoopLatch() && "loop should not have a latch at this point");
-
-  IRBuilder<> B(Header->getTerminator());
-  Instruction *OldInst =
-      getDebugLocFromInstOrOperands(Legal->getPrimaryInduction());
-  setDebugLocFromInst(OldInst, &B);
-
-  // Connect the header to the exit and header blocks and replace the old
-  // terminator.
-  B.CreateCondBr(B.getTrue(), L->getUniqueExitBlock(), Header);
-
-  // Now we have two terminators. Remove the old one from the block.
-  Header->getTerminator()->eraseFromParent();
-}
-
 Value *InnerLoopVectorizer::getOrCreateTripCount(BasicBlock *InsertBlock) {
   if (TripCount)
     return TripCount;
@@ -3093,7 +3072,7 @@ BasicBlock *InnerLoopVectorizer::emitMemRuntimeChecks(BasicBlock *Bypass) {
   return MemCheckBlock;
 }
 
-Loop *InnerLoopVectorizer::createVectorLoopSkeleton(StringRef Prefix) {
+void InnerLoopVectorizer::createVectorLoopSkeleton(StringRef Prefix) {
   LoopScalarBody = OrigLoop->getHeader();
   LoopVectorPreHeader = OrigLoop->getLoopPreheader();
   assert(LoopVectorPreHeader && "Invalid loop structure");
@@ -3125,12 +3104,8 @@ Loop *InnerLoopVectorizer::createVectorLoopSkeleton(StringRef Prefix) {
   BrInst->setDebugLoc(ScalarLatchTerm->getDebugLoc());
   ReplaceInstWithInst(LoopMiddleBlock->getTerminator(), BrInst);
 
-  // We intentionally don't let SplitBlock to update LoopInfo since
-  // LoopVectorBody should belong to another loop than LoopVectorPreHeader.
-  // LoopVectorBody is explicitly added to the correct place few lines later.
-  BasicBlock *LoopVectorBody =
-      SplitBlock(LoopVectorPreHeader, LoopVectorPreHeader->getTerminator(), DT,
-                 nullptr, nullptr, Twine(Prefix) + "vector.body");
+  SplitBlock(LoopVectorPreHeader, LoopVectorPreHeader->getTerminator(), DT, LI,
+             nullptr, Twine(Prefix) + "vector.body");
 
   // Update dominator for loop exit.
   if (!Cost->requiresScalarEpilogue(VF))
@@ -3138,20 +3113,6 @@ Loop *InnerLoopVectorizer::createVectorLoopSkeleton(StringRef Prefix) {
     // middle block to exit blocks  and thus no need to update the immediate
     // dominator of the exit blocks.
     DT->changeImmediateDominator(LoopExitBlock, LoopMiddleBlock);
-
-  // Create and register the new vector loop.
-  Loop *Lp = LI->AllocateLoop();
-  Loop *ParentLoop = OrigLoop->getParentLoop();
-
-  // Insert the new loop into the loop nest and register the new basic blocks
-  // before calling any utilities such as SCEV that require valid LoopInfo.
-  if (ParentLoop) {
-    ParentLoop->addChildLoop(Lp);
-  } else {
-    LI->addTopLevelLoop(Lp);
-  }
-  Lp->addBasicBlockToLoop(LoopVectorBody, *LI);
-  return Lp;
 }
 
 void InnerLoopVectorizer::createInductionResumeValues(
@@ -3263,7 +3224,6 @@ BasicBlock *InnerLoopVectorizer::completeLoopSkeleton(MDNode *OrigLoopID) {
 
 #ifdef EXPENSIVE_CHECKS
   assert(DT->verify(DominatorTree::VerificationLevel::Fast));
-  LI->verify(*DT);
 #endif
 
   return LoopVectorPreHeader;
@@ -3317,7 +3277,7 @@ InnerLoopVectorizer::createVectorizedLoopSkeleton() {
 
   // Create an empty vector loop, and prepare basic blocks for the runtime
   // checks.
-  Loop *Lp = createVectorLoopSkeleton("");
+  createVectorLoopSkeleton("");
 
   // Now, compare the new count to zero. If it is zero skip the vector loop and
   // jump to the scalar loop. This check also covers the case where the
@@ -3334,8 +3294,6 @@ InnerLoopVectorizer::createVectorizedLoopSkeleton() {
   // checks into a separate block to make the more common case of few elements
   // faster.
   emitMemRuntimeChecks(LoopScalarPreHeader);
-
-  createHeaderBranch(Lp);
 
   // Emit phis for the new starting index of the scalar loop.
   createInductionResumeValues();
@@ -4554,6 +4512,27 @@ bool LoopVectorizationCostModel::interleavedAccessCanBeWidened(
   if (hasIrregularType(ScalarTy, DL))
     return false;
 
+  // If the group involves a non-integral pointer, we may not be able to
+  // losslessly cast all values to a common type.
+  unsigned InterleaveFactor = Group->getFactor();
+  bool ScalarNI = DL.isNonIntegralPointerType(ScalarTy);
+  for (unsigned i = 0; i < InterleaveFactor; i++) {
+    Instruction *Member = Group->getMember(i);
+    if (!Member)
+      continue;
+    auto *MemberTy = getLoadStoreType(Member);
+    bool MemberNI = DL.isNonIntegralPointerType(MemberTy);
+    // Don't coerce non-integral pointers to integers or vice versa.
+    if (MemberNI != ScalarNI) {
+      // TODO: Consider adding special nullptr value case here
+      return false;
+    } else if (MemberNI && ScalarNI &&
+               ScalarTy->getPointerAddressSpace() !=
+               MemberTy->getPointerAddressSpace()) {
+      return false;
+    }
+  }
+
   // Check if masking is required.
   // A Group may need masking for one of two reasons: it resides in a block that
   // needs predication, or it was decided to use masking to deal with gaps
@@ -5222,9 +5201,12 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
     return ElementCount::getFixed(ClampedConstTripCount);
   }
 
+  TargetTransformInfo::RegisterKind RegKind =
+      ComputeScalableMaxVF ? TargetTransformInfo::RGK_ScalableVector
+                           : TargetTransformInfo::RGK_FixedWidthVector;
   ElementCount MaxVF = MaxVectorElementCount;
   if (MaximizeBandwidth || (MaximizeBandwidth.getNumOccurrences() == 0 &&
-                            TTI.shouldMaximizeVectorBandwidth())) {
+                            TTI.shouldMaximizeVectorBandwidth(RegKind))) {
     auto MaxVectorElementCountMaxBW = ElementCount::get(
         PowerOf2Floor(WidestRegister.getKnownMinSize() / SmallestType),
         ComputeScalableMaxVF);
@@ -7624,7 +7606,7 @@ void LoopVectorizationPlanner::executePlan(ElementCount BestVF, unsigned BestUF,
   // 1. Create a new empty loop. Unlink the old loop and connect the new one.
   VPTransformState State{BestVF, BestUF, LI, DT, ILV.Builder, &ILV, &BestVPlan};
   Value *CanonicalIVStartValue;
-  std::tie(State.CFG.PrevBB, CanonicalIVStartValue) =
+  std::tie(State.CFG.VectorPreHeader, CanonicalIVStartValue) =
       ILV.createVectorizedLoopSkeleton();
   ILV.collectPoisonGeneratingRecipes(State);
 
@@ -7741,7 +7723,16 @@ Value *InnerLoopUnroller::getBroadcastInstrs(Value *V) { return V; }
 std::pair<BasicBlock *, Value *>
 EpilogueVectorizerMainLoop::createEpilogueVectorizedLoopSkeleton() {
   MDNode *OrigLoopID = OrigLoop->getLoopID();
-  Loop *Lp = createVectorLoopSkeleton("");
+
+  // Workaround!  Compute the trip count of the original loop and cache it
+  // before we start modifying the CFG.  This code has a systemic problem
+  // wherein it tries to run analysis over partially constructed IR; this is
+  // wrong, and not simply for SCEV.  The trip count of the original loop
+  // simply happens to be prone to hitting this in practice.  In theory, we
+  // can hit the same issue for any SCEV, or ValueTracking query done during
+  // mutation.  See PR49900.
+  getOrCreateTripCount(OrigLoop->getLoopPreheader());
+  createVectorLoopSkeleton("");
 
   // Generate the code to check the minimum iteration count of the vector
   // epilogue (see below).
@@ -7770,7 +7761,6 @@ EpilogueVectorizerMainLoop::createEpilogueVectorizedLoopSkeleton() {
   // Generate the induction variable.
   Value *CountRoundDown = getOrCreateVectorTripCount(LoopVectorPreHeader);
   EPI.VectorTripCount = CountRoundDown;
-  createHeaderBranch(Lp);
 
   // Skip induction resume value creation here because they will be created in
   // the second pass. If we created them here, they wouldn't be used anyway,
@@ -7862,7 +7852,7 @@ EpilogueVectorizerMainLoop::emitMinimumIterationCountCheck(BasicBlock *Bypass,
 std::pair<BasicBlock *, Value *>
 EpilogueVectorizerEpilogueLoop::createEpilogueVectorizedLoopSkeleton() {
   MDNode *OrigLoopID = OrigLoop->getLoopID();
-  Loop *Lp = createVectorLoopSkeleton("vec.epilog.");
+  createVectorLoopSkeleton("vec.epilog.");
 
   // Now, compare the remaining count and if there aren't enough iterations to
   // execute the vectorized epilogue skip to the scalar part.
@@ -7942,9 +7932,6 @@ EpilogueVectorizerEpilogueLoop::createEpilogueVectorizedLoopSkeleton() {
   EPResumeVal->addIncoming(EPI.VectorTripCount, VecEpilogueIterationCountCheck);
   EPResumeVal->addIncoming(ConstantInt::get(IdxTy, 0),
                            EPI.MainLoopIterationCountCheck);
-
-  // Generate the induction variable.
-  createHeaderBranch(Lp);
 
   // Generate induction resume values. These variables save the new starting
   // indexes for the scalar loop. They are used to test if there are any tail
@@ -8864,6 +8851,8 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
     VPBlockUtils::insertBlockAfter(new VPBasicBlock(), VPBB);
     VPBB = cast<VPBasicBlock>(VPBB->getSingleSuccessor());
   }
+
+  HeaderVPBB->setName("vector.body");
 
   // Fold the last, empty block into its predecessor.
   VPBB = VPBlockUtils::tryToMergeBlockIntoPredecessor(VPBB);
@@ -10585,6 +10574,8 @@ bool LoopVectorizePass::processLoop(Loop *L) {
                                                  Checks);
 
         VPlan &BestEpiPlan = LVP.getBestPlanFor(EPI.EpilogueVF);
+        BestEpiPlan.getVectorLoopRegion()->getEntryBasicBlock()->setName(
+            "vec.epilog.vector.body");
 
         // Ensure that the start values for any VPReductionPHIRecipes are
         // updated before vectorising the epilogue loop.
