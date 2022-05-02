@@ -280,9 +280,12 @@ class SelectionDAG {
 
   DenseMap<const SDNode *, CallSiteDbgInfo> SDCallSiteDbgInfo;
 
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+  /// PersistentId counter to be used when inserting the next
+  /// SDNode to this SelectionDAG. We do not place that under
+  /// `#if LLVM_ENABLE_ABI_BREAKING_CHECKS` intentionally because
+  /// it adds unneeded complexity without noticeable
+  /// benefits (see discussion with @thakis in D120714).
   uint16_t NextPersistentId = 0;
-#endif
 
   /// Are instruction referencing variable locations desired for this function?
   bool UseInstrRefDebugInfo = false;
