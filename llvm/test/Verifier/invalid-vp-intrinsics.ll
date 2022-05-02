@@ -24,10 +24,10 @@ define void @test_vp_fcmp(<4 x float> %a, <4 x float> %b, <4 x i1> %m, i32 %n) {
   ret void
 }
 
-; DISABLE_CHECK: invalid predicate for VP integer comparison intrinsic
-; DISABLE_CHECK-NEXT: %r0 = call <4 x i1> @llvm.vp.icmp.v4i32
-; DISABLE_CHECK: invalid predicate for VP integer comparison intrinsic
-; DISABLE_CHECK-NEXT: %r1 = call <4 x i1> @llvm.vp.icmp.v4i32
+; CHECK: invalid predicate for VP integer comparison intrinsic
+; CHECK-NEXT: %r0 = call <4 x i1> @llvm.vp.icmp.v4i32
+; CHECK: invalid predicate for VP integer comparison intrinsic
+; CHECK-NEXT: %r1 = call <4 x i1> @llvm.vp.icmp.v4i32
 
 define void @test_vp_icmp(<4 x i32> %a, <4 x i32> %b, <4 x i1> %m, i32 %n) {
   %r0 = call <4 x i1> @llvm.vp.icmp.v4i32(<4 x i32> %a, <4 x i32> %b, metadata !"bad", <4 x i1> %m, i32 %n)

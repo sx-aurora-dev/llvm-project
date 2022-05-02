@@ -5747,12 +5747,12 @@ void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
     Check(CmpInst::isFPPredicate(Pred),
           "invalid predicate for VP FP comparison intrinsic", &VPI);
   }
+#endif
   if (VPI.getIntrinsicID() == Intrinsic::vp_icmp) {
     auto Pred = cast<VPCmpIntrinsic>(&VPI)->getPredicate();
     Check(CmpInst::isIntPredicate(Pred),
           "invalid predicate for VP integer comparison intrinsic", &VPI);
   }
-#endif
   Check(!VPI.isConstrainedOp(),
         "VP intrinsics only support the default fp environment for now "
         "(round.tonearest; fpexcept.ignore).");

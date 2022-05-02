@@ -397,22 +397,16 @@ END_REGISTER_VP(vp_nearbyint, VP_FNEARBYINT)
 // VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fcmp)
 // END_REGISTER_VP(vp_fcmp, VP_FCMP)
 
-// llvm.vp.icmp(x,y,cc,mask,vlen)
-// BEGIN_REGISTER_VP(vp_icmp, 3, 4, VP_ICMP, -1)
-// VP_PROPERTY_FUNCTIONAL_OPC(ICmp)
-// VP_PROPERTY_CMP(2, false)
-// END_REGISTER_VP(vp_icmp, VP_ICMP)
-
 // llvm.vp.fcmp(x,y,pred,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fcmp, 3, 4)
 VP_PROPERTY_FUNCTIONAL_OPC(FCmp)
 VP_PROPERTY_XCMP
 END_REGISTER_VP_INTRINSIC(vp_fcmp)
 
-// llvm.vp.icmp(x,y,cmp_pred,mask,vlen)
+// llvm.vp.icmp(x,y,cc,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_icmp, 3, 4)
 VP_PROPERTY_FUNCTIONAL_OPC(ICmp)
-VP_PROPERTY_XCMP
+VP_PROPERTY_CMP(2, false)
 END_REGISTER_VP_INTRINSIC(vp_icmp)
 
 // VP_SETCC (ISel only)

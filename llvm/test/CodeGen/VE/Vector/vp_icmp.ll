@@ -9,9 +9,9 @@ define fastcc <256 x i1> @test_vp_icmp(<256 x i32> %i0, <256 x i32> %i1, <256 x 
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v1
 ; CHECK-NEXT:    vfmk.w.eq %vm1, %v0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %r0 = call <256 x i1> @llvm.vp.icmp.v256i32(<256 x i32> %i0, <256 x i32> %i1, i8 32, <256 x i1> %m, i32 %n)
+  %r0 = call <256 x i1> @llvm.vp.icmp.v256i32(<256 x i32> %i0, <256 x i32> %i1, metadata !"eq", <256 x i1> %m, i32 %n)
   ret <256 x i1> %r0
 }
 
 ; integer arith
-declare <256 x i1> @llvm.vp.icmp.v256i32(<256 x i32>, <256 x i32>, i8, <256 x i1>, i32)
+declare <256 x i1> @llvm.vp.icmp.v256i32(<256 x i32>, <256 x i32>, metadata, <256 x i1>, i32)

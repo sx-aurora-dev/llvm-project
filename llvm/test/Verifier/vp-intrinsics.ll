@@ -73,11 +73,11 @@ define void @test_vp_conversions(<8 x i32*> %p0, <8 x i32> %i0, <8 x i64> %i1, <
 }
 
 ; Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
-;define void @test_vp_comparisons(<8 x float> %f0, <8 x float> %f1, <8 x i32> %i0, <8 x i32> %i1, <8 x i1> %mask, i32 %evl) {
+define void @test_vp_comparisons(<8 x float> %f0, <8 x float> %f1, <8 x i32> %i0, <8 x i32> %i1, <8 x i1> %mask, i32 %evl) {
 ;  %r0 = call <8 x i1> @llvm.vp.fcmp.v8f32(<8 x float> %f0, <8 x float> %f1, metadata !"oeq", <8 x i1> %mask, i32 %evl)
-;  %r1 = call <8 x i1> @llvm.vp.icmp.v8i32(<8 x i32> %i0, <8 x i32> %i1, metadata !"eq", <8 x i1> %mask, i32 %evl)
-;  ret void
-;}
+  %r1 = call <8 x i1> @llvm.vp.icmp.v8i32(<8 x i32> %i0, <8 x i32> %i1, metadata !"eq", <8 x i1> %mask, i32 %evl)
+  ret void
+}
 
 ; integer arith
 declare <8 x i32> @llvm.vp.add.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32)
