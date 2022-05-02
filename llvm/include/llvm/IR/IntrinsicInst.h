@@ -442,13 +442,6 @@ public:
   bool isTernaryOp() const;
   static bool IsTernaryVPOp(Intrinsic::ID);
 
-  /// \returns Whether this is a comparison operation.
-  bool isCompareOp() const;
-  static bool IsCompareVPOp(Intrinsic::ID);
-
-  /// \returns The comparison predicate.
-  CmpInst::Predicate getCmpPredicate() const;
-
   // Contrained fp-math
   // whether this is an fp op with non-standard rounding or exception
   // behavior.

@@ -659,25 +659,6 @@ bool VPIntrinsic::IsTernaryVPOp(Intrinsic::ID VPID) {
   return IsTernary;
 }
 
-bool VPIntrinsic::isCompareOp() const {
-  return IsCompareVPOp(getIntrinsicID());
-}
-
-bool VPIntrinsic::IsCompareVPOp(Intrinsic::ID VPID) {
-  bool IsCompare = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CMP(CCPOS, ISFP) IsCompare = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsCompare;
-}
-
 bool
 VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
   Optional<bool> HasExcept;
