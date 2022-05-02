@@ -2402,40 +2402,40 @@ void Verifier::verifyConstrainedFPBundles(const Instruction &I) {
     return;
 
   auto *VPIntrin = dyn_cast<VPIntrinsic>(&I);
-  Assert(VPIntrin,
-         "Constraint FP bundles only enabled for Vector Predication Intrinsics",
-         VPIntrin);
-  Assert(!RoundBundle ||
-             VPIntrinsic::HasRoundingMode(VPIntrin->getIntrinsicID()),
-         "Intrinsic does not accept a constraint fp rounding mode.", VPIntrin);
-  Assert(!ExceptBundle ||
-             VPIntrinsic::HasExceptionMode(VPIntrin->getIntrinsicID()),
-         "Intrinsic does not accept a constraint fp exception mode.", VPIntrin);
+  Check(VPIntrin,
+        "Constraint FP bundles only enabled for Vector Predication Intrinsics",
+        VPIntrin);
+  Check(!RoundBundle ||
+            VPIntrinsic::HasRoundingMode(VPIntrin->getIntrinsicID()),
+        "Intrinsic does not accept a constraint fp rounding mode.", VPIntrin);
+  Check(!ExceptBundle ||
+            VPIntrinsic::HasExceptionMode(VPIntrin->getIntrinsicID()),
+        "Intrinsic does not accept a constraint fp exception mode.", VPIntrin);
 
   if (RoundBundle) {
-    Assert(RoundBundle->Inputs.size() == 1,
-           "Constraint fp rounding mode has only one operand.", VPIntrin);
+    Check(RoundBundle->Inputs.size() == 1,
+          "Constraint fp rounding mode has only one operand.", VPIntrin);
     auto &RoundInput = *RoundBundle->Inputs[0];
-    Assert(isa<MetadataAsValue>(RoundInput),
-           "Constraint fp exception mode is not a metadata string.", RoundInput);
+    Check(isa<MetadataAsValue>(RoundInput),
+          "Constraint fp exception mode is not a metadata string.", RoundInput);
     auto *RoundString = dyn_cast<MDString>(cast<MetadataAsValue>(RoundInput).getMetadata());
-    Assert(RoundString,
-           "Constraint fp rounding mode is not a metadata string.", RoundInput);
+    Check(RoundString,
+          "Constraint fp rounding mode is not a metadata string.", RoundInput);
     auto RoundOpt = VPIntrin->getRoundingMode();
-    Assert(RoundOpt.hasValue(), "Invalid rounding mode metadata.", RoundString);
+    Check(RoundOpt.hasValue(), "Invalid rounding mode metadata.", RoundString);
   }
 
   if (ExceptBundle) {
-    Assert(ExceptBundle->Inputs.size() == 1,
-           "Constraint fp exception mode has only one operand.", VPIntrin);
+    Check(ExceptBundle->Inputs.size() == 1,
+          "Constraint fp exception mode has only one operand.", VPIntrin);
     auto &ExceptInput = *ExceptBundle->Inputs[0];
-    Assert(isa<MetadataAsValue>(ExceptInput),
-           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    Check(isa<MetadataAsValue>(ExceptInput),
+          "Constraint fp exception mode is not a metadata string.", ExceptInput);
     auto *ExceptString = dyn_cast<MDString>(cast<MetadataAsValue>(ExceptInput).getMetadata());
-    Assert(ExceptString,
-           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    Check(ExceptString,
+          "Constraint fp exception mode is not a metadata string.", ExceptInput);
     auto ExceptOpt = VPIntrin->getExceptionBehavior();
-    Assert(ExceptOpt.hasValue(), "Invalid exception mode metadata.", ExceptString);
+    Check(ExceptOpt.hasValue(), "Invalid exception mode metadata.", ExceptString);
   }
 }
 
@@ -3429,12 +3429,12 @@ void Verifier::visitCallBase(CallBase &Call) {
       FoundAttachedCallBundle = true;
       verifyAttachedCallBundle(Call, BU);
     } else if (Tag == LLVMContext::OB_cfp_round) {
-      Assert(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
-             Call);
+      Check(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
+            Call);
       FoundCFPRoundBundle = true;
     } else if (Tag == LLVMContext::OB_cfp_except) {
-      Assert(!FoundCFPExceptBundle, "Multiple cfp-except operand bundles",
-             Call);
+      Check(!FoundCFPExceptBundle, "Multiple cfp-except operand bundles",
+            Call);
       FoundCFPExceptBundle = true;
     }
   }
@@ -5753,14 +5753,14 @@ void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
           "invalid predicate for VP integer comparison intrinsic", &VPI);
   }
 #endif
-  Assert(!VPI.isConstrainedOp(),
-         "VP intrinsics only support the default fp environment for now "
-         "(round.tonearest; fpexcept.ignore).");
+  Check(!VPI.isConstrainedOp(),
+        "VP intrinsics only support the default fp environment for now "
+        "(round.tonearest; fpexcept.ignore).");
   if (VPI.isConstrainedOp()) {
-    Assert(VPI.getExceptionBehavior() != None,
-           "invalid exception behavior argument", &VPI);
-    Assert(VPI.getRoundingMode() != None, "invalid rounding mode argument",
-           &VPI);
+    Check(VPI.getExceptionBehavior() != None,
+          "invalid exception behavior argument", &VPI);
+    Check(VPI.getRoundingMode() != None, "invalid rounding mode argument",
+          &VPI);
   }
 }
 
