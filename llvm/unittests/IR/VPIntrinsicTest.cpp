@@ -149,6 +149,8 @@ protected:
     // Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
     Str << " declare <8 x i1> @llvm.vp.fcmp.v8f32"
         << "(<8 x float>, <8 x float>, metadata, <8 x i1>, i32) ";
+    Str << " declare <8 x i1> @llvm.vp.icmp.v8i16"
+        << "(<8 x i16>, <8 x i16>, metadata, <8 x i1>, i32) ";
 #endif
 
     return parseAssemblyString(Str.str(), Err, C);
