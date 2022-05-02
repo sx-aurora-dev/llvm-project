@@ -12,11 +12,10 @@ define void @test_vp_fptosi(<8 x float> %src, <4 x i1> %m, i32 %n) {
   ret void
 }
 
-; Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
-; DISABLE_CHECK: invalid predicate for VP FP comparison intrinsic
-; DISABLE_CHECK-NEXT: %r0 = call <4 x i1> @llvm.vp.fcmp.v4f32
-; DISABLE_CHECK: invalid predicate for VP FP comparison intrinsic
-; DISABLE_CHECK-NEXT: %r1 = call <4 x i1> @llvm.vp.fcmp.v4f32
+; CHECK: invalid predicate for VP FP comparison intrinsic
+; CHECK-NEXT: %r0 = call <4 x i1> @llvm.vp.fcmp.v4f32
+; CHECK: invalid predicate for VP FP comparison intrinsic
+; CHECK-NEXT: %r1 = call <4 x i1> @llvm.vp.fcmp.v4f32
 
 define void @test_vp_fcmp(<4 x float> %a, <4 x float> %b, <4 x i1> %m, i32 %n) {
   %r0 = call <4 x i1> @llvm.vp.fcmp.v4f32(<4 x float> %a, <4 x float> %b, metadata !"bad", <4 x i1> %m, i32 %n)

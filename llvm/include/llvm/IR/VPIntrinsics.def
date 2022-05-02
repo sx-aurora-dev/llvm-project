@@ -136,12 +136,6 @@
 #define VP_PROPERTY_CASTOP
 #endif
 
-// This VP Intrinsic is a comparison
-// (only count data params)
-#ifndef VP_PROPERTY_XCMP
-#define VP_PROPERTY_XCMP
-#endif
-
 // This VP Intrinsic is a comparison operation
 // The condition code arg is at CCPOS and accepts floating-point condition
 // codes if ISFP is set, else it accepts integer condition codes.
@@ -389,18 +383,11 @@ END_REGISTER_VP(vp_nearbyint, VP_FNEARBYINT)
 ///// } Rounding
 
 ///// Comparisons {
-// Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
 // llvm.vp.fcmp(x,y,cc,mask,vlen)
-// BEGIN_REGISTER_VP(vp_fcmp, 3, 4, VP_FCMP, -1)
-// VP_PROPERTY_FUNCTIONAL_OPC(FCmp)
-// VP_PROPERTY_CMP(2, true)
-// VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fcmp)
-// END_REGISTER_VP(vp_fcmp, VP_FCMP)
-
-// llvm.vp.fcmp(x,y,pred,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fcmp, 3, 4)
 VP_PROPERTY_FUNCTIONAL_OPC(FCmp)
-VP_PROPERTY_XCMP
+VP_PROPERTY_CMP(2, true)
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fcmp)
 END_REGISTER_VP_INTRINSIC(vp_fcmp)
 
 // llvm.vp.icmp(x,y,cc,mask,vlen)
@@ -410,7 +397,7 @@ VP_PROPERTY_CMP(2, false)
 END_REGISTER_VP_INTRINSIC(vp_icmp)
 
 // VP_SETCC (ISel only)
-BEGIN_REGISTER_VP_SDNODE(VP_SETCC, -1, vp_setcc, 3, 4)
+BEGIN_REGISTER_VP_SDNODE(VP_SETCC, 0, vp_setcc, 3, 4)
 END_REGISTER_VP_SDNODE(VP_SETCC)
 
 ///// } Comparisons
@@ -614,4 +601,3 @@ END_REGISTER_VP(experimental_vp_splice, EXPERIMENTAL_VP_SPLICE)
 #undef VP_PROPERTY_FUNCTIONAL_OPC
 #undef VP_PROPERTY_MEMOP
 #undef VP_PROPERTY_REDUCTION
-#undef VP_PROPERTY_XCMP

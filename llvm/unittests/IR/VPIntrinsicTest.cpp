@@ -71,7 +71,6 @@ protected:
 " declare <16 x float> @llvm.vp.vshift.v16f32(<16 x float>, i32, <16 x i1>, i32) "
 " declare <16 x float> @llvm.vp.compress.v16f32(<16 x float>, <16 x i1>, i32) "
 " declare <16 x float> @llvm.vp.expand.v16f32(<16 x float>, <16 x i1>, i32) "
-" declare <16 x i1> @llvm.vp.fcmp.v16f32(<16 x float>, <16 x float>, i8, <16 x i1>, i32) "
 " declare <8 x i64> @llvm.vp.fptosi.v8i64v8f64(<8 x double>, <8 x i1>, i32) "
 " declare <8 x i64> @llvm.vp.fptoui.v8i64v8f64(<8 x double>, <8 x i1>, i32) "
 " declare <8 x double> @llvm.vp.sitofp.v8f64v8i64(<8 x i64>, <8 x i1>, i32) "
@@ -162,11 +161,8 @@ protected:
     Str << " declare <8 x i32*> @llvm.vp.inttoptr.v8p0i32"
         << ".v8i32(<8 x i32>, <8 x i1>, i32) ";
 
-#if 0
-    // Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
     Str << " declare <8 x i1> @llvm.vp.fcmp.v8f32"
         << "(<8 x float>, <8 x float>, metadata, <8 x i1>, i32) ";
-#endif
     Str << " declare <8 x i1> @llvm.vp.icmp.v8i16"
         << "(<8 x i16>, <8 x i16>, metadata, <8 x i1>, i32) ";
 

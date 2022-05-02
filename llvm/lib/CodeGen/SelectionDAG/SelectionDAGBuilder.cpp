@@ -7369,38 +7369,6 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
   setValue(&FPI, FPResult);
 }
 
-void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-  SDLoc DL = getCurSDLoc();
-
-  ISD::CondCode Condition;
-  CmpInst::Predicate predicate = I.getCmpPredicate();
-  bool IsFP = I.getOperand(0)->getType()->isFPOrFPVectorTy();
-  if (IsFP) {
-    Condition = getFCmpCondCode(predicate);
-    auto *FPMO = dyn_cast<FPMathOperator>(&I);
-    if ((FPMO && FPMO->hasNoNaNs()) || TM.Options.NoNaNsFPMath)
-      Condition = getFCmpCodeWithoutNaN(Condition);
-
-  } else {
-    Condition = getICmpCondCode(predicate);
-  }
-
-  SDValue Op1 = getValue(I.getOperand(0));
-  SDValue Op2 = getValue(I.getOperand(1));
-  // #2 is the condition code
-  SDValue MaskOp = getValue(I.getOperand(3));
-  SDValue VLen = getValue(I.getOperand(4));
-  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
-  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
-         "Unexpected target EVL type");
-  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
-
-  EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
-                                                        I.getType());
-  setValue(&I, DAG.getVPSetCC(DL, DestVT, Op1, Op2, Condition, MaskOp, VLen));
-}
-
 static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
   Optional<unsigned> RelaxedOC;
   switch (VPOC) {
@@ -7638,15 +7606,6 @@ void SelectionDAGBuilder::visitVPCmp(const VPCmpIntrinsic &VPIntrin) {
 
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
-
-  switch (VPIntrin.getIntrinsicID()) {
-  default:
-    break;
-
-  case Intrinsic::vp_fcmp:
-    visitCmpVP(VPIntrin);
-    return;
-  }
   SDLoc DL = getCurSDLoc();
   unsigned Opcode = getISDForVPIntrinsic(VPIntrin);
 

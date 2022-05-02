@@ -5740,14 +5740,11 @@ void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
       break;
     }
   }
-#if 0
-  // Disable upstream fcmp until it is supported by SelectionDAGBuilder.cpp
   if (VPI.getIntrinsicID() == Intrinsic::vp_fcmp) {
     auto Pred = cast<VPCmpIntrinsic>(&VPI)->getPredicate();
     Check(CmpInst::isFPPredicate(Pred),
           "invalid predicate for VP FP comparison intrinsic", &VPI);
   }
-#endif
   if (VPI.getIntrinsicID() == Intrinsic::vp_icmp) {
     auto Pred = cast<VPCmpIntrinsic>(&VPI)->getPredicate();
     Check(CmpInst::isIntPredicate(Pred),

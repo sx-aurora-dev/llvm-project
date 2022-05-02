@@ -577,7 +577,6 @@ private:
                            SmallVectorImpl<SDValue> &OpValues);
   void visitVPCmp(const VPCmpIntrinsic &VPIntrin);
   void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin);
-  void visitCmpVP(const VPIntrinsic &I);
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);

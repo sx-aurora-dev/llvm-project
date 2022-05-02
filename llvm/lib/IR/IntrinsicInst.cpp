@@ -515,11 +515,6 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
   return false;
 }
 
-CmpInst::Predicate VPIntrinsic::getCmpPredicate() const {
-  return static_cast<CmpInst::Predicate>(
-      cast<ConstantInt>(getArgOperand(2))->getZExtValue());
-}
-
 Optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
   auto Bundle = this->getOperandBundle("cfp-round");
   if (!Bundle)
@@ -675,7 +670,7 @@ bool VPIntrinsic::IsCompareVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_XCMP IsCompare = true;
+#define VP_PROPERTY_CMP(CCPOS, ISFP) IsCompare = true;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
