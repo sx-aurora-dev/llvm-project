@@ -1089,6 +1089,11 @@ def TestCommutativeOp : TEST_Op<"op_commutative", [Commutative]> {
   let results = (outs I32);
 }
 
+def TestCommutative2Op : TEST_Op<"op_commutative2", [Commutative]> {
+  let arguments = (ins I32:$op1, I32:$op2);
+  let results = (outs I32);
+}
+
 def TestIdempotentTraitOp
  : TEST_Op<"op_idempotent_trait",
            [SameOperandsAndResultType, NoSideEffect, Idempotent]> {
@@ -2755,5 +2760,13 @@ def TestEffectsOpA : TEST_Op<"op_with_effects_a"> {
 
 def TestEffectsOpB : TEST_Op<"op_with_effects_b",
     [MemoryEffects<[MemWrite<TestResource>]>]>;
+
+def TestEffectsRead : TEST_Op<"op_with_memread",
+    [MemoryEffects<[MemRead]>]> {
+  let results = (outs AnyInteger);
+}
+
+def TestEffectsWrite : TEST_Op<"op_with_memwrite",
+    [MemoryEffects<[MemWrite]>]>;
 
 #endif // TEST_OPS

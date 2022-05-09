@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/ExtractAPI/DeclarationFragments.h"
+#include "TypedefUnderlyingTypeResolver.h"
 #include "clang/Index/USRGeneration.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -250,6 +251,31 @@ DeclarationFragments DeclarationFragmentsBuilder::getFragmentsForType(
     return Fragments.append(Base.getAsString(),
                             DeclarationFragments::FragmentKind::Keyword);
 
+  // If the type is a typedefed type, get the underlying TypedefNameDecl for a
+  // direct reference to the typedef instead of the wrapped type.
+  if (const TypedefType *TypedefTy = dyn_cast<TypedefType>(T)) {
+    const TypedefNameDecl *Decl = TypedefTy->getDecl();
+    std::string USR =
+        TypedefUnderlyingTypeResolver(Context).getUSRForType(QualType(T, 0));
+    return Fragments.append(Decl->getName(),
+                            DeclarationFragments::FragmentKind::TypeIdentifier,
+                            USR);
+  }
+
+  // If the base type is a TagType (struct/interface/union/class/enum), let's
+  // get the underlying Decl for better names and USRs.
+  if (const TagType *TagTy = dyn_cast<TagType>(Base)) {
+    const TagDecl *Decl = TagTy->getDecl();
+    // Anonymous decl, skip this fragment.
+    if (Decl->getName().empty())
+      return Fragments;
+    SmallString<128> TagUSR;
+    clang::index::generateUSRForDecl(Decl, TagUSR);
+    return Fragments.append(Decl->getName(),
+                            DeclarationFragments::FragmentKind::TypeIdentifier,
+                            TagUSR);
+  }
+
   // If the base type is an ObjCInterfaceType, use the underlying
   // ObjCInterfaceDecl for the true USR.
   if (const auto *ObjCIT = dyn_cast<ObjCInterfaceType>(Base)) {
@@ -426,8 +452,8 @@ DeclarationFragments DeclarationFragmentsBuilder::getFragmentsForEnumConstant(
 
 DeclarationFragments
 DeclarationFragmentsBuilder::getFragmentsForEnum(const EnumDecl *EnumDecl) {
-  // TODO: After we support typedef records, if there's a typedef for this enum
-  // just use the declaration fragments of the typedef decl.
+  if (const auto *TypedefNameDecl = EnumDecl->getTypedefNameForAnonDecl())
+    return getFragmentsForTypedef(TypedefNameDecl);
 
   DeclarationFragments Fragments, After;
   Fragments.append("enum", DeclarationFragments::FragmentKind::Keyword);
@@ -457,8 +483,8 @@ DeclarationFragmentsBuilder::getFragmentsForField(const FieldDecl *Field) {
 
 DeclarationFragments
 DeclarationFragmentsBuilder::getFragmentsForStruct(const RecordDecl *Record) {
-  // TODO: After we support typedef records, if there's a typedef for this
-  // struct just use the declaration fragments of the typedef decl.
+  if (const auto *TypedefNameDecl = Record->getTypedefNameForAnonDecl())
+    return getFragmentsForTypedef(TypedefNameDecl);
 
   DeclarationFragments Fragments;
   Fragments.append("struct", DeclarationFragments::FragmentKind::Keyword);
@@ -466,6 +492,55 @@ DeclarationFragmentsBuilder::getFragmentsForStruct(const RecordDecl *Record) {
   if (!Record->getName().empty())
     Fragments.appendSpace().append(
         Record->getName(), DeclarationFragments::FragmentKind::Identifier);
+  return Fragments;
+}
+
+DeclarationFragments
+DeclarationFragmentsBuilder::getFragmentsForMacro(StringRef Name,
+                                                  const MacroDirective *MD) {
+  DeclarationFragments Fragments;
+  Fragments.append("#define", DeclarationFragments::FragmentKind::Keyword)
+      .appendSpace();
+  Fragments.append(Name, DeclarationFragments::FragmentKind::Identifier);
+
+  auto *MI = MD->getMacroInfo();
+
+  if (MI->isFunctionLike()) {
+    Fragments.append("(", DeclarationFragments::FragmentKind::Text);
+    unsigned numParameters = MI->getNumParams();
+    if (MI->isC99Varargs())
+      --numParameters;
+    for (unsigned i = 0; i < numParameters; ++i) {
+      if (i)
+        Fragments.append(", ", DeclarationFragments::FragmentKind::Text);
+      Fragments.append(MI->params()[i]->getName(),
+                       DeclarationFragments::FragmentKind::InternalParam);
+    }
+    if (MI->isVariadic()) {
+      if (numParameters && MI->isC99Varargs())
+        Fragments.append(", ", DeclarationFragments::FragmentKind::Text);
+      Fragments.append("...", DeclarationFragments::FragmentKind::Text);
+    }
+    Fragments.append(")", DeclarationFragments::FragmentKind::Text);
+  }
+  return Fragments;
+}
+
+DeclarationFragments DeclarationFragmentsBuilder::getFragmentsForObjCCategory(
+    const ObjCCategoryDecl *Category) {
+  DeclarationFragments Fragments;
+
+  SmallString<128> InterfaceUSR;
+  index::generateUSRForDecl(Category->getClassInterface(), InterfaceUSR);
+
+  Fragments.append("@interface", DeclarationFragments::FragmentKind::Keyword)
+      .appendSpace()
+      .append(Category->getClassInterface()->getName(),
+              DeclarationFragments::FragmentKind::TypeIdentifier, InterfaceUSR)
+      .append(" (", DeclarationFragments::FragmentKind::Text)
+      .append(Category->getName(),
+              DeclarationFragments::FragmentKind::Identifier)
+      .append(")", DeclarationFragments::FragmentKind::Text);
 
   return Fragments;
 }
@@ -650,6 +725,20 @@ DeclarationFragments DeclarationFragmentsBuilder::getFragmentsForObjCProtocol(
   return Fragments;
 }
 
+DeclarationFragments DeclarationFragmentsBuilder::getFragmentsForTypedef(
+    const TypedefNameDecl *Decl) {
+  DeclarationFragments Fragments, After;
+  Fragments.append("typedef", DeclarationFragments::FragmentKind::Keyword)
+      .appendSpace()
+      .append(getFragmentsForType(Decl->getUnderlyingType(),
+                                  Decl->getASTContext(), After))
+      .append(std::move(After))
+      .appendSpace()
+      .append(Decl->getName(), DeclarationFragments::FragmentKind::Identifier);
+
+  return Fragments;
+}
+
 template <typename FunctionT>
 FunctionSignature
 DeclarationFragmentsBuilder::getFunctionSignature(const FunctionT *Function) {
@@ -698,4 +787,12 @@ DeclarationFragmentsBuilder::getSubHeading(const ObjCMethodDecl *Method) {
 
   return Fragments.append(Method->getNameAsString(),
                           DeclarationFragments::FragmentKind::Identifier);
+}
+
+// Subheading of a symbol defaults to its name.
+DeclarationFragments
+DeclarationFragmentsBuilder::getSubHeadingForMacro(StringRef Name) {
+  DeclarationFragments Fragments;
+  Fragments.append(Name, DeclarationFragments::FragmentKind::Identifier);
+  return Fragments;
 }

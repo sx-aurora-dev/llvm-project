@@ -216,10 +216,10 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, const SDLoc &DL,
           std::swap(Lo, Hi);
         EVT TotalVT = EVT::getIntegerVT(*DAG.getContext(), NumParts * PartBits);
         Hi = DAG.getNode(ISD::ANY_EXTEND, DL, TotalVT, Hi);
-        Hi =
-            DAG.getNode(ISD::SHL, DL, TotalVT, Hi,
-                        DAG.getConstant(Lo.getValueSizeInBits(), DL,
-                                        TLI.getPointerTy(DAG.getDataLayout())));
+        Hi = DAG.getNode(ISD::SHL, DL, TotalVT, Hi,
+                         DAG.getConstant(Lo.getValueSizeInBits(), DL,
+                                         TLI.getShiftAmountTy(
+                                             TotalVT, DAG.getDataLayout())));
         Lo = DAG.getNode(ISD::ZERO_EXTEND, DL, TotalVT, Lo);
         Val = DAG.getNode(ISD::OR, DL, TotalVT, Lo, Hi);
       }
@@ -625,7 +625,6 @@ static void getCopyToParts(SelectionDAG &DAG, const SDLoc &DL, SDValue Val,
 
 static SDValue widenVectorToPartType(SelectionDAG &DAG, SDValue Val,
                                      const SDLoc &DL, EVT PartVT) {
-
   if (!PartVT.isVector())
     return SDValue();
 
@@ -955,10 +954,7 @@ void RegsForValue::getCopyToRegs(SDValue Val, SelectionDAG &DAG,
                                           CallConv.getValue(), RegVTs[Value])
                                     : RegVTs[Value];
 
-    // We need to zero extend constants that are liveout to match assumptions
-    // in FunctionLoweringInfo::ComputePHILiveOutRegInfo.
-    if (ExtendKind == ISD::ANY_EXTEND &&
-        (TLI.isZExtFree(Val, RegisterVT) || isa<ConstantSDNode>(Val)))
+    if (ExtendKind == ISD::ANY_EXTEND && TLI.isZExtFree(Val, RegisterVT))
       ExtendKind = ISD::ZERO_EXTEND;
 
     getCopyToParts(DAG, dl, Val.getValue(Val.getResNo() + Value), &Parts[Part],
@@ -1268,7 +1264,8 @@ void SelectionDAGBuilder::resolveDanglingDebugInfo(const Value *V,
       // in the first place we should not be more successful here). Unless we
       // have some test case that prove this to be correct we should avoid
       // calling EmitFuncArgumentDbgValue here.
-      if (!EmitFuncArgumentDbgValue(V, Variable, Expr, dl, false, Val)) {
+      if (!EmitFuncArgumentDbgValue(V, Variable, Expr, dl,
+                                    FuncArgumentDbgValueKind::Value, Val)) {
         LLVM_DEBUG(dbgs() << "Resolve dangling debug info [order="
                           << DbgSDNodeOrder << "] for:\n  " << *DI << "\n");
         LLVM_DEBUG(dbgs() << "  By mapping to:\n    "; Val.dump());
@@ -1399,7 +1396,9 @@ bool SelectionDAGBuilder::handleDebugValue(ArrayRef<const Value *> Values,
       N = UnusedArgNodeMap[V];
     if (N.getNode()) {
       // Only emit func arg dbg value for non-variadic dbg.values for now.
-      if (!IsVariadic && EmitFuncArgumentDbgValue(V, Var, Expr, dl, false, N))
+      if (!IsVariadic &&
+          EmitFuncArgumentDbgValue(V, Var, Expr, dl,
+                                   FuncArgumentDbgValueKind::Value, N))
         return true;
       if (auto *FISDN = dyn_cast<FrameIndexSDNode>(N.getNode())) {
         // Construct a FrameIndexDbgValue for FrameIndexSDNodes so we can
@@ -4930,7 +4929,8 @@ static SDValue GetExponent(SelectionDAG &DAG, SDValue Op,
                            DAG.getConstant(0x7f800000, dl, MVT::i32));
   SDValue t1 = DAG.getNode(
       ISD::SRL, dl, MVT::i32, t0,
-      DAG.getConstant(23, dl, TLI.getPointerTy(DAG.getDataLayout())));
+      DAG.getConstant(23, dl,
+                      TLI.getShiftAmountTy(MVT::i32, DAG.getDataLayout())));
   SDValue t2 = DAG.getNode(ISD::SUB, dl, MVT::i32, t1,
                            DAG.getConstant(127, dl, MVT::i32));
   return DAG.getNode(ISD::SINT_TO_FP, dl, MVT::f32, t2);
@@ -4955,10 +4955,11 @@ static SDValue getLimitedPrecisionExp2(SDValue t0, const SDLoc &dl,
   SDValue X = DAG.getNode(ISD::FSUB, dl, MVT::f32, t0, t1);
 
   //   IntegerPartOfX <<= 23;
-  IntegerPartOfX = DAG.getNode(
-      ISD::SHL, dl, MVT::i32, IntegerPartOfX,
-      DAG.getConstant(23, dl, DAG.getTargetLoweringInfo().getPointerTy(
-                                  DAG.getDataLayout())));
+  IntegerPartOfX =
+      DAG.getNode(ISD::SHL, dl, MVT::i32, IntegerPartOfX,
+                  DAG.getConstant(23, dl,
+                                  DAG.getTargetLoweringInfo().getShiftAmountTy(
+                                      MVT::i32, DAG.getDataLayout())));
 
   SDValue TwoToFractionalPartOfX;
   if (LimitFloatPrecision <= 6) {
@@ -5538,7 +5539,7 @@ getUnderlyingArgRegs(SmallVectorImpl<std::pair<unsigned, TypeSize>> &Regs,
 /// appear for function arguments or in the prologue.
 bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     const Value *V, DILocalVariable *Variable, DIExpression *Expr,
-    DILocation *DL, bool IsDbgDeclare, const SDValue &N) {
+    DILocation *DL, FuncArgumentDbgValueKind Kind, const SDValue &N) {
   const Argument *Arg = dyn_cast<Argument>(V);
   if (!Arg)
     return false;
@@ -5572,7 +5573,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     }
   };
 
-  if (!IsDbgDeclare) {
+  if (Kind == FuncArgumentDbgValueKind::Value) {
     // ArgDbgValues are hoisted to the beginning of the entry block. So we
     // should only emit as ArgDbgValue if the dbg.value intrinsic is found in
     // the entry block.
@@ -5659,7 +5660,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     }
     if (Reg) {
       Op = MachineOperand::CreateReg(Reg, false);
-      IsIndirect = IsDbgDeclare;
+      IsIndirect = Kind != FuncArgumentDbgValueKind::Value;
     }
   }
 
@@ -5707,7 +5708,8 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
           continue;
         }
         MachineInstr *NewMI =
-            MakeVRegDbgValue(RegAndSize.first, *FragmentExpr, IsDbgDeclare);
+            MakeVRegDbgValue(RegAndSize.first, *FragmentExpr,
+                             Kind != FuncArgumentDbgValueKind::Value);
         FuncInfo.ArgDbgValues.push_back(NewMI);
       }
     };
@@ -5725,7 +5727,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
       }
 
       Op = MachineOperand::CreateReg(VMI->second, false);
-      IsIndirect = IsDbgDeclare;
+      IsIndirect = Kind != FuncArgumentDbgValueKind::Value;
     } else if (ArgRegsAndSizes.size() > 1) {
       // This was split due to the calling convention, and no virtual register
       // mapping exists for the value.
@@ -5747,6 +5749,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
     NewMI = BuildMI(MF, DL, TII->get(TargetOpcode::DBG_VALUE), true, *Op,
                     Variable, Expr);
 
+  // Otherwise, use ArgDbgValues.
   FuncInfo.ArgDbgValues.push_back(NewMI);
   return true;
 }
@@ -5852,16 +5855,18 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   case Intrinsic::vacopy:   visitVACopy(I); return;
   case Intrinsic::returnaddress:
     setValue(&I, DAG.getNode(ISD::RETURNADDR, sdl,
-                             TLI.getPointerTy(DAG.getDataLayout()),
+                             TLI.getValueType(DAG.getDataLayout(), I.getType()),
                              getValue(I.getArgOperand(0))));
     return;
   case Intrinsic::addressofreturnaddress:
-    setValue(&I, DAG.getNode(ISD::ADDROFRETURNADDR, sdl,
-                             TLI.getPointerTy(DAG.getDataLayout())));
+    setValue(&I,
+             DAG.getNode(ISD::ADDROFRETURNADDR, sdl,
+                         TLI.getValueType(DAG.getDataLayout(), I.getType())));
     return;
   case Intrinsic::sponentry:
-    setValue(&I, DAG.getNode(ISD::SPONENTRY, sdl,
-                             TLI.getFrameIndexTy(DAG.getDataLayout())));
+    setValue(&I,
+             DAG.getNode(ISD::SPONENTRY, sdl,
+                         TLI.getValueType(DAG.getDataLayout(), I.getType())));
     return;
   case Intrinsic::frameaddress:
     setValue(&I, DAG.getNode(ISD::FRAMEADDR, sdl,
@@ -6120,7 +6125,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
       } else if (isa<Argument>(Address)) {
         // Address is an argument, so try to emit its dbg value using
         // virtual register info from the FuncInfo.ValueMap.
-        EmitFuncArgumentDbgValue(Address, Variable, Expression, dl, true, N);
+        EmitFuncArgumentDbgValue(Address, Variable, Expression, dl,
+                                 FuncArgumentDbgValueKind::Declare, N);
         return;
       } else {
         SDV = DAG.getDbgValue(Variable, Expression, N.getNode(), N.getResNo(),
@@ -6130,8 +6136,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     } else {
       // If Address is an argument then try to emit its dbg value using
       // virtual register info from the FuncInfo.ValueMap.
-      if (!EmitFuncArgumentDbgValue(Address, Variable, Expression, dl, true,
-                                    N)) {
+      if (!EmitFuncArgumentDbgValue(Address, Variable, Expression, dl,
+                                    FuncArgumentDbgValueKind::Declare, N)) {
         LLVM_DEBUG(dbgs() << "Dropping debug info for " << DI
                           << " (could not emit func-arg dbg_value)\n");
       }
@@ -6901,7 +6907,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   }
   case Intrinsic::invariant_start:
     // Discard region information.
-    setValue(&I, DAG.getUNDEF(TLI.getPointerTy(DAG.getDataLayout())));
+    setValue(&I,
+             DAG.getUNDEF(TLI.getValueType(DAG.getDataLayout(), I.getType())));
     return;
   case Intrinsic::invariant_end:
     // Discard region information.
@@ -7362,38 +7369,6 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
   setValue(&FPI, FPResult);
 }
 
-void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-  SDLoc DL = getCurSDLoc();
-
-  ISD::CondCode Condition;
-  CmpInst::Predicate predicate = I.getCmpPredicate();
-  bool IsFP = I.getOperand(0)->getType()->isFPOrFPVectorTy();
-  if (IsFP) {
-    Condition = getFCmpCondCode(predicate);
-    auto *FPMO = dyn_cast<FPMathOperator>(&I);
-    if ((FPMO && FPMO->hasNoNaNs()) || TM.Options.NoNaNsFPMath)
-      Condition = getFCmpCodeWithoutNaN(Condition);
-
-  } else {
-    Condition = getICmpCondCode(predicate);
-  }
-
-  SDValue Op1 = getValue(I.getOperand(0));
-  SDValue Op2 = getValue(I.getOperand(1));
-  // #2 is the condition code
-  SDValue MaskOp = getValue(I.getOperand(3));
-  SDValue VLen = getValue(I.getOperand(4));
-  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
-  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
-         "Unexpected target EVL type");
-  VLen = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, VLen);
-
-  EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
-                                                        I.getType());
-  setValue(&I, DAG.getVPSetCC(DL, DestVT, Op1, Op2, Condition, MaskOp, VLen));
-}
-
 static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
   Optional<unsigned> RelaxedOC;
   switch (VPOC) {
@@ -7407,7 +7382,12 @@ static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
 
 static unsigned getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
   Optional<unsigned> ResOPC;
-  switch (VPIntrin.getIntrinsicID()) {
+  auto IID = VPIntrin.getIntrinsicID();
+  // vp.fcmp and vp.icmp are handled specially
+  if (IID == Intrinsic::vp_fcmp || IID == Intrinsic::vp_icmp)
+    return ISD::VP_SETCC;
+
+  switch (IID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define BEGIN_REGISTER_VP_SDNODE(VPSD, ...) ResOPC = ISD::VPSD;
 #define END_REGISTER_VP_INTRINSIC(VPID) break;
@@ -7590,38 +7570,56 @@ void SelectionDAGBuilder::visitVPStridedStore(
   setValue(&VPIntrin, ST);
 }
 
+void SelectionDAGBuilder::visitVPCmp(const VPCmpIntrinsic &VPIntrin) {
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDLoc DL = getCurSDLoc();
+
+  ISD::CondCode Condition;
+  CmpInst::Predicate CondCode = VPIntrin.getPredicate();
+  bool IsFP = VPIntrin.getOperand(0)->getType()->isFPOrFPVectorTy();
+  if (IsFP) {
+    // FIXME: Regular fcmps are FPMathOperators which may have fast-math (nnan)
+    // flags, but calls that don't return floating-point types can't be
+    // FPMathOperators, like vp.fcmp. This affects constrained fcmp too.
+    Condition = getFCmpCondCode(CondCode);
+    if (TM.Options.NoNaNsFPMath)
+      Condition = getFCmpCodeWithoutNaN(Condition);
+  } else {
+    Condition = getICmpCondCode(CondCode);
+  }
+
+  SDValue Op1 = getValue(VPIntrin.getOperand(0));
+  SDValue Op2 = getValue(VPIntrin.getOperand(1));
+  // #2 is the condition code
+  SDValue MaskOp = getValue(VPIntrin.getOperand(3));
+  SDValue EVL = getValue(VPIntrin.getOperand(4));
+  MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
+  assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
+         "Unexpected target EVL type");
+  EVL = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, EVL);
+
+  EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
+                                                        VPIntrin.getType());
+  setValue(&VPIntrin,
+           DAG.getSetCCVP(DL, DestVT, Op1, Op2, Condition, MaskOp, EVL));
+}
+
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
-
-  switch (VPIntrin.getIntrinsicID()) {
-  default:
-    break;
-
-  case Intrinsic::vp_fcmp:
-  case Intrinsic::vp_icmp:
-    visitCmpVP(VPIntrin);
-    return;
-  }
   SDLoc DL = getCurSDLoc();
   unsigned Opcode = getISDForVPIntrinsic(VPIntrin);
 
-  // TODO memory evl: SDValue Chain = getRoot();
+  auto IID = VPIntrin.getIntrinsicID();
+
+  if (const auto *CmpI = dyn_cast<VPCmpIntrinsic>(&VPIntrin))
+    return visitVPCmp(*CmpI);
 
   SmallVector<EVT, 4> ValueVTs;
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   ComputeValueVTs(TLI, DAG.getDataLayout(), VPIntrin.getType(), ValueVTs);
   SDVTList VTs = DAG.getVTList(ValueVTs);
 
-  // ValueVTs.push_back(MVT::Other); // Out chain
-
-  // Request Operands
-  // TODO: Constrained FP.
-  // auto ExceptPosOpt = None;
-      // VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
-  // auto RoundingModePosOpt = None;
-      // VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
-  auto EVLParamPos =
-      VPIntrinsic::getVectorLengthParamPos(VPIntrin.getIntrinsicID());
+  auto EVLParamPos = VPIntrinsic::getVectorLengthParamPos(IID);
 
   MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
   assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
@@ -7635,7 +7633,6 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
       Op = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, Op);
     OpValues.push_back(Op);
   }
-
 
   switch (Opcode) {
   default: {
@@ -10135,8 +10132,9 @@ SDValue TargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   llvm_unreachable("LowerOperation not implemented for this target!");
 }
 
-void
-SelectionDAGBuilder::CopyValueToVirtualRegister(const Value *V, unsigned Reg) {
+void SelectionDAGBuilder::CopyValueToVirtualRegister(const Value *V,
+                                                     unsigned Reg,
+                                                     ISD::NodeType ExtendType) {
   SDValue Op = getNonRegisterValue(V);
   assert((Op.getOpcode() != ISD::CopyFromReg ||
           cast<RegisterSDNode>(Op.getOperand(1))->getReg() != Reg) &&
@@ -10151,10 +10149,11 @@ SelectionDAGBuilder::CopyValueToVirtualRegister(const Value *V, unsigned Reg) {
                    None); // This is not an ABI copy.
   SDValue Chain = DAG.getEntryNode();
 
-  ISD::NodeType ExtendType = ISD::ANY_EXTEND;
-  auto PreferredExtendIt = FuncInfo.PreferredExtendType.find(V);
-  if (PreferredExtendIt != FuncInfo.PreferredExtendType.end())
-    ExtendType = PreferredExtendIt->second;
+  if (ExtendType == ISD::ANY_EXTEND) {
+    auto PreferredExtendIt = FuncInfo.PreferredExtendType.find(V);
+    if (PreferredExtendIt != FuncInfo.PreferredExtendType.end())
+      ExtendType = PreferredExtendIt->second;
+  }
   RFV.getCopyToRegs(Op, DAG, getCurSDLoc(), Chain, nullptr, V, ExtendType);
   PendingExports.push_back(Chain);
 }
@@ -10764,7 +10763,11 @@ SelectionDAGBuilder::HandlePHINodesInSuccessorBlocks(const BasicBlock *LLVMBB) {
         unsigned &RegOut = ConstantsOut[C];
         if (RegOut == 0) {
           RegOut = FuncInfo.CreateRegs(C);
-          CopyValueToVirtualRegister(C, RegOut);
+          // We need to zero extend ConstantInt phi operands to match
+          // assumptions in FunctionLoweringInfo::ComputePHILiveOutRegInfo.
+          ISD::NodeType ExtendType =
+              isa<ConstantInt>(PHIOp) ? ISD::ZERO_EXTEND : ISD::ANY_EXTEND;
+          CopyValueToVirtualRegister(C, RegOut, ExtendType);
         }
         Reg = RegOut;
       } else {
