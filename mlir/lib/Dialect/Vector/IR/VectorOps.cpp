@@ -950,7 +950,12 @@ OpFoldResult vector::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
 
   Attribute src = operands[0];
   Attribute pos = operands[1];
-  if (!src || !pos)
+
+  // Fold extractelement (splat X) -> X.
+  if (auto splat = getVector().getDefiningOp<vector::SplatOp>())
+    return splat.getInput();
+
+  if (!pos || !src)
     return {};
 
   auto srcElements = src.cast<DenseElementsAttr>().getValues<Attribute>();
@@ -1496,6 +1501,7 @@ public:
     Operation *defOp = extractOp.getVector().getDefiningOp();
     if (!defOp || !isa<vector::BroadcastOp, SplatOp>(defOp))
       return failure();
+
     Value source = defOp->getOperand(0);
     if (extractOp.getType() == source.getType())
       return failure();
@@ -1504,10 +1510,10 @@ public:
     };
     unsigned broadcastSrcRank = getRank(source.getType());
     unsigned extractResultRank = getRank(extractOp.getType());
-    // We only consider the case where the rank of the source is smaller than
-    // the rank of the extract dst. The other cases are handled in the folding
-    // patterns.
-    if (extractResultRank <= broadcastSrcRank)
+    // We only consider the case where the rank of the source is less than or
+    // equal to the rank of the extract dst. The other cases are handled in the
+    // folding patterns.
+    if (extractResultRank < broadcastSrcRank)
       return failure();
     rewriter.replaceOpWithNewOp<vector::BroadcastOp>(
         extractOp, extractOp.getType(), source);
@@ -3528,11 +3534,114 @@ public:
     return success();
   }
 };
+
+/// Rewrite tensor::ExtractSliceOp(vector::TransferWriteOp) to
+/// vector::TransferWriteOp(tensor::ExtractSliceOp) if the full slice is
+/// overwritten and inserted into another tensor. After this rewrite, the
+/// operations bufferize in-place since all of them work on the same slice.
+///
+/// For example:
+/// ```mlir
+///   %0 = vector.transfer_write %vec, %init_tensor[%c0, %c0]
+///        : vector<8x16xf32>, tensor<8x16xf32>
+///   %1 = tensor.extract_slice %0[0, 0] [%sz0, %sz1] [1, 1]
+///        : tensor<8x16xf32> to tensor<?x?xf32>
+///   %r = tensor.insert_slice %1 into %iter_arg[%iv0, %iv1] [%sz0, %sz1] [1, 1]
+///        : tensor<?x?xf32> into tensor<27x37xf32>
+/// ```
+/// folds to
+/// ```mlir
+///   %0 = tensor.extract_slice %iter_arg[%iv0, %iv1] [%sz0, %sz1] [1, 1]
+///        : tensor<27x37xf32> to tensor<?x?xf32>
+///   %1 = vector.transfer_write %vec, %0[%c0, %c0]
+///        : vector<8x16xf32>, tensor<?x?xf32>
+///   %r = tensor.insert_slice %1 into %iter_arg[%iv0, %iv1] [%sz0, %sz1] [1, 1]
+///        : tensor<?x?xf32> into tensor<27x37xf32>
+/// ```
+struct SwapExtractSliceOfTransferWrite
+    : public OpRewritePattern<tensor::InsertSliceOp> {
+public:
+  using OpRewritePattern<tensor::InsertSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(tensor::InsertSliceOp insertOp,
+                                PatternRewriter &rewriter) const override {
+    if (!insertOp.hasUnitStride())
+      return failure();
+    auto extractOp = insertOp.source().getDefiningOp<tensor::ExtractSliceOp>();
+    if (!extractOp || !extractOp.hasUnitStride() || !extractOp->hasOneUse())
+      return failure();
+    auto transferOp = extractOp.source().getDefiningOp<TransferWriteOp>();
+    if (!transferOp || !transferOp->hasOneUse())
+      return failure();
+
+    // Fail if vector::TransferWriteOp or tensor::ExtractSliceOp is
+    // rank-reducing.
+    if (insertOp.getSourceType().getRank() != transferOp.getTransferRank()) {
+      return rewriter.notifyMatchFailure(insertOp,
+                                         "use-def chain is rank-reducing");
+    }
+
+    // Fail if tensor::ExtractSliceOp has non-zero offset.
+    if (!extractOp.hasZeroOffset()) {
+      return rewriter.notifyMatchFailure(insertOp,
+                                         "ExtractSliceOp has non-zero offset");
+    }
+
+    // Fail if tensor::TransferWriteOp has non-zero offset.
+    if (!llvm::all_of(transferOp.getIndices(), [](Value value) {
+          return getConstantIntValue(value) == static_cast<int64_t>(0);
+        })) {
+      return rewriter.notifyMatchFailure(insertOp,
+                                         "TranferWriteOp has non-zero offset");
+    }
+
+    // Fail if tensor::ExtractSliceOp and tensor::InsertSliceOp sizes differ.
+    for (const auto &it :
+         llvm::zip(insertOp.getMixedSizes(), extractOp.getMixedSizes())) {
+      if (!isEqualConstantIntOrValue(std::get<0>(it), std::get<1>(it))) {
+        return rewriter.notifyMatchFailure(
+            insertOp, "InsertSliceOp and ExtractSliceOp sizes differ");
+      }
+    }
+
+    // Fail if the vector::TransferWriteOp may not overwrite the full tensor.
+    assert(transferOp.getVectorType().hasStaticShape() &&
+           "expected vector to have a static shape");
+    ArrayRef<int64_t> vectorShape = transferOp.getVectorType().getShape();
+    SmallVector<int64_t> resultShape = applyPermutationMap(
+        transferOp.getPermutationMap(), transferOp.getShapedType().getShape());
+    if (transferOp.getMask() || !vectorShape.equals(resultShape)) {
+      return rewriter.notifyMatchFailure(
+          insertOp, "TransferWriteOp may not write the full tensor.");
+    }
+
+    // Swap the tensor::ExtractSliceOp in front of the vector::TransferWriteOp.
+    SmallVector<int64_t> newResultShape = applyPermutationMap(
+        transferOp.getPermutationMap(), insertOp.getSourceType().getShape());
+    SmallVector<bool> newInBounds;
+    for (const auto &en : enumerate(newResultShape))
+      newInBounds.push_back(en.value() == vectorShape[en.index()]);
+    auto newExtractOp = rewriter.create<tensor::ExtractSliceOp>(
+        extractOp.getLoc(), insertOp.getSourceType(), insertOp.dest(),
+        insertOp.getMixedOffsets(), insertOp.getMixedSizes(),
+        insertOp.getMixedStrides());
+    auto newTransferWriteOp = rewriter.create<TransferWriteOp>(
+        transferOp.getLoc(), transferOp.getVector(), newExtractOp.getResult(),
+        transferOp.getIndices(), transferOp.getPermutationMapAttr(),
+        rewriter.getBoolArrayAttr(newInBounds));
+    rewriter.updateRootInPlace(insertOp, [&]() {
+      insertOp.sourceMutable().assign(newTransferWriteOp.getResult());
+    });
+    return success();
+  }
+};
+
 } // namespace
 
 void TransferWriteOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
-  results.add<FoldWaw, FoldInsertSliceIntoTransferWrite>(context);
+  results.add<FoldWaw, FoldInsertSliceIntoTransferWrite,
+              SwapExtractSliceOfTransferWrite>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4169,10 +4278,14 @@ void vector::TransposeOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTranspAttrStrName(), builder.getI64ArrayAttr(transp));
 }
 
-// Eliminates transpose operations, which produce values identical to their
-// input values. This happens when the dimensions of the input vector remain in
-// their original order after the transpose operation.
 OpFoldResult vector::TransposeOp::fold(ArrayRef<Attribute> operands) {
+  // Eliminate splat constant transpose ops.
+  if (auto attr = operands.front().dyn_cast_or_null<DenseElementsAttr>())
+    if (attr.isSplat())
+      return attr.reshape(getResultType());
+
+  // Eliminate identity transpose ops. This happens when the dimensions of the
+  // input vector remain in their original order after the transpose operation.
   SmallVector<int64_t, 4> transp;
   getTransp(transp);
 
@@ -4209,6 +4322,10 @@ LogicalResult vector::TransposeOp::verify() {
       return emitOpError("dimension size mismatch at: ") << i;
   }
   return success();
+}
+
+Optional<SmallVector<int64_t, 4>> TransposeOp::getShapeForUnroll() {
+  return llvm::to_vector<4>(getResultType().getShape());
 }
 
 namespace {

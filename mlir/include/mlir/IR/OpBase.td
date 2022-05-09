@@ -13,6 +13,8 @@
 #ifndef OP_BASE
 #define OP_BASE
 
+include "mlir/IR/DialectBase.td"
+
 //===----------------------------------------------------------------------===//
 // Common utilities for defining TableGen mechanisms
 //===----------------------------------------------------------------------===//
@@ -257,89 +259,6 @@ def HasStaticShapePred :
 
 // Whether a type is a TupleType.
 def IsTupleTypePred : CPred<"$_self.isa<::mlir::TupleType>()">;
-
-//===----------------------------------------------------------------------===//
-// Dialect definitions
-//===----------------------------------------------------------------------===//
-
-// "Enum" values for emitAccessorPrefix of Dialect.
-defvar kEmitAccessorPrefix_Raw = 0;      // Don't emit any getter/setter prefix.
-defvar kEmitAccessorPrefix_Prefixed = 1; // Only emit with getter/setter prefix.
-defvar kEmitAccessorPrefix_Both = 2;     // Emit without and with prefix.
-
-class Dialect {
-  // The name of the dialect.
-  string name = ?;
-
-  // Short summary of the dialect.
-  string summary = ?;
-
-  // The description of the dialect.
-  string description = ?;
-
-  // A list of dialects this dialect will load on construction as dependencies.
-  // These are dialects that this dialect may involve in canonicalization
-  // pattern or interfaces.
-  list<string> dependentDialects = [];
-
-  // The C++ namespace that ops of this dialect should be placed into.
-  //
-  // By default, uses the name of the dialect as the only namespace. To avoid
-  // placing in any namespace, use "". To specify nested namespaces, use "::"
-  // as the delimiter, e.g., given "A::B", ops will be placed in
-  // `namespace A { namespace B { <ops> } }`.
-  //
-  // Note that this works in conjunction with dialect C++ code. Depending on how
-  // the generated files are included into the dialect, you may want to specify
-  // a full namespace path or a partial one.
-  string cppNamespace = name;
-
-  // An optional code block containing extra declarations to place in the
-  // dialect declaration.
-  code extraClassDeclaration = "";
-
-  // If this dialect overrides the hook for materializing constants.
-  bit hasConstantMaterializer = 0;
-
-  /// If the dialect definition provides a non-default destructor.
-  /// If false, a default destructor implementation will be generated.
-  bit hasNonDefaultDestructor = 0;
-
-  // If this dialect overrides the hook for verifying operation attributes.
-  bit hasOperationAttrVerify = 0;
-
-  // If this dialect overrides the hook for verifying region argument
-  // attributes.
-  bit hasRegionArgAttrVerify = 0;
-
-  // If this dialect overrides the hook for verifying region result attributes.
-  bit hasRegionResultAttrVerify = 0;
-
-  // If this dialect overrides the hook for op interface fallback.
-  bit hasOperationInterfaceFallback = 0;
-
-  // If this dialect should use default generated attribute parser boilerplate:
-  // it'll dispatch the parsing to every individual attributes directly.
-  bit useDefaultAttributePrinterParser = 1;
-
-  // If this dialect should use default generated type parser boilerplate:
-  // it'll dispatch the parsing to every individual types directly.
-  bit useDefaultTypePrinterParser = 1;
-
-  // If this dialect overrides the hook for canonicalization patterns.
-  bit hasCanonicalizer = 0;
-
-  // Whether to emit raw/with no prefix or format changes, or emit with
-  // accessor with prefix only and UpperCamel suffix or to emit accessors with
-  // both.
-  //
-  // If emitting with prefix is specified then the attribute/operand's
-  // name is converted to UpperCamel from snake_case (which would result in
-  // leaving UpperCamel unchanged while also converting lowerCamel to
-  // UpperCamel) and prefixed with `get` or `set` depending on if it is a getter
-  // or setter.
-  int emitAccessorPrefix = kEmitAccessorPrefix_Raw;
-}
 
 //===----------------------------------------------------------------------===//
 // Type definitions
@@ -1311,13 +1230,6 @@ class EnumAttrCaseInfo<string sym, int intVal, string strVal> {
   string str = strVal;
 }
 
-// An enum attribute case stored with StringAttr.
-class StrEnumAttrCase<string sym, int val = -1, string str = sym> :
-    EnumAttrCaseInfo<sym, val, str>,
-    StringBasedAttr<
-      CPred<"$_self.cast<::mlir::StringAttr>().getValue() == \"" # str # "\"">,
-      "case " # str>;
-
 // An enum attribute case stored with IntegerAttr, which has an integer value,
 // its representation as a string and a C++ symbol name which may be different.
 class IntEnumAttrCaseBase<I intType, string sym, string strVal, int intVal> :
@@ -1334,34 +1246,72 @@ class I32EnumAttrCase<string sym, int val, string str = sym>
 class I64EnumAttrCase<string sym, int val, string str = sym>
     : IntEnumAttrCaseBase<I64, sym, str, val>;
 
-// A bit enum case stored with 32-bit IntegerAttr. `val` here is *not* the
-// ordinal number of the bit that is set. It is the 32-bit integer with only
-// one bit set.
-class BitEnumAttrCase<string sym, int val, string str = sym>
-    : EnumAttrCaseInfo<sym, val, str>,
-      SignlessIntegerAttrBase<I32, "case " #str>;
+// A bit enum case stored with an IntegerAttr. `val` here is *not* the ordinal
+// number of a bit that is set. It is an integer value with bits set to match
+// the case.
+class BitEnumAttrCaseBase<I intType, string sym, int val, string str = sym> :
+    EnumAttrCaseInfo<sym, val, str>,
+    SignlessIntegerAttrBase<intType, "case " #str>;
 
-// The special bit enum case for no bits set (i.e. value = 0).
-class BitEnumAttrCaseNone<string sym, string str = sym>
-    : BitEnumAttrCase<sym, 0, str>;
+// A bit enum case stored with a 32-bit IntegerAttr. `val` here is *not* the
+// ordinal number of a bit that is set. It is a 32-bit integer value with bits
+// set to match the case. 
+class I32BitEnumAttrCase<string sym, int val, string str = sym>
+    : BitEnumAttrCaseBase<I32, sym, val, str>;
 
-// The bit enum case for a single bit, specified by the bit position.
-// The pos argument refers to the index of the bit, and is currently
-// limited to be in the range [0, 31].
-class BitEnumAttrCaseBit<string sym, int pos, string str = sym>
-    : BitEnumAttrCase<sym, !shl(1, pos), str> {
-  assert !and(!ge(pos, 0), !le(pos, 31)),
-      "bit position must be between 0 and 31";
+// A bit enum case stored with a 64-bit IntegerAttr. `val` here is *not* the
+// ordinal number of a bit that is set. It is a 64-bit integer value with bits
+// bits set to match the case.
+class I64BitEnumAttrCase<string sym, int val, string str = sym>
+    : BitEnumAttrCaseBase<I64, sym, val, str>;
+
+// The special bit enum case for I32 with no bits set (i.e. value = 0).
+class I32BitEnumAttrCaseNone<string sym, string str = sym>
+    : I32BitEnumAttrCase<sym, 0, str>;
+
+// The special bit enum case for I64 with no bits set (i.e. value = 0).
+class I64BitEnumAttrCaseNone<string sym, string str = sym>
+    : I64BitEnumAttrCase<sym, 0, str>;
+
+// A bit enum case for a single bit, specified by a bit position.
+// The pos argument refers to the index of the bit, and is limited
+// to be in the range [0, bitwidth).
+class BitEnumAttrCaseBit<I intType, string sym, int pos, string str = sym>
+    : BitEnumAttrCaseBase<intType, sym, !shl(1, pos), str> {
+  assert !and(!ge(pos, 0), !lt(pos, intType.bitwidth)),
+      "bit position larger than underlying storage";
 }
 
-// A bit enum case for a group/list of previously declared single bits,
-// providing a convenient alias for that group.
-class BitEnumAttrCaseGroup<string sym, list<BitEnumAttrCaseBit> cases,
-                           string str = sym>
-    : BitEnumAttrCase<
-          sym, !foldl(0, cases, value, bitcase, !or(value, bitcase.value)),
-          str> {
-}
+// A bit enum case for a single bit in a 32-bit enum, specified by the
+// bit position.
+class I32BitEnumAttrCaseBit<string sym, int pos, string str = sym>
+    : BitEnumAttrCaseBit<I32, sym, pos, str>;
+
+// A bit enum case for a single bit in a 64-bit enum, specified by the
+// bit position.
+class I64BitEnumAttrCaseBit<string sym, int pos, string str = sym>
+    : BitEnumAttrCaseBit<I64, sym, pos, str>;
+
+
+// A bit enum case for a group/list of previously declared cases, providing
+// a convenient alias for that group.
+class BitEnumAttrCaseGroup<I intType, string sym,
+                           list<BitEnumAttrCaseBase> cases, string str = sym>
+    : BitEnumAttrCaseBase<intType, sym,
+          !foldl(0, cases, value, bitcase, !or(value, bitcase.value)),
+          str>;
+
+// A 32-bit enum case for a group/list of previously declared cases, providing
+// a convenient alias for that group.
+class I32BitEnumAttrCaseGroup<string sym, list<BitEnumAttrCaseBase> cases,
+                              string str = sym>
+    : BitEnumAttrCaseGroup<I32, sym, cases, str>;
+
+// A 64-bit enum case for a group/list of previously declared cases, providing
+// a convenient alias for that group.
+class I64BitEnumAttrCaseGroup<string sym, list<BitEnumAttrCaseBase> cases,
+                              string str = sym>
+    : BitEnumAttrCaseGroup<I64, sym, cases, str>;
 
 // Additional information for an enum attribute.
 class EnumAttrInfo<
@@ -1436,22 +1386,6 @@ class EnumAttrInfo<
   let valueType = baseAttrClass.valueType;
 }
 
-// An enum attribute backed by StringAttr.
-//
-// Op attributes of this kind are stored as StringAttr. Extra verification will
-// be generated on the string though: only the symbols of the allowed cases are
-// permitted as the string value.
-class StrEnumAttr<string name, string summary, list<StrEnumAttrCase> cases> :
-  EnumAttrInfo<name, cases,
-    StringBasedAttr<
-      And<[StrAttr.predicate, Or<!foreach(case, cases, case.predicate)>]>,
-      !if(!empty(summary), "allowed string cases: " #
-          !interleave(!foreach(case, cases, "'" # case.symbol # "'"), ", "),
-          summary)>> {
-  // Disable specialized Attribute class for `StringAttr` backend by default.
-  let genSpecializedAttr = 0;
-}
-
 // An enum attribute backed by IntegerAttr.
 //
 // Op attributes of this kind are stored as IntegerAttr. Extra verification will
@@ -1481,16 +1415,17 @@ class I64EnumAttr<string name, string summary, list<I64EnumAttrCase> cases> :
   let underlyingType = "uint64_t";
 }
 
-// A bit enum stored with 32-bit IntegerAttr.
+// A bit enum stored with an IntegerAttr.
 //
 // Op attributes of this kind are stored as IntegerAttr. Extra verification will
 // be generated on the integer to make sure only allowed bits are set. Besides,
 // helper methods are generated to parse a string separated with a specified
 // delimiter to a symbol and vice versa.
-class BitEnumAttrBase<list<BitEnumAttrCase> cases, string summary> :
-    SignlessIntegerAttrBase<I32, summary> {
+class BitEnumAttrBase<I intType, list<BitEnumAttrCaseBase> cases,
+                      string summary>
+    : SignlessIntegerAttrBase<intType, summary> {
   let predicate = And<[
-    I32Attr.predicate,
+    SignlessIntegerAttrBase<intType, summary>.predicate,
     // Make sure we don't have unknown bit set.
     CPred<"!($_self.cast<::mlir::IntegerAttr>().getValue().getZExtValue() & (~("
           # !interleave(!foreach(case, cases, case.value # "u"), "|") #
@@ -1498,10 +1433,9 @@ class BitEnumAttrBase<list<BitEnumAttrCase> cases, string summary> :
   ]>;
 }
 
-class BitEnumAttr<string name, string summary, list<BitEnumAttrCase> cases> :
-    EnumAttrInfo<name, cases, BitEnumAttrBase<cases, summary>> {
-  let underlyingType = "uint32_t";
-
+class BitEnumAttr<I intType, string name, string summary,
+                  list<BitEnumAttrCaseBase> cases>
+    : EnumAttrInfo<name, cases, BitEnumAttrBase<intType, cases, summary>> {
   // Determine "valid" bits from enum cases for error checking
   int validBits = !foldl(0, cases, value, bitcase, !or(value, bitcase.value));
 
@@ -1511,6 +1445,18 @@ class BitEnumAttr<string name, string summary, list<BitEnumAttrCase> cases> :
 
   // The delimiter used to separate bit enum cases in strings.
   string separator = "|";
+}
+
+class I32BitEnumAttr<string name, string summary,
+                     list<BitEnumAttrCaseBase> cases>
+    : BitEnumAttr<I32, name, summary, cases> {
+  let underlyingType = "uint32_t";
+}
+
+class I64BitEnumAttr<string name, string summary,
+                     list<BitEnumAttrCaseBase> cases>
+    : BitEnumAttr<I64, name, summary, cases> {
+  let underlyingType = "uint64_t";
 }
 
 //===----------------------------------------------------------------------===//
