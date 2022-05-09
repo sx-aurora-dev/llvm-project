@@ -5560,10 +5560,16 @@ def warn_missing_prototype : Warning<
 def note_declaration_not_a_prototype : Note<
   "this declaration is not a prototype; add %select{'void'|parameter declarations}0 "
   "to make it %select{a prototype for a zero-parameter function|one}0">;
-def warn_strict_prototypes : Warning<
-  "this %select{function declaration is not|block declaration is not|"
-  "old-style function definition is not preceded by}0 a prototype">,
-  InGroup<DiagGroup<"strict-prototypes">>, DefaultIgnore;
+// This is not actually an extension, but we only want it to be enabled in
+// -pedantic mode and this is the most direct way of accomplishing that.
+def warn_strict_prototypes : Extension<
+  "a %select{function|block}0 declaration without a prototype is deprecated "
+  "%select{in all versions of C|}0">, InGroup<StrictPrototypes>;
+def warn_non_prototype_changes_behavior : Warning<
+  "a function declaration without a prototype is deprecated in all versions of "
+  "C and is not supported in C2x">, InGroup<DeprecatedNonPrototype>;
+def note_func_decl_changes_behavior : Note<
+  "a function declaration without a prototype is not supported in C2x">;
 def warn_missing_variable_declarations : Warning<
   "no previous extern declaration for non-static variable %0">,
   InGroup<DiagGroup<"missing-variable-declarations">>, DefaultIgnore;
@@ -6632,6 +6638,8 @@ def err_subscript_function_type : Error<
   "subscript of pointer to function type %0">;
 def err_subscript_incomplete_or_sizeless_type : Error<
   "subscript of pointer to %select{incomplete|sizeless}0 type %1">;
+def err_subscript_svbool_t : Error<
+  "subscript of svbool_t is not allowed">;
 def err_dereference_incomplete_type : Error<
   "dereference of pointer to incomplete type %0">;
 def ext_gnu_subscript_void_type : Extension<
@@ -11582,5 +11590,13 @@ def err_hlsl_numthreads_argument_oor : Error<"argument '%select{X|Y|Z}0' to numt
 def err_hlsl_numthreads_invalid : Error<"total number of threads cannot exceed %0">;
 def err_hlsl_attribute_param_mismatch : Error<"%0 attribute parameters do not match the previous declaration">;
 
-} // end of sema component.
+def err_hlsl_pointers_unsupported : Error<
+  "%select{pointers|references}0 are unsupported in HLSL">;
 
+def err_hlsl_operator_unsupported : Error<
+  "the '%select{&|*|->}0' operator is unsupported in HLSL">;
+
+// Layout randomization warning.
+def err_cast_from_randomized_struct : Error<
+  "casting from randomized structure pointer type %0 to %1">;
+} // end of sema component.

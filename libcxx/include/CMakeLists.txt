@@ -75,6 +75,8 @@ set(files
   __algorithm/ranges_max_element.h
   __algorithm/ranges_min.h
   __algorithm/ranges_min_element.h
+  __algorithm/ranges_minmax.h
+  __algorithm/ranges_minmax_element.h
   __algorithm/ranges_mismatch.h
   __algorithm/ranges_swap_ranges.h
   __algorithm/ranges_transform.h
@@ -200,6 +202,7 @@ set(files
   __filesystem/space_info.h
   __filesystem/u8path.h
   __format/buffer.h
+  __format/enable_insertable.h
   __format/format_arg.h
   __format/format_args.h
   __format/format_context.h
@@ -269,6 +272,7 @@ set(files
   __iterator/iterator_traits.h
   __iterator/mergeable.h
   __iterator/move_iterator.h
+  __iterator/move_sentinel.h
   __iterator/next.h
   __iterator/ostream_iterator.h
   __iterator/ostreambuf_iterator.h
@@ -285,10 +289,12 @@ set(files
   __locale
   __mbstate_t.h
   __memory/addressof.h
+  __memory/allocate_at_least.h
   __memory/allocation_guard.h
   __memory/allocator.h
   __memory/allocator_arg_t.h
   __memory/allocator_traits.h
+  __memory/assume_aligned.h
   __memory/auto_ptr.h
   __memory/compressed_pair.h
   __memory/concepts.h
@@ -368,8 +374,10 @@ set(files
   __ranges/empty_view.h
   __ranges/enable_borrowed_range.h
   __ranges/enable_view.h
+  __ranges/filter_view.h
   __ranges/iota_view.h
   __ranges/join_view.h
+  __ranges/lazy_split_view.h
   __ranges/non_propagating_cache.h
   __ranges/owning_view.h
   __ranges/range_adaptor.h
