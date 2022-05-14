@@ -326,13 +326,7 @@ HELPER_REGISTER_FP_CAST_VP(fpext, VP_FP_EXTEND, FPExt, 0)
   END_REGISTER_VP(vp_##OPSUFFIX, VPSD)
 
 // llvm.vp.trunc(x,mask,vlen)
-// Use vp_trunc for VE until vp_trun can be codegenned
-// HELPER_REGISTER_INT_CAST_VP(trunc, VP_TRUNC, Trunc)
-BEGIN_REGISTER_VP(vp_trunc, 1, 2, VP_TRUNC, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_trunc)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(trunc)
-END_REGISTER_VP(vp_trunc, VP_TRUNC)
+HELPER_REGISTER_INT_CAST_VP(trunc, VP_TRUNC, Trunc)
 
 // llvm.vp.zext(x,mask,vlen)
 HELPER_REGISTER_INT_CAST_VP(zext, VP_ZEXT, ZExt)
