@@ -427,6 +427,10 @@ def note_macro_expansion_here : Note<"expansion of macro %0 requested here">;
 def ext_pp_opencl_variadic_macros : Extension<
   "variadic macros are a Clang extension in OpenCL">;
 
+def ext_pp_gnu_line_directive : Extension<
+  "this style of line directive is a GNU extension">,
+  InGroup<GNULineMarker>;
+
 def err_pp_invalid_directive : Error<"invalid preprocessing directive">;
 def err_pp_directive_required : Error<
   "%0 must be used within a preprocessing directive">;
@@ -693,6 +697,23 @@ def ext_pp_line_too_big : Extension<
 def warn_cxx98_compat_pp_line_too_big : Warning<
   "#line number greater than 32767 is incompatible with C++98">,
   InGroup<CXX98CompatPedantic>, DefaultIgnore;
+
+def warn_c2x_compat_pp_directive : Warning<
+  "use of a '#%select{<BUG IF SEEN>|elifdef|elifndef}0' directive "
+  "is incompatible with C standards before C2x">,
+  InGroup<CPre2xCompat>, DefaultIgnore;
+def ext_c2x_pp_directive : ExtWarn<
+  "use of a '#%select{<BUG IF SEEN>|elifdef|elifndef}0' directive "
+  "is a C2x extension">,
+  InGroup<C2x>;
+def warn_cxx2b_compat_pp_directive : Warning<
+  "use of a '#%select{<BUG IF SEEN>|elifdef|elifndef}0' directive "
+  "is incompatible with C++ standards before C++2b">,
+  InGroup<CXXPre2bCompat>, DefaultIgnore;
+def ext_cxx2b_pp_directive : ExtWarn<
+  "use of a '#%select{<BUG IF SEEN>|elifdef|elifndef}0' directive "
+  "is a C++2b extension">,
+  InGroup<CXX2b>;
 
 def err_pp_visibility_non_macro : Error<"no macro named %0">;
 

@@ -214,6 +214,17 @@ Improvements to Clang's diagnostics
   the ``-Wunreachable-code`` flag) which is enabled by default and warns the
   user about ``_Generic`` selection associations which are unreachable because
   the type specified is an array type or a qualified type.
+- Added the ``-Wgnu-line-marker`` diagnostic flag (grouped under the ``-Wgnu``
+  flag) which is a portability warning about use of GNU linemarker preprocessor
+  directives. Fixes `Issue 55067 <https://github.com/llvm/llvm-project/issues/55067>`_.
+- Using ``#elifdef`` and ``#elifndef`` that are incompatible with C/C++
+  standards before C2x/C++2b are now warned via ``-pedantic``. Additionally,
+  on such language mode, ``-Wpre-c2x-compat`` and ``-Wpre-c++2b-compat``
+  diagnostic flags report a compatibility issue.
+  Fixes `Issue 55306 <https://github.com/llvm/llvm-project/issues/55306>`_.
+- Clang now checks for stack resource exhaustion when recursively parsing
+  declarators in order to give a diagnostic before we run out of stack space.
+  This fixes `Issue 51642 <https://github.com/llvm/llvm-project/issues/51642>`_.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -294,6 +305,17 @@ Windows Support
   turned on. With this addition, clang-cl can be used in Visual Studio for the
   JustMyCode feature. Note, you may need to manually add ``/JMC`` as additional
   compile options in the Visual Studio since it currently assumes clang-cl does not support ``/JMC``.
+
+AIX Support
+-----------
+
+- The driver no longer adds ``-mignore-xcoff-visibility`` by default for AIX
+  targets when no other visibility command-line options are in effect, as
+  ignoring hidden visibility can silently have undesirable side effects (e.g
+  when libraries depend on visibility to hide non-ABI facing entities). The
+  ``-mignore-xcoff-visibility`` option can be manually specified on the
+  command-line to recover the previous behavior if desired.
+
 
 C Language Changes in Clang
 ---------------------------
