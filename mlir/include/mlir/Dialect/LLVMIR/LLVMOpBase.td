@@ -14,6 +14,7 @@
 #ifndef LLVMIR_OP_BASE
 #define LLVMIR_OP_BASE
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -91,7 +92,7 @@ def LLVM_AnyFloat : Type<
 
 // Type constraint accepting any LLVM pointer type.
 def LLVM_AnyPointer : Type<CPred<"$_self.isa<::mlir::LLVM::LLVMPointerType>()">,
-                          "LLVM pointer type">;
+                          "LLVM pointer type", "::mlir::LLVM::LLVMPointerType">;
 
 // Type constraint accepting LLVM pointer type with an additional constraint
 // on the element type.
@@ -102,7 +103,7 @@ class LLVM_PointerTo<Type pointee> : Type<
              "$_self",
              "$_self.cast<::mlir::LLVM::LLVMPointerType>().getElementType()",
              pointee.predicate>]>]>,
-  "LLVM pointer to " # pointee.summary>;
+  "LLVM pointer to " # pointee.summary, "::mlir::LLVM::LLVMPointerType">;
 
 // Type constraints accepting LLVM pointer type to integer of a specific width.
 class LLVM_IntPtrBase<int width, int addressSpace = 0> : Type<

@@ -64,9 +64,12 @@ bool compileCommandsAreEqual(const tooling::CompileCommand &LHS,
 
 class CppFilePreambleCallbacks : public PreambleCallbacks {
 public:
-  CppFilePreambleCallbacks(PathRef File, PreambleParsedCallback ParsedCallback,
-                           PreambleBuildStats *Stats)
-      : File(File), ParsedCallback(ParsedCallback), Stats(Stats) {}
+  CppFilePreambleCallbacks(
+      PathRef File, PreambleParsedCallback ParsedCallback,
+      PreambleBuildStats *Stats,
+      std::function<void(CompilerInstance &)> BeforeExecuteCallback)
+      : File(File), ParsedCallback(ParsedCallback), Stats(Stats),
+        BeforeExecuteCallback(std::move(BeforeExecuteCallback)) {}
 
   IncludeStructure takeIncludes() { return std::move(Includes); }
 
@@ -115,6 +118,8 @@ public:
     LangOpts = &CI.getLangOpts();
     SourceMgr = &CI.getSourceManager();
     Includes.collect(CI);
+    if (BeforeExecuteCallback)
+      BeforeExecuteCallback(CI);
   }
 
   std::unique_ptr<PPCallbacks> createPPCallbacks() override {
@@ -156,6 +161,7 @@ private:
   const clang::LangOptions *LangOpts = nullptr;
   const SourceManager *SourceMgr = nullptr;
   PreambleBuildStats *Stats;
+  std::function<void(CompilerInstance &)> BeforeExecuteCallback;
 };
 
 // Represents directives other than includes, where basic textual information is
@@ -296,6 +302,7 @@ scanPreamble(llvm::StringRef Contents, const tooling::CompileCommand &Cmd) {
     return error("compiler instance had no inputs");
   // We are only interested in main file includes.
   Clang->getPreprocessorOpts().SingleFileParseMode = true;
+  Clang->getPreprocessorOpts().UsePredefines = false;
   PreprocessOnlyAction Action;
   if (!Action.BeginSourceFile(*Clang, Clang->getFrontendOpts().Inputs[0]))
     return error("failed BeginSourceFile");
@@ -477,7 +484,11 @@ buildPreamble(PathRef FileName, CompilerInvocation CI,
   // to read back. We rely on dynamic index for the comments instead.
   CI.getPreprocessorOpts().WriteCommentListToPCH = false;
 
-  CppFilePreambleCallbacks CapturedInfo(FileName, PreambleCallback, Stats);
+  CppFilePreambleCallbacks CapturedInfo(FileName, PreambleCallback, Stats,
+                                        [&ASTListeners](CompilerInstance &CI) {
+                                          for (const auto &L : ASTListeners)
+                                            L->beforeExecute(CI);
+                                        });
   auto VFS = Inputs.TFS->view(Inputs.CompileCommand.Directory);
   llvm::SmallString<32> AbsFileName(FileName);
   VFS->makeAbsolute(AbsFileName);
@@ -716,5 +727,6 @@ SourceLocation translatePreamblePatchLocation(SourceLocation Loc,
   }
   return Loc;
 }
+
 } // namespace clangd
 } // namespace clang

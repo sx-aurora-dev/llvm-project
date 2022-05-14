@@ -660,7 +660,7 @@ public:
 
   /// \Returns true if the target supports broadcasting a load to a vector of
   /// type <NumElements x ElementTy>.
-  bool isLegalBroadcastLoad(Type *ElementTy, unsigned NumElements) const;
+  bool isLegalBroadcastLoad(Type *ElementTy, ElementCount NumElements) const;
 
   /// Return true if the target supports masked scatter.
   bool isLegalMaskedScatter(Type *DataType, Align Alignment) const;
@@ -950,6 +950,17 @@ public:
   /// Currently only used by the SLP vectorizer.
   unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const;
 
+  /// \return The minimum vectorization factor for the store instruction. Given
+  /// the initial estimation of the minimum vector factor and store value type,
+  /// it tries to find possible lowest VF, which still might be profitable for
+  /// the vectorization.
+  /// \param VF Initial estimation of the minimum vector factor.
+  /// \param ScalarMemTy Scalar memory type of the store operation.
+  /// \param ScalarValTy Scalar type of the stored value.
+  /// Currently only used by the SLP vectorizer.
+  unsigned getStoreMinimumVF(unsigned VF, Type *ScalarMemTy,
+                             Type *ScalarValTy) const;
+
   /// \return True if it should be considered for address type promotion.
   /// \p AllowPromotionWithoutCommonHeader Set true if promoting \p I is
   /// profitable without finding other extensions fed by the same input.
@@ -1055,7 +1066,7 @@ public:
   InstructionCost getShuffleCost(ShuffleKind Kind, VectorType *Tp,
                                  ArrayRef<int> Mask = None, int Index = 0,
                                  VectorType *SubTp = nullptr,
-                                 ArrayRef<Value *> Args = None) const;
+                                 ArrayRef<const Value *> Args = None) const;
 
   /// Represents a hint about the context in which a cast is used.
   ///
@@ -1560,7 +1571,7 @@ public:
   virtual bool isLegalNTStore(Type *DataType, Align Alignment) = 0;
   virtual bool isLegalNTLoad(Type *DataType, Align Alignment) = 0;
   virtual bool isLegalBroadcastLoad(Type *ElementTy,
-                                    unsigned NumElements) const = 0;
+                                    ElementCount NumElements) const = 0;
   virtual bool isLegalMaskedScatter(Type *DataType, Align Alignment) = 0;
   virtual bool isLegalMaskedGather(Type *DataType, Align Alignment) = 0;
   virtual bool forceScalarizeMaskedGather(VectorType *DataType,
@@ -1633,6 +1644,8 @@ public:
   virtual ElementCount getMinimumVF(unsigned ElemWidth,
                                     bool IsScalable) const = 0;
   virtual unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const = 0;
+  virtual unsigned getStoreMinimumVF(unsigned VF, Type *ScalarMemTy,
+                                     Type *ScalarValTy) const = 0;
   virtual bool shouldConsiderAddressTypePromotion(
       const Instruction &I, bool &AllowPromotionWithoutCommonHeader) = 0;
   virtual unsigned getCacheLineSize() const = 0;
@@ -1672,7 +1685,7 @@ public:
   virtual InstructionCost getShuffleCost(ShuffleKind Kind, VectorType *Tp,
                                          ArrayRef<int> Mask, int Index,
                                          VectorType *SubTp,
-                                         ArrayRef<Value *> Args) = 0;
+                                         ArrayRef<const Value *> Args) = 0;
   virtual InstructionCost getCastInstrCost(unsigned Opcode, Type *Dst,
                                            Type *Src, CastContextHint CCH,
                                            TTI::TargetCostKind CostKind,
@@ -1968,7 +1981,7 @@ public:
     return Impl.isLegalNTLoad(DataType, Alignment);
   }
   bool isLegalBroadcastLoad(Type *ElementTy,
-                            unsigned NumElements) const override {
+                            ElementCount NumElements) const override {
     return Impl.isLegalBroadcastLoad(ElementTy, NumElements);
   }
   bool isLegalMaskedScatter(Type *DataType, Align Alignment) override {
@@ -2136,6 +2149,10 @@ public:
   unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const override {
     return Impl.getMaximumVF(ElemWidth, Opcode);
   }
+  unsigned getStoreMinimumVF(unsigned VF, Type *ScalarMemTy,
+                             Type *ScalarValTy) const override {
+    return Impl.getStoreMinimumVF(VF, ScalarMemTy, ScalarValTy);
+  }
   bool shouldConsiderAddressTypePromotion(
       const Instruction &I, bool &AllowPromotionWithoutCommonHeader) override {
     return Impl.shouldConsiderAddressTypePromotion(
@@ -2199,7 +2216,7 @@ public:
   InstructionCost getShuffleCost(ShuffleKind Kind, VectorType *Tp,
                                  ArrayRef<int> Mask, int Index,
                                  VectorType *SubTp,
-                                 ArrayRef<Value *> Args) override {
+                                 ArrayRef<const Value *> Args) override {
     return Impl.getShuffleCost(Kind, Tp, Mask, Index, SubTp, Args);
   }
   InstructionCost getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,

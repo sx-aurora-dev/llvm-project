@@ -342,7 +342,7 @@ CodeGenFunction::AddInitializerToStaticVarDecl(const VarDecl &D,
   if (!Init) {
     if (!getLangOpts().CPlusPlus)
       CGM.ErrorUnsupported(D.getInit(), "constant l-value expression");
-    else if (!D.getFlexibleArrayInitChars(getContext()).isZero())
+    else if (D.hasFlexibleArrayInit(getContext()))
       CGM.ErrorUnsupported(D.getInit(), "flexible array initializer");
     else if (HaveInsertPoint()) {
       // Since we have a static initializer, this global variable can't
@@ -354,17 +354,12 @@ CodeGenFunction::AddInitializerToStaticVarDecl(const VarDecl &D,
     return GV;
   }
 
-#if 0
-  // FIXME: The following check doesn't handle flexible array members
-  // inside tail padding (which don't actually increase the size of
-  // the struct).
 #ifndef NDEBUG
   CharUnits VarSize = CGM.getContext().getTypeSizeInChars(D.getType()) +
                       D.getFlexibleArrayInitChars(getContext());
   CharUnits CstSize = CharUnits::fromQuantity(
       CGM.getDataLayout().getTypeAllocSize(Init->getType()));
   assert(VarSize == CstSize && "Emitted constant has unexpected size");
-#endif
 #endif
 
   // The initializer may differ in type from the global. Rewrite
@@ -2447,6 +2442,7 @@ namespace {
 /// for the specified parameter and set up LocalDeclMap.
 void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
                                    unsigned ArgNo) {
+  bool NoDebugInfo = false;
   // FIXME: Why isn't ImplicitParamDecl a ParmVarDecl?
   assert((isa<ParmVarDecl>(D) || isa<ImplicitParamDecl>(D)) &&
          "Invalid argument to EmitParmDecl");
@@ -2466,6 +2462,10 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
       setBlockContextParameter(IPD, ArgNo, V);
       return;
     }
+    // Suppressing debug info for ThreadPrivateVar parameters, else it hides
+    // debug info of TLS variables.
+    NoDebugInfo =
+        (IPD->getParameterKind() == ImplicitParamDecl::ThreadPrivateVar);
   }
 
   Address DeclPtr = Address::invalid();
@@ -2596,7 +2596,8 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
 
   // Emit debug info for param declarations in non-thunk functions.
   if (CGDebugInfo *DI = getDebugInfo()) {
-    if (CGM.getCodeGenOpts().hasReducedDebugInfo() && !CurFuncIsThunk) {
+    if (CGM.getCodeGenOpts().hasReducedDebugInfo() && !CurFuncIsThunk &&
+        !NoDebugInfo) {
       llvm::DILocalVariable *DILocalVar = DI->EmitDeclareOfArgVariable(
           &D, AllocaPtr.getPointer(), ArgNo, Builder);
       if (const auto *Var = dyn_cast_or_null<ParmVarDecl>(&D))

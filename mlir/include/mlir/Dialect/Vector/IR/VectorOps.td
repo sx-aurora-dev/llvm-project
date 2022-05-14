@@ -13,6 +13,7 @@
 #ifndef VECTOR_OPS
 #define VECTOR_OPS
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -310,6 +311,7 @@ def Vector_ReductionOp :
   // TODO: Migrate to assemblyFormat once `AllTypesMatch` supports optional
   // operands.
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizer = 1;
   let hasVerifier = 1;
 }
 

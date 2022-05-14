@@ -541,6 +541,11 @@ public:
     return Type::getVoidTy(Context);
   }
 
+  /// Fetch the type representing a pointer.
+  PointerType *getPtrTy(unsigned AddrSpace = 0) {
+    return PointerType::get(Context, AddrSpace);
+  }
+
   /// Fetch the type representing a pointer to an 8-bit integer value.
   PointerType *getInt8PtrTy(unsigned AddrSpace = 0) {
     return Type::getInt8PtrTy(Context, AddrSpace);
@@ -2337,15 +2342,6 @@ public:
                              const Twine &Name = "") {
     SmallVector<int, 16> IntMask;
     ShuffleVectorInst::getShuffleMask(cast<Constant>(Mask), IntMask);
-    return CreateShuffleVector(V1, V2, IntMask, Name);
-  }
-
-  LLVM_ATTRIBUTE_DEPRECATED(Value *CreateShuffleVector(Value *V1, Value *V2,
-                                                       ArrayRef<uint32_t> Mask,
-                                                       const Twine &Name = ""),
-                            "Pass indices as 'int' instead") {
-    SmallVector<int, 16> IntMask;
-    IntMask.assign(Mask.begin(), Mask.end());
     return CreateShuffleVector(V1, V2, IntMask, Name);
   }
 
