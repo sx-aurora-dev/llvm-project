@@ -19,6 +19,7 @@
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -647,6 +648,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_JUMP_TABLE;
   case Attribute::MinSize:
     return bitc::ATTR_KIND_MIN_SIZE;
+  case Attribute::AllocatedPointer:
+    return bitc::ATTR_KIND_ALLOCATED_POINTER;
   case Attribute::Naked:
     return bitc::ATTR_KIND_NAKED;
   case Attribute::Nest:
@@ -1018,6 +1021,8 @@ void ModuleBitcodeWriter::writeTypeTable() {
         TypeVals.push_back(true);
       break;
     }
+    case Type::DXILPointerTyID:
+      llvm_unreachable("DXIL pointers cannot be added to IR modules");
     }
 
     // Emit the finished record.
@@ -1822,6 +1827,7 @@ void ModuleBitcodeWriter::writeDISubprogram(const DISubprogram *N,
   Record.push_back(N->getThisAdjustment());
   Record.push_back(VE.getMetadataOrNullID(N->getThrownTypes().get()));
   Record.push_back(VE.getMetadataOrNullID(N->getAnnotations().get()));
+  Record.push_back(VE.getMetadataOrNullID(N->getRawTargetFuncName()));
 
   Stream.EmitRecord(bitc::METADATA_SUBPROGRAM, Record, Abbrev);
   Record.clear();
@@ -3360,7 +3366,7 @@ void ModuleBitcodeWriter::writeFunction(
   bool NeedsMetadataAttachment = F.hasMetadata();
 
   DILocation *LastDL = nullptr;
-  SmallPtrSet<Function *, 4> BlockAddressUsers;
+  SmallSetVector<Function *, 4> BlockAddressUsers;
 
   // Finally, emit all the instructions, in order.
   for (const BasicBlock &BB : F) {
@@ -3396,22 +3402,29 @@ void ModuleBitcodeWriter::writeFunction(
     }
 
     if (BlockAddress *BA = BlockAddress::lookup(&BB)) {
-      for (User *U : BA->users()) {
-        if (auto *I = dyn_cast<Instruction>(U)) {
-          Function *P = I->getParent()->getParent();
-          if (P != &F)
-            BlockAddressUsers.insert(P);
+      SmallVector<Value *> Worklist{BA};
+      SmallPtrSet<Value *, 8> Visited{BA};
+      while (!Worklist.empty()) {
+        Value *V = Worklist.pop_back_val();
+        for (User *U : V->users()) {
+          if (auto *I = dyn_cast<Instruction>(U)) {
+            Function *P = I->getFunction();
+            if (P != &F)
+              BlockAddressUsers.insert(P);
+          } else if (isa<Constant>(U) && !isa<GlobalValue>(U) &&
+                     Visited.insert(U).second)
+            Worklist.push_back(U);
         }
       }
     }
   }
 
   if (!BlockAddressUsers.empty()) {
-    SmallVector<uint64_t, 4> Record;
-    Record.reserve(BlockAddressUsers.size());
-    for (Function *F : BlockAddressUsers)
-      Record.push_back(VE.getValueID(F));
-    Stream.EmitRecord(bitc::FUNC_CODE_BLOCKADDR_USERS, Record);
+    Vals.resize(BlockAddressUsers.size());
+    for (auto I : llvm::enumerate(BlockAddressUsers))
+      Vals[I.index()] = VE.getValueID(I.value());
+    Stream.EmitRecord(bitc::FUNC_CODE_BLOCKADDR_USERS, Vals);
+    Vals.clear();
   }
 
   // Emit names for all the instructions etc.
@@ -4889,6 +4902,9 @@ static const char *getSectionNameForBitcode(const Triple &T) {
   case Triple::GOFF:
     llvm_unreachable("GOFF is not yet implemented");
     break;
+  case Triple::SPIRV:
+    llvm_unreachable("SPIRV is not yet implemented");
+    break;
   case Triple::XCOFF:
     llvm_unreachable("XCOFF is not yet implemented");
     break;
@@ -4910,6 +4926,9 @@ static const char *getSectionNameForCommandline(const Triple &T) {
     return ".llvmcmd";
   case Triple::GOFF:
     llvm_unreachable("GOFF is not yet implemented");
+    break;
+  case Triple::SPIRV:
+    llvm_unreachable("SPIRV is not yet implemented");
     break;
   case Triple::XCOFF:
     llvm_unreachable("XCOFF is not yet implemented");

@@ -1195,10 +1195,12 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   const DeclaratorChunk::FunctionTypeInfo &FTI = D.getFunctionTypeInfo();
   TemplateParameterDepthRAII CurTemplateDepthTracker(TemplateParameterDepth);
 
-  // If this is C90 and the declspecs were completely missing, fudge in an
+  // If this is C89 and the declspecs were completely missing, fudge in an
   // implicit int.  We do this here because this is the only place where
   // declaration-specifiers are completely optional in the grammar.
-  if (getLangOpts().ImplicitInt && D.getDeclSpec().isEmpty()) {
+  if (getLangOpts().isImplicitIntRequired() && D.getDeclSpec().isEmpty()) {
+    Diag(D.getIdentifierLoc(), diag::warn_missing_type_specifier)
+        << D.getDeclSpec().getSourceRange();
     const char *PrevSpec;
     unsigned DiagID;
     const PrintingPolicy &Policy = Actions.getASTContext().getPrintingPolicy();
@@ -2154,14 +2156,14 @@ SourceLocation Parser::handleUnexpectedCodeCompletionToken() {
   PrevTokLocation = Tok.getLocation();
 
   for (Scope *S = getCurScope(); S; S = S->getParent()) {
-    if (S->getFlags() & Scope::FnScope) {
+    if (S->isFunctionScope()) {
       cutOffParsing();
       Actions.CodeCompleteOrdinaryName(getCurScope(),
                                        Sema::PCC_RecoveryInFunction);
       return PrevTokLocation;
     }
 
-    if (S->getFlags() & Scope::ClassScope) {
+    if (S->isClassScope()) {
       cutOffParsing();
       Actions.CodeCompleteOrdinaryName(getCurScope(), Sema::PCC_Class);
       return PrevTokLocation;
@@ -2518,8 +2520,8 @@ Decl *Parser::ParseModuleImport(SourceLocation AtLoc,
   // the header is parseable. Emit a warning to make the user aware.
   if (IsObjCAtImport && AtLoc.isValid()) {
     auto &SrcMgr = PP.getSourceManager();
-    auto *FE = SrcMgr.getFileEntryForID(SrcMgr.getFileID(AtLoc));
-    if (FE && llvm::sys::path::parent_path(FE->getDir()->getName())
+    auto FE = SrcMgr.getFileEntryRefForID(SrcMgr.getFileID(AtLoc));
+    if (FE && llvm::sys::path::parent_path(FE->getDir().getName())
                   .endswith(".framework"))
       Diags.Report(AtLoc, diag::warn_atimport_in_framework_header);
   }

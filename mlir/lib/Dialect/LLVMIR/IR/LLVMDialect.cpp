@@ -194,7 +194,7 @@ void AllocaOp::print(OpAsmPrinter &p) {
 
   p << ' ' << getArraySize() << " x " << elemTy;
   if (getAlignment().hasValue() && *getAlignment() != 0)
-    p.printOptionalAttrDict((*this)->getAttrs());
+    p.printOptionalAttrDict((*this)->getAttrs(), {kElemTypeAttrName});
   else
     p.printOptionalAttrDict((*this)->getAttrs(),
                             {"alignment", kElemTypeAttrName});
@@ -332,7 +332,8 @@ static ParseResult parseSwitchOpCases(
     if (parser.parseColon() || parser.parseSuccessor(destination))
       return failure();
     if (!parser.parseOptionalLParen()) {
-      if (parser.parseRegionArgumentList(operands) ||
+      if (parser.parseOperandList(operands, OpAsmParser::Delimiter::None,
+                                  /*allowResultNumber=*/false) ||
           parser.parseColonTypeList(operandTypes) || parser.parseRParen())
         return failure();
     }
@@ -432,10 +433,9 @@ static void recordStructIndices(Type type, unsigned currentIndex,
 /// be either an LLVMPointer type or a vector thereof. If `structSizes` is
 /// provided, it is populated with sizes of the indexed structs for bounds
 /// verification purposes.
-static void
-findKnownStructIndices(Type sourceElementType,
-                       SmallVectorImpl<unsigned> &indices,
-                       SmallVectorImpl<unsigned> *structSizes = nullptr) {
+void GEPOp::findKnownStructIndices(Type sourceElementType,
+                                   SmallVectorImpl<unsigned> &indices,
+                                   SmallVectorImpl<unsigned> *structSizes) {
   SmallPtrSet<Type, 4> visited;
   recordStructIndices(sourceElementType, /*currentIndex=*/1, indices,
                       structSizes, visited);
@@ -464,14 +464,24 @@ void GEPOp::build(OpBuilder &builder, OperationState &result, Type resultType,
                   Value basePtr, ValueRange indices,
                   ArrayRef<int32_t> structIndices,
                   ArrayRef<NamedAttribute> attributes) {
+  auto ptrType =
+      extractVectorElementType(basePtr.getType()).cast<LLVMPointerType>();
+  assert(!ptrType.isOpaque() &&
+         "expected non-opaque pointer, provide elementType explicitly when "
+         "opaque pointers are used");
+  build(builder, result, resultType, ptrType.getElementType(), basePtr, indices,
+        structIndices, attributes);
+}
+
+void GEPOp::build(OpBuilder &builder, OperationState &result, Type resultType,
+                  Type elementType, Value basePtr, ValueRange indices,
+                  ArrayRef<int32_t> structIndices,
+                  ArrayRef<NamedAttribute> attributes) {
   SmallVector<Value> remainingIndices;
   SmallVector<int32_t> updatedStructIndices(structIndices.begin(),
                                             structIndices.end());
   SmallVector<unsigned> structRelatedPositions;
-  auto ptrType =
-      extractVectorElementType(basePtr.getType()).cast<LLVMPointerType>();
-  assert(!ptrType.isOpaque() && "expected non-opaque pointer");
-  findKnownStructIndices(ptrType.getElementType(), structRelatedPositions);
+  findKnownStructIndices(elementType, structRelatedPositions);
 
   SmallVector<unsigned> operandsToErase;
   for (unsigned pos : structRelatedPositions) {
@@ -517,6 +527,10 @@ void GEPOp::build(OpBuilder &builder, OperationState &result, Type resultType,
   result.addAttributes(attributes);
   result.addAttribute("structIndices",
                       builder.getI32TensorAttr(updatedStructIndices));
+  if (extractVectorElementType(basePtr.getType())
+          .cast<LLVMPointerType>()
+          .isOpaque())
+    result.addAttribute(kElemTypeAttrName, TypeAttr::get(elementType));
   result.addOperands(basePtr);
   result.addOperands(remainingIndices);
 }
@@ -526,7 +540,7 @@ parseGEPIndices(OpAsmParser &parser,
                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &indices,
                 DenseIntElementsAttr &structIndices) {
   SmallVector<int32_t> constantIndices;
-  do {
+  parser.parseCommaSeparatedList([&]() -> ParseResult {
     int32_t constantIndex;
     OptionalParseResult parsedInteger =
         parser.parseOptionalInteger(constantIndex);
@@ -534,13 +548,12 @@ parseGEPIndices(OpAsmParser &parser,
       if (failed(parsedInteger.getValue()))
         return failure();
       constantIndices.push_back(constantIndex);
-      continue;
+      return success();
     }
 
     constantIndices.push_back(LLVM::GEPOp::kDynamicIndex);
-    if (failed(parser.parseOperand(indices.emplace_back())))
-      return failure();
-  } while (succeeded(parser.parseOptionalComma()));
+    return parser.parseOperand(indices.emplace_back());
+  });
 
   structIndices = parser.getBuilder().getI32TensorAttr(constantIndices);
   return success();
@@ -1641,14 +1654,19 @@ LogicalResult AddressOfOp::verify() {
     return emitOpError(
         "must reference a global defined by 'llvm.mlir.global' or 'llvm.func'");
 
-  if (global &&
-      LLVM::LLVMPointerType::get(global.getType(), global.getAddrSpace()) !=
-          getResult().getType())
+  LLVMPointerType type = getType();
+  if (global && global.getAddrSpace() != type.getAddressSpace())
+    return emitOpError("pointer address space must match address space of the "
+                       "referenced global");
+
+  if (type.isOpaque())
+    return success();
+
+  if (global && type.getElementType() != global.getType())
     return emitOpError(
         "the type must be a pointer to the type of the referenced global");
 
-  if (function && LLVM::LLVMPointerType::get(function.getFunctionType()) !=
-                      getResult().getType())
+  if (function && type.getElementType() != function.getFunctionType())
     return emitOpError(
         "the type must be a pointer to the type of the referenced function");
 
@@ -2133,22 +2151,22 @@ ParseResult LLVMFuncOp::parse(OpAsmParser &parser, OperationState &result) {
                            parser, result, LLVM::Linkage::External)));
 
   StringAttr nameAttr;
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
-  SmallVector<NamedAttrList> argAttrs;
-  SmallVector<NamedAttrList> resultAttrs;
-  SmallVector<Type> argTypes;
+  SmallVector<OpAsmParser::Argument> entryArgs;
+  SmallVector<DictionaryAttr> resultAttrs;
   SmallVector<Type> resultTypes;
-  SmallVector<Location> argLocations;
   bool isVariadic;
 
   auto signatureLocation = parser.getCurrentLocation();
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
       function_interface_impl::parseFunctionSignature(
-          parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
-          argLocations, isVariadic, resultTypes, resultAttrs))
+          parser, /*allowVariadic=*/true, entryArgs, isVariadic, resultTypes,
+          resultAttrs))
     return failure();
 
+  SmallVector<Type> argTypes;
+  for (auto &arg : entryArgs)
+    argTypes.push_back(arg.type);
   auto type =
       buildLLVMFunctionType(parser, signatureLocation, argTypes, resultTypes,
                             function_interface_impl::VariadicFlag(isVariadic));
@@ -2160,11 +2178,11 @@ ParseResult LLVMFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
   function_interface_impl::addArgAndResultAttrs(parser.getBuilder(), result,
-                                                argAttrs, resultAttrs);
+                                                entryArgs, resultAttrs);
 
   auto *body = result.addRegion();
-  OptionalParseResult parseResult = parser.parseOptionalRegion(
-      *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes);
+  OptionalParseResult parseResult =
+      parser.parseOptionalRegion(*body, entryArgs);
   return failure(parseResult.hasValue() && failed(*parseResult));
 }
 
@@ -2849,22 +2867,21 @@ Attribute FMFAttr::parse(AsmParser &parser, Type type) {
 
   FastmathFlags flags = {};
   if (failed(parser.parseOptionalGreater())) {
-    do {
+    auto parseFlags = [&]() -> ParseResult {
       StringRef elemName;
       if (failed(parser.parseKeyword(&elemName)))
-        return {};
+        return failure();
 
       auto elem = symbolizeFastmathFlags(elemName);
-      if (!elem) {
-        parser.emitError(parser.getNameLoc(), "Unknown fastmath flag: ")
-            << elemName;
-        return {};
-      }
+      if (!elem)
+        return parser.emitError(parser.getNameLoc(), "Unknown fastmath flag: ")
+               << elemName;
 
       flags = flags | *elem;
-    } while (succeeded(parser.parseOptionalComma()));
-
-    if (failed(parser.parseGreater()))
+      return success();
+    };
+    if (failed(parser.parseCommaSeparatedList(parseFlags)) ||
+        parser.parseGreater())
       return {};
   }
 
@@ -3012,23 +3029,19 @@ Attribute LoopOptionsAttr::parse(AsmParser &parser, Type type) {
 
   SmallVector<std::pair<LoopOptionCase, int64_t>> options;
   llvm::SmallDenseSet<LoopOptionCase> seenOptions;
-  do {
+  auto parseLoopOptions = [&]() -> ParseResult {
     StringRef optionName;
     if (parser.parseKeyword(&optionName))
-      return {};
+      return failure();
 
     auto option = symbolizeLoopOptionCase(optionName);
-    if (!option) {
-      parser.emitError(parser.getNameLoc(), "unknown loop option: ")
-          << optionName;
-      return {};
-    }
-    if (!seenOptions.insert(*option).second) {
-      parser.emitError(parser.getNameLoc(), "loop option present twice");
-      return {};
-    }
+    if (!option)
+      return parser.emitError(parser.getNameLoc(), "unknown loop option: ")
+             << optionName;
+    if (!seenOptions.insert(*option).second)
+      return parser.emitError(parser.getNameLoc(), "loop option present twice");
     if (failed(parser.parseEqual()))
-      return {};
+      return failure();
 
     int64_t value;
     switch (*option) {
@@ -3040,22 +3053,20 @@ Attribute LoopOptionsAttr::parse(AsmParser &parser, Type type) {
       else if (succeeded(parser.parseOptionalKeyword("false")))
         value = 0;
       else {
-        parser.emitError(parser.getNameLoc(),
-                         "expected boolean value 'true' or 'false'");
-        return {};
+        return parser.emitError(parser.getNameLoc(),
+                                "expected boolean value 'true' or 'false'");
       }
       break;
     case LoopOptionCase::interleave_count:
     case LoopOptionCase::pipeline_initiation_interval:
-      if (failed(parser.parseInteger(value))) {
-        parser.emitError(parser.getNameLoc(), "expected integer value");
-        return {};
-      }
+      if (failed(parser.parseInteger(value)))
+        return parser.emitError(parser.getNameLoc(), "expected integer value");
       break;
     }
     options.push_back(std::make_pair(*option, value));
-  } while (succeeded(parser.parseOptionalComma()));
-  if (failed(parser.parseGreater()))
+    return success();
+  };
+  if (parser.parseCommaSeparatedList(parseLoopOptions) || parser.parseGreater())
     return {};
 
   llvm::sort(options, llvm::less_first());

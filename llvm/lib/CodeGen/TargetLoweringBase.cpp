@@ -777,7 +777,8 @@ void TargetLoweringBase::initActions() {
                         ISD::UMULFIX,        ISD::UMULFIXSAT,
                         ISD::SDIVFIX,        ISD::SDIVFIXSAT,
                         ISD::UDIVFIX,        ISD::UDIVFIXSAT,
-                        ISD::FP_TO_SINT_SAT, ISD::FP_TO_UINT_SAT},
+                        ISD::FP_TO_SINT_SAT, ISD::FP_TO_UINT_SAT,
+                        ISD::IS_FPCLASS},
                        VT, Expand);
 
     // Overflow operations default to expand
@@ -1604,6 +1605,11 @@ bool TargetLoweringBase::isSuitableForJumpTable(const SwitchInst *SI,
   // the range is dense enough for a jump table.
   return (OptForSize || Range <= MaxJumpTableSize) &&
          (NumCases * 100 >= Range * MinDensity);
+}
+
+MVT TargetLoweringBase::getPreferredSwitchConditionType(LLVMContext &Context,
+                                                        EVT ConditionVT) const {
+  return getRegisterType(Context, ConditionVT);
 }
 
 /// Get the EVTs and ArgFlags collections that represent the legalized return

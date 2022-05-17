@@ -8127,6 +8127,7 @@ public:
   bool VisitVarDecl(const Expr *E, const VarDecl *VD);
   bool VisitUnaryPreIncDec(const UnaryOperator *UO);
 
+  bool VisitCallExpr(const CallExpr *E);
   bool VisitDeclRefExpr(const DeclRefExpr *E);
   bool VisitPredefinedExpr(const PredefinedExpr *E) { return Success(E); }
   bool VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E);
@@ -8290,6 +8291,20 @@ bool LValueExprEvaluator::VisitVarDecl(const Expr *E, const VarDecl *VD) {
     return false;
   }
   return Success(*V, E);
+}
+
+bool LValueExprEvaluator::VisitCallExpr(const CallExpr *E) {
+  switch (E->getBuiltinCallee()) {
+  case Builtin::BIas_const:
+  case Builtin::BIforward:
+  case Builtin::BImove:
+  case Builtin::BImove_if_noexcept:
+    if (cast<FunctionDecl>(E->getCalleeDecl())->isConstexpr())
+      return Visit(E->getArg(0));
+    break;
+  }
+
+  return ExprEvaluatorBaseTy::VisitCallExpr(E);
 }
 
 bool LValueExprEvaluator::VisitMaterializeTemporaryExpr(
@@ -8616,7 +8631,7 @@ static bool evaluateLValueAsAllocSize(EvalInfo &Info, APValue::LValueBase Base,
     return false;
 
   const Expr *Init = VD->getAnyInitializer();
-  if (!Init)
+  if (!Init || Init->getType().isNull())
     return false;
 
   const Expr *E = Init->IgnoreParens();
@@ -9070,6 +9085,8 @@ static bool isOneByteCharacterType(QualType T) {
 bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
                                                 unsigned BuiltinOp) {
   switch (BuiltinOp) {
+  case Builtin::BIaddressof:
+  case Builtin::BI__addressof:
   case Builtin::BI__builtin_addressof:
     return evaluateLValue(E->getArg(0), Result);
   case Builtin::BI__builtin_assume_aligned: {
@@ -10336,9 +10353,9 @@ bool VectorExprEvaluator::VisitCastExpr(const CastExpr *E) {
       for (unsigned i = 0; i < NElts; i++) {
         llvm::APInt Elt;
         if (BigEndian)
-          Elt = SValInt.rotl(i*EltSize+FloatEltSize).trunc(FloatEltSize);
+          Elt = SValInt.rotl(i*EltSize+FloatEltSize).truncOrSelf(FloatEltSize);
         else
-          Elt = SValInt.rotr(i*EltSize).trunc(FloatEltSize);
+          Elt = SValInt.rotr(i*EltSize).truncOrSelf(FloatEltSize);
         Elts.push_back(APValue(APFloat(Sem, Elt)));
       }
     } else if (EltTy->isIntegerType()) {

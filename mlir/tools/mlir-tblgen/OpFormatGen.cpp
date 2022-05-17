@@ -187,10 +187,7 @@ public:
 
   /// Returns a range to iterate over the LiteralElements.
   auto getLiteralElements() const {
-    // The use of std::function is unfortunate but necessary here. Lambda
-    // functions cannot be copied but std::function can be copied. This copy
-    // constructor is used in llvm::zip.
-    std::function<LiteralElement *(FormatElement * el)>
+    function_ref<LiteralElement *(FormatElement * el)>
         literalElementCastConverter =
             [](FormatElement *el) { return cast<LiteralElement>(el); };
     return llvm::map_range(literalElements, literalElementCastConverter);
@@ -212,7 +209,7 @@ public:
   AttributeVariable *
   getUnitAttrParsingElement(ArrayRef<FormatElement *> pelement) {
     if (pelement.size() == 1) {
-      auto attrElem = dyn_cast<AttributeVariable>(pelement[0]);
+      auto *attrElem = dyn_cast<AttributeVariable>(pelement[0]);
       if (attrElem && attrElem->isUnitAttr())
         return attrElem;
     }
@@ -1892,8 +1889,8 @@ void collect(FormatElement *element,
       })
       .Case([&](OIListElement *oilist) {
         for (ArrayRef<FormatElement *> arg : oilist->getParsingElements())
-          for (FormatElement *arg_ : arg)
-            collect(arg_, variables);
+          for (FormatElement *arg : arg)
+            collect(arg, variables);
       });
 }
 

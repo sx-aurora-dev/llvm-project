@@ -761,6 +761,8 @@ template <class ELFT> void Writer<ELFT>::addSectionSymbols() {
 static bool isRelroSection(const OutputSection *sec) {
   if (!config->zRelro)
     return false;
+  if (sec->relro)
+    return true;
 
   uint64_t flags = sec->flags;
 
@@ -2636,11 +2638,10 @@ template <class ELFT> void Writer<ELFT>::setPhdrs(Partition &part) {
 
     if (p->p_type == PT_GNU_RELRO) {
       p->p_align = 1;
-      // musl/glibc ld.so rounds the size down, so we need to round up
-      // to protect the last page. This is a no-op on FreeBSD which always
-      // rounds up.
-      p->p_memsz = alignTo(p->p_offset + p->p_memsz, config->commonPageSize) -
-                   p->p_offset;
+      // musl/glibc/FreeBSD ld.so rounds the size down, so we need to round up
+      // to protect the last page.
+      p->p_memsz =
+          alignTo(p->p_offset + p->p_memsz, config->maxPageSize) - p->p_offset;
     }
   }
 }

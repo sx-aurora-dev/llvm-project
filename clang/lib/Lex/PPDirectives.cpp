@@ -652,6 +652,17 @@ void Preprocessor::SkipExcludedConditionalBlock(SourceLocation HashTokenLoc,
         PPConditionalInfo &CondInfo = CurPPLexer->peekConditionalLevel();
         Token DirectiveToken = Tok;
 
+        // Warn if using `#elifdef` & `#elifndef` in not C2x & C++2b mode even
+        // if this branch is in a skipping block.
+        unsigned DiagID;
+        if (LangOpts.CPlusPlus)
+          DiagID = LangOpts.CPlusPlus2b ? diag::warn_cxx2b_compat_pp_directive
+                                        : diag::ext_cxx2b_pp_directive;
+        else
+          DiagID = LangOpts.C2x ? diag::warn_c2x_compat_pp_directive
+                                : diag::ext_c2x_pp_directive;
+        Diag(Tok, DiagID) << (IsElifDef ? PED_Elifdef : PED_Elifndef);
+
         // If this is a #elif with a #else before it, report the error.
         if (CondInfo.FoundElse)
           Diag(Tok, diag::pp_err_elif_after_else)
@@ -905,7 +916,7 @@ Optional<FileEntryRef> Preprocessor::LookupFile(
     if (SuggestedModule && !LangOpts.AsmPreprocessor)
       HeaderInfo.getModuleMap().diagnoseHeaderInclusion(
           RequestingModule, RequestingModuleIsModuleInterface, FilenameLoc,
-          Filename, &FE->getFileEntry());
+          Filename, *FE);
     return FE;
   }
 
@@ -921,7 +932,7 @@ Optional<FileEntryRef> Preprocessor::LookupFile(
         if (SuggestedModule && !LangOpts.AsmPreprocessor)
           HeaderInfo.getModuleMap().diagnoseHeaderInclusion(
               RequestingModule, RequestingModuleIsModuleInterface, FilenameLoc,
-              Filename, &FE->getFileEntry());
+              Filename, *FE);
         return FE;
       }
     }
@@ -936,7 +947,7 @@ Optional<FileEntryRef> Preprocessor::LookupFile(
           if (SuggestedModule && !LangOpts.AsmPreprocessor)
             HeaderInfo.getModuleMap().diagnoseHeaderInclusion(
                 RequestingModule, RequestingModuleIsModuleInterface,
-                FilenameLoc, Filename, &FE->getFileEntry());
+                FilenameLoc, Filename, *FE);
           return FE;
         }
       }
@@ -1431,6 +1442,7 @@ void Preprocessor::HandleDigitDirective(Token &DigitTok) {
   // If the StrTok is "eod", then it wasn't present.  Otherwise, it must be a
   // string followed by eod.
   if (StrTok.is(tok::eod)) {
+    Diag(StrTok, diag::ext_pp_gnu_line_directive);
     // Treat this like "#line NN", which doesn't change file characteristics.
     FileKind = SourceMgr.getFileCharacteristic(DigitTok.getLocation());
   } else if (StrTok.isNot(tok::string_literal)) {
@@ -1458,6 +1470,9 @@ void Preprocessor::HandleDigitDirective(Token &DigitTok) {
     // If a filename was present, read any flags that are present.
     if (ReadLineMarkerFlags(IsFileEntry, IsFileExit, FileKind, *this))
       return;
+    if (!SourceMgr.isWrittenInBuiltinFile(DigitTok.getLocation()) &&
+        !SourceMgr.isWrittenInCommandLineFile(DigitTok.getLocation()))
+      Diag(StrTok, diag::ext_pp_gnu_line_directive);
 
     // Exiting to an empty string means pop to the including file, so leave
     // FilenameID as -1 in that case.
@@ -2047,10 +2062,6 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
       &CurDir, Filename, FilenameLoc, FilenameRange, FilenameTok,
       IsFrameworkFound, IsImportDecl, IsMapped, LookupFrom, LookupFromFile,
       LookupFilename, RelativePath, SearchPath, SuggestedModule, isAngled);
-
-  // Record the header's filename for later use.
-  if (File)
-    CurLexer->addInclude(OriginalFilename, File->getFileEntry(), FilenameLoc);
 
   if (usingPCHWithThroughHeader() && SkippingUntilPCHThroughHeader) {
     if (File && isPCHThroughHeader(&File->getFileEntry()))
@@ -3258,6 +3269,23 @@ void Preprocessor::HandleElifFamilyDirective(Token &ElifToken,
                        : Kind == tok::pp_elifdef ? PED_Elifdef
                                                  : PED_Elifndef;
   ++NumElse;
+
+  // Warn if using `#elifdef` & `#elifndef` in not C2x & C++2b mode.
+  switch (DirKind) {
+  case PED_Elifdef:
+  case PED_Elifndef:
+    unsigned DiagID;
+    if (LangOpts.CPlusPlus)
+      DiagID = LangOpts.CPlusPlus2b ? diag::warn_cxx2b_compat_pp_directive
+                                    : diag::ext_cxx2b_pp_directive;
+    else
+      DiagID = LangOpts.C2x ? diag::warn_c2x_compat_pp_directive
+                            : diag::ext_c2x_pp_directive;
+    Diag(ElifToken, DiagID) << DirKind;
+    break;
+  default:
+    break;
+  }
 
   // #elif directive in a non-skipping conditional... start skipping.
   // We don't care what the condition is, because we will always skip it (since

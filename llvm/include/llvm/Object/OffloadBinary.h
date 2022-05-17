@@ -31,6 +31,7 @@ enum OffloadKind : uint16_t {
   OFK_OpenMP,
   OFK_Cuda,
   OFK_HIP,
+  OFK_LAST,
 };
 
 /// The type of contents the offloading image contains.
@@ -41,6 +42,7 @@ enum ImageKind : uint16_t {
   IMG_Cubin,
   IMG_Fatbinary,
   IMG_PTX,
+  IMG_LAST,
 };
 
 /// A simple binary serialization of an offloading file. We use this format to
@@ -73,6 +75,7 @@ public:
 
   ImageKind getImageKind() const { return TheEntry->TheImageKind; }
   OffloadKind getOffloadKind() const { return TheEntry->TheOffloadKind; }
+  uint32_t getVersion() const { return TheHeader->Version; }
   uint32_t getFlags() const { return TheEntry->Flags; }
   uint64_t getSize() const { return TheHeader->Size; }
 
