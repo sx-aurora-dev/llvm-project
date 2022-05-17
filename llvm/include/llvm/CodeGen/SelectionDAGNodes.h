@@ -2756,7 +2756,9 @@ public:
   ISD::MemIndexType getIndexType() const {
     return static_cast<ISD::MemIndexType>(LSBaseSDNodeBits.AddressingMode);
   }
-  bool isIndexScaled() const { return isIndexTypeScaled(getIndexType()); }
+  bool isIndexScaled() const {
+    return !cast<ConstantSDNode>(getScale())->isOne();
+  }
   bool isIndexSigned() const { return isIndexTypeSigned(getIndexType()); }
 
   // In the both nodes address is Op1, mask is Op2:
@@ -2838,7 +2840,9 @@ public:
   ISD::MemIndexType getIndexType() const {
     return static_cast<ISD::MemIndexType>(LSBaseSDNodeBits.AddressingMode);
   }
-  bool isIndexScaled() const { return isIndexTypeScaled(getIndexType()); }
+  bool isIndexScaled() const {
+    return !cast<ConstantSDNode>(getScale())->isOne();
+  }
   bool isIndexSigned() const { return isIndexTypeSigned(getIndexType()); }
 
   // In the both nodes address is Op1, mask is Op2:

@@ -1671,6 +1671,16 @@ bool TargetLowering::SimplifyDemandedBits(
       // low bits known zero.
       Known.Zero.setLowBits(ShAmt);
 
+      // Attempt to avoid multi-use ops if we don't need anything from them.
+      if (!InDemandedMask.isAllOnesValue() || !DemandedElts.isAllOnesValue()) {
+        SDValue DemandedOp0 = SimplifyMultipleUseDemandedBits(
+            Op0, InDemandedMask, DemandedElts, TLO.DAG, Depth + 1);
+        if (DemandedOp0) {
+          SDValue NewOp = TLO.DAG.getNode(ISD::SHL, dl, VT, DemandedOp0, Op1);
+          return TLO.CombineTo(Op, NewOp);
+        }
+      }
+
       // Try shrinking the operation as long as the shift amount will still be
       // in range.
       if ((ShAmt < DemandedBits.getActiveBits()) &&
@@ -7742,8 +7752,6 @@ SDValue TargetLowering::expandCTPOP(SDNode *Node, SelectionDAG &DAG) const {
       DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x33)), dl, VT);
   SDValue Mask0F =
       DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x0F)), dl, VT);
-  SDValue Mask01 =
-      DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x01)), dl, VT);
 
   // v = v - ((v >> 1) & 0x55555555...)
   Op = DAG.getNode(ISD::SUB, dl, VT, Op,
@@ -7763,13 +7771,28 @@ SDValue TargetLowering::expandCTPOP(SDNode *Node, SelectionDAG &DAG) const {
                                DAG.getNode(ISD::SRL, dl, VT, Op,
                                            DAG.getConstant(4, dl, ShVT))),
                    Mask0F);
-  // v = (v * 0x01010101...) >> (Len - 8)
-  if (Len > 8)
-    Op =
-        DAG.getNode(ISD::SRL, dl, VT, DAG.getNode(ISD::MUL, dl, VT, Op, Mask01),
-                    DAG.getConstant(Len - 8, dl, ShVT));
 
-  return Op;
+  if (Len <= 8)
+    return Op;
+
+  // Avoid the multiply if we only have 2 bytes to add.
+  // TODO: Only doing this for scalars because vectors weren't as obviously
+  // improved.
+  if (Len == 16 && !VT.isVector()) {
+    // v = (v + (v >> 8)) & 0x00FF;
+    return DAG.getNode(ISD::AND, dl, VT,
+                     DAG.getNode(ISD::ADD, dl, VT, Op,
+                                 DAG.getNode(ISD::SRL, dl, VT, Op,
+                                             DAG.getConstant(8, dl, ShVT))),
+                     DAG.getConstant(0xFF, dl, VT));
+  }
+
+  // v = (v * 0x01010101...) >> (Len - 8)
+  SDValue Mask01 =
+      DAG.getConstant(APInt::getSplat(Len, APInt(8, 0x01)), dl, VT);
+  return DAG.getNode(ISD::SRL, dl, VT,
+                     DAG.getNode(ISD::MUL, dl, VT, Op, Mask01),
+                     DAG.getConstant(Len - 8, dl, ShVT));
 }
 
 SDValue TargetLowering::expandCTLZ(SDNode *Node, SelectionDAG &DAG) const {
@@ -8665,18 +8688,6 @@ SDValue TargetLowering::lowerCmpEqZeroToCtlzSrl(SDValue Op,
     }
   }
   return SDValue();
-}
-
-// Convert redundant addressing modes (e.g. scaling is redundant
-// when accessing bytes).
-ISD::MemIndexType
-TargetLowering::getCanonicalIndexType(ISD::MemIndexType IndexType, EVT MemVT,
-                                      SDValue Offsets) const {
-  // Scaling is unimportant for bytes, canonicalize to unscaled.
-  if (ISD::isIndexTypeScaled(IndexType) && MemVT.getScalarType() == MVT::i8)
-    return ISD::getUnscaledIndexType(IndexType);
-
-  return IndexType;
 }
 
 SDValue TargetLowering::expandIntMINMAX(SDNode *Node, SelectionDAG &DAG) const {

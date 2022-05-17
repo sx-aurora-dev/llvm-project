@@ -946,6 +946,8 @@ OutputDesc *ScriptParser::readOutputSectionDescription(StringRef outSec) {
       readSort();
     } else if (tok == "INCLUDE") {
       readInclude();
+    } else if (tok == "(" || tok == ")") {
+      setError("expected filename pattern");
     } else if (peek() == "(") {
       osec->commands.push_back(readInputSectionDescription(tok));
     } else {
