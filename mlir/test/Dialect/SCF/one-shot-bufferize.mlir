@@ -220,7 +220,7 @@ func.func @scf_if_non_equiv_yields(
 //       CHECK:   return %[[r]]
 func.func @scf_execute_region_yield_non_equivalent(%i: index, %j: index) -> f32 {
   %r = scf.execute_region -> (tensor<?xf32>) {
-    %t2 = linalg.init_tensor [%i] : tensor<?xf32>
+    %t2 = bufferization.alloc_tensor [%i] : tensor<?xf32>
     scf.yield %t2 : tensor<?xf32>
   }
   %f = tensor.extract %r[%j] : tensor<?xf32>
@@ -261,7 +261,7 @@ func.func @scf_for_yield_non_equivalent(
 //  CHECK-SAME:     %[[t:.*]]: memref<?xf32
 //       CHECK:   %[[cloned:.*]] = bufferization.clone %[[t]]
 //       CHECK:   %[[for:.*]] = scf.for {{.*}} iter_args(%[[iter:.*]] = %[[cloned]])
-// This alloc is for the linalg.init_tensor.
+// This alloc is for the bufferization.alloc_tensor.
 //   CHECK-DAG:     %[[alloc2:.*]] = memref.alloc(%{{.*}})
 //   CHECK-DAG:     memref.dealloc %[[iter]]
 // This alloc is for the scf.yield.
@@ -274,7 +274,7 @@ func.func @scf_for_yield_non_equivalent(
 func.func @scf_for_yield_allocation(%t: tensor<?xf32>, %lb : index, %ub : index,
                                %step : index) -> tensor<?xf32> {
   %r = scf.for %i = %lb to %ub step %step iter_args(%a = %t) -> tensor<?xf32> {
-    %t2 = linalg.init_tensor [%i] : tensor<?xf32>
+    %t2 = bufferization.alloc_tensor [%i] : tensor<?xf32>
     scf.yield %t2 : tensor<?xf32>
   }
 
@@ -448,4 +448,37 @@ func.func @scf_while_non_equiv_condition_and_body(%arg0: tensor<5xi1>,
   // CHECK-DAG: memref.dealloc %[[a1]]
   // CHECK: return %[[loop]]#0, %[[loop]]#1
   return %r0, %r1 : tensor<5xi1>, tensor<5xi1>
+}
+
+// -----
+
+// CHECK-LABEL: func @scf_while_iter_arg_result_mismatch(
+//  CHECK-SAME:     %[[arg0:.*]]: memref<5xi1, #{{.*}}>, %[[arg1:.*]]: memref<5xi1, #{{.*}}>
+//       CHECK:   %[[alloc1:.*]] = memref.alloc() {{.*}} : memref<5xi1>
+//       CHECK:   %[[alloc2:.*]] = memref.alloc() {{.*}} : memref<5xi1>
+//       CHECK:   scf.while (%[[arg3:.*]] = %[[arg1]]) : (memref<5xi1, #{{.*}}) -> () {
+//       CHECK:     %[[load:.*]] = memref.load %[[arg0]]
+//       CHECK:     scf.condition(%[[load]])
+//       CHECK:   } do {
+//       CHECK:     memref.copy %[[arg0]], %[[alloc2]]
+//       CHECK:     memref.store %{{.*}}, %[[alloc2]]
+//       CHECK:     memref.copy %[[alloc2]], %[[alloc1]]
+//       CHECK:     %[[casted:.*]] = memref.cast %[[alloc1]] : memref<5xi1> to memref<5xi1, #{{.*}}>
+//       CHECK:     scf.yield %[[casted]]
+//       CHECK:   }
+//   CHECK-DAG:   memref.dealloc %[[alloc1]]
+//   CHECK-DAG:   memref.dealloc %[[alloc2]]
+func.func @scf_while_iter_arg_result_mismatch(%arg0: tensor<5xi1>,
+                                              %arg1: tensor<5xi1>,
+                                              %arg2: index) {
+  scf.while (%arg3 = %arg1) : (tensor<5xi1>) -> () {
+    %0 = tensor.extract %arg0[%arg2] : tensor<5xi1>
+    scf.condition(%0)
+  } do {
+    %0 = "dummy.some_op"() : () -> index
+    %1 = "dummy.another_op"() : () -> i1
+    %2 = tensor.insert %1 into %arg0[%0] : tensor<5xi1>
+    scf.yield %2 : tensor<5xi1>
+  }
+  return
 }
