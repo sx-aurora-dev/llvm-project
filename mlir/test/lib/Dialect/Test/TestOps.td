@@ -324,7 +324,7 @@ def TestBitEnum
       ]> {
   let genSpecializedAttr = 0;
   let cppNamespace = "test";
-  let separator = ",";
+  let separator = ", ";
 }
 
 // Define the enum attribute.
@@ -347,7 +347,7 @@ def TestBitEnumVerticalBar
       ]> {
   let genSpecializedAttr = 0;
   let cppNamespace = "test";
-  let separator = "|";
+  let separator = " | ";
 }
 
 def TestBitEnumVerticalBarAttr
@@ -808,6 +808,12 @@ def DefaultDialectOp : TEST_Op<"default_dialect", [OpAsmOpInterface]> {
     void getAsmResultNames(::llvm::function_ref<void(::mlir::Value, ::llvm::StringRef)> setNameFn) {}
   }];
   let assemblyFormat = "regions attr-dict-with-keyword";
+}
+
+// This is used to test that the default dialect is not elided when printing an
+// op with dots in the name to avoid parsing ambiguity.
+def OpWithDotInNameOp : TEST_Op<"op.with_dot_in_name"> {
+  let assemblyFormat = "attr-dict";
 }
 
 // This is used to test the OpAsmOpInterface::getAsmBlockName() feature:

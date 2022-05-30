@@ -19597,6 +19597,13 @@ TEST_F(FormatTest, UnderstandPragmaOption) {
   EXPECT_EQ("#pragma option -C -A", format("#pragma    option   -C   -A"));
 }
 
+TEST_F(FormatTest, UnderstandPragmaRegion) {
+  auto Style = getLLVMStyleWithColumns(0);
+  verifyFormat("#pragma region TEST(FOO : BAR)", Style);
+
+  EXPECT_EQ("#pragma region TEST(FOO : BAR)", format("#pragma region TEST(FOO : BAR)", Style));
+}
+
 TEST_F(FormatTest, OptimizeBreakPenaltyVsExcess) {
   FormatStyle Style = getLLVMStyleWithColumns(20);
 
@@ -23661,11 +23668,6 @@ TEST_F(FormatTest, WhitespaceSensitiveMacros) {
 
   // Don't use the helpers here, since 'mess up' will change the whitespace
   // and these are all whitespace sensitive by definition
-
-  // Newlines are important here.
-  EXPECT_EQ("FOO(1+2  );\n", format("FOO(1+2  );\n", Style));
-  EXPECT_EQ("FOO(1+2  )\n", format("FOO(1+2  )\n", Style));
-
   EXPECT_EQ("FOO(String-ized&Messy+But(: :Still)=Intentional);",
             format("FOO(String-ized&Messy+But(: :Still)=Intentional);", Style));
   EXPECT_EQ(

@@ -2988,7 +2988,7 @@ def fenable_matrix : Flag<["-"], "fenable-matrix">, Group<f_Group>,
 
 def fzero_call_used_regs_EQ
     : Joined<["-"], "fzero-call-used-regs=">, Group<f_Group>, Flags<[CC1Option]>,
-      HelpText<"Clear call-used registers upon function return.">,
+      HelpText<"Clear call-used registers upon function return (AArch64/x86 only)">,
       Values<"skip,used-gpr-arg,used-gpr,used-arg,used,all-gpr-arg,all-gpr,all-arg,all">,
       NormalizedValues<["Skip", "UsedGPRArg", "UsedGPR", "UsedArg", "Used",
                         "AllGPRArg", "AllGPR", "AllArg", "All"]>,
@@ -4792,7 +4792,7 @@ def cpp : Flag<["-"], "cpp">, Group<f_Group>,
   HelpText<"Enable predefined and command line preprocessor macros">;
 def nocpp : Flag<["-"], "nocpp">, Group<f_Group>,
   HelpText<"Disable predefined and command line preprocessor macros">;
-def module_dir : Separate<["-"], "module-dir">, MetaVarName<"<dir>">,
+def module_dir : JoinedOrSeparate<["-"], "module-dir">, MetaVarName<"<dir>">,
   HelpText<"Put MODULE files in <dir>">,
   DocBrief<[{This option specifies where to put .mod files for compiled modules.
 It is also added to the list of directories to be searched by an USE statement.
@@ -6503,6 +6503,10 @@ def _SLASH_Zc_twoPhase : CLFlag<"Zc:twoPhase">,
 def _SLASH_Zc_twoPhase_ : CLFlag<"Zc:twoPhase-">,
   HelpText<"Disable two-phase name lookup in templates (default)">,
   Alias<fdelayed_template_parsing>;
+def _SLASH_Zc_wchar_t : CLFlag<"Zc:wchar_t">,
+  HelpText<"Enable C++ builtin type wchar_t (default)">;
+def _SLASH_Zc_wchar_t_ : CLFlag<"Zc:wchar_t-">,
+  HelpText<"Disable C++ builtin type wchar_t">;
 def _SLASH_Z7 : CLFlag<"Z7">,
   HelpText<"Enable CodeView debug information in object files">;
 def _SLASH_Zi : CLFlag<"Zi">, Alias<_SLASH_Z7>,
@@ -6690,7 +6694,6 @@ def _SLASH_Zc_forScope : CLIgnoredFlag<"Zc:forScope">;
 def _SLASH_Zc_inline : CLIgnoredFlag<"Zc:inline">;
 def _SLASH_Zc_rvalueCast : CLIgnoredFlag<"Zc:rvalueCast">;
 def _SLASH_Zc_ternary : CLIgnoredFlag<"Zc:ternary">;
-def _SLASH_Zc_wchar_t : CLIgnoredFlag<"Zc:wchar_t">;
 def _SLASH_ZH_MD5 : CLIgnoredFlag<"ZH:MD5">;
 def _SLASH_ZH_SHA1 : CLIgnoredFlag<"ZH:SHA1">;
 def _SLASH_ZH_SHA_256 : CLIgnoredFlag<"ZH:SHA_256">;
