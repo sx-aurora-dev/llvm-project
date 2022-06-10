@@ -4520,13 +4520,19 @@ bool AArch64TargetLowering::shouldExtendGSIndex(EVT VT, EVT &EltTy) const {
   return false;
 }
 
-bool AArch64TargetLowering::shouldRemoveExtendFromGSIndex(EVT VT) const {
-  if (VT.getVectorElementType() == MVT::i32 &&
-      VT.getVectorElementCount().getKnownMinValue() >= 4 &&
-      !VT.isFixedLengthVector())
-    return true;
+bool AArch64TargetLowering::shouldRemoveExtendFromGSIndex(EVT IndexVT,
+                                                          EVT DataVT) const {
+  // SVE only supports implicit extension of 32-bit indices.
+  if (!Subtarget->hasSVE() || IndexVT.getVectorElementType() != MVT::i32)
+    return false;
 
-  return false;
+  // Indices cannot be smaller than the main data type.
+  if (IndexVT.getScalarSizeInBits() < DataVT.getScalarSizeInBits())
+    return false;
+
+  // Scalable vectors with "vscale * 2" or fewer elements sit within a 64-bit
+  // element container type, which would violate the previous clause.
+  return DataVT.isFixedLengthVector() || DataVT.getVectorMinNumElements() > 2;
 }
 
 bool AArch64TargetLowering::isVectorLoadExtDesirable(SDValue ExtVal) const {
@@ -5461,6 +5467,36 @@ bool AArch64TargetLowering::useSVEForFixedLengthVectorVT(
 //===----------------------------------------------------------------------===//
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//
+
+static unsigned getIntrinsicID(const SDNode *N) {
+  unsigned Opcode = N->getOpcode();
+  switch (Opcode) {
+  default:
+    return Intrinsic::not_intrinsic;
+  case ISD::INTRINSIC_WO_CHAIN: {
+    unsigned IID = cast<ConstantSDNode>(N->getOperand(0))->getZExtValue();
+    if (IID < Intrinsic::num_intrinsics)
+      return IID;
+    return Intrinsic::not_intrinsic;
+  }
+  }
+}
+
+bool AArch64TargetLowering::isReassocProfitable(SelectionDAG &DAG, SDValue N0,
+                                                SDValue N1) const {
+  if (!N0.hasOneUse())
+    return false;
+
+  unsigned IID = getIntrinsicID(N1.getNode());
+  // Avoid reassociating expressions that can be lowered to smlal/umlal.
+  if (IID == Intrinsic::aarch64_neon_umull ||
+      N1.getOpcode() == AArch64ISD::UMULL ||
+      IID == Intrinsic::aarch64_neon_smull ||
+      N1.getOpcode() == AArch64ISD::SMULL)
+    return N0.getOpcode() != ISD::ADD;
+
+  return true;
+}
 
 /// Selects the correct CCAssignFn for a given CallingConvention value.
 CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
@@ -10686,20 +10722,6 @@ static bool isAllConstantBuildVector(const SDValue &PotentialBVec,
   return true;
 }
 
-static unsigned getIntrinsicID(const SDNode *N) {
-  unsigned Opcode = N->getOpcode();
-  switch (Opcode) {
-  default:
-    return Intrinsic::not_intrinsic;
-  case ISD::INTRINSIC_WO_CHAIN: {
-    unsigned IID = cast<ConstantSDNode>(N->getOperand(0))->getZExtValue();
-    if (IID < Intrinsic::num_intrinsics)
-      return IID;
-    return Intrinsic::not_intrinsic;
-  }
-  }
-}
-
 // Attempt to form a vector S[LR]I from (or (and X, BvecC1), (lsl Y, C2)),
 // to (SLI X, Y, C2), where X and Y have matching vector types, BvecC1 is a
 // BUILD_VECTORs with constant element C1, C2 is a constant, and:
@@ -15103,7 +15125,7 @@ static SDValue tryCombineFixedPointConvert(SDNode *N,
   else if (Vec.getValueType() == MVT::v2i64)
     VecResTy = MVT::v2f64;
   else
-    llvm_unreachable("unexpected vector type!");
+    return SDValue();
 
   SDValue Convert =
       DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, VecResTy, IID, Vec, Shift);

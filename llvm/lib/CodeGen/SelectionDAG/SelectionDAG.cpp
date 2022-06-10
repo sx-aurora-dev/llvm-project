@@ -5299,7 +5299,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     assert(VT.isInteger() && VT == Operand.getValueType() &&
            "Invalid ABS!");
     if (OpOpcode == ISD::UNDEF)
-      return getUNDEF(VT);
+      return getConstant(0, DL, VT);
     break;
   case ISD::BSWAP:
     assert(VT.isInteger() && VT == Operand.getValueType() &&
