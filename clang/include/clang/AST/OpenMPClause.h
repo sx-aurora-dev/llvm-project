@@ -2266,6 +2266,133 @@ public:
   }
 };
 
+/// This represents 'fail' clause in the '#pragma omp atomic'
+/// directive.
+///
+/// \code
+/// #pragma omp atomic compare fail
+/// \endcode
+/// In this example directive '#pragma omp atomic compare' has 'fail' clause.
+class OMPFailClause final
+    : public OMPClause,
+      private llvm::TrailingObjects<OMPFailClause, SourceLocation,
+                                    OpenMPClauseKind> {
+  OMPClause *MemoryOrderClause;
+
+  friend class OMPClauseReader;
+  friend TrailingObjects;
+
+  /// Define the sizes of each trailing object array except the last one. This
+  /// is required for TrailingObjects to work properly.
+  size_t numTrailingObjects(OverloadToken<SourceLocation>) const {
+    // 2 locations: for '(' and argument location.
+    return 2;
+  }
+
+  /// Sets the location of '(' in fail clause.
+  void setLParenLoc(SourceLocation Loc) {
+    *getTrailingObjects<SourceLocation>() = Loc;
+  }
+
+  /// Sets the location of memoryOrder clause argument in fail clause.
+  void setArgumentLoc(SourceLocation Loc) {
+    *std::next(getTrailingObjects<SourceLocation>(), 1) = Loc;
+  }
+
+  /// Sets the mem_order clause for 'atomic compare fail' directive.
+  void setMemOrderClauseKind(OpenMPClauseKind MemOrder) {
+    OpenMPClauseKind *MOCK = getTrailingObjects<OpenMPClauseKind>();
+    *MOCK = MemOrder;
+  }
+
+  /// Sets the mem_order clause for 'atomic compare fail' directive.
+  void setMemOrderClause(OMPClause *MemoryOrderClauseParam) {
+    MemoryOrderClause = MemoryOrderClauseParam;
+  }
+public:
+  /// Build 'fail' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  OMPFailClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : OMPClause(llvm::omp::OMPC_fail, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  OMPFailClause()
+      : OMPClause(llvm::omp::OMPC_fail, SourceLocation(), SourceLocation()) {}
+
+  static OMPFailClause *CreateEmpty(const ASTContext &C);
+  static OMPFailClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                               SourceLocation EndLoc);
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+
+  const_child_range children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  child_range used_children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range used_children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == llvm::omp::OMPC_fail;
+  }
+
+  void initFailClause(SourceLocation LParenLoc, OMPClause *MemOClause,
+                      SourceLocation MemOrderLoc) {
+
+    setLParenLoc(LParenLoc);
+    MemoryOrderClause = MemOClause;
+    setArgumentLoc(MemOrderLoc);
+
+    OpenMPClauseKind ClauseKind = MemoryOrderClause->getClauseKind();
+    OpenMPClauseKind MemClauseKind = llvm::omp::OMPC_unknown;
+    switch(ClauseKind) {
+    case llvm::omp::OMPC_acq_rel:
+    case llvm::omp::OMPC_acquire:
+      MemClauseKind = llvm::omp::OMPC_acquire;
+      break;
+    case llvm::omp::OMPC_relaxed:
+    case llvm::omp::OMPC_release:
+      MemClauseKind = llvm::omp::OMPC_relaxed;
+      break;
+    case llvm::omp::OMPC_seq_cst:
+      MemClauseKind = llvm::omp::OMPC_seq_cst;
+      break;
+    default : break;
+    }
+    setMemOrderClauseKind(MemClauseKind);
+  }
+
+  /// Gets the location of '(' in fail clause.
+  SourceLocation getLParenLoc() const {
+    return *getTrailingObjects<SourceLocation>();
+  }
+
+  OMPClause *getMemoryOrderClause() { return MemoryOrderClause; }
+
+  const OMPClause *const_getMemoryOrderClause() const {
+    return static_cast<const OMPClause *>(MemoryOrderClause);
+  }
+
+  /// Gets the location of memoryOrder clause argument in fail clause.
+  SourceLocation getArgumentLoc() const {
+    return *std::next(getTrailingObjects<SourceLocation>(), 1);
+  }
+
+  /// Gets the dependence kind in clause for 'depobj' directive.
+  OpenMPClauseKind getMemOrderClauseKind() const {
+    return *getTrailingObjects<OpenMPClauseKind>();
+  }
+};
+
 /// This represents 'seq_cst' clause in the '#pragma omp atomic'
 /// directive.
 ///
@@ -4746,14 +4873,24 @@ class OMPDependClause final
   friend OMPVarListClause;
   friend TrailingObjects;
 
-  /// Dependency type (one of in, out, inout).
-  OpenMPDependClauseKind DepKind = OMPC_DEPEND_unknown;
+public:
+  struct DependDataTy final {
+    /// Dependency type (one of in, out, inout).
+    OpenMPDependClauseKind DepKind = OMPC_DEPEND_unknown;
 
-  /// Dependency type location.
-  SourceLocation DepLoc;
+    /// Dependency type location.
+    SourceLocation DepLoc;
 
-  /// Colon location.
-  SourceLocation ColonLoc;
+    /// Colon location.
+    SourceLocation ColonLoc;
+
+    /// Location of 'omp_all_memory'.
+    SourceLocation OmpAllMemoryLoc;
+  };
+
+private:
+  /// Dependency type and source locations.
+  DependDataTy Data;
 
   /// Number of loops, associated with the depend clause.
   unsigned NumLoops = 0;
@@ -4784,13 +4921,16 @@ class OMPDependClause final
         NumLoops(NumLoops) {}
 
   /// Set dependency kind.
-  void setDependencyKind(OpenMPDependClauseKind K) { DepKind = K; }
+  void setDependencyKind(OpenMPDependClauseKind K) { Data.DepKind = K; }
 
   /// Set dependency kind and its location.
-  void setDependencyLoc(SourceLocation Loc) { DepLoc = Loc; }
+  void setDependencyLoc(SourceLocation Loc) { Data.DepLoc = Loc; }
 
   /// Set colon location.
-  void setColonLoc(SourceLocation Loc) { ColonLoc = Loc; }
+  void setColonLoc(SourceLocation Loc) { Data.ColonLoc = Loc; }
+
+  /// Set the 'omp_all_memory' location.
+  void setOmpAllMemoryLoc(SourceLocation Loc) { Data.OmpAllMemoryLoc = Loc; }
 
   /// Sets optional dependency modifier.
   void setModifier(Expr *DepModifier);
@@ -4802,18 +4942,15 @@ public:
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param EndLoc Ending location of the clause.
-  /// \param DepKind Dependency type.
-  /// \param DepLoc Location of the dependency type.
-  /// \param ColonLoc Colon location.
+  /// \param Data Dependency type and source locations.
   /// \param VL List of references to the variables.
   /// \param NumLoops Number of loops that is associated with this depend
   /// clause.
   static OMPDependClause *Create(const ASTContext &C, SourceLocation StartLoc,
                                  SourceLocation LParenLoc,
-                                 SourceLocation EndLoc, Expr *DepModifier,
-                                 OpenMPDependClauseKind DepKind,
-                                 SourceLocation DepLoc, SourceLocation ColonLoc,
-                                 ArrayRef<Expr *> VL, unsigned NumLoops);
+                                 SourceLocation EndLoc, DependDataTy Data,
+                                 Expr *DepModifier, ArrayRef<Expr *> VL,
+                                 unsigned NumLoops);
 
   /// Creates an empty clause with \a N variables.
   ///
@@ -4825,19 +4962,22 @@ public:
                                       unsigned NumLoops);
 
   /// Get dependency type.
-  OpenMPDependClauseKind getDependencyKind() const { return DepKind; }
+  OpenMPDependClauseKind getDependencyKind() const { return Data.DepKind; }
+
+  /// Get dependency type location.
+  SourceLocation getDependencyLoc() const { return Data.DepLoc; }
+
+  /// Get colon location.
+  SourceLocation getColonLoc() const { return Data.ColonLoc; }
+
+  /// Get 'omp_all_memory' location.
+  SourceLocation getOmpAllMemoryLoc() const { return Data.OmpAllMemoryLoc; }
 
   /// Return optional depend modifier.
   Expr *getModifier();
   const Expr *getModifier() const {
     return const_cast<OMPDependClause *>(this)->getModifier();
   }
-
-  /// Get dependency type location.
-  SourceLocation getDependencyLoc() const { return DepLoc; }
-
-  /// Get colon location.
-  SourceLocation getColonLoc() const { return ColonLoc; }
 
   /// Get number of loops associated with the clause.
   unsigned getNumLoops() const { return NumLoops; }

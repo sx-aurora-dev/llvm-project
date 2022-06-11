@@ -127,6 +127,7 @@ const OMPClauseWithPreInit *OMPClauseWithPreInit::get(const OMPClause *C) {
   case OMPC_update:
   case OMPC_capture:
   case OMPC_compare:
+  case OMPC_fail:
   case OMPC_seq_cst:
   case OMPC_acq_rel:
   case OMPC_acquire:
@@ -220,6 +221,7 @@ const OMPClauseWithPostUpdate *OMPClauseWithPostUpdate::get(const OMPClause *C) 
   case OMPC_update:
   case OMPC_capture:
   case OMPC_compare:
+  case OMPC_fail:
   case OMPC_seq_cst:
   case OMPC_acq_rel:
   case OMPC_acquire:
@@ -409,6 +411,25 @@ OMPUpdateClause *OMPUpdateClause::CreateEmpty(const ASTContext &C,
                  alignof(OMPUpdateClause));
   auto *Clause = new (Mem) OMPUpdateClause(/*IsExtended=*/true);
   Clause->IsExtended = true;
+  return Clause;
+}
+
+OMPFailClause *OMPFailClause::Create(const ASTContext &C,
+                                     SourceLocation StartLoc,
+                                     SourceLocation EndLoc) {
+  void *Mem =
+      C.Allocate(totalSizeToAlloc<SourceLocation, OpenMPClauseKind>(2, 1),
+                 alignof(OMPFailClause));
+  auto *Clause =
+      new (Mem) OMPFailClause(StartLoc, EndLoc);
+  return Clause;
+}
+
+OMPFailClause *OMPFailClause::CreateEmpty(const ASTContext &C) {
+  void *Mem =
+      C.Allocate(totalSizeToAlloc<SourceLocation, OpenMPClauseKind>(2, 1),
+                 alignof(OMPFailClause));
+  auto *Clause = new (Mem) OMPFailClause();
   return Clause;
 }
 
@@ -1040,19 +1061,19 @@ OMPDepobjClause *OMPDepobjClause::CreateEmpty(const ASTContext &C) {
 OMPDependClause *
 OMPDependClause::Create(const ASTContext &C, SourceLocation StartLoc,
                         SourceLocation LParenLoc, SourceLocation EndLoc,
-                        Expr *DepModifier, OpenMPDependClauseKind DepKind,
-                        SourceLocation DepLoc, SourceLocation ColonLoc,
+                        DependDataTy Data, Expr *DepModifier,
                         ArrayRef<Expr *> VL, unsigned NumLoops) {
   void *Mem = C.Allocate(
       totalSizeToAlloc<Expr *>(VL.size() + /*depend-modifier*/ 1 + NumLoops),
       alignof(OMPDependClause));
   OMPDependClause *Clause = new (Mem)
       OMPDependClause(StartLoc, LParenLoc, EndLoc, VL.size(), NumLoops);
-  Clause->setVarRefs(VL);
-  Clause->setDependencyKind(DepKind);
-  Clause->setDependencyLoc(DepLoc);
-  Clause->setColonLoc(ColonLoc);
+  Clause->setDependencyKind(Data.DepKind);
+  Clause->setDependencyLoc(Data.DepLoc);
+  Clause->setColonLoc(Data.ColonLoc);
+  Clause->setOmpAllMemoryLoc(Data.OmpAllMemoryLoc);
   Clause->setModifier(DepModifier);
+  Clause->setVarRefs(VL);
   for (unsigned I = 0 ; I < NumLoops; ++I)
     Clause->setLoopData(I, nullptr);
   return Clause;
@@ -1847,6 +1868,16 @@ void OMPClausePrinter::VisitOMPCompareClause(OMPCompareClause *) {
   OS << "compare";
 }
 
+void OMPClausePrinter::VisitOMPFailClause(OMPFailClause *Node) {
+  OS << "fail";
+  if(Node) {
+    OS << "(";
+    OS << getOpenMPSimpleClauseTypeName(Node->getClauseKind(),
+                       static_cast<int>(Node->getMemOrderClauseKind()));
+    OS << ")";
+  }
+}
+
 void OMPClausePrinter::VisitOMPSeqCstClause(OMPSeqCstClause *) {
   OS << "seq_cst";
 }
@@ -2183,11 +2214,23 @@ void OMPClausePrinter::VisitOMPDependClause(OMPDependClause *Node) {
     DepModifier->printPretty(OS, nullptr, Policy);
     OS << ", ";
   }
-  OS << getOpenMPSimpleClauseTypeName(Node->getClauseKind(),
-                                      Node->getDependencyKind());
-  if (!Node->varlist_empty()) {
+  OpenMPDependClauseKind DepKind = Node->getDependencyKind();
+  OpenMPDependClauseKind PrintKind = DepKind;
+  bool IsOmpAllMemory = false;
+  if (PrintKind == OMPC_DEPEND_outallmemory) {
+    PrintKind = OMPC_DEPEND_out;
+    IsOmpAllMemory = true;
+  } else if (PrintKind == OMPC_DEPEND_inoutallmemory) {
+    PrintKind = OMPC_DEPEND_inout;
+    IsOmpAllMemory = true;
+  }
+  OS << getOpenMPSimpleClauseTypeName(Node->getClauseKind(), PrintKind);
+  if (!Node->varlist_empty() || IsOmpAllMemory)
     OS << " :";
-    VisitOMPClauseList(Node, ' ');
+  VisitOMPClauseList(Node, ' ');
+  if (IsOmpAllMemory) {
+    OS << (Node->varlist_empty() ? " " : ",");
+    OS << "omp_all_memory";
   }
   OS << ")";
 }
