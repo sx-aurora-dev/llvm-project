@@ -1873,11 +1873,11 @@ static const std::string *DefinesBindCName(const Symbol &symbol) {
   }
 }
 
-// Check that BIND(C) names are distinct and BIND(C) variable declared in module
 void CheckHelper::CheckBindC(const Symbol &symbol) {
   if (!symbol.attrs().test(Attr::BIND_C)) {
     return;
   }
+  CheckConflicting(symbol, Attr::BIND_C, Attr::PARAMETER);
   if (symbol.has<ObjectEntityDetails>() && !symbol.owner().IsModule()) {
     messages_.Say(symbol.name(),
         "A variable with BIND(C) attribute may only appear in the specification part of a module"_err_en_US);
@@ -1895,6 +1895,13 @@ void CheckHelper::CheckBindC(const Symbol &symbol) {
         context_.SetError(symbol);
         context_.SetError(other);
       }
+    }
+  }
+  if (const auto *proc{symbol.detailsIf<ProcEntityDetails>()}) {
+    if (!proc->interface().symbol() ||
+        !proc->interface().symbol()->attrs().test(Attr::BIND_C)) {
+      messages_.Say(symbol.name(),
+          "An interface name with BIND attribute must be specified if the BIND attribute is specified in a procedure declaration statement"_err_en_US);
     }
   }
 }

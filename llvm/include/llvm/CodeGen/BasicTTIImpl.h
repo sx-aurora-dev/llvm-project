@@ -195,6 +195,10 @@ private:
                                               bool VariableMask,
                                               bool IsGatherScatter,
                                               TTI::TargetCostKind CostKind) {
+    // We cannot scalarize scalable vectors, so return Invalid.
+    if (isa<ScalableVectorType>(DataTy))
+      return InstructionCost::getInvalid();
+
     auto *VT = cast<FixedVectorType>(DataTy);
     // Assume the target does not have support for gather/scatter operations
     // and provide a rough estimate.
@@ -1240,6 +1244,11 @@ public:
       unsigned Opcode, Type *VecTy, unsigned Factor, ArrayRef<unsigned> Indices,
       Align Alignment, unsigned AddressSpace, TTI::TargetCostKind CostKind,
       bool UseMaskForCond = false, bool UseMaskForGaps = false) {
+
+    // We cannot scalarize scalable vectors, so return Invalid.
+    if (isa<ScalableVectorType>(VecTy))
+      return InstructionCost::getInvalid();
+
     auto *VT = cast<FixedVectorType>(VecTy);
 
     unsigned NumElts = VT->getNumElements();
@@ -2130,6 +2139,11 @@ public:
   /// vector is reduced on each iteration.
   InstructionCost getTreeReductionCost(unsigned Opcode, VectorType *Ty,
                                        TTI::TargetCostKind CostKind) {
+    // Targets must implement a default value for the scalable case, since
+    // we don't know how many lanes the vector has.
+    if (isa<ScalableVectorType>(Ty))
+      return InstructionCost::getInvalid();
+
     Type *ScalarTy = Ty->getElementType();
     unsigned NumVecElts = cast<FixedVectorType>(Ty)->getNumElements();
     if ((Opcode == Instruction::Or || Opcode == Instruction::And) &&
@@ -2228,6 +2242,11 @@ public:
   InstructionCost getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
                                          bool IsUnsigned,
                                          TTI::TargetCostKind CostKind) {
+    // Targets must implement a default value for the scalable case, since
+    // we don't know how many lanes the vector has.
+    if (isa<ScalableVectorType>(Ty))
+      return InstructionCost::getInvalid();
+
     Type *ScalarTy = Ty->getElementType();
     Type *ScalarCondTy = CondTy->getElementType();
     unsigned NumVecElts = cast<FixedVectorType>(Ty)->getNumElements();

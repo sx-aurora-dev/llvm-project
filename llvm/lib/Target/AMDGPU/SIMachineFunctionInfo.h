@@ -389,9 +389,9 @@ class SIMachineFunctionInfo final : public AMDGPUMachineFunction {
   // unit. Minimum - first, maximum - second.
   std::pair<unsigned, unsigned> WavesPerEU = {0, 0};
 
-  std::unique_ptr<const AMDGPUBufferPseudoSourceValue> BufferPSV;
-  std::unique_ptr<const AMDGPUImagePseudoSourceValue> ImagePSV;
-  std::unique_ptr<const AMDGPUGWSResourcePseudoSourceValue> GWSResourcePSV;
+  const AMDGPUBufferPseudoSourceValue BufferPSV;
+  const AMDGPUImagePseudoSourceValue ImagePSV;
+  const AMDGPUGWSResourcePseudoSourceValue GWSResourcePSV;
 
 private:
   unsigned NumUserSGPRs = 0;
@@ -452,17 +452,6 @@ private:
   MCPhysReg getNextSystemSGPR() const;
 
 public:
-  struct SpilledReg {
-    Register VGPR;
-    int Lane = -1;
-
-    SpilledReg() = default;
-    SpilledReg(Register R, int L) : VGPR (R), Lane (L) {}
-
-    bool hasLane() { return Lane != -1;}
-    bool hasReg() { return VGPR != 0;}
-  };
-
   struct SGPRSpillVGPR {
     // VGPR used for SGPR spills
     Register VGPR;
@@ -501,7 +490,7 @@ public:
 private:
   // Track VGPR + wave index for each subregister of the SGPR spilled to
   // frameindex key.
-  DenseMap<int, std::vector<SpilledReg>> SGPRToVGPRSpills;
+  DenseMap<int, std::vector<SIRegisterInfo::SpilledReg>> SGPRToVGPRSpills;
   unsigned NumVGPRSpillLanes = 0;
   SmallVector<SGPRSpillVGPR, 2> SpillVGPRs;
 
@@ -544,6 +533,12 @@ public: // FIXME
 
 public:
   SIMachineFunctionInfo(const MachineFunction &MF);
+  SIMachineFunctionInfo(const SIMachineFunctionInfo &MFI) = default;
+
+  MachineFunctionInfo *
+  clone(BumpPtrAllocator &Allocator, MachineFunction &DestMF,
+        const DenseMap<MachineBasicBlock *, MachineBasicBlock *> &Src2DstMBB)
+      const override;
 
   bool initializeBaseYamlFields(const yaml::SIMachineFunctionInfo &YamlMFI,
                                 const MachineFunction &MF,
@@ -554,10 +549,12 @@ public:
     WWMReservedRegs.insert(Reg);
   }
 
-  ArrayRef<SpilledReg> getSGPRToVGPRSpills(int FrameIndex) const {
+  ArrayRef<SIRegisterInfo::SpilledReg>
+  getSGPRToVGPRSpills(int FrameIndex) const {
     auto I = SGPRToVGPRSpills.find(FrameIndex);
-    return (I == SGPRToVGPRSpills.end()) ?
-      ArrayRef<SpilledReg>() : makeArrayRef(I->second);
+    return (I == SGPRToVGPRSpills.end())
+               ? ArrayRef<SIRegisterInfo::SpilledReg>()
+               : makeArrayRef(I->second);
   }
 
   ArrayRef<SGPRSpillVGPR> getSGPRSpillVGPRs() const { return SpillVGPRs; }
@@ -932,27 +929,17 @@ public:
 
   const AMDGPUBufferPseudoSourceValue *
   getBufferPSV(const AMDGPUTargetMachine &TM) {
-    if (!BufferPSV)
-      BufferPSV = std::make_unique<AMDGPUBufferPseudoSourceValue>(TM);
-
-    return BufferPSV.get();
+    return &BufferPSV;
   }
 
   const AMDGPUImagePseudoSourceValue *
   getImagePSV(const AMDGPUTargetMachine &TM) {
-    if (!ImagePSV)
-      ImagePSV = std::make_unique<AMDGPUImagePseudoSourceValue>(TM);
-
-    return ImagePSV.get();
+    return &ImagePSV;
   }
 
   const AMDGPUGWSResourcePseudoSourceValue *
   getGWSPSV(const AMDGPUTargetMachine &TM) {
-    if (!GWSResourcePSV) {
-      GWSResourcePSV = std::make_unique<AMDGPUGWSResourcePseudoSourceValue>(TM);
-    }
-
-    return GWSResourcePSV.get();
+    return &GWSResourcePSV;
   }
 
   unsigned getOccupancy() const {

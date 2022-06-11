@@ -66,8 +66,10 @@ set(files
   __algorithm/pop_heap.h
   __algorithm/prev_permutation.h
   __algorithm/push_heap.h
+  __algorithm/ranges_adjacent_find.h
   __algorithm/ranges_all_of.h
   __algorithm/ranges_any_of.h
+  __algorithm/ranges_binary_search.h
   __algorithm/ranges_copy.h
   __algorithm/ranges_copy_backward.h
   __algorithm/ranges_copy_if.h
@@ -78,6 +80,7 @@ set(files
   __algorithm/ranges_fill.h
   __algorithm/ranges_fill_n.h
   __algorithm/ranges_find.h
+  __algorithm/ranges_find_first_of.h
   __algorithm/ranges_find_if.h
   __algorithm/ranges_find_if_not.h
   __algorithm/ranges_for_each.h
@@ -85,6 +88,7 @@ set(files
   __algorithm/ranges_is_partitioned.h
   __algorithm/ranges_is_sorted.h
   __algorithm/ranges_is_sorted_until.h
+  __algorithm/ranges_lower_bound.h
   __algorithm/ranges_max.h
   __algorithm/ranges_max_element.h
   __algorithm/ranges_min.h
@@ -93,9 +97,12 @@ set(files
   __algorithm/ranges_minmax_element.h
   __algorithm/ranges_mismatch.h
   __algorithm/ranges_none_of.h
+  __algorithm/ranges_replace.h
+  __algorithm/ranges_replace_if.h
   __algorithm/ranges_reverse.h
   __algorithm/ranges_swap_ranges.h
   __algorithm/ranges_transform.h
+  __algorithm/ranges_upper_bound.h
   __algorithm/remove.h
   __algorithm/remove_copy.h
   __algorithm/remove_copy_if.h
@@ -417,7 +424,8 @@ set(files
   __ranges/zip_view.h
   __split_buffer
   __std_stream
-  __string
+  __string/char_traits.h
+  __string/extern_template_lists.h
   __support/android/locale_bionic.h
   __support/fuchsia/xlocale.h
   __support/ibm/gettod_zos.h
@@ -448,22 +456,32 @@ set(files
   __type_traits/add_pointer.h
   __type_traits/add_rvalue_reference.h
   __type_traits/add_volatile.h
+  __type_traits/alignment_of.h
+  __type_traits/apply_cv.h
   __type_traits/conditional.h
+  __type_traits/conjunction.h
   __type_traits/decay.h
+  __type_traits/disjunction.h
   __type_traits/enable_if.h
   __type_traits/extent.h
+  __type_traits/has_unique_object_representation.h
+  __type_traits/has_virtual_destructor.h
   __type_traits/integral_constant.h
   __type_traits/is_abstract.h
   __type_traits/is_aggregate.h
   __type_traits/is_arithmetic.h
   __type_traits/is_array.h
+  __type_traits/is_assignable.h
   __type_traits/is_base_of.h
   __type_traits/is_bounded_array.h
   __type_traits/is_callable.h
   __type_traits/is_class.h
   __type_traits/is_compound.h
   __type_traits/is_const.h
+  __type_traits/is_constant_evaluated.h
   __type_traits/is_convertible.h
+  __type_traits/is_copy_assignable.h
+  __type_traits/is_core_convertible.h
   __type_traits/is_empty.h
   __type_traits/is_enum.h
   __type_traits/is_final.h
@@ -471,18 +489,26 @@ set(files
   __type_traits/is_function.h
   __type_traits/is_fundamental.h
   __type_traits/is_integral.h
+  __type_traits/is_literal_type.h
   __type_traits/is_member_function_pointer.h
   __type_traits/is_member_object_pointer.h
   __type_traits/is_member_pointer.h
+  __type_traits/is_move_assignable.h
   __type_traits/is_null_pointer.h
   __type_traits/is_object.h
+  __type_traits/is_pod.h
   __type_traits/is_pointer.h
+  __type_traits/is_polymorphic.h
   __type_traits/is_reference.h
   __type_traits/is_reference_wrapper.h
   __type_traits/is_referenceable.h
   __type_traits/is_same.h
   __type_traits/is_scalar.h
+  __type_traits/is_scoped_enum.h
   __type_traits/is_signed.h
+  __type_traits/is_standard_layout.h
+  __type_traits/is_trivial.h
+  __type_traits/is_trivially_copyable.h
   __type_traits/is_unbounded_array.h
   __type_traits/is_union.h
   __type_traits/is_unsigned.h
@@ -497,6 +523,7 @@ set(files
   __type_traits/remove_reference.h
   __type_traits/remove_volatile.h
   __type_traits/type_identity.h
+  __type_traits/underlying_type.h
   __undef_macros
   __utility/as_const.h
   __utility/auto_cast.h
@@ -611,7 +638,6 @@ set(files
   map
   math.h
   memory
-  module.modulemap
   mutex
   new
   numbers
@@ -662,9 +688,17 @@ set(files
   wctype.h
   )
 
-configure_file("__config_site.in" "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site" @ONLY)
+foreach(feature LIBCXX_ENABLE_FILESYSTEM LIBCXX_ENABLE_LOCALIZATION LIBCXX_ENABLE_THREADS LIBCXX_ENABLE_WIDE_CHARACTERS)
+  if (NOT ${${feature}})
+    set(requires_${feature} "requires LIBCXX_CONFIGURED_WITHOUT_SUPPORT_FOR_THIS_HEADER")
+  endif()
+endforeach()
 
-set(_all_includes "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site")
+configure_file("__config_site.in" "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site" @ONLY)
+configure_file("module.modulemap.in" "${LIBCXX_GENERATED_INCLUDE_DIR}/module.modulemap" @ONLY)
+
+set(_all_includes "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site"
+                  "${LIBCXX_GENERATED_INCLUDE_DIR}/module.modulemap")
 foreach(f ${files})
   set(src "${CMAKE_CURRENT_SOURCE_DIR}/${f}")
   set(dst "${LIBCXX_GENERATED_INCLUDE_DIR}/${f}")
@@ -699,8 +733,9 @@ if (LIBCXX_INSTALL_HEADERS)
     )
   endforeach()
 
-  # Install the generated __config_site.
-  install(FILES ${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site
+  # Install the generated __config_site and the generated modulemap file.
+  install(FILES "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}/__config_site"
+                "${LIBCXX_GENERATED_INCLUDE_DIR}/module.modulemap"
     DESTINATION "${LIBCXX_INSTALL_INCLUDE_TARGET_DIR}"
     PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
     COMPONENT cxx-headers)

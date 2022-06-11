@@ -1939,7 +1939,7 @@ bool AMDGPURegisterBankInfo::foldExtractEltToCmpSelect(
   unsigned NumElem = VecTy.getNumElements();
 
   if (!SITargetLowering::shouldExpandVectorDynExt(EltSize, NumElem,
-                                                  IsDivergentIdx))
+                                                  IsDivergentIdx, &Subtarget))
     return false;
 
   MachineIRBuilder B(MI);
@@ -2037,7 +2037,7 @@ bool AMDGPURegisterBankInfo::foldInsertEltToCmpSelect(
   unsigned NumElem = VecTy.getNumElements();
 
   if (!SITargetLowering::shouldExpandVectorDynExt(EltSize, NumElem,
-                                                  IsDivergentIdx))
+                                                  IsDivergentIdx, &Subtarget))
     return false;
 
   MachineIRBuilder B(MI);
@@ -4497,7 +4497,8 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     case Intrinsic::amdgcn_s_getreg:
     case Intrinsic::amdgcn_s_memtime:
     case Intrinsic::amdgcn_s_memrealtime:
-    case Intrinsic::amdgcn_s_get_waveid_in_workgroup: {
+    case Intrinsic::amdgcn_s_get_waveid_in_workgroup:
+    case Intrinsic::amdgcn_s_sendmsg_rtn: {
       unsigned Size = MRI.getType(MI.getOperand(0).getReg()).getSizeInBits();
       OpdsMapping[0] = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, Size);
       break;

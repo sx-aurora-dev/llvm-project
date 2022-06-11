@@ -6955,10 +6955,8 @@ outliner::OutlinedFunction AArch64InstrInfo::getOutliningCandidateInfo(
   unsigned FlagsSetInAll = 0xF;
 
   // Compute liveness information for each candidate, and set FlagsSetInAll.
-  std::for_each(RepeatedSequenceLocs.begin(), RepeatedSequenceLocs.end(),
-                [&FlagsSetInAll](outliner::Candidate &C) {
-                  FlagsSetInAll &= C.Flags;
-                });
+  for (outliner::Candidate &C : RepeatedSequenceLocs)
+    FlagsSetInAll &= C.Flags;
 
   // According to the AArch64 Procedure Call Standard, the following are
   // undefined on entry/exit from a function call:
@@ -7014,12 +7012,10 @@ outliner::OutlinedFunction AArch64InstrInfo::getOutliningCandidateInfo(
   // We check to see if CFI Instructions are present, and if they are
   // we find the number of CFI Instructions in the candidates.
   unsigned CFICount = 0;
-  MachineBasicBlock::iterator MBBI = RepeatedSequenceLocs[0].front();
-  for (unsigned Loc = RepeatedSequenceLocs[0].getStartIdx();
-       Loc < RepeatedSequenceLocs[0].getEndIdx() + 1; Loc++) {
-    if (MBBI->isCFIInstruction())
+  for (auto &I : make_range(RepeatedSequenceLocs[0].front(),
+                            std::next(RepeatedSequenceLocs[0].back()))) {
+    if (I.isCFIInstruction())
       CFICount++;
-    MBBI++;
   }
 
   // We compare the number of found CFI Instructions to  the number of CFI
@@ -7314,8 +7310,8 @@ bool AArch64InstrInfo::isMBBSafeToOutlineFrom(MachineBasicBlock &MBB,
          "Suitable Machine Function for outlining must track liveness");
   LiveRegUnits LRU(getRegisterInfo());
 
-  std::for_each(MBB.rbegin(), MBB.rend(),
-                [&LRU](MachineInstr &MI) { LRU.accumulate(MI); });
+  for (MachineInstr &MI : llvm::reverse(MBB))
+    LRU.accumulate(MI);
 
   // Check if each of the unsafe registers are available...
   bool W16AvailableInBlock = LRU.available(AArch64::W16);

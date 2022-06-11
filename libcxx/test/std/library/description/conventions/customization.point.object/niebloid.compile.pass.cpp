@@ -60,10 +60,10 @@ auto triple = [](int x) { return 3*x; };
 
 // [algorithm.syn]
 
-//static_assert(test(std::ranges::adjacent_find, a));
+static_assert(test(std::ranges::adjacent_find, a));
 static_assert(test(std::ranges::all_of, a, odd));
 static_assert(test(std::ranges::any_of, a, odd));
-//static_assert(test(std::ranges::binary_search, a, 42));
+static_assert(test(std::ranges::binary_search, a, 42));
 //static_assert(test(std::ranges::clamp, 42, 42, 42));
 static_assert(test(std::ranges::copy, a, a));
 static_assert(test(std::ranges::copy_backward, a, a));
@@ -94,7 +94,7 @@ static_assert(test(std::ranges::is_partitioned, a, odd));
 static_assert(test(std::ranges::is_sorted, a));
 static_assert(test(std::ranges::is_sorted_until, a));
 //static_assert(test(std::ranges::lexicographical_compare, a, a));
-//static_assert(test(std::ranges::lower_bound, a, 42));
+static_assert(test(std::ranges::lower_bound, a, 42));
 //static_assert(test(std::ranges::make_heap, a));
 static_assert(test(std::ranges::max, a));
 static_assert(test(std::ranges::max_element, a));
@@ -121,10 +121,10 @@ static_assert(test(std::ranges::none_of, a, odd));
 //static_assert(test(std::ranges::remove_copy, a, a, 42));
 //static_assert(test(std::ranges::remove_copy_if, a, a, odd));
 //static_assert(test(std::ranges::remove_if, a, odd));
-//static_assert(test(std::ranges::replace, a, 42, 43));
+static_assert(test(std::ranges::replace, a, 42, 43));
 //static_assert(test(std::ranges::replace_copy, a, a, 42, 43));
 //static_assert(test(std::ranges::replace_copy_if, a, a, odd, 43));
-//static_assert(test(std::ranges::replace_if, a, odd, 43));
+static_assert(test(std::ranges::replace_if, a, odd, 43));
 static_assert(test(std::ranges::reverse, a));
 //static_assert(test(std::ranges::reverse_copy, a, a));
 //static_assert(test(std::ranges::rotate, a, a+5));
@@ -146,7 +146,7 @@ static_assert(test(std::ranges::swap_ranges, a, a));
 static_assert(test(std::ranges::transform, a, a, triple));
 //static_assert(test(std::ranges::unique, a));
 //static_assert(test(std::ranges::unique_copy, a, a));
-//static_assert(test(std::ranges::upper_bound, a, 42));
+static_assert(test(std::ranges::upper_bound, a, 42));
 
 // [memory.syn]
 

@@ -64,23 +64,18 @@ extern cl::opt<unsigned> Verbosity;
 
 extern bool processAllFunctions();
 
-cl::opt<bool>
-CheckEncoding("check-encoding",
-  cl::desc("perform verification of LLVM instruction encoding/decoding. "
-           "Every instruction in the input is decoded and re-encoded. "
-           "If the resulting bytes do not match the input, a warning message "
-           "is printed."),
-  cl::init(false),
-  cl::ZeroOrMore,
-  cl::Hidden,
-  cl::cat(BoltCategory));
+cl::opt<bool> CheckEncoding(
+    "check-encoding",
+    cl::desc("perform verification of LLVM instruction encoding/decoding. "
+             "Every instruction in the input is decoded and re-encoded. "
+             "If the resulting bytes do not match the input, a warning message "
+             "is printed."),
+    cl::Hidden, cl::cat(BoltCategory));
 
-static cl::opt<bool>
-DotToolTipCode("dot-tooltip-code",
-  cl::desc("add basic block instructions as tool tips on nodes"),
-  cl::ZeroOrMore,
-  cl::Hidden,
-  cl::cat(BoltCategory));
+static cl::opt<bool> DotToolTipCode(
+    "dot-tooltip-code",
+    cl::desc("add basic block instructions as tool tips on nodes"), cl::Hidden,
+    cl::cat(BoltCategory));
 
 cl::opt<JumpTableSupportLevel>
 JumpTables("jump-tables",
@@ -102,21 +97,17 @@ JumpTables("jump-tables",
   cl::ZeroOrMore,
   cl::cat(BoltOptCategory));
 
-static cl::opt<bool>
-NoScan("no-scan",
-  cl::desc("do not scan cold functions for external references (may result in "
-           "slower binary)"),
-  cl::init(false),
-  cl::ZeroOrMore,
-  cl::Hidden,
-  cl::cat(BoltOptCategory));
+static cl::opt<bool> NoScan(
+    "no-scan",
+    cl::desc(
+        "do not scan cold functions for external references (may result in "
+        "slower binary)"),
+    cl::Hidden, cl::cat(BoltOptCategory));
 
 cl::opt<bool>
-PreserveBlocksAlignment("preserve-blocks-alignment",
-  cl::desc("try to preserve basic block alignment"),
-  cl::init(false),
-  cl::ZeroOrMore,
-  cl::cat(BoltOptCategory));
+    PreserveBlocksAlignment("preserve-blocks-alignment",
+                            cl::desc("try to preserve basic block alignment"),
+                            cl::cat(BoltOptCategory));
 
 cl::opt<bool>
 PrintDynoStats("dyno-stats",
@@ -139,11 +130,9 @@ PrintOnly("print-only",
   cl::cat(BoltCategory));
 
 cl::opt<bool>
-TimeBuild("time-build",
-  cl::desc("print time spent constructing binary functions"),
-  cl::ZeroOrMore,
-  cl::Hidden,
-  cl::cat(BoltCategory));
+    TimeBuild("time-build",
+              cl::desc("print time spent constructing binary functions"),
+              cl::Hidden, cl::cat(BoltCategory));
 
 cl::opt<bool>
 TrapOnAVX512("trap-avx512",
@@ -1394,6 +1383,9 @@ add_instruction:
   // Reset symbolizer for the disassembler.
   BC.SymbolicDisAsm->setSymbolizer(nullptr);
 
+  if (uint64_t Offset = getFirstInstructionOffset())
+    Labels[Offset] = BC.Ctx->createNamedTempSymbol();
+
   clearList(Relocations);
 
   if (!IsSimple) {
@@ -1906,7 +1898,7 @@ bool BinaryFunction::buildCFG(MCPlusBuilder::AllocatorIdTy AllocatorId) {
     return false;
 
   assert(BasicBlocks.empty() && "basic block list should be empty");
-  assert((Labels.find(0) != Labels.end()) &&
+  assert((Labels.find(getFirstInstructionOffset()) != Labels.end()) &&
          "first instruction should always have a label");
 
   // Create basic blocks in the original layout order:
@@ -2010,9 +2002,9 @@ bool BinaryFunction::buildCFG(MCPlusBuilder::AllocatorIdTy AllocatorId) {
         updateOffset(LastInstrOffset);
       }
     }
-    if (Offset == 0) {
-      // Add associated CFI pseudos in the first offset (0)
-      addCFIPlaceholders(0, InsertBB);
+    if (Offset == getFirstInstructionOffset()) {
+      // Add associated CFI pseudos in the first offset
+      addCFIPlaceholders(Offset, InsertBB);
     }
 
     const bool IsBlockEnd = MIB->isTerminator(Instr);
