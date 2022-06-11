@@ -2105,7 +2105,8 @@ public:
   virtual AtomicExpansionKind
   shouldCastAtomicRMWIInIR(AtomicRMWInst *RMWI) const {
     if (RMWI->getOperation() == AtomicRMWInst::Xchg &&
-        RMWI->getValOperand()->getType()->isFloatingPointTy())
+        (RMWI->getValOperand()->getType()->isFloatingPointTy() ||
+         RMWI->getValOperand()->getType()->isPointerTy()))
       return AtomicExpansionKind::CastToInteger;
 
     return AtomicExpansionKind::None;
