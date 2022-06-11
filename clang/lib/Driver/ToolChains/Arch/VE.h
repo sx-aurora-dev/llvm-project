@@ -20,14 +20,6 @@ namespace driver {
 namespace tools {
 namespace ve {
 
-enum class FloatABI {
-  Invalid,
-  Soft,
-  Hard,
-};
-
-FloatABI getVEFloatABI(const Driver &D, const llvm::opt::ArgList &Args);
-
 void getVETargetFeatures(const Driver &D, const llvm::opt::ArgList &Args,
                          std::vector<llvm::StringRef> &Features);
 
