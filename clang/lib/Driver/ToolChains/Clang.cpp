@@ -2396,20 +2396,9 @@ void Clang::AddWebAssemblyTargetArgs(const ArgList &Args,
 }
 
 void Clang::AddVETargetArgs(const ArgList &Args, ArgStringList &CmdArgs) const {
-  ve::FloatABI FloatABI =
-      ve::getVEFloatABI(getToolChain().getDriver(), Args);
-
-  if (FloatABI == ve::FloatABI::Soft) {
-    // Floating point operations and argument passing are soft.
-    CmdArgs.push_back("-msoft-float");
-    CmdArgs.push_back("-mfloat-abi");
-    CmdArgs.push_back("soft");
-  } else {
-    // Floating point operations and argument passing are hard.
-    assert(FloatABI == ve::FloatABI::Hard && "Invalid float abi!");
-    CmdArgs.push_back("-mfloat-abi");
-    CmdArgs.push_back("hard");
-  }
+  // Floating point operations and argument passing are hard.
+  CmdArgs.push_back("-mfloat-abi");
+  CmdArgs.push_back("hard");
 }
 
 void Clang::DumpCompilationDatabase(Compilation &C, StringRef Filename,
