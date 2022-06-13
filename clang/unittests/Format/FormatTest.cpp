@@ -3096,6 +3096,14 @@ TEST_F(FormatTest, MultiLineControlStatements) {
             "         baz);",
             format("do{foo();}while(bar&&baz);", Style));
   // Long lines should put opening brace on new line.
+  verifyFormat("void f() {\n"
+               "  if (a1 && a2 &&\n"
+               "      a3)\n"
+               "  {\n"
+               "    quux();\n"
+               "  }\n"
+               "}",
+               "void f(){if(a1&&a2&&a3){quux();}}", Style);
   EXPECT_EQ("if (foo && bar &&\n"
             "    baz)\n"
             "{\n"
@@ -3565,6 +3573,7 @@ TEST_F(FormatTest, FormatsEnum) {
   verifyFormat("enum X E {} d;");
   verifyFormat("enum __attribute__((...)) E {} d;");
   verifyFormat("enum __declspec__((...)) E {} d;");
+  verifyFormat("enum [[nodiscard]] E {} d;");
   verifyFormat("enum {\n"
                "  Bar = Foo<int, int>::value\n"
                "};",
@@ -3610,6 +3619,17 @@ TEST_F(FormatTest, FormatsEnum) {
                "        COMPLEX\n"
                "};",
                EightIndent);
+
+  verifyFormat("enum [[nodiscard]] E {\n"
+               "  ONE,\n"
+               "  TWO,\n"
+               "};");
+  verifyFormat("enum [[nodiscard]] E {\n"
+               "  // Comment 1\n"
+               "  ONE,\n"
+               "  // Comment 2\n"
+               "  TWO,\n"
+               "};");
 
   // Not enums.
   verifyFormat("enum X f() {\n"
@@ -3658,7 +3678,19 @@ TEST_F(FormatTest, FormatsEnumStruct) {
   verifyFormat("enum struct X E {} d;");
   verifyFormat("enum struct __attribute__((...)) E {} d;");
   verifyFormat("enum struct __declspec__((...)) E {} d;");
+  verifyFormat("enum struct [[nodiscard]] E {} d;");
   verifyFormat("enum struct X f() {\n  a();\n  return 42;\n}");
+
+  verifyFormat("enum struct [[nodiscard]] E {\n"
+               "  ONE,\n"
+               "  TWO,\n"
+               "};");
+  verifyFormat("enum struct [[nodiscard]] E {\n"
+               "  // Comment 1\n"
+               "  ONE,\n"
+               "  // Comment 2\n"
+               "  TWO,\n"
+               "};");
 }
 
 TEST_F(FormatTest, FormatsEnumClass) {
@@ -3675,7 +3707,19 @@ TEST_F(FormatTest, FormatsEnumClass) {
   verifyFormat("enum class X E {} d;");
   verifyFormat("enum class __attribute__((...)) E {} d;");
   verifyFormat("enum class __declspec__((...)) E {} d;");
+  verifyFormat("enum class [[nodiscard]] E {} d;");
   verifyFormat("enum class X f() {\n  a();\n  return 42;\n}");
+
+  verifyFormat("enum class [[nodiscard]] E {\n"
+               "  ONE,\n"
+               "  TWO,\n"
+               "};");
+  verifyFormat("enum class [[nodiscard]] E {\n"
+               "  // Comment 1\n"
+               "  ONE,\n"
+               "  // Comment 2\n"
+               "  TWO,\n"
+               "};");
 }
 
 TEST_F(FormatTest, FormatsEnumTypes) {
@@ -19601,7 +19645,8 @@ TEST_F(FormatTest, UnderstandPragmaRegion) {
   auto Style = getLLVMStyleWithColumns(0);
   verifyFormat("#pragma region TEST(FOO : BAR)", Style);
 
-  EXPECT_EQ("#pragma region TEST(FOO : BAR)", format("#pragma region TEST(FOO : BAR)", Style));
+  EXPECT_EQ("#pragma region TEST(FOO : BAR)",
+            format("#pragma region TEST(FOO : BAR)", Style));
 }
 
 TEST_F(FormatTest, OptimizeBreakPenaltyVsExcess) {
@@ -21330,6 +21375,7 @@ TEST_F(FormatTest, FormatsLambdas) {
   verifyFormat("int c = []() -> int * { return 2; }();\n");
   verifyFormat("int c = []() -> vector<int> { return {2}; }();\n");
   verifyFormat("Foo([]() -> std::vector<int> { return {2}; }());");
+  verifyFormat("foo([]() noexcept -> int {});");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> D* {};");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> pair<D*, D*> {};");
   verifyGoogleFormat("auto a = [&b, c](D* d) -> D& {};");
@@ -23800,6 +23846,22 @@ TEST_F(FormatTest, LikelyUnlikely) {
                "  return 29;\n",
                Style);
 
+  verifyFormat("while (limit > 0) [[unlikely]] {\n"
+               "  --limit;\n"
+               "}",
+               Style);
+  verifyFormat("for (auto &limit : limits) [[likely]] {\n"
+               "  --limit;\n"
+               "}",
+               Style);
+
+  verifyFormat("for (auto &limit : limits) [[unlikely]]\n"
+               "  --limit;",
+               Style);
+  verifyFormat("while (limit > 0) [[likely]]\n"
+               "  --limit;",
+               Style);
+
   Style.AttributeMacros.push_back("UNLIKELY");
   Style.AttributeMacros.push_back("LIKELY");
   verifyFormat("if (argc > 5) UNLIKELY\n"
@@ -23827,6 +23889,22 @@ TEST_F(FormatTest, LikelyUnlikely) {
                "} else LIKELY {\n"
                "  return 42;\n"
                "}\n",
+               Style);
+
+  verifyFormat("for (auto &limit : limits) UNLIKELY {\n"
+               "  --limit;\n"
+               "}",
+               Style);
+  verifyFormat("while (limit > 0) LIKELY {\n"
+               "  --limit;\n"
+               "}",
+               Style);
+
+  verifyFormat("while (limit > 0) UNLIKELY\n"
+               "  --limit;",
+               Style);
+  verifyFormat("for (auto &limit : limits) LIKELY\n"
+               "  --limit;",
                Style);
 }
 
@@ -25054,12 +25132,12 @@ TEST_F(FormatTest, RemoveBraces) {
   FormatStyle Style = getLLVMStyle();
   Style.RemoveBracesLLVM = true;
 
-  // The following eight test cases are fully-braced versions of the examples at
+  // The following test cases are fully-braced versions of the examples at
   // "llvm.org/docs/CodingStandards.html#don-t-use-braces-on-simple-single-
   // statement-bodies-of-if-else-loop-statements".
 
-  // 1. Omit the braces, since the body is simple and clearly associated with
-  // the if.
+  // Omit the braces since the body is simple and clearly associated with the
+  // `if`.
   verifyFormat("if (isa<FunctionDecl>(D))\n"
                "  handleFunctionDecl(D);\n"
                "else if (isa<VarDecl>(D))\n"
@@ -25071,7 +25149,7 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
-  // 2. Here we document the condition itself and not the body.
+  // Here we document the condition itself and not the body.
   verifyFormat("if (isa<VarDecl>(D)) {\n"
                "  // It is necessary that we explain the situation with this\n"
                "  // surprisingly long comment, so it would be unclear\n"
@@ -25079,32 +25157,29 @@ TEST_F(FormatTest, RemoveBraces) {
                "  // the scope of the `if`.\n"
                "  // Because the condition is documented, we can't really\n"
                "  // hoist this comment that applies to the body above the\n"
-               "  // if.\n"
+               "  // `if`.\n"
                "  handleOtherDecl(D);\n"
                "}",
                Style);
 
-  // 3. Use braces on the outer `if` to avoid a potential dangling else
+  // Use braces on the outer `if` to avoid a potential dangling `else`
   // situation.
   verifyFormat("if (isa<VarDecl>(D)) {\n"
-               "  for (auto *A : D.attrs())\n"
-               "    if (shouldProcessAttr(A))\n"
-               "      handleAttr(A);\n"
+               "  if (shouldProcessAttr(A))\n"
+               "    handleAttr(A);\n"
                "}",
                "if (isa<VarDecl>(D)) {\n"
-               "  for (auto *A : D.attrs()) {\n"
-               "    if (shouldProcessAttr(A)) {\n"
-               "      handleAttr(A);\n"
-               "    }\n"
+               "  if (shouldProcessAttr(A)) {\n"
+               "    handleAttr(A);\n"
                "  }\n"
                "}",
                Style);
 
-  // 4. Use braces for the `if` block to keep it uniform with the else block.
+  // Use braces for the `if` block to keep it uniform with the `else` block.
   verifyFormat("if (isa<FunctionDecl>(D)) {\n"
                "  handleFunctionDecl(D);\n"
                "} else {\n"
-               "  // In this else case, it is necessary that we explain the\n"
+               "  // In this `else` case, it is necessary that we explain the\n"
                "  // situation with this surprisingly long comment, so it\n"
                "  // would be unclear without the braces whether the\n"
                "  // following statement is in the scope of the `if`.\n"
@@ -25112,9 +25187,9 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
-  // 5. This should also omit braces.  The `for` loop contains only a single
+  // This should also omit braces. The `for` loop contains only a single
   // statement, so it shouldn't have braces.  The `if` also only contains a
-  // single simple statement (the for loop), so it also should omit braces.
+  // single simple statement (the `for` loop), so it also should omit braces.
   verifyFormat("if (isa<FunctionDecl>(D))\n"
                "  for (auto *A : D.attrs())\n"
                "    handleAttr(A);",
@@ -25125,18 +25200,26 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
-  // 6. Use braces for the outer `if` since the nested `for` is braced.
+  // Use braces for a `do-while` loop and its enclosing statement.
+  verifyFormat("if (Tok->is(tok::l_brace)) {\n"
+               "  do {\n"
+               "    Tok = Tok->Next;\n"
+               "  } while (Tok);\n"
+               "}",
+               Style);
+
+  // Use braces for the outer `if` since the nested `for` is braced.
   verifyFormat("if (isa<FunctionDecl>(D)) {\n"
                "  for (auto *A : D.attrs()) {\n"
-               "    // In this for loop body, it is necessary that we explain\n"
-               "    // the situation with this surprisingly long comment,\n"
-               "    // forcing braces on the `for` block.\n"
+               "    // In this `for` loop body, it is necessary that we\n"
+               "    // explain the situation with this surprisingly long\n"
+               "    // comment, forcing braces on the `for` block.\n"
                "    handleAttr(A);\n"
                "  }\n"
                "}",
                Style);
 
-  // 7. Use braces on the outer block because there are more than two levels of
+  // Use braces on the outer block because there are more than two levels of
   // nesting.
   verifyFormat("if (isa<FunctionDecl>(D)) {\n"
                "  for (auto *A : D.attrs())\n"
@@ -25152,7 +25235,7 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
-  // 8. Use braces on the outer block because of a nested `if`, otherwise the
+  // Use braces on the outer block because of a nested `if`; otherwise the
   // compiler would warn: `add explicit braces to avoid dangling else`
   verifyFormat("if (auto *D = dyn_cast<FunctionDecl>(D)) {\n"
                "  if (shouldProcess(D))\n"
@@ -25339,6 +25422,171 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
+  verifyFormat("if (isa<VarDecl>(D)) {\n"
+               "  for (auto *A : D.attrs())\n"
+               "    if (shouldProcessAttr(A))\n"
+               "      handleAttr(A);\n"
+               "}",
+               "if (isa<VarDecl>(D)) {\n"
+               "  for (auto *A : D.attrs()) {\n"
+               "    if (shouldProcessAttr(A)) {\n"
+               "      handleAttr(A);\n"
+               "    }\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("do {\n"
+               "  ++I;\n"
+               "} while (hasMore() && Filter(*I));",
+               "do { ++I; } while (hasMore() && Filter(*I));", Style);
+
+  verifyFormat("if (a)\n"
+               "  if (b)\n"
+               "    c;\n"
+               "  else {\n"
+               "    if (d)\n"
+               "      e;\n"
+               "  }\n"
+               "else\n"
+               "  f;",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "  if (b)\n"
+               "    c;\n"
+               "  else {\n"
+               "    if (d)\n"
+               "      e;\n"
+               "    else if (f)\n"
+               "      g;\n"
+               "  }\n"
+               "else\n"
+               "  h;",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  b;\n"
+               "} else if (c) {\n"
+               "  d;\n"
+               "  e;\n"
+               "}",
+               "if (a) {\n"
+               "  b;\n"
+               "} else {\n"
+               "  if (c) {\n"
+               "    d;\n"
+               "    e;\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  b;\n"
+               "  c;\n"
+               "} else if (d) {\n"
+               "  e;\n"
+               "  f;\n"
+               "}",
+               "if (a) {\n"
+               "  b;\n"
+               "  c;\n"
+               "} else {\n"
+               "  if (d) {\n"
+               "    e;\n"
+               "    f;\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  b;\n"
+               "} else if (c) {\n"
+               "  d;\n"
+               "} else {\n"
+               "  e;\n"
+               "  f;\n"
+               "}",
+               "if (a) {\n"
+               "  b;\n"
+               "} else {\n"
+               "  if (c) {\n"
+               "    d;\n"
+               "  } else {\n"
+               "    e;\n"
+               "    f;\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  b;\n"
+               "} else if (c) {\n"
+               "  d;\n"
+               "} else if (e) {\n"
+               "  f;\n"
+               "  g;\n"
+               "}",
+               "if (a) {\n"
+               "  b;\n"
+               "} else {\n"
+               "  if (c) {\n"
+               "    d;\n"
+               "  } else if (e) {\n"
+               "    f;\n"
+               "    g;\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  if (b)\n"
+               "    c;\n"
+               "  else if (d) {\n"
+               "    e;\n"
+               "    f;\n"
+               "  }\n"
+               "} else {\n"
+               "  g;\n"
+               "}",
+               "if (a) {\n"
+               "  if (b)\n"
+               "    c;\n"
+               "  else {\n"
+               "    if (d) {\n"
+               "      e;\n"
+               "      f;\n"
+               "    }\n"
+               "  }\n"
+               "} else {\n"
+               "  g;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "  if (b)\n"
+               "    c;\n"
+               "  else {\n"
+               "    if (d) {\n"
+               "      e;\n"
+               "      f;\n"
+               "    }\n"
+               "  }\n"
+               "else\n"
+               "  g;",
+               Style);
+
+  verifyFormat("if (a) {\n"
+               "  b;\n"
+               "  c;\n"
+               "} else { // comment\n"
+               "  if (d) {\n"
+               "    e;\n"
+               "    f;\n"
+               "  }\n"
+               "}",
+               Style);
+
   verifyFormat("if (a)\n"
                "  b;\n"
                "else if (c)\n"
@@ -25453,7 +25701,6 @@ TEST_F(FormatTest, RemoveBraces) {
                Style);
 
   Style.ColumnLimit = 65;
-
   verifyFormat("if (condition) {\n"
                "  ff(Indices,\n"
                "     [&](unsigned LHSI, unsigned RHSI) { return true; });\n"
@@ -25496,14 +25743,177 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
-  Style.ColumnLimit = 0;
+  verifyFormat("if (-b >=\n"
+               "    c) { // Keep.\n"
+               "  foo();\n"
+               "} else {\n"
+               "  bar();\n"
+               "}",
+               "if (-b >= c) { // Keep.\n"
+               "  foo();\n"
+               "} else {\n"
+               "  bar();\n"
+               "}",
+               Style);
 
+  verifyFormat("if (a) /* Remove. */\n"
+               "  f();\n"
+               "else\n"
+               "  g();",
+               "if (a) <% /* Remove. */\n"
+               "  f();\n"
+               "%> else <%\n"
+               "  g();\n"
+               "%>",
+               Style);
+
+  verifyFormat("while (\n"
+               "    !i--) <% // Keep.\n"
+               "  foo();\n"
+               "%>",
+               "while (!i--) <% // Keep.\n"
+               "  foo();\n"
+               "%>",
+               Style);
+
+  verifyFormat("for (int &i : chars)\n"
+               "  ++i;",
+               "for (int &i :\n"
+               "     chars) {\n"
+               "  ++i;\n"
+               "}",
+               Style);
+
+  Style.ColumnLimit = 0;
   verifyFormat("if (a)\n"
                "  b234567890223456789032345678904234567890 = "
                "c234567890223456789032345678904234567890;",
                "if (a) {\n"
                "  b234567890223456789032345678904234567890 = "
                "c234567890223456789032345678904234567890;\n"
+               "}",
+               Style);
+
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterControlStatement = FormatStyle::BWACS_Always;
+  Style.BraceWrapping.BeforeElse = true;
+
+  Style.ColumnLimit = 65;
+
+  verifyFormat("if (condition)\n"
+               "{\n"
+               "  ff(Indices,\n"
+               "     [&](unsigned LHSI, unsigned RHSI) { return true; });\n"
+               "}\n"
+               "else\n"
+               "{\n"
+               "  ff(Indices,\n"
+               "     [&](unsigned LHSI, unsigned RHSI) { return true; });\n"
+               "}",
+               "if (condition) {\n"
+               "  ff(Indices,\n"
+               "     [&](unsigned LHSI, unsigned RHSI) { return true; });\n"
+               "} else {\n"
+               "  ff(Indices,\n"
+               "     [&](unsigned LHSI, unsigned RHSI) { return true; });\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{ //\n"
+               "  foo();\n"
+               "}",
+               "if (a) { //\n"
+               "  foo();\n"
+               "}",
+               Style);
+
+  Style.ColumnLimit = 20;
+
+  verifyFormat("int ab = [](int i) {\n"
+               "  if (i > 0)\n"
+               "  {\n"
+               "    i = 12345678 -\n"
+               "        i;\n"
+               "  }\n"
+               "  return i;\n"
+               "};",
+               "int ab = [](int i) {\n"
+               "  if (i > 0) {\n"
+               "    i = 12345678 -\n"
+               "        i;\n"
+               "  }\n"
+               "  return i;\n"
+               "};",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = c + // 1 -\n"
+               "      d;\n"
+               "}",
+               "if (a) {\n"
+               "  b = c + // 1 -\n"
+               "      d;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = c >= 0 ? d\n"
+               "             : e;\n"
+               "}",
+               "if (a) {\n"
+               "  b = c >= 0 ? d : e;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "  b = c > 0 ? d : e;",
+               "if (a)\n"
+               "{\n"
+               "  b = c > 0 ? d : e;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (foo + bar <=\n"
+               "    baz)\n"
+               "{\n"
+               "  func(arg1, arg2);\n"
+               "}",
+               "if (foo + bar <= baz) {\n"
+               "  func(arg1, arg2);\n"
+               "}",
+               Style);
+
+  verifyFormat("if (foo + bar < baz)\n"
+               "  func(arg1, arg2);\n"
+               "else\n"
+               "  func();",
+               "if (foo + bar < baz)\n"
+               "<%\n"
+               "  func(arg1, arg2);\n"
+               "%>\n"
+               "else\n"
+               "<%\n"
+               "  func();\n"
+               "%>",
+               Style);
+
+  verifyFormat("while (i--)\n"
+               "<% // Keep.\n"
+               "  foo();\n"
+               "%>",
+               "while (i--) <% // Keep.\n"
+               "  foo();\n"
+               "%>",
+               Style);
+
+  verifyFormat("for (int &i : chars)\n"
+               "  ++i;",
+               "for (int &i : chars)\n"
+               "{\n"
+               "  ++i;\n"
                "}",
                Style);
 }

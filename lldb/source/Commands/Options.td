@@ -128,15 +128,13 @@ let Command = "breakpoint set" in {
     Arg<"AddressOrExpression">, Required,
     Desc<"Set the breakpoint at the specified address.  If the address maps "
     "uniquely to a particular binary, then the address will be converted to "
-    "a \"file\" address, so that the breakpoint will track that binary+offset "
+    "a \"file\"address, so that the breakpoint will track that binary+offset "
     "no matter where the binary eventually loads.  Alternately, if you also "
     "specify the module - with the -s option - then the address will be "
     "treated as a file address in that module, and resolved accordingly.  "
     "Again, this will allow lldb to track that offset on subsequent reloads.  "
     "The module need not have been loaded at the time you specify this "
-    "breakpoint, and will get resolved when the module is loaded.  If no "
-    "module is specified, the binary being debugged is considered as a "
-    "fallback.">;
+    "breakpoint, and will get resolved when the module is loaded.">;
   def breakpoint_set_name : Option<"name", "n">, Group<3>, Arg<"FunctionName">,
     Completion<"Symbol">, Required,
     Desc<"Set the breakpoint by function name.  Can be repeated multiple times "
@@ -744,6 +742,8 @@ let Command = "process load" in {
 }
 
 let Command = "process handle" in {
+  def process_handle_clear : Option<"clear", "c">, Group<2>,
+    Desc<"Removes the signals listed from the Target signal handlers">;
   def process_handle_stop : Option<"stop", "s">, Group<1>, Arg<"Boolean">,
     Desc<"Whether or not the process should be stopped if the signal is "
     "received.">;
@@ -752,6 +752,10 @@ let Command = "process handle" in {
     "received.">;
   def process_handle_pass : Option<"pass", "p">, Group<1>, Arg<"Boolean">,
     Desc<"Whether or not the signal should be passed to the process.">;
+  def process_handle_only_target : Option<"target", "t">, Group<1>,
+    Desc<"Show only the signals with behaviors modified in this target">;
+  def process_handle_dummy : Option<"dummy", "d">, Group<2>,
+    Desc<"Also clear the values in the dummy target so they won't be inherited by new targets.">;
 }
 
 let Command = "process status" in {

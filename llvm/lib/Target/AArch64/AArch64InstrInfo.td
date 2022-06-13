@@ -142,26 +142,26 @@ def HasSMEF64        : Predicate<"Subtarget->hasSMEF64()">,
                                  AssemblerPredicate<(all_of FeatureSMEF64), "sme-f64">;
 def HasSMEI64        : Predicate<"Subtarget->hasSMEI64()">,
                                  AssemblerPredicate<(all_of FeatureSMEI64), "sme-i64">;
-def HasStreamingSVE  : Predicate<"Subtarget->hasStreamingSVE()">,
-                                 AssemblerPredicate<(all_of FeatureStreamingSVE), "sme">;
 // A subset of SVE(2) instructions are legal in Streaming SVE execution mode,
 // they should be enabled if either has been specified.
-def HasSVEorStreamingSVE
-    : Predicate<"Subtarget->hasSVE() || Subtarget->hasStreamingSVE()">,
-                AssemblerPredicate<(any_of FeatureSVE, FeatureStreamingSVE),
+def HasSVEorSME
+    : Predicate<"Subtarget->hasSVE() || Subtarget->hasSME()">,
+                AssemblerPredicate<(any_of FeatureSVE, FeatureSME),
                 "sve or sme">;
-def HasSVE2orStreamingSVE
-    : Predicate<"Subtarget->hasSVE2() || Subtarget->hasStreamingSVE()">,
-                AssemblerPredicate<(any_of FeatureSVE2, FeatureStreamingSVE),
+def HasSVE2orSME
+    : Predicate<"Subtarget->hasSVE2() || Subtarget->hasSME()">,
+                AssemblerPredicate<(any_of FeatureSVE2, FeatureSME),
                 "sve2 or sme">;
 // A subset of NEON instructions are legal in Streaming SVE execution mode,
 // they should be enabled if either has been specified.
-def HasNEONorStreamingSVE
-    : Predicate<"Subtarget->hasNEON() || Subtarget->hasStreamingSVE()">,
-                AssemblerPredicate<(any_of FeatureNEON, FeatureStreamingSVE),
+def HasNEONorSME
+    : Predicate<"Subtarget->hasNEON() || Subtarget->hasSME()">,
+                AssemblerPredicate<(any_of FeatureNEON, FeatureSME),
                 "neon or sme">;
 def HasRCPC          : Predicate<"Subtarget->hasRCPC()">,
                                  AssemblerPredicate<(all_of FeatureRCPC), "rcpc">;
+def HasLDAPR         : Predicate<"Subtarget->hasLDAPR()">,
+                                 AssemblerPredicate<(all_of FeatureLDAPR), "ldapr">;
 def HasAltNZCV       : Predicate<"Subtarget->hasAlternativeNZCV()">,
                        AssemblerPredicate<(all_of FeatureAltFPCmp), "altnzcv">;
 def HasFRInt3264     : Predicate<"Subtarget->hasFRInt3264()">,
@@ -443,6 +443,58 @@ def non_temporal_store :
          cast<MaskedStoreSDNode>(N)->isNonTemporal();
 }]>;
 
+multiclass masked_gather_scatter<PatFrags GatherScatterOp> {
+  // offsets = (signed)Index << sizeof(elt)
+  def NAME#_signed_scaled :
+    PatFrag<(ops node:$val, node:$pred, node:$ptr, node:$idx),
+            (GatherScatterOp node:$val, node:$pred, node:$ptr, node:$idx),[{
+    auto MGS = cast<MaskedGatherScatterSDNode>(N);
+    bool Signed = MGS->isIndexSigned() ||
+        MGS->getIndex().getValueType().getVectorElementType() == MVT::i64;
+    return Signed && MGS->isIndexScaled();
+  }]>;
+  // offsets = (signed)Index
+  def NAME#_signed_unscaled :
+    PatFrag<(ops node:$val, node:$pred, node:$ptr, node:$idx),
+            (GatherScatterOp node:$val, node:$pred, node:$ptr, node:$idx),[{
+    auto MGS = cast<MaskedGatherScatterSDNode>(N);
+    bool Signed = MGS->isIndexSigned() ||
+        MGS->getIndex().getValueType().getVectorElementType() == MVT::i64;
+    return Signed && !MGS->isIndexScaled();
+  }]>;
+  // offsets = (unsigned)Index << sizeof(elt)
+  def NAME#_unsigned_scaled :
+    PatFrag<(ops node:$val, node:$pred, node:$ptr, node:$idx),
+            (GatherScatterOp node:$val, node:$pred, node:$ptr, node:$idx),[{
+    auto MGS = cast<MaskedGatherScatterSDNode>(N);
+    bool Signed = MGS->isIndexSigned() ||
+        MGS->getIndex().getValueType().getVectorElementType() == MVT::i64;
+    return !Signed && MGS->isIndexScaled();
+  }]>;
+  // offsets = (unsigned)Index
+  def NAME#_unsigned_unscaled :
+    PatFrag<(ops node:$val, node:$pred, node:$ptr, node:$idx),
+            (GatherScatterOp node:$val, node:$pred, node:$ptr, node:$idx),[{
+    auto MGS = cast<MaskedGatherScatterSDNode>(N);
+    bool Signed = MGS->isIndexSigned() ||
+        MGS->getIndex().getValueType().getVectorElementType() == MVT::i64;
+    return !Signed && !MGS->isIndexScaled();
+  }]>;
+}
+
+defm nonext_masked_gather    : masked_gather_scatter<nonext_masked_gather>;
+defm azext_masked_gather_i8  : masked_gather_scatter<azext_masked_gather_i8>;
+defm azext_masked_gather_i16 : masked_gather_scatter<azext_masked_gather_i16>;
+defm azext_masked_gather_i32 : masked_gather_scatter<azext_masked_gather_i32>;
+defm sext_masked_gather_i8   : masked_gather_scatter<sext_masked_gather_i8>;
+defm sext_masked_gather_i16  : masked_gather_scatter<sext_masked_gather_i16>;
+defm sext_masked_gather_i32  : masked_gather_scatter<sext_masked_gather_i32>;
+
+defm nontrunc_masked_scatter  : masked_gather_scatter<nontrunc_masked_scatter>;
+defm trunc_masked_scatter_i8  : masked_gather_scatter<trunc_masked_scatter_i8>;
+defm trunc_masked_scatter_i16 : masked_gather_scatter<trunc_masked_scatter_i16>;
+defm trunc_masked_scatter_i32 : masked_gather_scatter<trunc_masked_scatter_i32>;
+
 // top16Zero - answer true if the upper 16 bits of $src are 0, false otherwise
 def top16Zero: PatLeaf<(i32 GPR32:$src), [{
   return SDValue(N,0)->getValueType(0) == MVT::i32 &&
@@ -642,14 +694,21 @@ def AArch64sabd     : PatFrags<(ops node:$lhs, node:$rhs),
                                [(abds node:$lhs, node:$rhs),
                                 (int_aarch64_neon_sabd node:$lhs, node:$rhs)]>;
 
+def AArch64addp_n   : SDNode<"AArch64ISD::ADDP", SDT_AArch64Zip>;
 def AArch64uaddlp_n : SDNode<"AArch64ISD::UADDLP", SDT_AArch64uaddlp>;
 def AArch64saddlp_n : SDNode<"AArch64ISD::SADDLP", SDT_AArch64uaddlp>;
+def AArch64addp     : PatFrags<(ops node:$Rn, node:$Rm),
+                               [(AArch64addp_n node:$Rn, node:$Rm),
+                                (int_aarch64_neon_addp node:$Rn, node:$Rm)]>;
 def AArch64uaddlp   : PatFrags<(ops node:$src),
                                [(AArch64uaddlp_n node:$src),
                                 (int_aarch64_neon_uaddlp node:$src)]>;
 def AArch64saddlp   : PatFrags<(ops node:$src),
                                [(AArch64saddlp_n node:$src),
                                 (int_aarch64_neon_saddlp node:$src)]>;
+def AArch64faddp     : PatFrags<(ops node:$Rn, node:$Rm),
+                                [(AArch64addp_n node:$Rn, node:$Rm),
+                                 (int_aarch64_neon_faddp node:$Rn, node:$Rm)]>;
 
 def SDT_AArch64SETTAG : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisPtrTy<1>]>;
 def AArch64stg : SDNode<"AArch64ISD::STG", SDT_AArch64SETTAG, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
@@ -943,7 +1002,7 @@ def : Pat<(v2f32 (int_aarch64_neon_bfdot
                              VectorIndexS:$idx)>;
 }
 
-let Predicates = [HasNEONorStreamingSVE, HasBF16] in {
+let Predicates = [HasNEONorSME, HasBF16] in {
 def BFCVT : BF16ToSinglePrecision<"bfcvt">;
 }
 
@@ -2381,6 +2440,10 @@ def TLSDESCCALL : Pseudo<(outs), (ins i64imm:$sym), []>, Sched<[]> {
 // Pseudo instruction to tell the streamer to emit a 'B' character into the
 // augmentation string.
 def EMITBKEY : Pseudo<(outs), (ins), []>, Sched<[]> {}
+
+// Pseudo instruction to tell the streamer to emit a 'G' character into the
+// augmentation string.
+def EMITMTETAGGED : Pseudo<(outs), (ins), []>, Sched<[]> {}
 
 // FIXME: maybe the scratch register used shouldn't be fixed to X1?
 // FIXME: can "hasSideEffects be dropped?
@@ -4454,7 +4517,7 @@ def : Pat<(v8i16 (concat_vectors
 //===----------------------------------------------------------------------===//
 
 defm ADD     : SIMDThreeSameVector<0, 0b10000, "add", add>;
-defm ADDP    : SIMDThreeSameVector<0, 0b10111, "addp", int_aarch64_neon_addp>;
+defm ADDP    : SIMDThreeSameVector<0, 0b10111, "addp", AArch64addp>;
 defm CMEQ    : SIMDThreeSameVector<1, 0b10001, "cmeq", AArch64cmeq>;
 defm CMGE    : SIMDThreeSameVector<0, 0b00111, "cmge", AArch64cmge>;
 defm CMGT    : SIMDThreeSameVector<0, 0b00110, "cmgt", AArch64cmgt>;
@@ -4475,7 +4538,7 @@ def : Pat<(fabs (fsub VT:$Rn, VT:$Rm)), (!cast<Instruction>("FABD"#VT) VT:$Rn, V
 }
 defm FACGE   : SIMDThreeSameVectorFPCmp<1,0,0b101,"facge",int_aarch64_neon_facge>;
 defm FACGT   : SIMDThreeSameVectorFPCmp<1,1,0b101,"facgt",int_aarch64_neon_facgt>;
-defm FADDP   : SIMDThreeSameVectorFP<1,0,0b010,"faddp",int_aarch64_neon_faddp>;
+defm FADDP   : SIMDThreeSameVectorFP<1,0,0b010,"faddp", AArch64faddp>;
 defm FADD    : SIMDThreeSameVectorFP<0,0,0b010,"fadd", any_fadd>;
 defm FCMEQ   : SIMDThreeSameVectorFPCmp<0, 0, 0b100, "fcmeq", AArch64fcmeq>;
 defm FCMGE   : SIMDThreeSameVectorFPCmp<1, 0, 0b100, "fcmge", AArch64fcmge>;
@@ -4795,9 +4858,9 @@ defm FACGT    : SIMDThreeScalarFPCmp<1, 1, 0b101, "facgt",
 defm FCMEQ    : SIMDThreeScalarFPCmp<0, 0, 0b100, "fcmeq", AArch64fcmeq>;
 defm FCMGE    : SIMDThreeScalarFPCmp<1, 0, 0b100, "fcmge", AArch64fcmge>;
 defm FCMGT    : SIMDThreeScalarFPCmp<1, 1, 0b100, "fcmgt", AArch64fcmgt>;
-defm FMULX    : SIMDFPThreeScalar<0, 0, 0b011, "fmulx", int_aarch64_neon_fmulx, HasNEONorStreamingSVE>;
-defm FRECPS   : SIMDFPThreeScalar<0, 0, 0b111, "frecps", int_aarch64_neon_frecps, HasNEONorStreamingSVE>;
-defm FRSQRTS  : SIMDFPThreeScalar<0, 1, 0b111, "frsqrts", int_aarch64_neon_frsqrts, HasNEONorStreamingSVE>;
+defm FMULX    : SIMDFPThreeScalar<0, 0, 0b011, "fmulx", int_aarch64_neon_fmulx, HasNEONorSME>;
+defm FRECPS   : SIMDFPThreeScalar<0, 0, 0b111, "frecps", int_aarch64_neon_frecps, HasNEONorSME>;
+defm FRSQRTS  : SIMDFPThreeScalar<0, 1, 0b111, "frsqrts", int_aarch64_neon_frsqrts, HasNEONorSME>;
 defm SQADD    : SIMDThreeScalarBHSD<0, 0b00001, "sqadd", int_aarch64_neon_sqadd>;
 defm SQDMULH  : SIMDThreeScalarHS<  0, 0b10110, "sqdmulh", int_aarch64_neon_sqdmulh>;
 defm SQRDMULH : SIMDThreeScalarHS<  1, 0b10110, "sqrdmulh", int_aarch64_neon_sqrdmulh>;
@@ -4892,9 +4955,9 @@ defm FCVTPU : SIMDFPTwoScalar<   1, 1, 0b11010, "fcvtpu">;
 def  FCVTXNv1i64 : SIMDInexactCvtTwoScalar<0b10110, "fcvtxn">;
 defm FCVTZS : SIMDFPTwoScalar<   0, 1, 0b11011, "fcvtzs">;
 defm FCVTZU : SIMDFPTwoScalar<   1, 1, 0b11011, "fcvtzu">;
-defm FRECPE : SIMDFPTwoScalar<   0, 1, 0b11101, "frecpe", HasNEONorStreamingSVE>;
-defm FRECPX : SIMDFPTwoScalar<   0, 1, 0b11111, "frecpx", HasNEONorStreamingSVE>;
-defm FRSQRTE : SIMDFPTwoScalar<  1, 1, 0b11101, "frsqrte", HasNEONorStreamingSVE>;
+defm FRECPE : SIMDFPTwoScalar<   0, 1, 0b11101, "frecpe", HasNEONorSME>;
+defm FRECPX : SIMDFPTwoScalar<   0, 1, 0b11111, "frecpx", HasNEONorSME>;
+defm FRSQRTE : SIMDFPTwoScalar<  1, 1, 0b11101, "frsqrte", HasNEONorSME>;
 defm NEG    : SIMDTwoScalarD<    1, 0b01011, "neg",
                                  UnOpFrag<(sub immAllZerosV, node:$LHS)> >;
 defm SCVTF  : SIMDFPTwoScalarCVT<   0, 0, 0b11101, "scvtf", AArch64sitof>;
@@ -7200,14 +7263,6 @@ def SHA256SU0rr : SHATiedInstVV<0b0010, "sha256su0",int_aarch64_crypto_sha256su0
 // Compiler-pseudos
 //----------------------------------------------------------------------------
 // FIXME: Like for X86, these should go in their own separate .td file.
-
-def def32 : PatLeaf<(i32 GPR32:$src), [{
-  return isDef32(*N);
-}]>;
-
-// In the case of a 32-bit def that is known to implicitly zero-extend,
-// we can use a SUBREG_TO_REG.
-def : Pat<(i64 (zext def32:$src)), (SUBREG_TO_REG (i64 0), GPR32:$src, sub_32)>;
 
 // For an anyext, we don't care what the high bits are, so we can perform an
 // INSERT_SUBREF into an IMPLICIT_DEF.

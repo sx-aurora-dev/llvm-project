@@ -161,7 +161,7 @@ def RegionBranchOpInterface : OpInterface<"RegionBranchOpInterface"> {
       "void", "getSuccessorRegions",
       (ins "::mlir::Optional<unsigned>":$index,
            "::mlir::ArrayRef<::mlir::Attribute>":$operands,
-           "::mlir::SmallVectorImpl<::mlir::RegionSuccessor> &":$regions)
+           "::llvm::SmallVectorImpl<::mlir::RegionSuccessor> &":$regions)
     >,
     InterfaceMethod<[{
         Populates `invocationBounds` with the minimum and maximum number of
@@ -207,10 +207,7 @@ def RegionBranchOpInterface : OpInterface<"RegionBranchOpInterface"> {
   let extraClassDeclaration = [{
     /// Convenience helper in case none of the operands is known.
     void getSuccessorRegions(Optional<unsigned> index,
-                             SmallVectorImpl<RegionSuccessor> &regions) {
-       SmallVector<Attribute, 2> nullAttrs(getOperation()->getNumOperands());
-       getSuccessorRegions(index, nullAttrs, regions);
-    }
+                             SmallVectorImpl<RegionSuccessor> &regions);
 
     /// Return `true` if control flow originating from the given region may
     /// eventually branch back to the same region. (Maybe after passing through

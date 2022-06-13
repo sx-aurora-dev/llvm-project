@@ -354,6 +354,7 @@ public:
       SelectionDAG &DAG) const override;
   bool shouldSinkOperands(Instruction *I,
                           SmallVectorImpl<Use *> &Ops) const override;
+  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
 
@@ -560,7 +561,7 @@ public:
                                            const RISCVRegisterInfo *TRI);
   MVT getContainerForFixedLengthVector(MVT VT) const;
 
-  bool shouldRemoveExtendFromGSIndex(EVT VT) const override;
+  bool shouldRemoveExtendFromGSIndex(EVT IndexVT, EVT DataVT) const override;
 
   bool isLegalElementTypeForRVV(Type *ScalarTy) const;
 
@@ -663,6 +664,8 @@ private:
                                             unsigned ExtendOpc) const;
   SDValue lowerGET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue lowerEH_DWARF_CFA(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue expandUnalignedRVVLoad(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandUnalignedRVVStore(SDValue Op, SelectionDAG &DAG) const;

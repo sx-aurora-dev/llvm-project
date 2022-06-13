@@ -560,7 +560,10 @@ def arcmt_migrate_report_output : Separate<["-"], "arcmt-migrate-report-output">
 def arcmt_migrate_emit_arc_errors : Flag<["-"], "arcmt-migrate-emit-errors">,
   HelpText<"Emit ARC errors even if the migrator can fix them">, Flags<[CC1Option]>,
   MarshallingInfoFlag<FrontendOpts<"ARCMTMigrateEmitARCErrors">>;
+def gen_reproducer_eq: Joined<["-"], "gen-reproducer=">, Flags<[NoArgumentUnused, CoreOption]>,
+  HelpText<"Emit reproducer on (option: off, crash (default), error, always)">;
 def gen_reproducer: Flag<["-"], "gen-reproducer">, InternalDebugOpt,
+  Alias<gen_reproducer_eq>, AliasArgs<["always"]>,
   HelpText<"Auto-generates preprocessed source files and a reproduction script">;
 def gen_cdb_fragment_path: Separate<["-"], "gen-cdb-fragment-path">, InternalDebugOpt,
   HelpText<"Emit a compilation database fragment to the specified directory">;
@@ -822,9 +825,14 @@ def Xopenmp_target_EQ : JoinedAndSeparate<["-"], "Xopenmp-target=">, Group<Compi
 def z : Separate<["-"], "z">, Flags<[LinkerInput, RenderAsInput]>,
   HelpText<"Pass -z <arg> to the linker">, MetaVarName<"<arg>">,
   Group<Link_Group>;
+def offload_link : Flag<["--"], "offload-link">, Group<Link_Group>,
+  HelpText<"Use the new offloading linker to perform the link job.">;
 def Xlinker : Separate<["-"], "Xlinker">, Flags<[LinkerInput, RenderAsInput]>,
   HelpText<"Pass <arg> to the linker">, MetaVarName<"<arg>">,
   Group<Link_Group>;
+def Xoffload_linker : JoinedAndSeparate<["-"], "Xoffload-linker">,
+  HelpText<"Pass <arg> to the offload linkers or the ones idenfied by -<triple>">, 
+  MetaVarName<"<triple> <arg>">, Group<Link_Group>;
 def Xpreprocessor : Separate<["-"], "Xpreprocessor">, Group<Preprocessor_Group>,
   HelpText<"Pass <arg> to the preprocessor">, MetaVarName<"<arg>">;
 def X_Flag : Flag<["-"], "X">, Group<Link_Group>;
@@ -846,6 +854,7 @@ def bundle : Flag<["-"], "bundle">;
 def b : JoinedOrSeparate<["-"], "b">, Flags<[LinkerInput, RenderAsInput]>,
   HelpText<"Pass -b <arg> to the linker on AIX (only).">, MetaVarName<"<arg>">,
   Group<Link_Group>;
+// OpenCL-only Options
 def cl_opt_disable : Flag<["-"], "cl-opt-disable">, Group<opencl_Group>, Flags<[CC1Option]>,
   HelpText<"OpenCL only. This option disables all optimizations. By default optimizations are enabled.">;
 def cl_strict_aliasing : Flag<["-"], "cl-strict-aliasing">, Group<opencl_Group>, Flags<[CC1Option]>,
@@ -885,6 +894,11 @@ def cl_uniform_work_group_size : Flag<["-"], "cl-uniform-work-group-size">, Grou
   MarshallingInfoFlag<CodeGenOpts<"UniformWGSize">>;
 def cl_no_stdinc : Flag<["-"], "cl-no-stdinc">, Group<opencl_Group>,
   HelpText<"OpenCL only. Disables all standard includes containing non-native compiler types and functions.">;
+def cl_ext_EQ : CommaJoined<["-"], "cl-ext=">, Group<opencl_Group>, Flags<[CC1Option]>,
+  HelpText<"OpenCL only. Enable or disable OpenCL extensions/optional features. The argument is a comma-separated "
+           "sequence of one or more extension names, each prefixed by '+' or '-'.">,
+  MarshallingInfoStringVector<TargetOpts<"OpenCLExtensionsAsWritten">>;
+
 def client__name : JoinedOrSeparate<["-"], "client_name">;
 def combine : Flag<["-", "--"], "combine">, Flags<[NoXarchOption, Unsupported]>;
 def compatibility__version : JoinedOrSeparate<["-"], "compatibility_version">;
@@ -1388,6 +1402,7 @@ def fexperimental_new_constant_interpreter : Flag<["-"], "fexperimental-new-cons
 def fconstexpr_backtrace_limit_EQ : Joined<["-"], "fconstexpr-backtrace-limit=">,
                                     Group<f_Group>;
 def fno_crash_diagnostics : Flag<["-"], "fno-crash-diagnostics">, Group<f_clang_Group>, Flags<[NoArgumentUnused, CoreOption]>,
+  Alias<gen_reproducer_eq>, AliasArgs<["off"]>,
   HelpText<"Disable auto-generation of preprocessed source files and a script for reproduction during a clang crash">;
 def fcrash_diagnostics_dir : Joined<["-"], "fcrash-diagnostics-dir=">,
   Group<f_clang_Group>, Flags<[NoArgumentUnused, CoreOption]>,
@@ -2165,6 +2180,8 @@ def fms_memptr_rep_EQ : Joined<["-"], "fms-memptr-rep=">, Group<f_Group>, Flags<
   NormalizedValues<["PPTMK_FullGeneralitySingleInheritance", "PPTMK_FullGeneralityMultipleInheritance",
                     "PPTMK_FullGeneralityVirtualInheritance"]>,
   MarshallingInfoEnum<LangOpts<"MSPointerToMemberRepresentationMethod">, "PPTMK_BestCase">;
+def fms_kernel : Flag<["-"], "fms-kernel">, Group<f_Group>, Flags<[CC1Option, NoDriverOption]>,
+  MarshallingInfoFlag<LangOpts<"Kernel">>;
 // __declspec is enabled by default for the PS4 by the driver, and also
 // enabled for Microsoft Extensions or Borland Extensions, here.
 //
@@ -3512,7 +3529,10 @@ def mbranch_protection_EQ : Joined<["-"], "mbranch-protection=">,
   HelpText<"Enforce targets of indirect branches and function returns">;
 
 def mharden_sls_EQ : Joined<["-"], "mharden-sls=">,
-  HelpText<"Select straight-line speculation hardening scope">;
+  HelpText<"Select straight-line speculation hardening scope (ARM/AArch64/X86"
+           " only). <arg> must be: all, none, retbr(ARM/AArch64),"
+           " blr(ARM/AArch64), comdat(ARM/AArch64), nocomdat(ARM/AArch64),"
+           " return(X86), indirect-jmp(X86)">;
 
 def msimd128 : Flag<["-"], "msimd128">, Group<m_wasm_Features_Group>;
 def mno_simd128 : Flag<["-"], "mno-simd128">, Group<m_wasm_Features_Group>;
@@ -3987,6 +4007,8 @@ def print_rocm_search_dirs : Flag<["-", "--"], "print-rocm-search-dirs">,
   HelpText<"Print the paths used for finding ROCm installation">;
 def print_runtime_dir : Flag<["-", "--"], "print-runtime-dir">,
   HelpText<"Print the directory pathname containing clangs runtime libraries">;
+def print_diagnostic_options : Flag<["-", "--"], "print-diagnostic-options">,
+  HelpText<"Print all of Clang's warning options">;
 def private__bundle : Flag<["-"], "private_bundle">;
 def pthreads : Flag<["-"], "pthreads">;
 defm pthread : BoolOption<"", "pthread",
@@ -4146,7 +4168,8 @@ def why_load : Flag<["-"], "why_load">;
 def whyload : Flag<["-"], "whyload">, Alias<why_load>;
 def w : Flag<["-"], "w">, HelpText<"Suppress all warnings">, Flags<[CC1Option]>,
   MarshallingInfoFlag<DiagnosticOpts<"IgnoreWarnings">>;
-def x : JoinedOrSeparate<["-"], "x">, Flags<[NoXarchOption,CC1Option]>,
+def x : JoinedOrSeparate<["-"], "x">,
+Flags<[NoXarchOption,CC1Option,FlangOption,FC1Option]>,
   HelpText<"Treat subsequent input files as having type <language>">,
   MetaVarName<"<language>">;
 def y : Joined<["-"], "y">;
@@ -4162,6 +4185,13 @@ def fintegrated_cc1 : Flag<["-"], "fintegrated-cc1">,
 def fno_integrated_cc1 : Flag<["-"], "fno-integrated-cc1">,
                          Flags<[CoreOption, NoXarchOption]>, Group<f_Group>,
                          HelpText<"Spawn a separate process for each cc1">;
+
+def fintegrated_objemitter : Flag<["-"], "fintegrated-objemitter">,
+  Flags<[CoreOption, NoXarchOption]>, Group<f_Group>,
+  HelpText<"Use internal machine object code emitter.">;
+def fno_integrated_objemitter : Flag<["-"], "fno-integrated-objemitter">,
+  Flags<[CoreOption, NoXarchOption]>, Group<f_Group>,
+  HelpText<"Use external machine object code emitter.">;
 
 def : Flag<["-"], "integrated-as">, Alias<fintegrated_as>, Flags<[NoXarchOption]>;
 def : Flag<["-"], "no-integrated-as">, Alias<fno_integrated_as>,
@@ -6049,7 +6079,7 @@ def fdefault_calling_conv_EQ : Joined<["-"], "fdefault-calling-conv=">,
 
 // These options cannot be marshalled, because they are used to set up the LangOptions defaults.
 def finclude_default_header : Flag<["-"], "finclude-default-header">,
-  HelpText<"Include default header file for OpenCL">;
+  HelpText<"Include default header file for OpenCL and HLSL">;
 def fdeclare_opencl_builtins : Flag<["-"], "fdeclare-opencl-builtins">,
   HelpText<"Add OpenCL builtin function declarations (experimental)">;
 
@@ -6079,6 +6109,12 @@ def fobjc_gc_only : Flag<["-"], "fobjc-gc-only">, Group<f_Group>,
   HelpText<"Use GC exclusively for Objective-C related memory management">;
 def fobjc_gc : Flag<["-"], "fobjc-gc">, Group<f_Group>,
   HelpText<"Enable Objective-C garbage collection">;
+
+def fexperimental_max_bitint_width_EQ:
+  Joined<["-"], "fexperimental-max-bitint-width=">, Group<f_Group>,
+  MetaVarName<"<N>">,
+  HelpText<"Set the maximum bitwidth for _BitInt (this option is expected to be removed in the future)">,
+  MarshallingInfoInt<LangOpts<"MaxBitIntWidth">>;
 
 } // let Flags = [CC1Option, NoDriverOption]
 
@@ -6145,15 +6181,6 @@ def disable_pragma_debug_crash : Flag<["-"], "disable-pragma-debug-crash">,
   MarshallingInfoFlag<PreprocessorOpts<"DisablePragmaDebugCrash">>;
 
 } // let Flags = [CC1Option, NoDriverOption]
-
-//===----------------------------------------------------------------------===//
-// OpenCL Options
-//===----------------------------------------------------------------------===//
-
-def cl_ext_EQ : CommaJoined<["-"], "cl-ext=">,
-  HelpText<"OpenCL only. Enable or disable OpenCL extensions. The argument is a comma-separated sequence of one or more extension names, each prefixed by '+' or '-'.">,
-  Flags<[CC1Option, NoDriverOption]>,
-  MarshallingInfoStringVector<TargetOpts<"OpenCLExtensionsAsWritten">>;
 
 //===----------------------------------------------------------------------===//
 // CUDA Options
@@ -6787,6 +6814,8 @@ class DXCJoinedOrSeparate<string name> : Option<["/", "-"], name,
 def dxc_help : Option<["/", "-", "--"], "help", KIND_JOINED>,
   Group<dxc_Group>, Flags<[DXCOption, NoXarchOption]>, Alias<help>,
   HelpText<"Display available options">;
+def dxc_no_stdinc : DXCFlag<"hlsl-no-stdinc">,
+  HelpText<"HLSL only. Disables all standard includes containing non-native compiler types and functions.">;
 def Fo : DXCJoinedOrSeparate<"Fo">, Alias<o>,
   HelpText<"Output object file">;
 def dxil_validator_version : Option<["/", "-"], "validator-version", KIND_SEPARATE>,
@@ -6805,6 +6834,8 @@ def target_profile : DXCJoinedOrSeparate<"T">, MetaVarName<"<profile>">,
          "lib_6_3, lib_6_4, lib_6_5, lib_6_6, lib_6_7, lib_6_x,"
          "ms_6_5, ms_6_6, ms_6_7,"
          "as_6_5, as_6_6, as_6_7">;
+def dxc_D : Option<["--", "/", "-"], "D", KIND_JOINED_OR_SEPARATE>,
+  Group<dxc_Group>, Flags<[DXCOption, NoXarchOption]>, Alias<D>;
 def emit_pristine_llvm : DXCFlag<"emit-pristine-llvm">,
   HelpText<"Emit pristine LLVM IR from the frontend by not running any LLVM passes at all."
            "Same as -S + -emit-llvm + -disable-llvm-passes.">;

@@ -1403,7 +1403,9 @@ public:
 
   // Returns true if VT is a legal index type for masked gathers/scatters
   // on this target
-  virtual bool shouldRemoveExtendFromGSIndex(EVT VT) const { return false; }
+  virtual bool shouldRemoveExtendFromGSIndex(EVT IndexVT, EVT DataVT) const {
+    return false;
+  }
 
   /// Return how the condition code should be treated: either it is legal, needs
   /// to be expanded to some other code sequence, or the target has a custom
@@ -2103,7 +2105,8 @@ public:
   virtual AtomicExpansionKind
   shouldCastAtomicRMWIInIR(AtomicRMWInst *RMWI) const {
     if (RMWI->getOperation() == AtomicRMWInst::Xchg &&
-        RMWI->getValOperand()->getType()->isFloatingPointTy())
+        (RMWI->getValOperand()->getType()->isFloatingPointTy() ||
+         RMWI->getValOperand()->getType()->isPointerTy()))
       return AtomicExpansionKind::CastToInteger;
 
     return AtomicExpansionKind::None;
@@ -3549,6 +3552,7 @@ public:
 
   /// Determines the optimal series of memory ops to replace the memset / memcpy.
   /// Return true if the number of memory ops is below the threshold (Limit).
+  /// Note that this is always the case when Limit is ~0.
   /// It returns the types of the sequence of memory ops to perform
   /// memset / memcpy by reference.
   virtual bool

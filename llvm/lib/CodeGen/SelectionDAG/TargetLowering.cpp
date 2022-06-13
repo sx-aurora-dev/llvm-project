@@ -196,7 +196,8 @@ TargetLowering::makeLibCall(SelectionDAG &DAG, RTLIB::Libcall LC, EVT RetVT,
 bool TargetLowering::findOptimalMemOpLowering(
     std::vector<EVT> &MemOps, unsigned Limit, const MemOp &Op, unsigned DstAS,
     unsigned SrcAS, const AttributeList &FuncAttributes) const {
-  if (Op.isMemcpyWithFixedDstAlign() && Op.getSrcAlign() < Op.getDstAlign())
+  if (Limit != ~unsigned(0) && Op.isMemcpyWithFixedDstAlign() &&
+      Op.getSrcAlign() < Op.getDstAlign())
     return false;
 
   EVT VT = getOptimalMemOpType(Op, FuncAttributes);
@@ -2870,6 +2871,25 @@ bool TargetLowering::SimplifyDemandedVectorElts(
         return true;
       KnownUndef.insertBits(SubUndef, i * NumSubElts);
       KnownZero.insertBits(SubZero, i * NumSubElts);
+    }
+
+    // Attempt to avoid multi-use ops if we don't need anything from them.
+    if (!DemandedElts.isAllOnes()) {
+      bool FoundNewSub = false;
+      SmallVector<SDValue, 2> DemandedSubOps;
+      for (unsigned i = 0; i != NumSubVecs; ++i) {
+        SDValue SubOp = Op.getOperand(i);
+        APInt SubElts = DemandedElts.extractBits(NumSubElts, i * NumSubElts);
+        SDValue NewSubOp = SimplifyMultipleUseDemandedVectorElts(
+            SubOp, SubElts, TLO.DAG, Depth + 1);
+        DemandedSubOps.push_back(NewSubOp ? NewSubOp : SubOp);
+        FoundNewSub = NewSubOp ? true : FoundNewSub;
+      }
+      if (FoundNewSub) {
+        SDValue NewOp =
+            TLO.DAG.getNode(Op.getOpcode(), SDLoc(Op), VT, DemandedSubOps);
+        return TLO.CombineTo(Op, NewOp);
+      }
     }
     break;
   }
@@ -7505,7 +7525,9 @@ SDValue TargetLowering::expandIS_FPCLASS(EVT ResultVT, SDValue Op,
   assert(OperandVT.isFloatingPoint());
 
   // Degenerated cases.
-  if (Test == 0 || (Test & fcAllFlags) == fcAllFlags)
+  if (Test == 0)
+    return DAG.getBoolConstant(false, DL, ResultVT, OperandVT);
+  if ((Test & fcAllFlags) == fcAllFlags)
     return DAG.getBoolConstant(true, DL, ResultVT, OperandVT);
 
   // PPC double double is a pair of doubles, of which the higher part determines
@@ -7914,6 +7936,7 @@ SDValue TargetLowering::expandABS(SDNode *N, SelectionDAG &DAG,
   if (!IsNegative && isOperationLegal(ISD::SUB, VT) &&
       isOperationLegal(ISD::UMIN, VT)) {
     SDValue Zero = DAG.getConstant(0, dl, VT);
+    Op = DAG.getFreeze(Op);
     return DAG.getNode(ISD::UMIN, dl, VT, Op,
                        DAG.getNode(ISD::SUB, dl, VT, Zero, Op));
   }
@@ -7921,6 +7944,7 @@ SDValue TargetLowering::expandABS(SDNode *N, SelectionDAG &DAG,
   // 0 - abs(x) -> smin(x, sub(0,x))
   if (IsNegative && isOperationLegal(ISD::SUB, VT) &&
       isOperationLegal(ISD::SMIN, VT)) {
+    Op = DAG.getFreeze(Op);
     SDValue Zero = DAG.getConstant(0, dl, VT);
     return DAG.getNode(ISD::SMIN, dl, VT, Op,
                        DAG.getNode(ISD::SUB, dl, VT, Zero, Op));
@@ -7934,6 +7958,7 @@ SDValue TargetLowering::expandABS(SDNode *N, SelectionDAG &DAG,
        !isOperationLegalOrCustomOrPromote(ISD::XOR, VT)))
     return SDValue();
 
+  Op = DAG.getFreeze(Op);
   SDValue Shift =
       DAG.getNode(ISD::SRA, dl, VT, Op,
                   DAG.getConstant(VT.getScalarSizeInBits() - 1, dl, ShVT));

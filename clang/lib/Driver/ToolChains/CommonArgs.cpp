@@ -559,6 +559,9 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
     CmdArgs.push_back(
         Args.MakeArgString("-plugin-opt=jobs=" + Twine(Parallelism)));
 
+  if (!CLANG_ENABLE_OPAQUE_POINTERS_INTERNAL)
+    CmdArgs.push_back(Args.MakeArgString("-plugin-opt=no-opaque-pointers"));
+
   // If an explicit debugger tuning argument appeared, pass it along.
   if (Arg *A = Args.getLastArg(options::OPT_gTune_Group,
                                options::OPT_ggdbN_Group)) {
@@ -835,6 +838,9 @@ void tools::linkSanitizerRuntimeDeps(const ToolChain &TC,
       TC.getTriple().isOSNetBSD() ||
       TC.getTriple().isOSOpenBSD())
     CmdArgs.push_back("-lexecinfo");
+  // There is no libresolv on Android.
+  if (!TC.getTriple().isAndroid())
+    CmdArgs.push_back("-lresolv");
 }
 
 static void
@@ -1286,23 +1292,24 @@ tools::ParsePICArgs(const ToolChain &ToolChain, const ArgList &Args) {
             O.matches(options::OPT_fPIE) || O.matches(options::OPT_fPIC);
       } else {
         PIE = PIC = false;
-        if (EffectiveTriple.isPS4()) {
+        if (EffectiveTriple.isPS()) {
           Arg *ModelArg = Args.getLastArg(options::OPT_mcmodel_EQ);
           StringRef Model = ModelArg ? ModelArg->getValue() : "";
           if (Model != "kernel") {
             PIC = true;
-            ToolChain.getDriver().Diag(diag::warn_drv_ps4_force_pic)
-                << LastPICArg->getSpelling();
+            ToolChain.getDriver().Diag(diag::warn_drv_ps_force_pic)
+                << LastPICArg->getSpelling()
+                << (EffectiveTriple.isPS4() ? "PS4" : "PS5");
           }
         }
       }
     }
   }
 
-  // Introduce a Darwin and PS4-specific hack. If the default is PIC, but the
-  // PIC level would've been set to level 1, force it back to level 2 PIC
+  // Introduce a Darwin and PS4/PS5-specific hack. If the default is PIC, but
+  // the PIC level would've been set to level 1, force it back to level 2 PIC
   // instead.
-  if (PIC && (Triple.isOSDarwin() || EffectiveTriple.isPS4()))
+  if (PIC && (Triple.isOSDarwin() || EffectiveTriple.isPS()))
     IsPICLevelTwo |= ToolChain.isPICDefault();
 
   // This kernel flags are a trump-card: they will disable PIC/PIE
@@ -1781,8 +1788,13 @@ bool tools::GetSDLFromOffloadArchive(
   for (auto LPath : LibraryPaths) {
     ArchiveOfBundles.clear();
 
-    AOBFileNames.push_back(Twine(LPath + "/libdevice/lib" + Lib + ".a").str());
-    AOBFileNames.push_back(Twine(LPath + "/lib" + Lib + ".a").str());
+    llvm::Triple Triple(D.getTargetTriple());
+    bool IsMSVC = Triple.isWindowsMSVCEnvironment();
+    for (auto Prefix : {"/libdevice/", "/"}) {
+      if (IsMSVC)
+        AOBFileNames.push_back(Twine(LPath + Prefix + Lib + ".lib").str());
+      AOBFileNames.push_back(Twine(LPath + Prefix + "lib" + Lib + ".a").str());
+    }
 
     for (auto AOB : AOBFileNames) {
       if (llvm::sys::fs::exists(AOB)) {

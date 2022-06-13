@@ -1270,7 +1270,7 @@ bool InquireUnitState::Inquire(
     }
     return true;
   case HashInquiryKeyword("NUMBER"):
-    result = unit().IsConnected() ? unit().unitNumber() : -1;
+    result = unit().unitNumber();
     return true;
   case HashInquiryKeyword("POS"):
     result = unit().InquirePos();
@@ -1300,8 +1300,9 @@ bool InquireUnitState::Inquire(
   }
 }
 
-InquireNoUnitState::InquireNoUnitState(const char *sourceFile, int sourceLine)
-    : NoUnitIoStatementState{sourceFile, sourceLine, *this} {}
+InquireNoUnitState::InquireNoUnitState(
+    const char *sourceFile, int sourceLine, int badUnitNumber)
+    : NoUnitIoStatementState{*this, sourceFile, sourceLine, badUnitNumber} {}
 
 bool InquireNoUnitState::Inquire(
     InquiryKeywordHash inquiry, char *result, std::size_t length) {
@@ -1370,8 +1371,10 @@ bool InquireNoUnitState::Inquire(
 bool InquireNoUnitState::Inquire(
     InquiryKeywordHash inquiry, std::int64_t &result) {
   switch (inquiry) {
-  case HashInquiryKeyword("NEXTREC"):
   case HashInquiryKeyword("NUMBER"):
+    result = badUnitNumber();
+    return true;
+  case HashInquiryKeyword("NEXTREC"):
   case HashInquiryKeyword("POS"):
   case HashInquiryKeyword("RECL"):
   case HashInquiryKeyword("SIZE"):
@@ -1385,7 +1388,7 @@ bool InquireNoUnitState::Inquire(
 
 InquireUnconnectedFileState::InquireUnconnectedFileState(
     OwningPtr<char> &&path, const char *sourceFile, int sourceLine)
-    : NoUnitIoStatementState{sourceFile, sourceLine, *this}, path_{std::move(
+    : NoUnitIoStatementState{*this, sourceFile, sourceLine}, path_{std::move(
                                                                  path)} {}
 
 bool InquireUnconnectedFileState::Inquire(
@@ -1480,8 +1483,10 @@ bool InquireUnconnectedFileState::Inquire(
   case HashInquiryKeyword("NUMBER"):
   case HashInquiryKeyword("POS"):
   case HashInquiryKeyword("RECL"):
-  case HashInquiryKeyword("SIZE"):
     result = -1;
+    return true;
+  case HashInquiryKeyword("SIZE"):
+    result = SizeInBytes(path_.get());
     return true;
   default:
     BadInquiryKeywordHashCrash(inquiry);
@@ -1491,7 +1496,7 @@ bool InquireUnconnectedFileState::Inquire(
 
 InquireIOLengthState::InquireIOLengthState(
     const char *sourceFile, int sourceLine)
-    : NoUnitIoStatementState{sourceFile, sourceLine, *this} {}
+    : NoUnitIoStatementState{*this, sourceFile, sourceLine} {}
 
 bool InquireIOLengthState::Emit(const char *, std::size_t n, std::size_t) {
   bytes_ += n;
@@ -1515,6 +1520,9 @@ bool InquireIOLengthState::Emit(const char32_t *p, std::size_t n) {
 
 int ErroneousIoStatementState::EndIoStatement() {
   SignalPendingError();
+  if (unit_) {
+    unit_->EndIoStatement();
+  }
   return IoStatementBase::EndIoStatement();
 }
 
