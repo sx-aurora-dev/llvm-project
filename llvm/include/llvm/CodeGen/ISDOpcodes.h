@@ -1314,8 +1314,6 @@ inline bool isBitwiseLogicOp(unsigned Opcode) {
 /// For example ISD::AND for ISD::VECREDUCE_AND.
 NodeType getVecReduceBaseOpcode(unsigned VecReduceOpcode);
 
-/// Vector Predication {
-
 /// Whether this is a vector-predicated Opcode.
 bool isVPOpcode(unsigned Opcode);
 
@@ -1330,17 +1328,6 @@ Optional<unsigned> getVPMaskIdx(unsigned Opcode);
 
 /// The operand position of the explicit vector length parameter.
 Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
-
-/// Translate this VP OpCode to an unpredicated instruction OpCode.
-Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
-
-/// Translate this non-VP Opcode to its corresponding VP Opcode
-unsigned GetVPForFunctionOpCode(unsigned OpCode);
-
-Optional<unsigned> getVPReductionStartParamPos(unsigned VPISD);
-Optional<unsigned> getVPReductionVectorParamPos(unsigned VPISD);
-
-/// } Vector Predication
 
 //===--------------------------------------------------------------------===//
 /// MemIndexedMode enum - This enum defines the load / store indexed
