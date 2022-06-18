@@ -510,6 +510,7 @@ namespace {
     SDValue visitMSCATTER(SDNode *N);
     SDValue visitFP_TO_FP16(SDNode *N);
     SDValue visitFP16_TO_FP(SDNode *N);
+    SDValue visitFP_TO_BF16(SDNode *N);
     SDValue visitVECREDUCE(SDNode *N);
     SDValue visitVPOp(SDNode *N);
 
@@ -1746,6 +1747,7 @@ SDValue DAGCombiner::visit(SDNode *N) {
   case ISD::LIFETIME_END:       return visitLIFETIME_END(N);
   case ISD::FP_TO_FP16:         return visitFP_TO_FP16(N);
   case ISD::FP16_TO_FP:         return visitFP16_TO_FP(N);
+  case ISD::FP_TO_BF16:         return visitFP_TO_BF16(N);
   case ISD::FREEZE:             return visitFREEZE(N);
   case ISD::VECREDUCE_FADD:
   case ISD::VECREDUCE_FMUL:
@@ -8956,7 +8958,7 @@ SDValue DAGCombiner::visitSHL(SDNode *N) {
         Mask = DAG.getNode(ISD::SHL, DL, VT, Mask, N01);
         Mask = DAG.getNode(ISD::SRL, DL, VT, Mask, Diff);
         SDValue Shift = DAG.getNode(ISD::SRL, DL, VT, N0.getOperand(0), Diff);
-        return DAG.getNode(ISD::AND, SDLoc(N0), VT, Shift, Mask);
+        return DAG.getNode(ISD::AND, DL, VT, Shift, Mask);
       }
       if (ISD::matchBinaryPredicate(N0.getOperand(1), N1, MatchShiftAmount,
                                     /*AllowUndefs*/ false,
@@ -8966,7 +8968,7 @@ SDValue DAGCombiner::visitSHL(SDNode *N) {
         SDValue Mask = DAG.getAllOnesConstant(DL, VT);
         Mask = DAG.getNode(ISD::SHL, DL, VT, Mask, N1);
         SDValue Shift = DAG.getNode(ISD::SHL, DL, VT, N0.getOperand(0), Diff);
-        return DAG.getNode(ISD::AND, SDLoc(N0), VT, Shift, Mask);
+        return DAG.getNode(ISD::AND, DL, VT, Shift, Mask);
       }
     }
   }
@@ -19426,6 +19428,41 @@ SDValue DAGCombiner::visitINSERT_VECTOR_ELT(SDNode *N) {
       Ops.append(NumElts, DAG.getUNDEF(InVal.getValueType()));
       return UpdateBuildVector(Ops);
     }
+
+    // If we're inserting into the end of a vector as part of an sequence, see
+    // if we can create a BUILD_VECTOR by following the sequence back up the
+    // chain.
+    if (Elt == (NumElts - 1)) {
+      SmallVector<SDValue> ReverseInsertions;
+      ReverseInsertions.push_back(InVal);
+
+      EVT MaxEltVT = InVal.getValueType();
+      SDValue CurVec = InVec;
+      for (unsigned I = 1; I != NumElts; ++I) {
+        if (CurVec.getOpcode() != ISD::INSERT_VECTOR_ELT || !CurVec.hasOneUse())
+          break;
+
+        auto *CurIdx = dyn_cast<ConstantSDNode>(CurVec.getOperand(2));
+        if (!CurIdx || CurIdx->getAPIntValue() != ((NumElts - 1) - I))
+          break;
+        SDValue CurVal = CurVec.getOperand(1);
+        ReverseInsertions.push_back(CurVal);
+        if (VT.isInteger()) {
+          EVT CurValVT = CurVal.getValueType();
+          MaxEltVT = MaxEltVT.bitsGE(CurValVT) ? MaxEltVT : CurValVT;
+        }
+        CurVec = CurVec.getOperand(0);
+      }
+
+      if (ReverseInsertions.size() == NumElts) {
+        for (unsigned I = 0; I != NumElts; ++I) {
+          SDValue Val = ReverseInsertions[(NumElts - 1) - I];
+          Val = VT.isInteger() ? DAG.getAnyExtOrTrunc(Val, DL, MaxEltVT) : Val;
+          Ops.push_back(Val);
+        }
+        return DAG.getBuildVector(VT, DL, Ops);
+      }
+    }
   }
 
   return SDValue();
@@ -23033,6 +23070,16 @@ SDValue DAGCombiner::visitFP16_TO_FP(SDNode *N) {
                          N0.getOperand(0));
     }
   }
+
+  return SDValue();
+}
+
+SDValue DAGCombiner::visitFP_TO_BF16(SDNode *N) {
+  SDValue N0 = N->getOperand(0);
+
+  // fold (fp_to_bf16 (bf16_to_fp op)) -> op
+  if (N0->getOpcode() == ISD::BF16_TO_FP)
+    return N0->getOperand(0);
 
   return SDValue();
 }

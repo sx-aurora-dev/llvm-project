@@ -1796,25 +1796,6 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
       return BinaryOperator::CreateOr(And, ConstantInt::get(Ty, Together));
     }
 
-    // If the mask is only needed on one incoming arm, push the 'and' op up.
-    if (match(Op0, m_OneUse(m_Xor(m_Value(X), m_Value(Y)))) ||
-        match(Op0, m_OneUse(m_Or(m_Value(X), m_Value(Y))))) {
-      APInt NotAndMask(~(*C));
-      BinaryOperator::BinaryOps BinOp = cast<BinaryOperator>(Op0)->getOpcode();
-      if (MaskedValueIsZero(X, NotAndMask, 0, &I)) {
-        // Not masking anything out for the LHS, move mask to RHS.
-        // and ({x}or X, Y), C --> {x}or X, (and Y, C)
-        Value *NewRHS = Builder.CreateAnd(Y, Op1, Y->getName() + ".masked");
-        return BinaryOperator::Create(BinOp, X, NewRHS);
-      }
-      if (!isa<Constant>(Y) && MaskedValueIsZero(Y, NotAndMask, 0, &I)) {
-        // Not masking anything out for the RHS, move mask to LHS.
-        // and ({x}or X, Y), C --> {x}or (and X, C), Y
-        Value *NewLHS = Builder.CreateAnd(X, Op1, X->getName() + ".masked");
-        return BinaryOperator::Create(BinOp, NewLHS, Y);
-      }
-    }
-
     unsigned Width = Ty->getScalarSizeInBits();
     const APInt *ShiftC;
     if (match(Op0, m_OneUse(m_SExt(m_AShr(m_Value(X), m_APInt(ShiftC)))))) {
@@ -1912,28 +1893,81 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
       }
     }
 
+    // This is intentionally placed after the narrowing transforms for
+    // efficiency (transform directly to the narrow logic op if possible).
+    // If the mask is only needed on one incoming arm, push the 'and' op up.
+    if (match(Op0, m_OneUse(m_Xor(m_Value(X), m_Value(Y)))) ||
+        match(Op0, m_OneUse(m_Or(m_Value(X), m_Value(Y))))) {
+      APInt NotAndMask(~(*C));
+      BinaryOperator::BinaryOps BinOp = cast<BinaryOperator>(Op0)->getOpcode();
+      if (MaskedValueIsZero(X, NotAndMask, 0, &I)) {
+        // Not masking anything out for the LHS, move mask to RHS.
+        // and ({x}or X, Y), C --> {x}or X, (and Y, C)
+        Value *NewRHS = Builder.CreateAnd(Y, Op1, Y->getName() + ".masked");
+        return BinaryOperator::Create(BinOp, X, NewRHS);
+      }
+      if (!isa<Constant>(Y) && MaskedValueIsZero(Y, NotAndMask, 0, &I)) {
+        // Not masking anything out for the RHS, move mask to LHS.
+        // and ({x}or X, Y), C --> {x}or (and X, C), Y
+        Value *NewLHS = Builder.CreateAnd(X, Op1, X->getName() + ".masked");
+        return BinaryOperator::Create(BinOp, NewLHS, Y);
+      }
+    }
+
+    // When the mask is a power-of-2 constant and op0 is a shifted-power-of-2
+    // constant, test if the shift amount equals the offset bit index:
+    // (ShiftC << X) & C --> X == (log2(C) - log2(ShiftC)) ? C : 0
+    // (ShiftC >> X) & C --> X == (log2(ShiftC) - log2(C)) ? C : 0
+    if (C->isPowerOf2() &&
+        match(Op0, m_OneUse(m_LogicalShift(m_Power2(ShiftC), m_Value(X))))) {
+      int Log2ShiftC = ShiftC->exactLogBase2();
+      int Log2C = C->exactLogBase2();
+      bool IsShiftLeft =
+         cast<BinaryOperator>(Op0)->getOpcode() == Instruction::Shl;
+      int BitNum = IsShiftLeft ? Log2C - Log2ShiftC : Log2ShiftC - Log2C;
+      assert(BitNum >= 0 && "Expected demanded bits to handle impossible mask");
+      Value *Cmp = Builder.CreateICmpEQ(X, ConstantInt::get(Ty, BitNum));
+      return SelectInst::Create(Cmp, ConstantInt::get(Ty, *C),
+                                ConstantInt::getNullValue(Ty));
+    }
+
     Constant *C1, *C2;
     const APInt *C3 = C;
     Value *X;
-    if (C3->isPowerOf2() &&
-        match(Op0, m_OneUse(m_LShr(m_Shl(m_ImmConstant(C1), m_Value(X)),
-                                   m_ImmConstant(C2)))) &&
-        match(C1, m_Power2())) {
-      Constant *Log2C1 = ConstantExpr::getExactLogBase2(C1);
+    if (C3->isPowerOf2()) {
       Constant *Log2C3 = ConstantInt::get(Ty, C3->countTrailingZeros());
-      Constant *LshrC = ConstantExpr::getAdd(C2, Log2C3);
-      KnownBits KnownLShrc = computeKnownBits(LshrC, 0, nullptr);
-      if (KnownLShrc.getMaxValue().ult(Width)) {
-        // iff C1,C3 is pow2 and C2 + cttz(C3) < BitWidth:
-        // ((C1 << X) >> C2) & C3 -> X == (cttz(C3)+C2-cttz(C1)) ? C3 : 0
-        Constant *CmpC = ConstantExpr::getSub(LshrC, Log2C1);
-        Value *Cmp = Builder.CreateICmpEQ(X, CmpC);
-        return SelectInst::Create(Cmp, ConstantInt::get(Ty, *C3),
-                                  ConstantInt::getNullValue(Ty));
+      if (match(Op0, m_OneUse(m_LShr(m_Shl(m_ImmConstant(C1), m_Value(X)),
+                                     m_ImmConstant(C2)))) &&
+          match(C1, m_Power2())) {
+        Constant *Log2C1 = ConstantExpr::getExactLogBase2(C1);
+        Constant *LshrC = ConstantExpr::getAdd(C2, Log2C3);
+        KnownBits KnownLShrc = computeKnownBits(LshrC, 0, nullptr);
+        if (KnownLShrc.getMaxValue().ult(Width)) {
+          // iff C1,C3 is pow2 and C2 + cttz(C3) < BitWidth:
+          // ((C1 << X) >> C2) & C3 -> X == (cttz(C3)+C2-cttz(C1)) ? C3 : 0
+          Constant *CmpC = ConstantExpr::getSub(LshrC, Log2C1);
+          Value *Cmp = Builder.CreateICmpEQ(X, CmpC);
+          return SelectInst::Create(Cmp, ConstantInt::get(Ty, *C3),
+                                    ConstantInt::getNullValue(Ty));
+        }
       }
-      // TODO: Symmetrical case
-      // iff C1,C3 is pow2 and Log2(C3) >= C2:
-      // ((C1 >> X) << C2) & C3 -> X == (cttz(C1)+C2-cttz(C3)) ? C3 : 0
+
+      if (match(Op0, m_OneUse(m_Shl(m_LShr(m_ImmConstant(C1), m_Value(X)),
+                                    m_ImmConstant(C2)))) &&
+          match(C1, m_Power2())) {
+        Constant *Log2C1 = ConstantExpr::getExactLogBase2(C1);
+        Constant *Cmp =
+            ConstantExpr::getCompare(ICmpInst::ICMP_ULT, Log2C3, C2);
+        if (Cmp->isZeroValue()) {
+          // iff C1,C3 is pow2 and Log2(C3) >= C2:
+          // ((C1 >> X) << C2) & C3 -> X == (cttz(C1)+C2-cttz(C3)) ? C3 : 0
+          Constant *ShlC = ConstantExpr::getAdd(C2, Log2C1);
+          Constant *CmpC = ConstantExpr::getSub(ShlC, Log2C3);
+          Value *Cmp = Builder.CreateICmpEQ(X, CmpC);
+          return SelectInst::Create(Cmp, ConstantInt::get(Ty, *C3),
+                                    ConstantInt::getNullValue(Ty));
+        }
+      }
     }
   }
 
