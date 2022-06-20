@@ -214,9 +214,3 @@ void VEInstPrinter::printRDOperand(const MCInst *MI, int OpNum,
   int RD = (int)MI->getOperand(OpNum).getImm();
   O << VERDToString((VERD::RoundingMode)RD);
 }
-
-bool VEInstPrinter::printGetGOT(const MCInst *MI, unsigned OpNum,
-                                const MCSubtargetInfo &STI, raw_ostream &O) {
-  llvm_unreachable("FIXME: Implement VEInstPrinter::printGetGOT.");
-  return true;
-}

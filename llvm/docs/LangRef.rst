@@ -17960,7 +17960,7 @@ the range:
 
 ::
 
-      0 <= %evl <= W,  where W is the (total) number of vector elements
+      0 <= %evl <= W,  where W is the number of vector elements
 
 Note that for :ref:`scalable vector types <t_vector>` ``W`` is the runtime
 length of the vector.
@@ -18797,6 +18797,7 @@ Overview:
 """""""""
 
 Predicated floating-point addition of two vectors of floating-point values.
+
 
 Arguments:
 """"""""""
@@ -19904,10 +19905,12 @@ This is an overloaded intrinsic.
       declare <16 x i1> @llvm.get.active.lane.mask.v16i1.i64(i64 %base, i64 %n)
       declare <vscale x 16 x i1> @llvm.get.active.lane.mask.nxv16i1.i64(i64 %base, i64 %n)
 
+
 Overview:
 """""""""
 
 Create a mask representing active and inactive vector lanes.
+
 
 Arguments:
 """"""""""
@@ -19951,6 +19954,12 @@ This mask ``%m`` can e.g. be used in masked load/store instructions. These
 intrinsics provide a hint to the backend. I.e., for a vector loop, the
 back-edge taken count of the original scalar loop is explicit as the second
 argument.
+
+
+Examples:
+"""""""""
+
+.. code-block:: llvm
 
       %active.lane.mask = call <4 x i1> @llvm.get.active.lane.mask.v4i1.i64(i64 %elem0, i64 429)
       %wide.masked.load = call <4 x i32> @llvm.masked.load.v4i32.p0v4i32(<4 x i32>* %3, i32 4, <4 x i1> %active.lane.mask, <4 x i32> undef)
