@@ -2332,7 +2332,7 @@ void RewriteInstance::readRelocations(const SectionRef &Section) {
     SmallString<16> TypeName;
     Rel.getTypeName(TypeName);
     uint64_t RType = Rel.getType();
-    if (Relocation::isNone(RType))
+    if (Relocation::skipRelocationType(RType))
       continue;
 
     // Adjust the relocation type as the linker might have skewed it.
@@ -2903,6 +2903,7 @@ void RewriteInstance::disassembleFunctions() {
     BC->processInterproceduralReferences(Function);
   }
 
+  BC->clearJumpTableOffsets();
   BC->populateJumpTables();
   BC->skipMarkedFragments();
 
