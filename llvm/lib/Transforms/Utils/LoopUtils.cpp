@@ -254,10 +254,10 @@ llvm::getOptionalElementCountLoopAttribute(const Loop *TheLoop) {
   Optional<int> Width =
       getOptionalIntLoopAttribute(TheLoop, "llvm.loop.vectorize.width");
 
-  if (Width.hasValue()) {
+  if (Width) {
     Optional<int> IsScalable = getOptionalIntLoopAttribute(
         TheLoop, "llvm.loop.vectorize.scalable.enable");
-    return ElementCount::get(*Width, IsScalable.getValueOr(false));
+    return ElementCount::get(*Width, IsScalable.value_or(false));
   }
 
   return None;

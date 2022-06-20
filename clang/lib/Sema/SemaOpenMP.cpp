@@ -2395,7 +2395,7 @@ OpenMPClauseKind Sema::isOpenMPPrivateDecl(ValueDecl *D, unsigned Level,
   // User-defined allocators are private since they must be defined in the
   // context of target region.
   if (DSAStack->hasExplicitDirective(isOpenMPTargetExecutionDirective, Level) &&
-      DSAStack->isUsesAllocatorsDecl(Level, D).getValueOr(
+      DSAStack->isUsesAllocatorsDecl(Level, D).value_or(
           DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait) ==
           DSAStackTy::UsesAllocatorsDeclKind::UserDefinedAllocator)
     return OMPC_private;
@@ -3540,7 +3540,7 @@ public:
           !Stack->isImplicitTaskFirstprivate(VD))
         return;
       // Skip allocators in uses_allocators clauses.
-      if (Stack->isUsesAllocatorsDecl(VD).hasValue())
+      if (Stack->isUsesAllocatorsDecl(VD))
         return;
 
       DSAStackTy::DSAVarData DVar = Stack->getTopDSA(VD, /*FromParent=*/false);
@@ -5189,8 +5189,7 @@ class AllocatorChecker final : public ConstStmtVisitor<AllocatorChecker, bool> {
 public:
   bool VisitDeclRefExpr(const DeclRefExpr *E) {
     return S->isUsesAllocatorsDecl(E->getDecl())
-               .getValueOr(
-                   DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait) ==
+               .value_or(DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait) ==
            DSAStackTy::UsesAllocatorsDeclKind::AllocatorTrait;
   }
   bool VisitStmt(const Stmt *S) {
@@ -7651,7 +7650,7 @@ public:
   bool doesCondDependOnLC() const { return CondDependOnLC.hasValue(); }
   /// Returns index of the loop we depend on (starting from 1), or 0 otherwise.
   unsigned getLoopDependentIdx() const {
-    return InitDependOnLC.getValueOr(CondDependOnLC.getValueOr(0));
+    return InitDependOnLC.value_or(CondDependOnLC.value_or(0));
   }
 
 private:
@@ -8050,7 +8049,7 @@ bool OpenMPIterationSpaceChecker::checkAndSetCond(Expr *S) {
           CE->getArg(1), CE->getSourceRange(), CE->getOperatorLoc());
     }
   }
-  if (Res.hasValue())
+  if (Res)
     return *Res;
   if (dependent() || SemaRef.CurContext->isDependentContext())
     return false;
@@ -22184,7 +22183,7 @@ static void checkDeclInTargetContext(SourceLocation SL, SourceRange SR,
       return;
     }
   }
-  if (MapTy.hasValue())
+  if (MapTy)
     return;
   SemaRef.Diag(VD->getLocation(), diag::warn_omp_not_in_target_context);
   SemaRef.Diag(SL, diag::note_used_here) << SR;
