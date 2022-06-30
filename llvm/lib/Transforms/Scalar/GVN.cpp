@@ -1188,9 +1188,7 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
             canCoerceMustAliasedValueToLoad(DepLoad, LoadType, DL)) {
           const auto ClobberOff = MD->getClobberOffset(DepLoad);
           // GVN has no deal with a negative offset.
-          Offset = (ClobberOff == None || ClobberOff.getValue() < 0)
-                       ? -1
-                       : ClobberOff.getValue();
+          Offset = (ClobberOff == None || *ClobberOff < 0) ? -1 : *ClobberOff;
         }
         if (Offset == -1)
           Offset =
@@ -1234,12 +1232,11 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
     return true;
   }
 
-  if (isAllocationFn(DepInst, TLI))
-    if (auto *InitVal = getInitialValueOfAllocation(cast<CallBase>(DepInst),
-                                                    TLI, Load->getType())) {
-      Res = AvailableValue::get(InitVal);
-      return true;
-    }
+  if (Constant *InitVal =
+          getInitialValueOfAllocation(DepInst, TLI, Load->getType())) {
+    Res = AvailableValue::get(InitVal);
+    return true;
+  }
 
   if (StoreInst *S = dyn_cast<StoreInst>(DepInst)) {
     // Reject loads and stores that are to the same address but are of
