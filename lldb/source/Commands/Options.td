@@ -456,6 +456,11 @@ let Command = "log enable" in {
     Desc<"Prepend the names of files and function that generate the logs.">;
 }
 
+let Command = "log dump" in {
+  def log_dump_file : Option<"file", "f">, Group<1>, Arg<"Filename">,
+    Desc<"Set the destination file to dump to.">;
+}
+
 let Command = "reproducer dump" in {
   def reproducer_provider : Option<"provider", "p">, Group<1>,
     EnumArg<"None", "ReproducerProviderType()">,
@@ -1131,8 +1136,8 @@ let Command = "thread trace dump instructions" in {
     "id can be provided in decimal or hexadecimal representation.">;
   def thread_trace_dump_instructions_skip: Option<"skip", "s">, Group<1>,
     Arg<"Index">,
-    Desc<"How many instruction to skip from the starting position of the trace "
-    "before starting the traversal.">;
+    Desc<"How many trace items (instructions, errors and events) to skip from "
+    "the starting position of the trace before starting the traversal.">;
   def thread_trace_dump_instructions_raw : Option<"raw", "r">, Group<1>,
     Desc<"Dump only instruction address without disassembly nor symbol "
     "information.">;

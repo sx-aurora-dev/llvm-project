@@ -33,7 +33,7 @@
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanStepInRange.h"
 #include "lldb/Target/Trace.h"
-#include "lldb/Target/TraceInstructionDumper.h"
+#include "lldb/Target/TraceDumper.h"
 #include "lldb/Utility/State.h"
 
 using namespace lldb;
@@ -1033,21 +1033,11 @@ protected:
         line_table->FindLineEntryByAddress(fun_end_addr, function_start,
                                            &end_ptr);
 
-        // Since not all source lines will contribute code, check if we are
-        // setting the breakpoint on the exact line number or the nearest
-        // subsequent line number and set breakpoints at all the line table
-        // entries of the chosen line number (exact or nearest subsequent).
         for (uint32_t line_number : line_numbers) {
-          LineEntry line_entry;
-          bool exact = false;
           uint32_t start_idx_ptr = index_ptr;
-          start_idx_ptr = sc.comp_unit->FindLineEntry(
-              index_ptr, line_number, nullptr, exact, &line_entry);
-          if (start_idx_ptr != UINT32_MAX)
-            line_number = line_entry.line;
-          exact = true;
-          start_idx_ptr = index_ptr;
           while (start_idx_ptr <= end_ptr) {
+            LineEntry line_entry;
+            const bool exact = false;
             start_idx_ptr = sc.comp_unit->FindLineEntry(
                 start_idx_ptr, line_number, nullptr, exact, &line_entry);
             if (start_idx_ptr == UINT32_MAX)
@@ -2218,7 +2208,7 @@ public:
     size_t m_count;
     size_t m_continue;
     llvm::Optional<FileSpec> m_output_file;
-    TraceInstructionDumperOptions m_dumper_options;
+    TraceDumperOptions m_dumper_options;
   };
 
   CommandObjectTraceDumpInstructions(CommandInterpreter &interpreter)
@@ -2229,7 +2219,10 @@ public:
             nullptr,
             eCommandRequiresProcess | eCommandRequiresThread |
                 eCommandTryTargetAPILock | eCommandProcessMustBeLaunched |
-                eCommandProcessMustBePaused | eCommandProcessMustBeTraced) {}
+                eCommandProcessMustBePaused | eCommandProcessMustBeTraced) {
+    CommandArgumentData thread_arg{eArgTypeThreadIndex, eArgRepeatOptional};
+    m_arguments.push_back({thread_arg});
+  }
 
   ~CommandObjectTraceDumpInstructions() override = default;
 
@@ -2279,8 +2272,14 @@ protected:
       m_options.m_dumper_options.id = m_last_id;
     }
 
-    TraceCursorUP cursor_up =
-        m_exe_ctx.GetTargetSP()->GetTrace()->GetCursor(*thread_sp);
+    llvm::Expected<TraceCursorUP> cursor_or_error =
+        m_exe_ctx.GetTargetSP()->GetTrace()->CreateNewCursor(*thread_sp);
+
+    if (!cursor_or_error) {
+      result.AppendError(llvm::toString(cursor_or_error.takeError()));
+      return false;
+    }
+    TraceCursorUP &cursor_up = *cursor_or_error;
 
     if (m_options.m_dumper_options.id &&
         !cursor_up->HasId(*m_options.m_dumper_options.id)) {
@@ -2295,15 +2294,16 @@ protected:
                        lldb::eFilePermissionsFileDefault);
     }
 
-    TraceInstructionDumper dumper(
-        std::move(cursor_up), out_file ? *out_file : result.GetOutputStream(),
-        m_options.m_dumper_options);
-
     if (m_options.m_continue && !m_last_id) {
-      // We need to tell the dumper to stop processing data when
-      // we already ran out of instructions in a previous command
-      dumper.SetNoMoreData();
+      // We need to stop processing data when we already ran out of instructions
+      // in a previous command. We can fake this by setting the cursor past the
+      // end of the trace.
+      cursor_up->Seek(1, TraceCursor::SeekType::End);
     }
+
+    TraceDumper dumper(std::move(cursor_up),
+                       out_file ? *out_file : result.GetOutputStream(),
+                       m_options.m_dumper_options);
 
     m_last_id = dumper.DumpInstructions(m_options.m_count);
     return true;

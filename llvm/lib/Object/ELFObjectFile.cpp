@@ -358,6 +358,8 @@ Optional<StringRef> ELFObjectFileBase::tryGetCPUName() const {
   switch (getEMachine()) {
   case ELF::EM_AMDGPU:
     return getAMDGPUCPUName();
+  case ELF::EM_PPC64:
+    return StringRef("future");
   default:
     return None;
   }
@@ -678,7 +680,8 @@ readBBAddrMapImpl(const ELFFile<ELFT> &EF,
   std::vector<BBAddrMap> BBAddrMaps;
   const auto &Sections = cantFail(EF.sections());
   for (const Elf_Shdr &Sec : Sections) {
-    if (Sec.sh_type != ELF::SHT_LLVM_BB_ADDR_MAP)
+    if (Sec.sh_type != ELF::SHT_LLVM_BB_ADDR_MAP &&
+        Sec.sh_type != ELF::SHT_LLVM_BB_ADDR_MAP_V0)
       continue;
     if (TextSectionIndex) {
       Expected<const Elf_Shdr *> TextSecOrErr = EF.getSection(Sec.sh_link);

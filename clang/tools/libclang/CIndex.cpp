@@ -536,7 +536,7 @@ bool CursorVisitor::VisitChildren(CXCursor Cursor) {
                                            TLEnd = CXXUnit->top_level_end();
                TL != TLEnd; ++TL) {
             const Optional<bool> V = handleDeclForVisitation(*TL);
-            if (!V.hasValue())
+            if (!V)
               continue;
             return V.getValue();
           }
@@ -641,7 +641,7 @@ bool CursorVisitor::VisitDeclContext(DeclContext *DC) {
         if (OMD->isSynthesizedAccessorStub())
           continue;
     const Optional<bool> V = handleDeclForVisitation(D);
-    if (!V.hasValue())
+    if (!V)
       continue;
     return V.getValue();
   }
@@ -675,7 +675,7 @@ Optional<bool> CursorVisitor::handleDeclForVisitation(const Decl *D) {
   }
 
   const Optional<bool> V = shouldVisitCursor(Cursor);
-  if (!V.hasValue())
+  if (!V)
     return None;
   if (!V.getValue())
     return false;
@@ -1074,7 +1074,7 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
        I != E; ++I) {
     CXCursor Cursor = MakeCXCursor(*I, TU, RegionOfInterest);
     const Optional<bool> &V = shouldVisitCursor(Cursor);
-    if (!V.hasValue())
+    if (!V)
       continue;
     if (!V.getValue())
       return false;
@@ -2181,8 +2181,12 @@ public:
   void VisitOMPMaskedTaskLoopDirective(const OMPMaskedTaskLoopDirective *D);
   void
   VisitOMPMasterTaskLoopSimdDirective(const OMPMasterTaskLoopSimdDirective *D);
+  void VisitOMPMaskedTaskLoopSimdDirective(
+      const OMPMaskedTaskLoopSimdDirective *D);
   void VisitOMPParallelMasterTaskLoopDirective(
       const OMPParallelMasterTaskLoopDirective *D);
+  void VisitOMPParallelMaskedTaskLoopDirective(
+      const OMPParallelMaskedTaskLoopDirective *D);
   void VisitOMPParallelMasterTaskLoopSimdDirective(
       const OMPParallelMasterTaskLoopSimdDirective *D);
   void VisitOMPDistributeDirective(const OMPDistributeDirective *D);
@@ -3195,8 +3199,18 @@ void EnqueueVisitor::VisitOMPMasterTaskLoopSimdDirective(
   VisitOMPLoopDirective(D);
 }
 
+void EnqueueVisitor::VisitOMPMaskedTaskLoopSimdDirective(
+    const OMPMaskedTaskLoopSimdDirective *D) {
+  VisitOMPLoopDirective(D);
+}
+
 void EnqueueVisitor::VisitOMPParallelMasterTaskLoopDirective(
     const OMPParallelMasterTaskLoopDirective *D) {
+  VisitOMPLoopDirective(D);
+}
+
+void EnqueueVisitor::VisitOMPParallelMaskedTaskLoopDirective(
+    const OMPParallelMaskedTaskLoopDirective *D) {
   VisitOMPLoopDirective(D);
 }
 
@@ -5832,8 +5846,12 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("OMPMaskedTaskLoopDirective");
   case CXCursor_OMPMasterTaskLoopSimdDirective:
     return cxstring::createRef("OMPMasterTaskLoopSimdDirective");
+  case CXCursor_OMPMaskedTaskLoopSimdDirective:
+    return cxstring::createRef("OMPMaskedTaskLoopSimdDirective");
   case CXCursor_OMPParallelMasterTaskLoopDirective:
     return cxstring::createRef("OMPParallelMasterTaskLoopDirective");
+  case CXCursor_OMPParallelMaskedTaskLoopDirective:
+    return cxstring::createRef("OMPParallelMaskedTaskLoopDirective");
   case CXCursor_OMPParallelMasterTaskLoopSimdDirective:
     return cxstring::createRef("OMPParallelMasterTaskLoopSimdDirective");
   case CXCursor_OMPDistributeDirective:
@@ -8178,13 +8196,13 @@ static CXVersion convertVersion(VersionTuple In) {
   Out.Major = In.getMajor();
 
   Optional<unsigned> Minor = In.getMinor();
-  if (Minor.hasValue())
+  if (Minor)
     Out.Minor = *Minor;
   else
     return Out;
 
   Optional<unsigned> Subminor = In.getSubminor();
-  if (Subminor.hasValue())
+  if (Subminor)
     Out.Subminor = *Subminor;
 
   return Out;

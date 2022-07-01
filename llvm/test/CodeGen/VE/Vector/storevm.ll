@@ -169,4 +169,3 @@ define fastcc void @storev512i1com(<512 x i1> %m) {
   store <512 x i1> %m, <512 x i1>* @v512i1, align 16
   ret void
 }
-
