@@ -226,6 +226,30 @@ DiagnosedSilenceableFailure mlir::test::TestEmitRemarkAndEraseOperandOp::apply(
   return DiagnosedSilenceableFailure::success();
 }
 
+FailureOr<SmallVector<Operation *>>
+mlir::test::TestWrongNumberOfResultsOp::applyToOne(
+    Operation *, transform::TransformState &state) {
+  return SmallVector<Operation *>{};
+}
+
+FailureOr<SmallVector<Operation *>>
+mlir::test::TestWrongNumberOfMultiResultsOp::applyToOne(
+    Operation *op, transform::TransformState &state) {
+  static int count = 0;
+  if (count++ > 0)
+    return SmallVector<Operation *>{};
+  OperationState opState(op->getLoc(), "foo");
+  return SmallVector<Operation *>{OpBuilder(op).create(opState)};
+}
+
+FailureOr<SmallVector<Operation *>>
+mlir::test::TestCorrectNumberOfMultiResultsOp::applyToOne(
+    Operation *op, transform::TransformState &state) {
+  OperationState opState(op->getLoc(), "foo");
+  return SmallVector<Operation *>{OpBuilder(op).create(opState),
+                                  OpBuilder(op).create(opState)};
+}
+
 namespace {
 /// Test extension of the Transform dialect. Registers additional ops and
 /// declares PDL as dependent dialect since the additional ops are using PDL

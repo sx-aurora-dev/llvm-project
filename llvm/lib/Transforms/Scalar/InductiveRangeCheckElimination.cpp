@@ -1414,7 +1414,7 @@ bool LoopConstrainer::run() {
     return false;
   }
 
-  SubRanges SR = MaybeSR.getValue();
+  SubRanges SR = *MaybeSR;
   bool Increasing = MainLoopStructure.IndVarIncreasing;
   IntegerType *IVTy =
       cast<IntegerType>(Range.getBegin()->getType());
@@ -1708,7 +1708,7 @@ IntersectSignedRange(ScalarEvolution &SE,
                      const InductiveRangeCheck::Range &R2) {
   if (R2.isEmpty(SE, /* IsSigned */ true))
     return None;
-  if (!R1.hasValue())
+  if (!R1)
     return R2;
   auto &R1Value = R1.getValue();
   // We never return empty ranges from this function, and R1 is supposed to be
@@ -1737,7 +1737,7 @@ IntersectUnsignedRange(ScalarEvolution &SE,
                        const InductiveRangeCheck::Range &R2) {
   if (R2.isEmpty(SE, /* IsSigned */ false))
     return None;
-  if (!R1.hasValue())
+  if (!R1)
     return R2;
   auto &R1Value = R1.getValue();
   // We never return empty ranges from this function, and R1 is supposed to be
@@ -1927,7 +1927,7 @@ bool InductiveRangeCheckElimination::run(
                       << FailureReason << "\n";);
     return false;
   }
-  LoopStructure LS = MaybeLoopStructure.getValue();
+  LoopStructure LS = *MaybeLoopStructure;
   if (!isProfitableToTransform(*L, LS))
     return false;
   const SCEVAddRecExpr *IndVar =
@@ -1948,10 +1948,10 @@ bool InductiveRangeCheckElimination::run(
   for (InductiveRangeCheck &IRC : RangeChecks) {
     auto Result = IRC.computeSafeIterationSpace(SE, IndVar,
                                                 LS.IsSignedPredicate);
-    if (Result.hasValue()) {
+    if (Result) {
       auto MaybeSafeIterRange =
           IntersectRange(SE, SafeIterRange, Result.getValue());
-      if (MaybeSafeIterRange.hasValue()) {
+      if (MaybeSafeIterRange) {
         assert(
             !MaybeSafeIterRange.getValue().isEmpty(SE, LS.IsSignedPredicate) &&
             "We should never return empty ranges!");
@@ -1961,7 +1961,7 @@ bool InductiveRangeCheckElimination::run(
     }
   }
 
-  if (!SafeIterRange.hasValue())
+  if (!SafeIterRange)
     return false;
 
   LoopConstrainer LC(*L, LI, LPMAddNewLoop, LS, SE, DT,

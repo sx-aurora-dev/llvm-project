@@ -43,9 +43,9 @@
 #define PGMATH_DECLARE
 #include "flang/Evaluate/pgmath.h.inc"
 
-/// This file implements lowering of Fortran intrinsic procedures.
-/// Intrinsics are lowered to a mix of FIR and MLIR operations as
-/// well as call to runtime functions or LLVM intrinsics.
+/// This file implements lowering of Fortran intrinsic procedures and Fortran
+/// intrinsic module procedures.  A call may be inlined with a mix of FIR and
+/// MLIR operations, or as a call to a runtime function or LLVM intrinsic.
 
 /// Lowering of intrinsic procedure calls is based on a map that associates
 /// Fortran intrinsic generic names to FIR generator functions.
@@ -493,6 +493,10 @@ struct IntrinsicLibrary {
   mlir::Value genIbits(mlir::Type, llvm::ArrayRef<mlir::Value>);
   mlir::Value genIbset(mlir::Type, llvm::ArrayRef<mlir::Value>);
   fir::ExtendedValue genIchar(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
+  mlir::Value genIeeeIsFinite(mlir::Type, llvm::ArrayRef<mlir::Value>);
+  template <mlir::arith::CmpIPredicate pred>
+  fir::ExtendedValue genIeeeTypeCompare(mlir::Type,
+                                        llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genIeor(mlir::Type, llvm::ArrayRef<mlir::Value>);
   fir::ExtendedValue genIndex(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genIor(mlir::Type, llvm::ArrayRef<mlir::Value>);
@@ -758,6 +762,11 @@ static constexpr IntrinsicHandler handlers[]{
     {"ibits", &I::genIbits},
     {"ibset", &I::genIbset},
     {"ichar", &I::genIchar},
+    {"ieee_class_eq", &I::genIeeeTypeCompare<mlir::arith::CmpIPredicate::eq>},
+    {"ieee_class_ne", &I::genIeeeTypeCompare<mlir::arith::CmpIPredicate::ne>},
+    {"ieee_is_finite", &I::genIeeeIsFinite},
+    {"ieee_round_eq", &I::genIeeeTypeCompare<mlir::arith::CmpIPredicate::eq>},
+    {"ieee_round_ne", &I::genIeeeTypeCompare<mlir::arith::CmpIPredicate::ne>},
     {"ieor", &I::genIeor},
     {"index",
      &I::genIndex,
@@ -1274,7 +1283,7 @@ static mlir::func::FuncOp getRuntimeFunction(mlir::Location loc,
                                              llvm::StringRef name,
                                              mlir::FunctionType funcType) {
   const RuntimeFunction *bestNearMatch = nullptr;
-  FunctionDistance bestMatchDistance{};
+  FunctionDistance bestMatchDistance;
   mlir::func::FuncOp match;
   using RtMap = Fortran::common::StaticMultimapView<RuntimeFunction>;
   static constexpr RtMap pgmathF(pgmathFast);
@@ -1395,7 +1404,11 @@ mlir::Value toValue(const fir::ExtendedValue &val, fir::FirOpBuilder &builder,
                     mlir::Location loc) {
   if (const fir::CharBoxValue *charBox = val.getCharBox()) {
     mlir::Value buffer = charBox->getBuffer();
-    if (buffer.getType().isa<fir::BoxCharType>())
+    auto buffTy = buffer.getType();
+    if (buffTy.isa<mlir::FunctionType>())
+      fir::emitFatalError(
+          loc, "A character's buffer type cannot be a function type.");
+    if (buffTy.isa<fir::BoxCharType>())
       return buffer;
     return fir::factory::CharacterExprHelper{builder, loc}.createEmboxChar(
         buffer, charBox->getLen());
@@ -1410,9 +1423,33 @@ mlir::Value toValue(const fir::ExtendedValue &val, fir::FirOpBuilder &builder,
 // IntrinsicLibrary
 //===----------------------------------------------------------------------===//
 
-/// Emit a TODO error message for as yet unimplemented intrinsics.
-static void crashOnMissingIntrinsic(mlir::Location loc, llvm::StringRef name) {
-  TODO(loc, "missing intrinsic lowering: " + llvm::Twine(name));
+static bool isIntrinsicModuleProcedure(llvm::StringRef name) {
+  return name.startswith("c_") || name.startswith("compiler_") ||
+         name.startswith("ieee_");
+}
+
+/// Return the generic name of an intrinsic module procedure specific name.
+/// Remove any "__builtin_" prefix, and any specific suffix of the form
+/// {_[ail]?[0-9]+}*, such as _1 or _a4.
+llvm::StringRef genericName(llvm::StringRef specificName) {
+  const std::string builtin = "__builtin_";
+  llvm::StringRef name = specificName.startswith(builtin)
+                             ? specificName.drop_front(builtin.size())
+                             : specificName;
+  size_t size = name.size();
+  if (isIntrinsicModuleProcedure(name))
+    while (isdigit(name[size - 1]))
+      while (name[--size] != '_')
+        ;
+  return name.drop_back(name.size() - size);
+}
+
+/// Generate a TODO error message for an as yet unimplemented intrinsic.
+void crashOnMissingIntrinsic(mlir::Location loc, llvm::StringRef name) {
+  if (isIntrinsicModuleProcedure(name))
+    TODO(loc, "intrinsic module procedure: " + llvm::Twine(name));
+  else
+    TODO(loc, "intrinsic: " + llvm::Twine(name));
 }
 
 template <typename GeneratorType>
@@ -1502,9 +1539,10 @@ invokeHandler(IntrinsicLibrary::SubroutineGenerator generator,
 }
 
 fir::ExtendedValue
-IntrinsicLibrary::genIntrinsicCall(llvm::StringRef name,
+IntrinsicLibrary::genIntrinsicCall(llvm::StringRef specificName,
                                    llvm::Optional<mlir::Type> resultType,
                                    llvm::ArrayRef<fir::ExtendedValue> args) {
+  llvm::StringRef name = genericName(specificName);
   if (const IntrinsicHandler *handler = findIntrinsicHandler(name)) {
     bool outline = handler->outline || outlineAllIntrinsics;
     return std::visit(
@@ -1695,10 +1733,10 @@ IntrinsicLibrary::getRuntimeCallGenerator(llvm::StringRef name,
   mlir::func::FuncOp funcOp =
       getRuntimeFunction(loc, builder, name, soughtFuncType);
   if (!funcOp) {
-    std::string buffer("not yet implemented: missing intrinsic lowering: ");
-    llvm::raw_string_ostream sstream(buffer);
-    sstream << name << "\nrequested type was: " << soughtFuncType << '\n';
-    fir::emitFatalError(loc, buffer);
+    std::string nameAndType;
+    llvm::raw_string_ostream sstream(nameAndType);
+    sstream << name << "\nrequested type: " << soughtFuncType;
+    crashOnMissingIntrinsic(loc, nameAndType);
   }
 
   mlir::FunctionType actualFuncType = funcOp.getFunctionType();
@@ -2523,7 +2561,9 @@ void IntrinsicLibrary::genGetEnvironmentVariable(
 mlir::Value IntrinsicLibrary::genIand(mlir::Type resultType,
                                       llvm::ArrayRef<mlir::Value> args) {
   assert(args.size() == 2);
-  return builder.create<mlir::arith::AndIOp>(loc, args[0], args[1]);
+  auto arg0 = builder.createConvert(loc, resultType, args[0]);
+  auto arg1 = builder.createConvert(loc, resultType, args[1]);
+  return builder.create<mlir::arith::AndIOp>(loc, arg0, arg1);
 }
 
 // IBCLR
@@ -2619,6 +2659,67 @@ IntrinsicLibrary::genIchar(mlir::Type resultType,
   if (code.getType() == resultType)
     return code;
   return builder.create<mlir::arith::ExtUIOp>(loc, resultType, code);
+}
+
+// IEEE_CLASS_TYPE OPERATOR(==), OPERATOR(/=)
+// IEEE_ROUND_TYPE OPERATOR(==), OPERATOR(/=)
+template <mlir::arith::CmpIPredicate pred>
+fir::ExtendedValue
+IntrinsicLibrary::genIeeeTypeCompare(mlir::Type resultType,
+                                     llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 2);
+  mlir::Value arg0 = fir::getBase(args[0]);
+  mlir::Value arg1 = fir::getBase(args[1]);
+  auto recType =
+      fir::unwrapPassByRefType(arg0.getType()).dyn_cast<fir::RecordType>();
+  assert(recType.getTypeList().size() == 1 && "expected exactly one component");
+  auto [fieldName, fieldType] = recType.getTypeList().front();
+  mlir::Type fieldIndexType = fir::FieldType::get(recType.getContext());
+  mlir::Value field = builder.create<fir::FieldIndexOp>(
+      loc, fieldIndexType, fieldName, recType, fir::getTypeParams(arg0));
+  mlir::Value left = builder.create<fir::LoadOp>(
+      loc, fieldType,
+      builder.create<fir::CoordinateOp>(loc, builder.getRefType(fieldType),
+                                        arg0, field));
+  mlir::Value right = builder.create<fir::LoadOp>(
+      loc, fieldType,
+      builder.create<fir::CoordinateOp>(loc, builder.getRefType(fieldType),
+                                        arg1, field));
+  return builder.create<mlir::arith::CmpIOp>(loc, pred, left, right);
+}
+
+// IEEE_IS_FINITE
+mlir::Value
+IntrinsicLibrary::genIeeeIsFinite(mlir::Type resultType,
+                                  llvm::ArrayRef<mlir::Value> args) {
+  // IEEE_IS_FINITE(X) is true iff exponent(X) is the max exponent of kind(X).
+  assert(args.size() == 1);
+  mlir::Value floatVal = fir::getBase(args[0]);
+  mlir::FloatType floatType = floatVal.getType().dyn_cast<mlir::FloatType>();
+  int floatBits = floatType.getWidth();
+  mlir::Type intType = builder.getIntegerType(
+      floatType.isa<mlir::Float80Type>() ? 128 : floatBits);
+  mlir::Value intVal =
+      builder.create<mlir::arith::BitcastOp>(loc, intType, floatVal);
+  int significandBits;
+  if (floatType.isa<mlir::Float32Type>())
+    significandBits = 23;
+  else if (floatType.isa<mlir::Float64Type>())
+    significandBits = 52;
+  else // problems elsewhere for other kinds
+    TODO(loc, "intrinsic module procedure: ieee_is_finite");
+  mlir::Value significand =
+      builder.createIntegerConstant(loc, intType, significandBits);
+  int exponentBits = floatBits - 1 - significandBits;
+  mlir::Value maxExponent =
+      builder.createIntegerConstant(loc, intType, (1 << exponentBits) - 1);
+  mlir::Value exponent = genIbits(
+      intType, {intVal, significand,
+                builder.createIntegerConstant(loc, intType, exponentBits)});
+  return builder.createConvert(
+      loc, resultType,
+      builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::ne,
+                                          exponent, maxExponent));
 }
 
 // IEOR
@@ -2811,7 +2912,7 @@ IntrinsicLibrary::genLenTrim(mlir::Type resultType,
 // LGE, LGT, LLE, LLT
 template <mlir::arith::CmpIPredicate pred>
 fir::ExtendedValue
-IntrinsicLibrary::genCharacterCompare(mlir::Type type,
+IntrinsicLibrary::genCharacterCompare(mlir::Type resultType,
                                       llvm::ArrayRef<fir::ExtendedValue> args) {
   assert(args.size() == 2);
   return fir::runtime::genCharCompare(
@@ -2852,13 +2953,20 @@ fir::ExtendedValue
 IntrinsicLibrary::genMerge(mlir::Type,
                            llvm::ArrayRef<fir::ExtendedValue> args) {
   assert(args.size() == 3);
-  mlir::Value arg0 = fir::getBase(args[0]);
-  mlir::Value arg1 = fir::getBase(args[1]);
-  mlir::Value arg2 = fir::getBase(args[2]);
-  mlir::Type type0 = fir::unwrapRefType(arg0.getType());
+  mlir::Value tsource = fir::getBase(args[0]);
+  mlir::Value fsource = fir::getBase(args[1]);
+  mlir::Value rawMask = fir::getBase(args[2]);
+  mlir::Type type0 = fir::unwrapRefType(tsource.getType());
   bool isCharRslt = fir::isa_char(type0); // result is same as first argument
-  mlir::Value mask = builder.createConvert(loc, builder.getI1Type(), arg2);
-  auto rslt = builder.create<mlir::arith::SelectOp>(loc, mask, arg0, arg1);
+  mlir::Value mask = builder.createConvert(loc, builder.getI1Type(), rawMask);
+  // FSOURCE has the same type as TSOURCE, but they may not have the same MLIR
+  // types (one can have dynamic length while the other has constant lengths,
+  // or one may be a fir.logical<> while the other is an i1). Insert a cast to
+  // fulfill mlir::SelectOp constraint that the MLIR types must be the same.
+  mlir::Value fsourceCast =
+      builder.createConvert(loc, tsource.getType(), fsource);
+  auto rslt =
+      builder.create<mlir::arith::SelectOp>(loc, mask, tsource, fsourceCast);
   if (isCharRslt) {
     // Need a CharBoxValue for character results
     const fir::CharBoxValue *charBox = args[0].getCharBox();
@@ -3361,6 +3469,56 @@ static mlir::Value computeLBOUND(fir::FirOpBuilder &builder, mlir::Location loc,
   return builder.create<mlir::arith::SelectOp>(loc, dimIsEmpty, one, lb);
 }
 
+/// Create a fir.box to be passed to the LBOUND runtime.
+/// This ensure that local lower bounds of assumed shape are propagated and that
+/// a fir.box with equivalent LBOUNDs but an explicit shape is created for
+/// assumed size arrays to avoid undefined behaviors in codegen or the runtime.
+static mlir::Value createBoxForLBOUND(mlir::Location loc,
+                                      fir::FirOpBuilder &builder,
+                                      const fir::ExtendedValue &array) {
+  if (!array.isAssumedSize())
+    return array.match(
+        [&](const fir::BoxValue &boxValue) -> mlir::Value {
+          // This entity is mapped to a fir.box that may not contain the local
+          // lower bound information if it is a dummy. Rebox it with the local
+          // shape information.
+          mlir::Value localShape = builder.createShape(loc, array);
+          mlir::Value oldBox = boxValue.getAddr();
+          return builder.create<fir::ReboxOp>(loc, oldBox.getType(), oldBox,
+                                              localShape,
+                                              /*slice=*/mlir::Value{});
+        },
+        [&](const auto &) -> mlir::Value {
+          // This a pointer/allocatable, or an entity not yet tracked with a
+          // fir.box. For pointer/allocatable, createBox will forward the
+          // descriptor that contains the correct lower bound information. For
+          // other entities, a new fir.box will be made with the local lower
+          // bounds.
+          return builder.createBox(loc, array);
+        });
+  // Assumed sized are not meant to be emboxed. This could cause the undefined
+  // extent cannot safely be understood by the runtime/codegen that will
+  // consider that the dimension is empty and that the related LBOUND value must
+  // be one. Pretend that the related extent is one to get the correct LBOUND
+  // value.
+  llvm::SmallVector<mlir::Value> shape =
+      fir::factory::getExtents(loc, builder, array);
+  assert(!shape.empty() && "assumed size must have at least one dimension");
+  shape.back() = builder.createIntegerConstant(loc, builder.getIndexType(), 1);
+  auto safeToEmbox = array.match(
+      [&](const fir::CharArrayBoxValue &x) -> fir::ExtendedValue {
+        return fir::CharArrayBoxValue{x.getAddr(), x.getLen(), shape,
+                                      x.getLBounds()};
+      },
+      [&](const fir::ArrayBoxValue &x) -> fir::ExtendedValue {
+        return fir::ArrayBoxValue{x.getAddr(), shape, x.getLBounds()};
+      },
+      [&](const auto &) -> fir::ExtendedValue {
+        fir::emitFatalError(loc, "not an assumed size array");
+      });
+  return builder.createBox(loc, safeToEmbox);
+}
+
 // LBOUND
 fir::ExtendedValue
 IntrinsicLibrary::genLbound(mlir::Type resultType,
@@ -3411,25 +3569,7 @@ IntrinsicLibrary::genLbound(mlir::Type resultType,
     return builder.createConvert(loc, resultType, lb);
   }
 
-  mlir::Value box = array.match(
-      [&](const fir::BoxValue &boxValue) -> mlir::Value {
-        // This entity is mapped to a fir.box that may not contain the local
-        // lower bound information if it is a dummy. Rebox it with the local
-        // shape information.
-        mlir::Value localShape = builder.createShape(loc, array);
-        mlir::Value oldBox = boxValue.getAddr();
-        return builder.create<fir::ReboxOp>(
-            loc, oldBox.getType(), oldBox, localShape, /*slice=*/mlir::Value{});
-      },
-      [&](const auto &) -> mlir::Value {
-        // This a pointer/allocatable, or an entity not yet tracked with a
-        // fir.box. For pointer/allocatable, createBox will forward the
-        // descriptor that contains the correct lower bound information. For
-        // other entities, a new fir.box will be made with the local lower
-        // bounds.
-        return builder.createBox(loc, array);
-      });
-
+  fir::ExtendedValue box = createBoxForLBOUND(loc, builder, array);
   return builder.createConvert(
       loc, resultType,
       fir::runtime::genLboundDim(builder, loc, fir::getBase(box), dim));
@@ -3850,15 +3990,11 @@ Fortran::lower::getIntrinsicArgumentLowering(llvm::StringRef intrinsicName) {
 /// Return how argument \p argName should be lowered given the rules for the
 /// intrinsic function.
 Fortran::lower::ArgLoweringRule Fortran::lower::lowerIntrinsicArgumentAs(
-    mlir::Location loc, const IntrinsicArgumentLoweringRules &rules,
-    llvm::StringRef argName) {
-  for (const IntrinsicDummyArgument &arg : rules.args) {
-    if (arg.name && arg.name == argName)
-      return {arg.lowerAs, arg.handleDynamicOptional};
-  }
-  fir::emitFatalError(
-      loc, "internal: unknown intrinsic argument name in lowering '" + argName +
-               "'");
+    const IntrinsicArgumentLoweringRules &rules, unsigned position) {
+  assert(position < sizeof(rules.args) / sizeof(decltype(*rules.args)) &&
+         "invalid argument");
+  return {rules.args[position].lowerAs,
+          rules.args[position].handleDynamicOptional};
 }
 
 //===----------------------------------------------------------------------===//

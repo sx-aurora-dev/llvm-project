@@ -93,6 +93,7 @@ private:
   bool EnableDefaultUnroll = true;
   bool EnableSaveRestore = false;
   bool EnableUnalignedScalarMem = false;
+  bool HasLUIADDIFusion = false;
   unsigned XLen = 32;
   unsigned ZvlLen = 0;
   MVT XLenVT = MVT::i32;
@@ -184,6 +185,7 @@ public:
   bool enableDefaultUnroll() const { return EnableDefaultUnroll; }
   bool enableSaveRestore() const { return EnableSaveRestore; }
   bool enableUnalignedScalarMem() const { return EnableUnalignedScalarMem; }
+  bool hasLUIADDIFusion() const { return HasLUIADDIFusion; }
   MVT getXLenVT() const { return XLenVT; }
   unsigned getXLen() const { return XLen; }
   unsigned getFLen() const {
@@ -215,6 +217,8 @@ public:
     return UserReservedRegister[i];
   }
 
+  bool hasMacroFusion() const { return hasLUIADDIFusion(); }
+
   // Vector codegen related methods.
   bool hasVInstructions() const { return HasStdExtZve32x; }
   bool hasVInstructionsI64() const { return HasStdExtZve64x; }
@@ -236,6 +240,13 @@ protected:
   std::unique_ptr<LegalizerInfo> Legalizer;
   std::unique_ptr<RegisterBankInfo> RegBankInfo;
 
+  // Return the known range for the bit length of RVV data registers as set
+  // at the command line. A value of 0 means nothing is known about that particular
+  // limit beyond what's implied by the architecture.
+  // NOTE: Please use getRealMinVLen and getRealMaxVLen instead!
+  unsigned getMaxRVVVectorSizeInBits() const;
+  unsigned getMinRVVVectorSizeInBits() const;
+
 public:
   const CallLowering *getCallLowering() const override;
   InstructionSelector *getInstructionSelector() const override;
@@ -248,15 +259,13 @@ public:
   // pool if exceeded.
   unsigned getMaxBuildIntsCost() const;
 
-  // Return the known range for the bit length of RVV data registers. A value
-  // of 0 means nothing is known about that particular limit beyond what's
-  // implied by the architecture.
-  unsigned getMaxRVVVectorSizeInBits() const;
-  unsigned getMinRVVVectorSizeInBits() const;
   unsigned getMaxLMULForFixedLengthVectors() const;
   bool useRVVForFixedLengthVectors() const;
 
   bool enableSubRegLiveness() const override;
+
+  void getPostRAMutations(std::vector<std::unique_ptr<ScheduleDAGMutation>>
+                              &Mutations) const override;
 };
 } // End llvm namespace
 

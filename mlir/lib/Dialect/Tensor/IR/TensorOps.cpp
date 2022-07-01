@@ -309,7 +309,7 @@ LogicalResult DimOp::verify() {
   // Check that constant index is not knowingly out of range.
   auto type = source().getType();
   if (auto tensorType = type.dyn_cast<RankedTensorType>()) {
-    if (index.getValue() >= tensorType.getRank())
+    if (*index >= tensorType.getRank())
       return emitOpError("index is out of range");
   } else if (type.isa<UnrankedTensorType>()) {
     // Assume index to be in range.
@@ -844,6 +844,18 @@ void CollapseShapeOp::build(OpBuilder &b, OperationState &result, Value src,
                       getReassociationIndicesAttribute(b, reassociation));
 }
 
+// Checks if types are the same, but ignoring encoding on ranked tensors.
+static bool isSameTypesWithoutEncoding(Type tp1, Type tp2) {
+  if (auto rtp1 = tp1.dyn_cast<RankedTensorType>()) {
+    if (auto rtp2 = tp2.dyn_cast<RankedTensorType>())
+      return rtp1.getShape() == rtp2.getShape() &&
+             rtp1.getElementType() == rtp2.getElementType();
+    return false;
+  }
+  // Default implementation.
+  return tp1 == tp2;
+}
+
 template <typename TensorReshapeOp, bool isExpansion = std::is_same<
                                         TensorReshapeOp, ExpandShapeOp>::value>
 static LogicalResult verifyTensorReshapeOp(TensorReshapeOp op,
@@ -856,7 +868,7 @@ static LogicalResult verifyTensorReshapeOp(TensorReshapeOp op,
   auto maps = op.getReassociationMaps();
   RankedTensorType expectedType =
       computeTensorReshapeCollapsedType(expandedType, maps);
-  if (collapsedType != expectedType)
+  if (!isSameTypesWithoutEncoding(collapsedType, expectedType))
     return op.emitOpError("expected collapsed type to be ")
            << expectedType << ", but got " << collapsedType;
   return success();
@@ -1138,7 +1150,7 @@ llvm::SmallBitVector ExtractSliceOp::getDroppedDims() {
     // If the size is not 1, or if the current matched dimension of the result
     // is the same static shape as the size value (which is 1), then the
     // dimension is preserved.
-    if (!sizeVal || sizeVal.getValue() != 1 ||
+    if (!sizeVal || *sizeVal != 1 ||
         (shapePos < resultShape.size() && resultShape[shapePos] == 1)) {
       shapePos++;
       continue;

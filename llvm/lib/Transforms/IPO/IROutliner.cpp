@@ -554,7 +554,7 @@ collectRegionsConstants(OutlinableRegion &Region,
     // the the number has been found to be not the same value in each instance.
     for (Value *V : ID.OperVals) {
       Optional<unsigned> GVNOpt = C.getGVN(V);
-      assert(GVNOpt.hasValue() && "Expected a GVN for operand?");
+      assert(GVNOpt && "Expected a GVN for operand?");
       unsigned GVN = GVNOpt.getValue();
 
       // Check if this global value has been found to not be the same already.
@@ -569,7 +569,7 @@ collectRegionsConstants(OutlinableRegion &Region,
       // global value number.  If the global value does not map to a Constant,
       // it is considered to not be the same value.
       Optional<bool> ConstantMatches = constantMatches(V, GVN, GVNToConstant);
-      if (ConstantMatches.hasValue()) {
+      if (ConstantMatches) {
         if (ConstantMatches.getValue())
           continue;
         else
@@ -650,7 +650,7 @@ Function *IROutliner::createFunction(Module &M, OutlinableGroup &Group,
       "outlined_ir_func_" + std::to_string(FunctionNameSuffix), M);
 
   // Transfer the swifterr attribute to the correct function parameter.
-  if (Group.SwiftErrorArgument.hasValue())
+  if (Group.SwiftErrorArgument)
     Group.OutlinedFunction->addParamAttr(Group.SwiftErrorArgument.getValue(),
                                          Attribute::SwiftError);
 
@@ -777,7 +777,7 @@ static void findConstants(IRSimilarityCandidate &C, DenseSet<unsigned> &NotSame,
     for (Value *V : (*IDIt).OperVals) {
       // Since these are stored before any outlining, they will be in the
       // global value numbering.
-      unsigned GVN = C.getGVN(V).getValue();
+      unsigned GVN = *C.getGVN(V);
       if (isa<Constant>(V))
         if (NotSame.contains(GVN) && !Seen.contains(GVN)) {
           Inputs.push_back(GVN);
@@ -808,8 +808,7 @@ static void mapInputsToGVNs(IRSimilarityCandidate &C,
     assert(Input && "Have a nullptr as an input");
     if (OutputMappings.find(Input) != OutputMappings.end())
       Input = OutputMappings.find(Input)->second;
-    assert(C.getGVN(Input).hasValue() &&
-           "Could not find a numbering for the given input");
+    assert(C.getGVN(Input) && "Could not find a numbering for the given input");
     EndInputNumbers.push_back(C.getGVN(Input).getValue());
   }
 }
@@ -948,11 +947,11 @@ findExtractedInputToOverallInputMapping(OutlinableRegion &Region,
   // numbering overrides any discovered location for the extracted code.
   for (unsigned InputVal : InputGVNs) {
     Optional<unsigned> CanonicalNumberOpt = C.getCanonicalNum(InputVal);
-    assert(CanonicalNumberOpt.hasValue() && "Canonical number not found?");
+    assert(CanonicalNumberOpt && "Canonical number not found?");
     unsigned CanonicalNumber = CanonicalNumberOpt.getValue();
 
     Optional<Value *> InputOpt = C.fromGVN(InputVal);
-    assert(InputOpt.hasValue() && "Global value number not found?");
+    assert(InputOpt && "Global value number not found?");
     Value *Input = InputOpt.getValue();
 
     DenseMap<unsigned, unsigned>::iterator AggArgIt =
@@ -964,7 +963,7 @@ findExtractedInputToOverallInputMapping(OutlinableRegion &Region,
       // argument in the overall function.
       if (Input->isSwiftError()) {
         assert(
-            !Group.SwiftErrorArgument.hasValue() &&
+            !Group.SwiftErrorArgument &&
             "Argument already marked with swifterr for this OutlinableGroup!");
         Group.SwiftErrorArgument = TypeIndex;
       }
@@ -1194,7 +1193,7 @@ static Optional<unsigned> getGVNForPHINode(OutlinableRegion &Region,
       continue;
 
     // Collect the canonical numbers of the values in the PHINode.
-    unsigned GVN = OGVN.getValue();
+    unsigned GVN = *OGVN;
     OGVN = Cand.getCanonicalNum(GVN);
     assert(OGVN && "No GVN found for incoming value?");
     PHIGVNs.push_back(*OGVN);
@@ -1223,7 +1222,7 @@ static Optional<unsigned> getGVNForPHINode(OutlinableRegion &Region,
       assert(PrevBlock && "Expected a predecessor not in the reigon!");
       OGVN = Cand.getGVN(PrevBlock);
     }
-    GVN = OGVN.getValue();
+    GVN = *OGVN;
     OGVN = Cand.getCanonicalNum(GVN);
     assert(OGVN && "No GVN found for incoming block?");
     PHIGVNs.push_back(*OGVN);
@@ -1235,11 +1234,10 @@ static Optional<unsigned> getGVNForPHINode(OutlinableRegion &Region,
   DenseMap<hash_code, unsigned>::iterator GVNToPHIIt;
   DenseMap<unsigned, PHINodeData>::iterator PHIToGVNIt;
   Optional<unsigned> BBGVN = Cand.getGVN(PHIBB);
-  assert(BBGVN.hasValue() && "Could not find GVN for the incoming block!");
+  assert(BBGVN && "Could not find GVN for the incoming block!");
 
   BBGVN = Cand.getCanonicalNum(BBGVN.getValue());
-  assert(BBGVN.hasValue() &&
-         "Could not find canonical number for the incoming block!");
+  assert(BBGVN && "Could not find canonical number for the incoming block!");
   // Create a pair of the exit block canonical value, and the aggregate
   // argument location, connected to the canonical numbers stored in the
   // PHINode.
@@ -1517,7 +1515,7 @@ CallInst *replaceCalledFunction(Module &M, OutlinableRegion &Region) {
 
   // Make sure that the argument in the new function has the SwiftError
   // argument.
-  if (Group.SwiftErrorArgument.hasValue())
+  if (Group.SwiftErrorArgument)
     Call->addParamAttr(Group.SwiftErrorArgument.getValue(),
                        Attribute::SwiftError);
 
@@ -1650,9 +1648,9 @@ static void findCanonNumsForPHI(
 
     // Find and add the canonical number for the incoming value.
     Optional<unsigned> GVN = Region.Candidate->getGVN(IVal);
-    assert(GVN.hasValue() && "No GVN for incoming value");
+    assert(GVN && "No GVN for incoming value");
     Optional<unsigned> CanonNum = Region.Candidate->getCanonicalNum(*GVN);
-    assert(CanonNum.hasValue() && "No Canonical Number for GVN");
+    assert(CanonNum && "No Canonical Number for GVN");
     CanonNums.push_back(std::make_pair(*CanonNum, IBlock));
   }
 }
@@ -1871,7 +1869,7 @@ replaceArgumentUses(OutlinableRegion &Region,
       // If this is storing a PHINode, we must make sure it is included in the
       // overall function.
       if (!isa<PHINode>(ValueOperand) ||
-          Region.Candidate->getGVN(ValueOperand).hasValue()) {
+          Region.Candidate->getGVN(ValueOperand).has_value()) {
         if (FirstFunction)
           continue;
         Value *CorrVal =
@@ -2081,7 +2079,7 @@ static void alignOutputBlockWithAggFunc(
 
   // If there is, we remove the new output blocks.  If it does not,
   // we add it to our list of sets of output blocks.
-  if (MatchingBB.hasValue()) {
+  if (MatchingBB) {
     LLVM_DEBUG(dbgs() << "Set output block for region in function"
                       << Region.ExtractedFunction << " to "
                       << MatchingBB.getValue());
@@ -2504,9 +2502,9 @@ static Value *findOutputValueInRegion(OutlinableRegion &Region,
     OutputCanon = *It->second.second.begin();
   }
   Optional<unsigned> OGVN = Region.Candidate->fromCanonicalNum(OutputCanon);
-  assert(OGVN.hasValue() && "Could not find GVN for Canonical Number?");
+  assert(OGVN && "Could not find GVN for Canonical Number?");
   Optional<Value *> OV = Region.Candidate->fromGVN(*OGVN);
-  assert(OV.hasValue() && "Could not find value for GVN?");
+  assert(OV && "Could not find value for GVN?");
   return *OV;
 }
 

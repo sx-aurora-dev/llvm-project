@@ -1408,7 +1408,7 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
       // Right now, most targets return None i.e ignore to treat a symbol
       // separately. But WebAssembly decodes preludes for some symbols.
       //
-      if (Status.hasValue()) {
+      if (Status) {
         if (Status.getValue() == MCDisassembler::Fail) {
           outs() << "// Error in decoding " << SymbolName
                  << " : Decoding failed region as bytes.\n";
@@ -2129,7 +2129,7 @@ void objdump::printSymbol(const ObjectFile *O, const SymbolRef &Symbol,
           dyn_cast<const XCOFFObjectFile>(O), Symbol);
       if (SymRef) {
 
-        Expected<StringRef> NameOrErr = SymRef.getValue().getName();
+        Expected<StringRef> NameOrErr = SymRef->getName();
 
         if (NameOrErr) {
           outs() << " (csect:";
@@ -2289,7 +2289,7 @@ static void printFaultMaps(const ObjectFile *Obj) {
   }
 
   StringRef FaultMapContents =
-      unwrapOrError(FaultMapSection.getValue().getContents(), Obj->getFileName());
+      unwrapOrError(FaultMapSection->getContents(), Obj->getFileName());
   FaultMapParser FMP(FaultMapContents.bytes_begin(),
                      FaultMapContents.bytes_end());
 
