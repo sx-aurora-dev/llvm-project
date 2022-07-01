@@ -775,7 +775,6 @@ public:
   CallInst *CreateAssumption(Value *Cond,
                              ArrayRef<OperandBundleDef> OpBundles = llvm::None);
 
-
   /// Call an arithmetic VP intrinsic.
   Instruction *CreateVectorPredicatedInst(unsigned OC, Type *ReturnTy,
                                           ArrayRef<Value *>,
@@ -1188,11 +1187,11 @@ private:
   Value *getConstrainedFPRounding(Optional<RoundingMode> Rounding) {
     RoundingMode UseRounding = DefaultConstrainedRounding;
 
-    if (Rounding.hasValue())
+    if (Rounding)
       UseRounding = Rounding.getValue();
 
     Optional<StringRef> RoundingStr = convertRoundingModeToStr(UseRounding);
-    assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
+    assert(RoundingStr && "Garbage strict rounding mode!");
     auto *RoundingMDS = MDString::get(Context, RoundingStr.getValue());
 
     return MetadataAsValue::get(Context, RoundingMDS);
@@ -1201,10 +1200,14 @@ private:
   Value *getConstrainedFPExcept(Optional<fp::ExceptionBehavior> Except) {
     fp::ExceptionBehavior UseExcept = DefaultConstrainedExcept;
 
-    if (Except.hasValue())
+    if (Except)
       UseExcept = Except.getValue();
 
-    return GetConstrainedFPExcept(Context, UseExcept);
+    Optional<StringRef> ExceptStr = convertExceptionBehaviorToStr(UseExcept);
+    assert(ExceptStr && "Garbage strict exception behavior!");
+    auto *ExceptMDS = MDString::get(Context, ExceptStr.getValue());
+
+    return MetadataAsValue::get(Context, ExceptMDS);
   }
 
   Value *getConstrainedFPPredicate(CmpInst::Predicate Predicate) {
