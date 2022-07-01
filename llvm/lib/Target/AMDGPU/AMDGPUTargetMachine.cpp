@@ -272,6 +272,12 @@ static cl::opt<bool> EnableSIModeRegisterPass(
   cl::init(true),
   cl::Hidden);
 
+// Enable GFX11+ s_delay_alu insertion
+static cl::opt<bool>
+    EnableInsertDelayAlu("amdgpu-enable-delay-alu",
+                         cl::desc("Enable s_delay_alu insertion"),
+                         cl::init(true), cl::Hidden);
+
 // Option is used in lit tests to prevent deadcoding of patterns inspected.
 static cl::opt<bool>
 EnableDCEInRA("amdgpu-dce-in-ra",
@@ -363,6 +369,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPURewriteOutArgumentsPass(*PR);
   initializeAMDGPUUnifyMetadataPass(*PR);
   initializeSIAnnotateControlFlowPass(*PR);
+  initializeAMDGPUReleaseVGPRsPass(*PR);
+  initializeAMDGPUInsertDelayAluPass(*PR);
   initializeSIInsertHardClausesPass(*PR);
   initializeSIInsertWaitcntsPass(*PR);
   initializeSIModeRegisterPass(*PR);
@@ -396,9 +404,12 @@ static ScheduleDAGInstrs *createSIMachineScheduler(MachineSchedContext *C) {
 
 static ScheduleDAGInstrs *
 createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
+  const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
   ScheduleDAGMILive *DAG =
     new GCNScheduleDAGMILive(C, std::make_unique<GCNMaxOccupancySchedStrategy>(C));
   DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
+  if (ST.shouldClusterStores())
+    DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createIGroupLPDAGMutation());
   DAG->addMutation(createSchedBarrierDAGMutation());
   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
@@ -408,9 +419,12 @@ createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
 
 static ScheduleDAGInstrs *
 createIterativeGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
+  const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
   auto DAG = new GCNIterativeScheduler(C,
     GCNIterativeScheduler::SCHEDULE_LEGACYMAXOCCUPANCY);
   DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
+  if (ST.shouldClusterStores())
+    DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   return DAG;
 }
 
@@ -421,9 +435,12 @@ static ScheduleDAGInstrs *createMinRegScheduler(MachineSchedContext *C) {
 
 static ScheduleDAGInstrs *
 createIterativeILPMachineScheduler(MachineSchedContext *C) {
+  const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
   auto DAG = new GCNIterativeScheduler(C,
     GCNIterativeScheduler::SCHEDULE_ILP);
   DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
+  if (ST.shouldClusterStores())
+    DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
   return DAG;
 }
@@ -898,6 +915,8 @@ public:
     ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
     const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
     DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
+    if (ST.shouldClusterStores())
+      DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
     DAG->addMutation(ST.createFillMFMAShadowMutation(DAG->TII));
     DAG->addMutation(createIGroupLPDAGMutation());
     DAG->addMutation(createSchedBarrierDAGMutation());
@@ -1102,8 +1121,11 @@ bool AMDGPUPassConfig::addGCPasses() {
 
 llvm::ScheduleDAGInstrs *
 AMDGPUPassConfig::createMachineScheduler(MachineSchedContext *C) const {
+  const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
   ScheduleDAGMILive *DAG = createGenericSchedLive(C);
   DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
+  if (ST.shouldClusterStores())
+    DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   return DAG;
 }
 
@@ -1399,6 +1421,13 @@ void GCNPassConfig::addPreEmitPass() {
   // Here we add a stand-alone hazard recognizer pass which can handle all
   // cases.
   addPass(&PostRAHazardRecognizerID);
+
+  if (getOptLevel() > CodeGenOpt::Less)
+    addPass(&AMDGPUReleaseVGPRsID);
+
+  if (isPassEnabled(EnableInsertDelayAlu, CodeGenOpt::Less))
+    addPass(&AMDGPUInsertDelayAluID);
+
   addPass(&BranchRelaxationPassID);
 }
 

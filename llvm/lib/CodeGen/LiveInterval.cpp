@@ -348,7 +348,8 @@ private:
 //===----------------------------------------------------------------------===//
 
 LiveRange::iterator LiveRange::find(SlotIndex Pos) {
-  return llvm::partition(*this, [&](const Segment &X) { return X.end <= Pos; });
+  return llvm::partition_point(*this,
+                               [&](const Segment &X) { return X.end <= Pos; });
 }
 
 VNInfo *LiveRange::createDeadDef(SlotIndex Def, VNInfo::Allocator &VNIAlloc) {

@@ -1890,6 +1890,22 @@ CodeGenModule::getMostBaseClasses(const CXXRecordDecl *RD) {
   return MostBases.takeVector();
 }
 
+llvm::GlobalVariable *
+CodeGenModule::GetOrCreateRTTIProxyGlobalVariable(llvm::Constant *Addr) {
+  auto It = RTTIProxyMap.find(Addr);
+  if (It != RTTIProxyMap.end())
+    return It->second;
+
+  auto *FTRTTIProxy = new llvm::GlobalVariable(
+      TheModule, Addr->getType(),
+      /*isConstant=*/true, llvm::GlobalValue::PrivateLinkage, Addr,
+      "__llvm_rtti_proxy");
+  FTRTTIProxy->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+  RTTIProxyMap[Addr] = FTRTTIProxy;
+  return FTRTTIProxy;
+}
+
 void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
                                                            llvm::Function *F) {
   llvm::AttrBuilder B(F->getContext());
@@ -2826,12 +2842,12 @@ bool CodeGenModule::isProfileInstrExcluded(llvm::Function *Fn,
   CodeGenOptions::ProfileInstrKind Kind = getCodeGenOpts().getProfileInstr();
   // First, check the function name.
   Optional<bool> V = ProfileList.isFunctionExcluded(Fn->getName(), Kind);
-  if (V.hasValue())
+  if (V)
     return *V;
   // Next, check the source location.
   if (Loc.isValid()) {
     Optional<bool> V = ProfileList.isLocationExcluded(Loc, Kind);
-    if (V.hasValue())
+    if (V)
       return *V;
   }
   // If location is unknown, this may be a compiler-generated function. Assume

@@ -3056,17 +3056,6 @@ BasicBlock *InnerLoopVectorizer::emitMemRuntimeChecks(BasicBlock *Bypass) {
 
   AddedSafetyChecks = true;
 
-  // Only use noalias metadata when using memory checks guaranteeing no overlap
-  // across all iterations.
-  if (!Legal->getLAI()->getRuntimePointerChecking()->getDiffChecks()) {
-    //  We currently don't use LoopVersioning for the actual loop cloning but we
-    //  still use it to add the noalias metadata.
-    LVer = std::make_unique<LoopVersioning>(
-        *Legal->getLAI(),
-        Legal->getLAI()->getRuntimePointerChecking()->getChecks(), OrigLoop, LI,
-        DT, PSE.getSE());
-    LVer->prepareNoAliasMetadata();
-  }
   return MemCheckBlock;
 }
 
@@ -6714,10 +6703,17 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
 
   bool TypeNotScalarized = false;
   if (VF.isVector() && VectorTy->isVectorTy()) {
-    unsigned NumParts = TTI.getNumberOfParts(VectorTy);
-    if (NumParts)
-      TypeNotScalarized = NumParts < VF.getKnownMinValue();
-    else
+    if (unsigned NumParts = TTI.getNumberOfParts(VectorTy)) {
+      if (VF.isScalable())
+        // <vscale x 1 x iN> is assumed to be profitable over iN because
+        // scalable registers are a distinct register class from scalar ones.
+        // If we ever find a target which wants to lower scalable vectors
+        // back to scalars, we'll need to update this code to explicitly
+        // ask TTI about the register class uses for each part.
+        TypeNotScalarized = NumParts <= VF.getKnownMinValue();
+      else
+        TypeNotScalarized = NumParts < VF.getKnownMinValue();
+    } else
       C = InstructionCost::getInvalid();
   }
   return VectorizationCostTy(C, TypeNotScalarized);
@@ -7585,6 +7581,22 @@ void LoopVectorizationPlanner::executePlan(ElementCount BestVF, unsigned BestUF,
   Value *CanonicalIVStartValue;
   std::tie(State.CFG.PrevBB, CanonicalIVStartValue) =
       ILV.createVectorizedLoopSkeleton();
+
+  // Only use noalias metadata when using memory checks guaranteeing no overlap
+  // across all iterations.
+  const LoopAccessInfo *LAI = ILV.Legal->getLAI();
+  if (LAI && !LAI->getRuntimePointerChecking()->getChecks().empty() &&
+      !LAI->getRuntimePointerChecking()->getDiffChecks()) {
+    //  We currently don't use LoopVersioning for the actual loop cloning but we
+    //  still use it to add the noalias metadata.
+    //  TODO: Find a better way to re-use LoopVersioning functionality to add
+    //        metadata.
+    ILV.LVer = std::make_unique<LoopVersioning>(
+        *LAI, LAI->getRuntimePointerChecking()->getChecks(), OrigLoop, LI, DT,
+        PSE.getSE());
+    ILV.LVer->prepareNoAliasMetadata();
+  }
+
   ILV.collectPoisonGeneratingRecipes(State);
 
   ILV.printDebugTracesAtStart();
@@ -7601,6 +7613,7 @@ void LoopVectorizationPlanner::executePlan(ElementCount BestVF, unsigned BestUF,
   BestVPlan.prepareToExecute(ILV.getOrCreateTripCount(nullptr),
                              ILV.getOrCreateVectorTripCount(nullptr),
                              CanonicalIVStartValue, State);
+
   BestVPlan.execute(&State);
 
   // Keep all loop hints from the original loop on the vector loop (we'll

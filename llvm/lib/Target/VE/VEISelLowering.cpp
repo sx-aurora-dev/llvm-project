@@ -93,6 +93,8 @@ static const MVT WholeVectorVTs[] = {
     MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
 };
 
+static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
+
 static const MVT All256MaskVTs[] = {
     MVT::v256i1, MVT::v128i1, MVT::v64i1, MVT::v32i1,
     MVT::v16i1,  MVT::v8i1,   MVT::v4i1,  MVT::v2i1,
@@ -629,10 +631,6 @@ void VETargetLowering::initVPUActions() {
     // Lower to vvp_trunc
     setOperationAction(ISD::TRUNCATE, MaskVT, Custom);
 
-    // Custom lower mask ops
-    setOperationAction(ISD::STORE, MaskVT, Custom);
-    setOperationAction(ISD::LOAD, MaskVT, Custom);
-
     ForAll_setOperationAction(IntReductionOCs, MaskVT, Custom);
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
 
@@ -717,6 +715,13 @@ void VETargetLowering::initVPUActions() {
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not
   // generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
+
+  // v256i1 and v512i1 ops
+  for (MVT MaskVT : AllMaskVTs) {
+    // Custom lower mask ops
+    setOperationAction(ISD::STORE, MaskVT, Custom);
+    setOperationAction(ISD::LOAD, MaskVT, Custom);
+  }
 }
 
 SDValue
@@ -1938,7 +1943,7 @@ SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
 
   if (MemVT == MVT::f128)
     return lowerLoadF128(Op, DAG);
-  if (isVectorMaskType(MemVT))
+  if (isMaskType(MemVT))
     return lowerLoadI1(Op, DAG);
 
   return Op;
@@ -2051,7 +2056,7 @@ SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
 
   if (MemVT == MVT::f128)
     return lowerStoreF128(Op, DAG);
-  if (isVectorMaskType(MemVT))
+  if (isMaskType(MemVT))
     return lowerStoreI1(Op, DAG);
 
   // Otherwise, ask llvm to expand it.

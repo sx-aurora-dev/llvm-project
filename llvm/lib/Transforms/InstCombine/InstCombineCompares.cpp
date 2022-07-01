@@ -190,8 +190,11 @@ Instruction *InstCombinerImpl::foldCmpLoadFromIndexedGlobal(
     if (!Elt) return nullptr;
 
     // If this is indexing an array of structures, get the structure element.
-    if (!LaterIndices.empty())
-      Elt = ConstantExpr::getExtractValue(Elt, LaterIndices);
+    if (!LaterIndices.empty()) {
+      Elt = ConstantFoldExtractValueInstruction(Elt, LaterIndices);
+      if (!Elt)
+        return nullptr;
+    }
 
     // If the element is masked, handle it.
     if (AndCst) Elt = ConstantExpr::getAnd(Elt, AndCst);
@@ -1531,7 +1534,7 @@ Instruction *InstCombinerImpl::foldICmpWithDominatingICmp(ICmpInst &Cmp) {
   return nullptr;
 }
 
-/// Fold icmp (trunc X, Y), C.
+/// Fold icmp (trunc X), C.
 Instruction *InstCombinerImpl::foldICmpTruncConstant(ICmpInst &Cmp,
                                                      TruncInst *Trunc,
                                                      const APInt &C) {
@@ -1548,6 +1551,14 @@ Instruction *InstCombinerImpl::foldICmpTruncConstant(ICmpInst &Cmp,
   unsigned DstBits = Trunc->getType()->getScalarSizeInBits(),
            SrcBits = X->getType()->getScalarSizeInBits();
   if (Cmp.isEquality() && Trunc->hasOneUse()) {
+    if (!X->getType()->isVectorTy() && shouldChangeType(DstBits, SrcBits)) {
+      Constant *Mask = ConstantInt::get(X->getType(),
+                                        APInt::getLowBitsSet(SrcBits, DstBits));
+      Value *And = Builder.CreateAnd(X, Mask);
+      Constant *WideC = ConstantInt::get(X->getType(), C.zext(SrcBits));
+      return new ICmpInst(Pred, And, WideC);
+    }
+
     // Simplify icmp eq (trunc x to i8), 42 -> icmp eq x, 42|highbits if all
     // of the high bits truncated out of x are known.
     KnownBits Known = computeKnownBits(X, 0, &Cmp);
@@ -2223,13 +2234,19 @@ Instruction *InstCombinerImpl::foldICmpShrConstant(ICmpInst &Cmp,
 
     // If the shifted constant is a power-of-2, test the shift amount directly:
     // (ShiftValC >> X) >u C --> X <u (LZ(C) - LZ(ShiftValC))
-    // TODO: Handle ult.
-    if (!IsAShr && Pred == CmpInst::ICMP_UGT && ShiftValC->isPowerOf2()) {
-      assert(ShiftValC->ugt(C) && "Expected simplify of compare");
-      unsigned CmpLZ = C.countLeadingZeros();
+    // (ShiftValC >> X) <u C --> X >=u (LZ(C-1) - LZ(ShiftValC))
+    if (!IsAShr && ShiftValC->isPowerOf2() &&
+        (Pred == CmpInst::ICMP_UGT || Pred == CmpInst::ICMP_ULT)) {
+      bool IsUGT = Pred == CmpInst::ICMP_UGT;
+      assert(ShiftValC->uge(C) && "Expected simplify of compare");
+      assert((IsUGT || !C.isZero()) && "Expected X u< 0 to simplify");
+
+      unsigned CmpLZ =
+          IsUGT ? C.countLeadingZeros() : (C - 1).countLeadingZeros();
       unsigned ShiftLZ = ShiftValC->countLeadingZeros();
       Constant *NewC = ConstantInt::get(Shr->getType(), CmpLZ - ShiftLZ);
-      return new ICmpInst(ICmpInst::ICMP_ULT, Shr->User::getOperand(1), NewC);
+      auto NewPred = IsUGT ? CmpInst::ICMP_ULT : CmpInst::ICMP_UGE;
+      return new ICmpInst(NewPred, Shr->getOperand(1), NewC);
     }
   }
 
