@@ -1922,17 +1922,12 @@ static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
 }
 
 SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "LowerLOAD ("; Op->print(dbgs()); dbgs() << ")\n");
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
-  auto MemVT = LdNode->getMemoryVT();
 
   // always expand non-mask vector loads to VVP
-  if (MemVT.isVector() && !isVectorMaskType(MemVT))
-    return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
-
-  // Dispatch to vector isel.
+  EVT MemVT = LdNode->getMemoryVT();
   if (MemVT.isVector() && !isMaskType(MemVT))
-    return lowerToVVP(Op, DAG);
+    return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   SDValue BasePtr = LdNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
@@ -2044,7 +2039,7 @@ SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
 
   // always expand non-mask vector loads to VVP
   EVT MemVT = StNode->getMemoryVT();
-  if (MemVT.isVector() && !isVectorMaskType(MemVT))
+  if (MemVT.isVector() && !isMaskType(MemVT))
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   SDValue BasePtr = StNode->getBasePtr();
@@ -4028,10 +4023,6 @@ void VETargetLowering::finalizeLowering(MachineFunction &MF) const {
   for (auto &MBB : MF)
     MBB.addLiveIn(VE::VL);
   TargetLoweringBase::finalizeLowering(MF);
-}
-
-bool VETargetLowering::isVectorMaskType(EVT VT) const {
-  return (VT == MVT::v256i1 || VT == MVT::v512i1);
 }
 
 //===----------------------------------------------------------------------===//

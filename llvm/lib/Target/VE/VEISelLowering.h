@@ -545,9 +545,6 @@ public:
   }
 #endif
 
-  /// Return the preferred vector type legalization action.
-  bool isVectorMaskType(EVT VT) const;
-
   bool convertSetCCLogicToBitwiseLogic(EVT VT) const override { return true; }
 
   /// Target Optimization {
