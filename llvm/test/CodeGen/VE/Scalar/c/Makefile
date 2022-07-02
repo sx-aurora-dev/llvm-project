@@ -16,9 +16,10 @@ FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
 ATOMIC_TARGETS = atomic_fence.ll atomic_load.ll atomic_store.ll \
                  atomic_cmp_swap.ll atomic_swap.ll
 STACKFRAME_TARGETS = stackframe_call.ll stackframe_nocall.ll
+STACK_TARGETS = load_stk.ll store_stk.ll
 
 TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
-          $(STACKFRAME_TARGETS) \
+          $(STACKFRAME_TARGETS) $(STACK_TARGETS) \
           br_jt.ll brind.ll \
           fp_ceil.ll \
           fp_exp.ll fp_exp2.ll fp_floor.ll \
@@ -70,7 +71,7 @@ fp_frem.ll: fp_frem_mod.ll
 
 stackframe_call.ll : stackframe_call.c
 	$(CLANG) $(CFLAGS) -S -emit-llvm $<
-	sed -e 's/, !tbaa !2//' -e '/^![2-4]*/d' $@ > $@.tmp && mv $@.tmp $@
+	sed -e '/^!2 /d' $@ > $@.tmp && mv $@.tmp $@
 	$(CLEAN_TEST) $@
 	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve -relocation-model=pic \\\n; RUN:     | FileCheck %s --check-prefix=PIC' $@ > $@.tmp && mv $@.tmp $@
@@ -79,10 +80,26 @@ stackframe_call.ll : stackframe_call.c
 
 stackframe_nocall.ll : stackframe_nocall.c
 	$(CLANG) $(CFLAGS) -S -emit-llvm $<
-	sed -e 's/, !tbaa !2//' -e '/^![2-4]*/d' $@ > $@.tmp && mv $@.tmp $@
+	sed -e '/^!2 /d' $@ > $@.tmp && mv $@.tmp $@
 	$(CLEAN_TEST) $@
 	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve -relocation-model=pic \\\n; RUN:     | FileCheck %s --check-prefix=PIC' $@ > $@.tmp && mv $@.tmp $@
+	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
+
+store_stk.ll : store_stk.c
+	$(CLANG) $(CFLAGS) -S -emit-llvm $<
+	sed -e '/^!2 /d' $@ > $@.tmp && mv $@.tmp $@
+	$(CLEAN_TEST) $@
+	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
+	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
+
+load_stk.ll : load_stk.c
+	$(CLANG) $(CFLAGS) -S -emit-llvm $<
+	sed -e '/^!2 /d' $@ > $@.tmp && mv $@.tmp $@
+	$(CLEAN_TEST) $@
+	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
 
