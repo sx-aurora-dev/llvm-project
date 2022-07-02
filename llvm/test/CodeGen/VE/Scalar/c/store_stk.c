@@ -102,21 +102,21 @@ void KIND ## TYPE ## _stk(TYPE v) { \
   stk = v; \
 } \
 __attribute__ ((REGCALL)) \
-void KIND ## TYPE ## _stk_big(TYPE v) { \
+void KIND ## TYPE ## _stk_big(TYPE v, i64 v2) { \
   volatile TYPE stk; \
-  volatile TYPE array[268435455]; \
+  volatile i64 array[268435455]; \
   stk = v; \
   for (i64 i = 0; i < 268435455; ++i) { \
-    array[i] = v; \
+    array[i] = v2; \
   } \
 } \
 __attribute__ ((REGCALL)) \
-void KIND ## TYPE ## _stk_big2(TYPE v) { \
+void KIND ## TYPE ## _stk_big2(TYPE v, i64 v2) { \
   volatile TYPE stk; \
-  volatile TYPE array[268435456]; \
+  volatile i64 array[268435456]; \
   stk = v; \
   for (i64 i = 0; i < 268435456; ++i) { \
-    array[i] = v; \
+    array[i] = v2; \
   } \
 }
 
@@ -167,3 +167,8 @@ DYN_TEST(store, i64)
 DYN_ALIGN_TEST(store, i64)
 DYN_ALIGN2_TEST(store, i64)
 DYN_ALIGN_SPILL_TEST(store, i64)
+STK_TEST(store, quad)
+DYN_TEST(store, quad)
+DYN_ALIGN_TEST(store, quad)
+DYN_ALIGN2_TEST(store, quad)
+DYN_ALIGN_SPILL_TEST(store, quad)

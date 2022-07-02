@@ -238,7 +238,8 @@ class EliminateFrameIndex {
   // Calculate an address of frame index from a frame register and a given
   // offset if the offset doesn't fit in the immediate field.  Use a clobber
   // register to hold calculated address.
-  void prepareReplaceFI(MachineInstr &MI, Register FrameReg, int64_t Offset);
+  void prepareReplaceFI(MachineInstr &MI, Register &FrameReg, int64_t &Offset,
+                        int64_t Bytes = 0);
   // Replace the frame index in \p MI with a frame register and a given offset
   // if it fits in the immediate field.  Otherwise, use pre-calculated address
   // in a clobber regsiter.
@@ -280,9 +281,9 @@ public:
 
 // Prepare the frame index if it doesn't fit in the immediate field.  Use
 // clobber register to hold calculated address.
-void EliminateFrameIndex::prepareReplaceFI(MachineInstr &MI, Register FrameReg,
-                                           int64_t Offset) {
-  if (isInt<32>(Offset)) {
+void EliminateFrameIndex::prepareReplaceFI(MachineInstr &MI, Register &FrameReg,
+                                           int64_t &Offset, int64_t Bytes) {
+  if (isInt<32>(Offset) && isInt<32>(Offset + Bytes)) {
     // If the offset is small enough to fit in the immediate field, directly
     // encode it.  So, nothing to prepare here.
     return;
@@ -299,23 +300,21 @@ void EliminateFrameIndex::prepareReplaceFI(MachineInstr &MI, Register FrameReg,
       .addReg(clobber)
       .addReg(FrameReg)
       .addImm(Hi_32(Offset));
+
+  // Use clobber register as a frame register and 0 offset
+  FrameReg = clobber;
+  Offset = 0;
 }
 
 // Replace the frame index in \p MI with a proper byte and framereg offset.
 void EliminateFrameIndex::replaceFI(MachineInstr &MI, Register FrameReg,
                                     int64_t Offset, int FIOperandNum) {
-  if (isInt<32>(Offset)) {
-    // If the offset is small enough to fit in the immediate field, directly
-    // encode it.
-    MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-    MI.getOperand(FIOperandNum + offsetToDisp(MI)).ChangeToImmediate(Offset);
-    return;
-  }
+  assert(isInt<32>(Offset));
 
-  // Otherwise, use SX13 which holds calculated the address.  The address
-  // is calculated in prepareReplaceFI().
-  MI.getOperand(FIOperandNum).ChangeToRegister(clobber, false);
-  MI.getOperand(FIOperandNum + offsetToDisp(MI)).ChangeToImmediate(0);
+  // The offset must be small enough to fit in the immediate field after
+  // call of prepareReplaceFI.  Therefore, we directly encode it.
+  MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
+  MI.getOperand(FIOperandNum + offsetToDisp(MI)).ChangeToImmediate(Offset);
 }
 
 void EliminateFrameIndex::processSTQ(MachineInstr &MI, Register FrameReg,
@@ -323,7 +322,7 @@ void EliminateFrameIndex::processSTQ(MachineInstr &MI, Register FrameReg,
   assert(MI.getOpcode() == VE::STQrii);
   LLVM_DEBUG(dbgs() << "processSTQ: "; MI.dump());
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 8);
 
   Register SrcReg = MI.getOperand(3).getReg();
   Register SrcHiReg = getSubReg(SrcReg, VE::sub_even);
@@ -344,7 +343,7 @@ void EliminateFrameIndex::processLDQ(MachineInstr &MI, Register FrameReg,
   assert(MI.getOpcode() == VE::LDQrii);
   LLVM_DEBUG(dbgs() << "processLDQ: "; MI.dump());
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 8);
 
   Register DestReg = MI.getOperand(0).getReg();
   Register DestHiReg = getSubReg(DestReg, VE::sub_even);
@@ -376,7 +375,7 @@ void EliminateFrameIndex::processSTVM(MachineInstr &MI, Register FrameReg,
   //   SVMi   tmp-reg, reg, 3
   //   STrii  frame-reg, 0, offset+24, tmp-reg
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 24);
 
   Register SrcReg = MI.getOperand(3).getReg();
   bool isKill = MI.getOperand(3).isKill();
@@ -414,7 +413,7 @@ void EliminateFrameIndex::processLDVM(MachineInstr &MI, Register FrameReg,
   //   LDrii  tmp-reg, frame-reg, 0, offset+24
   //   LVMir_m vm, 3, tmp-reg, vm
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 24);
 
   Register DestReg = MI.getOperand(0).getReg();
   // FIXME: it would be better to scavenge a register here instead of
@@ -454,7 +453,7 @@ void EliminateFrameIndex::processSTVM512(MachineInstr &MI, Register FrameReg,
   assert(MI.getOpcode() == VE::STVM512rii);
   LLVM_DEBUG(dbgs() << "processSTVM512: "; MI.dump());
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 56);
 
   Register SrcReg = MI.getOperand(3).getReg();
   Register SrcLoReg = getSubReg(SrcReg, VE::sub_vm_odd);
@@ -500,7 +499,7 @@ void EliminateFrameIndex::processLDVM512(MachineInstr &MI, Register FrameReg,
   assert(MI.getOpcode() == VE::LDVM512rii);
   LLVM_DEBUG(dbgs() << "processLDVM512: "; MI.dump());
 
-  prepareReplaceFI(MI, FrameReg, Offset);
+  prepareReplaceFI(MI, FrameReg, Offset, 56);
 
   Register DestReg = MI.getOperand(0).getReg();
   Register DestLoReg = getSubReg(DestReg, VE::sub_vm_odd);

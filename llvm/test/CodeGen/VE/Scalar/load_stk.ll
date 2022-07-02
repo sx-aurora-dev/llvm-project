@@ -430,6 +430,354 @@ declare void @dummy(...)
 
 declare void @pass(i64 noundef)
 
+; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
+define x86_fastcallcc fp128 @loadquad_stk() {
+; CHECK-LABEL: loadquad_stk:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.l %s11, -16, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB7_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB7_2:
+; CHECK-NEXT:    ld %s1, (, %s11)
+; CHECK-NEXT:    ld %s0, 8(, %s11)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
+; CHECK-NEXT:    b.l.t (, %s10)
+  %1 = alloca fp128, align 16
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %1)
+  %2 = load volatile fp128, ptr %1, align 16, !tbaa !12
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %1)
+  ret fp128 %2
+}
+
+; Function Attrs: argmemonly nofree nounwind
+define x86_fastcallcc fp128 @loadquad_stk_big() {
+; CHECK-LABEL: loadquad_stk_big:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s13, 2147483632
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    brge.l %s11, %s8, .LBB8_4
+; CHECK-NEXT:  # %bb.3:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB8_4:
+; CHECK-NEXT:    lea %s13, -2147483648
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s13, (%s11, %s13)
+; CHECK-NEXT:    ld %s1, (, %s13)
+; CHECK-NEXT:    ld %s0, 8(, %s13)
+; CHECK-NEXT:    or %s2, 0, (0)1
+; CHECK-NEXT:    lea %s3, 2147483640
+; CHECK-NEXT:  .LBB8_1: # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    ld %s4, 8(%s2, %s11)
+; CHECK-NEXT:    lea %s2, 8(, %s2)
+; CHECK-NEXT:    brne.l %s2, %s3, .LBB8_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s13, -2147483632
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s11, (%s13, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %1 = alloca fp128, align 16
+  %2 = alloca [268435455 x i64], align 8
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %1)
+  call void @llvm.lifetime.start.p0(i64 2147483640, ptr nonnull %2)
+  %3 = load volatile fp128, ptr %1, align 16, !tbaa !12
+  br label %5
+
+4:                                                ; preds = %5
+  call void @llvm.lifetime.end.p0(i64 2147483640, ptr nonnull %2)
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %1)
+  ret fp128 %3
+
+5:                                                ; preds = %0, %5
+  %6 = phi i64 [ 0, %0 ], [ %9, %5 ]
+  %7 = getelementptr inbounds [268435455 x i64], ptr %2, i64 0, i64 %6
+  %8 = load volatile i64, ptr %7, align 8, !tbaa !3
+  %9 = add nuw nsw i64 %6, 1
+  %10 = icmp eq i64 %9, 268435455
+  br i1 %10, label %4, label %5, !llvm.loop !14
+}
+
+; Function Attrs: argmemonly nofree nounwind
+define x86_fastcallcc fp128 @loadquad_stk_big2() {
+; CHECK-LABEL: loadquad_stk_big2:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s13, 2147483632
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    brge.l %s11, %s8, .LBB9_4
+; CHECK-NEXT:  # %bb.3:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB9_4:
+; CHECK-NEXT:    lea %s13, -2147483648
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s13, (%s11, %s13)
+; CHECK-NEXT:    ld %s1, (, %s13)
+; CHECK-NEXT:    ld %s0, 8(, %s13)
+; CHECK-NEXT:    or %s2, 0, (0)1
+; CHECK-NEXT:    lea %s3, -2147483648
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:  .LBB9_1: # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    ld %s4, (%s2, %s11)
+; CHECK-NEXT:    lea %s2, 8(, %s2)
+; CHECK-NEXT:    brne.l %s2, %s3, .LBB9_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s13, -2147483632
+; CHECK-NEXT:    and %s13, %s13, (32)0
+; CHECK-NEXT:    lea.sl %s11, (%s13, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %1 = alloca fp128, align 16
+  %2 = alloca [268435456 x i64], align 8
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %1)
+  call void @llvm.lifetime.start.p0(i64 2147483648, ptr nonnull %2)
+  %3 = load volatile fp128, ptr %1, align 16, !tbaa !12
+  br label %5
+
+4:                                                ; preds = %5
+  call void @llvm.lifetime.end.p0(i64 2147483648, ptr nonnull %2)
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %1)
+  ret fp128 %3
+
+5:                                                ; preds = %0, %5
+  %6 = phi i64 [ 0, %0 ], [ %9, %5 ]
+  %7 = getelementptr inbounds [268435456 x i64], ptr %2, i64 0, i64 %6
+  %8 = load volatile i64, ptr %7, align 8, !tbaa !3
+  %9 = add nuw nsw i64 %6, 1
+  %10 = icmp eq i64 %9, 268435456
+  br i1 %10, label %4, label %5, !llvm.loop !15
+}
+
+; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
+define x86_fastcallcc fp128 @loadquad_stk_dyn(i64 noundef %0) {
+; CHECK-LABEL: loadquad_stk_dyn:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    st %s9, (, %s11)
+; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    or %s9, 0, %s11
+; CHECK-NEXT:    lea %s11, -256(, %s11)
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB10_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB10_2:
+; CHECK-NEXT:    lea %s0, 15(, %s0)
+; CHECK-NEXT:    and %s0, -16, %s0
+; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ve_grow_stack@hi(, %s1)
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    ld %s1, 8(, %s0)
+; CHECK-NEXT:    ld %s0, (, %s0)
+; CHECK-NEXT:    ld %s1, -16(, %s9)
+; CHECK-NEXT:    ld %s0, -8(, %s9)
+; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = alloca fp128, align 16
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %2)
+  %3 = alloca i8, i64 %0, align 16
+  %4 = load volatile fp128, ptr %3, align 16, !tbaa !12
+  %5 = load volatile fp128, ptr %2, align 16, !tbaa !12
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %2)
+  ret fp128 %5
+}
+
+; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align(i64 noundef %0) {
+; CHECK-LABEL: loadquad_stk_dyn_align:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    st %s9, (, %s11)
+; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    st %s17, 40(, %s11)
+; CHECK-NEXT:    or %s9, 0, %s11
+; CHECK-NEXT:    lea %s11, -288(, %s11)
+; CHECK-NEXT:    and %s11, %s11, (59)1
+; CHECK-NEXT:    or %s17, 0, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB11_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB11_2:
+; CHECK-NEXT:    lea %s0, 15(, %s0)
+; CHECK-NEXT:    and %s0, -16, %s0
+; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ve_grow_stack@hi(, %s1)
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    ld %s1, 8(, %s0)
+; CHECK-NEXT:    ld %s0, (, %s0)
+; CHECK-NEXT:    ld %s1, 256(, %s17)
+; CHECK-NEXT:    ld %s0, 264(, %s17)
+; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s17, 40(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = alloca fp128, align 32
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %2)
+  %3 = alloca i8, i64 %0, align 16
+  %4 = load volatile fp128, ptr %3, align 16, !tbaa !12
+  %5 = load volatile fp128, ptr %2, align 32, !tbaa !16
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %2)
+  ret fp128 %5
+}
+
+; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align2(i64 noundef %0) {
+; CHECK-LABEL: loadquad_stk_dyn_align2:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    st %s9, (, %s11)
+; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    st %s17, 40(, %s11)
+; CHECK-NEXT:    or %s9, 0, %s11
+; CHECK-NEXT:    lea %s11, -320(, %s11)
+; CHECK-NEXT:    and %s11, %s11, (58)1
+; CHECK-NEXT:    or %s17, 0, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB12_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB12_2:
+; CHECK-NEXT:    lea %s0, 15(, %s0)
+; CHECK-NEXT:    and %s0, -16, %s0
+; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ve_grow_stack@hi(, %s1)
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    ld %s1, 8(, %s0)
+; CHECK-NEXT:    ld %s0, (, %s0)
+; CHECK-NEXT:    ld %s1, 288(, %s17)
+; CHECK-NEXT:    ld %s0, 296(, %s17)
+; CHECK-NEXT:    ld %s3, 256(, %s17)
+; CHECK-NEXT:    ld %s2, 264(, %s17)
+; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s17, 40(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = alloca fp128, align 32
+  %3 = alloca fp128, align 64
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %2)
+  %4 = alloca i8, i64 %0, align 16
+  %5 = load volatile fp128, ptr %4, align 16, !tbaa !12
+  %6 = load volatile fp128, ptr %2, align 32, !tbaa !16
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %3)
+  %7 = load volatile fp128, ptr %3, align 64, !tbaa !16
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %3)
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %2)
+  ret fp128 %6
+}
+
+; Function Attrs: nounwind
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align_spill(i64 noundef %0) {
+; CHECK-LABEL: loadquad_stk_dyn_align_spill:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    st %s9, (, %s11)
+; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    st %s17, 40(, %s11)
+; CHECK-NEXT:    or %s9, 0, %s11
+; CHECK-NEXT:    lea %s11, -288(, %s11)
+; CHECK-NEXT:    and %s11, %s11, (59)1
+; CHECK-NEXT:    or %s17, 0, %s11
+; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB13_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    ld %s61, 24(, %s14)
+; CHECK-NEXT:    or %s62, 0, %s0
+; CHECK-NEXT:    lea %s63, 315
+; CHECK-NEXT:    shm.l %s63, (%s61)
+; CHECK-NEXT:    shm.l %s8, 8(%s61)
+; CHECK-NEXT:    shm.l %s11, 16(%s61)
+; CHECK-NEXT:    monc
+; CHECK-NEXT:    or %s0, 0, %s62
+; CHECK-NEXT:  .LBB13_2:
+; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    st %s20, 64(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    st %s21, 72(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    or %s18, 0, %s0
+; CHECK-NEXT:    lea %s0, 15(, %s0)
+; CHECK-NEXT:    and %s0, -16, %s0
+; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ve_grow_stack@hi(, %s1)
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    ld %s1, 8(, %s0)
+; CHECK-NEXT:    ld %s0, (, %s0)
+; CHECK-NEXT:    ld %s21, 256(, %s17)
+; CHECK-NEXT:    ld %s20, 264(, %s17)
+; CHECK-NEXT:    lea %s0, dummy@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, dummy@hi(, %s0)
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    lea %s0, pass@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, pass@hi(, %s0)
+; CHECK-NEXT:    or %s0, 0, %s18
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s0, 0, %s20
+; CHECK-NEXT:    or %s1, 0, %s21
+; CHECK-NEXT:    ld %s21, 72(, %s9) # 8-byte Folded Reload
+; CHECK-NEXT:    ld %s20, 64(, %s9) # 8-byte Folded Reload
+; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
+; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s17, 40(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = alloca fp128, align 32
+  call void @llvm.lifetime.start.p0(i64 16, ptr nonnull %2)
+  %3 = alloca i8, i64 %0, align 16
+  %4 = load volatile fp128, ptr %3, align 16, !tbaa !12
+  %5 = load volatile fp128, ptr %2, align 32, !tbaa !16
+  tail call void (...) @dummy()
+  tail call void @pass(i64 noundef %0)
+  call void @llvm.lifetime.end.p0(i64 16, ptr nonnull %2)
+  ret fp128 %5
+}
+
 !3 = !{!4, !4, i64 0}
 !4 = !{!"long", !5, i64 0}
 !5 = !{!"omnipotent char", !6, i64 0}
@@ -439,3 +787,9 @@ declare void @pass(i64 noundef)
 !9 = distinct !{!9, !8}
 !10 = !{!11, !4, i64 0}
 !11 = !{!"", !4, i64 0}
+!12 = !{!13, !13, i64 0}
+!13 = !{!"long double", !5, i64 0}
+!14 = distinct !{!14, !8}
+!15 = distinct !{!15, !8}
+!16 = !{!17, !13, i64 0}
+!17 = !{!"", !13, i64 0}

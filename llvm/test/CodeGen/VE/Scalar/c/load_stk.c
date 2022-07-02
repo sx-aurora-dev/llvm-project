@@ -105,8 +105,9 @@ TYPE KIND ## TYPE ## _stk() { \
 __attribute__ ((REGCALL)) \
 TYPE KIND ## TYPE ## _stk_big() { \
   volatile TYPE stk; \
-  volatile TYPE array[268435455]; \
-  TYPE v, v2; \
+  volatile i64 array[268435455]; \
+  TYPE v; \
+  i64 v2; \
   v = stk; \
   for (i64 i = 0; i < 268435455; ++i) { \
     v2 = array[i]; \
@@ -116,8 +117,9 @@ TYPE KIND ## TYPE ## _stk_big() { \
 __attribute__ ((REGCALL)) \
 TYPE KIND ## TYPE ## _stk_big2() { \
   volatile TYPE stk; \
-  volatile TYPE array[268435456]; \
-  TYPE v, v2; \
+  volatile i64 array[268435456]; \
+  TYPE v; \
+  i64 v2; \
   v = stk; \
   for (i64 i = 0; i < 268435456; ++i) { \
     v2 = array[i]; \
@@ -180,3 +182,8 @@ DYN_TEST(load, i64)
 DYN_ALIGN_TEST(load, i64)
 DYN_ALIGN2_TEST(load, i64)
 DYN_ALIGN_SPILL_TEST(load, i64)
+STK_TEST(load, quad)
+DYN_TEST(load, quad)
+DYN_ALIGN_TEST(load, quad)
+DYN_ALIGN2_TEST(load, quad)
+DYN_ALIGN_SPILL_TEST(load, quad)
