@@ -225,12 +225,12 @@ def RetCC_VE_Fast : CallingConv<[
 ]>;
 
 // Callee-saved registers
+// NOTE: Don't write alias registers here.  Otherwise, super registers
+//       are spilled instead of actually used registers.
 def CSR : CalleeSavedRegs<(add (sequence "SX%u", 18, 33))>;
 def CSR_RegCall : CalleeSavedRegs<(add (sequence "SX%u", 18, 33),
                                        (sequence "V%u", 18, 33),
-                                       (sequence "VP%u", 9, 16),
-                                       (sequence "VM%u", 10, 15),
-                                       (sequence "VMP%u", 5, 7))>;
+                                       (sequence "VM%u", 10, 15))>;
 def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
 // vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63, v0-6, and vm6
@@ -243,8 +243,8 @@ def CSR_vec_expf : CalleeSavedRegs<(add (sequence "SX%u", 2, 4),
                                         )>;
 
 // PreserveAll (clobbers s62,s63) - used for ve_grow_stack
+// NOTE: Don't write alias registers here.  Otherwise, super registers
+//       are spilled instead of actually used registers.
 def CSR_preserve_all : CalleeSavedRegs<(add (sequence "SX%u", 0, 61),
                                             (sequence "V%u", 0, 63),
-                                            (sequence "VP%u", 0, 31),
-                                            (sequence "VM%u", 1, 15),
-                                            (sequence "VMP%u", 1, 7))>;
+                                            (sequence "VM%u", 1, 15))>;
