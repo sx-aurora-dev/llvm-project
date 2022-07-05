@@ -30,6 +30,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "ve-register-info"
+
 #define GET_REGINFO_TARGET_DESC
 #include "VEGenRegisterInfo.inc"
 
@@ -148,8 +150,6 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                    unsigned Kind) const {
   return &VE::I64RegClass;
 }
-
-#define DEBUG_TYPE "ve-register-info"
 
 static unsigned offsetToDisp(MachineInstr &MI) {
   // Default offset in instruction's operands (reg+reg+imm).
