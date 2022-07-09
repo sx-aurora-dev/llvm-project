@@ -377,20 +377,42 @@ def VEMEMziiAsmOperand : AsmOperandClass {
 // ASX format uses single assembly instruction format.
 def MEMrri : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, ptr_rc, i64imm);
+  let MIOperandInfo = (ops ptr_rc, ptr_rc, i32imm);
   let ParserMatchClass = VEMEMrriAsmOperand;
 }
 def MEMrii : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, i32imm, i64imm);
+  let MIOperandInfo = (ops ptr_rc, i32imm, i32imm);
   let ParserMatchClass = VEMEMriiAsmOperand;
 }
 def MEMzri : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i64imm);
+  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i32imm);
   let ParserMatchClass = VEMEMzriAsmOperand;
 }
 def MEMzii : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops i32imm /* = 0 */, i32imm, i32imm);
+  let ParserMatchClass = VEMEMziiAsmOperand;
+}
+
+// Special ASX format for i64 immediate like tglobaladdress.
+def MEMrri64 : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops ptr_rc, ptr_rc, i64imm);
+  let ParserMatchClass = VEMEMrriAsmOperand;
+}
+def MEMrii64 : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops ptr_rc, i32imm, i64imm);
+  let ParserMatchClass = VEMEMriiAsmOperand;
+}
+def MEMzri64 : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i64imm);
+  let ParserMatchClass = VEMEMzriAsmOperand;
+}
+def MEMzii64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
   let MIOperandInfo = (ops i32imm /* = 0 */, i32imm, i64imm);
   let ParserMatchClass = VEMEMziiAsmOperand;
@@ -1052,6 +1074,23 @@ multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC, bit MoveImm = 0> {
   let cy = 0, cz = 0 in
   def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
                !strconcat(opcStr, " $dest, $addr"), []> {
+    // VE uses LEAzii and LEASLzii as a move immediate instruction, so declare
+    // it here.  An instruction declared as MoveImm will be optimized in
+    // FoldImmediate later.
+    let isMoveImm = MoveImm;
+  }
+  let isCodeGenOnly = 1 in
+  def rri64 : RM<opc, (outs RC:$dest), (ins MEMrri64:$addr),
+                 !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0, isCodeGenOnly = 1 in
+  def rii64 : RM<opc, (outs RC:$dest), (ins MEMrii64:$addr),
+                 !strconcat(opcStr, " $dest, $addr"), []>;
+  let cz = 0, isCodeGenOnly = 1 in
+  def zri64 : RM<opc, (outs RC:$dest), (ins MEMzri64:$addr),
+                 !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0, cz = 0, isCodeGenOnly = 1 in
+  def zii64 : RM<opc, (outs RC:$dest), (ins MEMzii64:$addr),
+                 !strconcat(opcStr, " $dest, $addr"), []> {
     // VE uses LEAzii and LEASLzii as a move immediate instruction, so declare
     // it here.  An instruction declared as MoveImm will be optimized in
     // FoldImmediate later.
@@ -1771,15 +1810,15 @@ def : Pat<(lea_add I64:$base, I64:$idx, lozero:$disp),
 //      LEASL %reg, label@HI32(%reg, %got)
 //
 def velo_only : OutPatFrag<(ops node:$lo),
-                           (ANDrm (LEAzii 0, 0, $lo), !add(32, 64))>;
+                           (ANDrm (LEAzii64 0, 0, $lo), !add(32, 64))>;
 def vehi_only : OutPatFrag<(ops node:$hi),
-                           (LEASLzii 0, 0, $hi)>;
+                           (LEASLzii64 0, 0, $hi)>;
 def vehi_lo : OutPatFrag<(ops node:$hi, node:$lo),
-                         (LEASLrii $lo, 0, $hi)>;
+                         (LEASLrii64 $lo, 0, $hi)>;
 def vehi_lo_imm : OutPatFrag<(ops node:$hi, node:$lo, node:$idx),
-                             (LEASLrii $lo, $idx, $hi)>;
+                             (LEASLrii64 $lo, $idx, $hi)>;
 def vehi_baselo : OutPatFrag<(ops node:$base, node:$hi, node:$lo),
-                             (LEASLrri $base, $lo, $hi)>;
+                             (LEASLrri64 $base, $lo, $hi)>;
 foreach type = [ "tblockaddress", "tconstpool", "texternalsym", "tglobaladdr",
                  "tglobaltlsaddr", "tjumptable" ] in {
   def : Pat<(VElo !cast<SDNode>(type):$lo), (velo_only $lo)>;
