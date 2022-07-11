@@ -321,6 +321,11 @@ New Compiler Flags
   removed in the future once clang supports all such operations.
 - Added the ``-print-diagnostic-options`` option, which prints a list of
   warnings the compiler supports.
+- Added the ``-Warray-parameter`` warning. It diagnoses differences between
+  array parameters between function redeclarations (arrays of different extents,
+  etc). This flag is related to the same flag in GCC, but is different in that
+  it does not accept an explicitly- specified warning level and use of this flag
+  has no effect on ``-Warray-bounds``.
 
 Deprecated Compiler Flags
 -------------------------
@@ -384,6 +389,10 @@ Attribute Changes in Clang
   annotations to types (see documentation for details).
 
 - Added half float to types that can be represented by ``__attribute__((mode(XX)))``.
+
+- The ``format`` attribute can now be applied to non-variadic functions. The
+  format string must correctly format the fixed parameter types of the function.
+  Using the attribute this way emits a GCC compatibility diagnostic.
 
 Windows Support
 ---------------
@@ -499,6 +508,14 @@ ABI Changes in Clang
   (e.g. ``int : 0``) no longer prevents the structure from being considered a
   homogeneous floating-point or vector aggregate. The new behavior agrees with
   the AAPCS specification, and matches the similar bug fix in GCC 12.1.
+- Targeting AArch64, since D127209 LLVM now only preserves the z8-z23
+  and p4-p15 registers across a call if the registers z0-z7 or p0-p3 are
+  used to pass data into or out of a subroutine. The new behavior
+  matches the AAPCS. Previously LLVM preserved z8-z23 and p4-p15 across
+  a call if the callee had an SVE type anywhere in its signature. This
+  would cause an incorrect use of the caller-preserved z8-z23 and p4-p15
+  ABI for example if the 9th argument or greater were the first SVE type
+  in the signature of a function.
 - All copy constructors can now be trivial if they are not user-provided,
   regardless of the type qualifiers of the argument of the defaulted constructor,
   fixing dr2171.
@@ -523,6 +540,9 @@ X86 Support in Clang
 - Support for the ``_Float16`` type has been added for all targets with SSE2.
   When AVX512-FP16 is not available, arithmetic on ``_Float16`` is emulated
   using ``float``.
+- Added the ``-m[no-]rdpru`` flag to enable/disable the RDPRU instruction
+  provided by AMD Zen2 and later processors. Defined intrinsics for using
+  this instruction (see rdpruintrin.h).
 
 DWARF Support in Clang
 ----------------------
@@ -586,6 +606,13 @@ clang-format
 
 - Option ``InsertBraces`` has been added to insert optional braces after control
   statements.
+
+clang-extdef-mapping
+--------------------
+
+- clang-extdef-mapping now accepts .ast files as input. This is faster than to
+  recompile the files from sources when extracting method definitons. This can
+  be really beneficial when creating .ast files for input to the clang-static-analyzer.
 
 libclang
 --------
@@ -653,5 +680,5 @@ this release by going into the "``clang/docs/``" directory in the Clang
 tree.
 
 If you have any questions or comments about Clang, please feel free to
-contact us via the `mailing
-list <https://lists.llvm.org/mailman/listinfo/cfe-dev>`_.
+contact us on the Discourse forums (Clang Frontend category)
+<https://discourse.llvm.org/c/clang/6>`_.

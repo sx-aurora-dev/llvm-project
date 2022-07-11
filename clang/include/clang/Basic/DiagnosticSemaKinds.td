@@ -3115,8 +3115,6 @@ def note_ownership_returns_index_mismatch : Note<
   "declared with index %0 here">;
 def err_format_strftime_third_parameter : Error<
   "strftime format attribute requires 3rd parameter to be 0">;
-def err_format_attribute_requires_variadic : Error<
-  "format attribute requires variadic function">;
 def err_format_attribute_not : Error<"format argument not a string type">;
 def err_format_attribute_result_not : Error<"function does not return %0">;
 def err_format_attribute_implicit_this_format_string : Error<
@@ -4127,6 +4125,9 @@ def err_attribute_not_supported_on_arch
 def warn_gcc_ignores_type_attr : Warning<
   "GCC does not allow the %0 attribute to be written on a type">,
   InGroup<GccCompat>;
+def warn_gcc_requires_variadic_function : Warning<
+  "GCC requires a function with the %0 attribute to be variadic">,
+  InGroup<GccCompat>;
 
 // Clang-Specific Attributes
 def warn_attribute_iboutlet : Warning<
@@ -4829,8 +4830,12 @@ def warn_cxx14_compat_template_nontype_parm_auto_type : Warning<
   DefaultIgnore, InGroup<CXXPre17Compat>;
 def err_template_param_default_arg_redefinition : Error<
   "template parameter redefines default argument">;
+def err_template_param_default_arg_inconsistent_redefinition : Error<
+  "template parameter default argument is inconsistent with previous definition">;
 def note_template_param_prev_default_arg : Note<
   "previous default template argument defined here">;
+def note_template_param_prev_default_arg_in_other_module : Note<
+  "previous default template argument defined in module %0">;
 def err_template_param_default_arg_missing : Error<
   "template parameter missing a default argument">;
 def ext_template_parameter_default_in_function_template : ExtWarn<
@@ -9394,6 +9399,12 @@ def warn_array_index_exceeds_max_addressable_bounds : Warning<
   InGroup<ArrayBounds>;
 def note_array_declared_here : Note<
   "array %0 declared here">;
+
+def warn_inconsistent_array_form : Warning<
+  "argument %0 of type %1 with mismatched bound">,
+  InGroup<ArrayParameter>, DefaultIgnore;
+def note_previous_declaration_as : Note<
+  "previously declared as %0 here">;
 
 def warn_printf_insufficient_data_args : Warning<
   "more '%%' conversions than data arguments">, InGroup<FormatInsufficientArgs>;

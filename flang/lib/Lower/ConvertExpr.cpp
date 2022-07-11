@@ -892,7 +892,7 @@ public:
   }
 
   static bool
-  isDerivedTypeWithLengthParameters(const Fortran::semantics::Symbol &sym) {
+  isDerivedTypeWithLenParameters(const Fortran::semantics::Symbol &sym) {
     if (const Fortran::semantics::DeclTypeSpec *declTy = sym.GetType())
       if (const Fortran::semantics::DerivedTypeSpec *derived =
               declTy->AsDerived())
@@ -943,7 +943,7 @@ public:
         continue;
       }
 
-      if (isDerivedTypeWithLengthParameters(sym))
+      if (isDerivedTypeWithLenParameters(sym))
         TODO(loc, "component with length parameters in structure constructor");
 
       if (isBuiltinCPtr(sym)) {
@@ -1013,7 +1013,7 @@ public:
       if (sym.test(Fortran::semantics::Symbol::Flag::ParentComp))
         TODO(loc, "parent component in structure constructor");
 
-      if (isDerivedTypeWithLengthParameters(sym))
+      if (isDerivedTypeWithLenParameters(sym))
         TODO(loc, "component with length parameters in structure constructor");
 
       llvm::StringRef name = toStringRef(sym.name());
@@ -2136,7 +2136,7 @@ public:
     mlir::Value box = builder.createBox(loc, exv);
     return fir::BoxValue(
         box, fir::factory::getNonDefaultLowerBounds(builder, loc, exv),
-        fir::factory::getNonDeferredLengthParams(exv));
+        fir::factory::getNonDeferredLenParams(exv));
   }
 
   /// Generate a call to a Fortran intrinsic or intrinsic module procedure.
@@ -3633,6 +3633,38 @@ public:
     ael.lowerAllocatableArrayAssignment(lhs, rhs);
   }
 
+  /// Lower an assignment to allocatable array, where the LHS array
+  /// is represented with \p lhs extended value produced in different
+  /// branches created in genReallocIfNeeded(). The RHS lowering
+  /// is provided via \p rhsCC continuation.
+  void lowerAllocatableArrayAssignment(ExtValue lhs, CC rhsCC) {
+    mlir::Location loc = getLoc();
+    // Check if the initial destShape is null, which means
+    // it has not been computed from rhs (e.g. rhs is scalar).
+    bool destShapeIsEmpty = destShape.empty();
+    // Create ArrayLoad for the mutable box and save it into `destination`.
+    PushSemantics(ConstituentSemantics::ProjectedCopyInCopyOut);
+    ccStoreToDest = genarr(lhs);
+    // destShape is either non-null on entry to this function,
+    // or has been just set by lhs lowering.
+    assert(!destShape.empty() && "destShape must have been set.");
+    // Finish lowering the loop nest.
+    assert(destination && "destination must have been set");
+    ExtValue exv = lowerArrayExpression(rhsCC, destination.getType());
+    if (!explicitSpaceIsActive())
+      builder.create<fir::ArrayMergeStoreOp>(
+          loc, destination, fir::getBase(exv), destination.getMemref(),
+          destination.getSlice(), destination.getTypeparams());
+    // destShape may originally be null, if rhs did not define a shape.
+    // In this case the destShape is computed from lhs, and we may have
+    // multiple different lhs values for different branches created
+    // in genReallocIfNeeded(). We cannot reuse destShape computed
+    // in different branches, so we have to reset it,
+    // so that it is recomputed for the next branch FIR generation.
+    if (destShapeIsEmpty)
+      destShape.clear();
+  }
+
   /// Assignment to allocatable array.
   ///
   /// The semantics are reverse that of a "regular" array assignment. The rhs
@@ -3648,7 +3680,6 @@ public:
     // array.
     fir::MutableBoxValue mutableBox =
         Fortran::lower::createMutableBox(loc, converter, lhs, symMap);
-    mlir::Type resultTy = converter.genType(rhs);
     if (rhs.Rank() > 0)
       determineShapeOfDest(rhs);
     auto rhsCC = [&]() {
@@ -3679,25 +3710,16 @@ public:
       auto lbs = fir::factory::getOrigins(arrayOperands[0].shape);
       lbounds.append(lbs.begin(), lbs.end());
     }
+    auto assignToStorage = [&](fir::ExtendedValue newLhs) {
+      // The lambda will be called repeatedly by genReallocIfNeeded().
+      lowerAllocatableArrayAssignment(newLhs, rhsCC);
+    };
     fir::factory::MutableBoxReallocation realloc =
         fir::factory::genReallocIfNeeded(builder, loc, mutableBox, destShape,
-                                         lengthParams);
-    // Create ArrayLoad for the mutable box and save it into `destination`.
-    PushSemantics(ConstituentSemantics::ProjectedCopyInCopyOut);
-    ccStoreToDest = genarr(realloc.newValue);
-    // If the rhs is scalar, get shape from the allocatable ArrayLoad.
-    if (destShape.empty())
-      destShape = getShape(destination);
-    // Finish lowering the loop nest.
-    assert(destination && "destination must have been set");
-    ExtValue exv = lowerArrayExpression(rhsCC, resultTy);
+                                         lengthParams, assignToStorage);
     if (explicitSpaceIsActive()) {
       explicitSpace->finalizeContext();
-      builder.create<fir::ResultOp>(loc, fir::getBase(exv));
-    } else {
-      builder.create<fir::ArrayMergeStoreOp>(
-          loc, destination, fir::getBase(exv), destination.getMemref(),
-          destination.getSlice(), destination.getTypeparams());
+      builder.create<fir::ResultOp>(loc, fir::getBase(realloc.newValue));
     }
     fir::factory::finalizeRealloc(builder, loc, mutableBox, lbounds,
                                   takeLboundsIfRealloc, realloc);
@@ -7214,8 +7236,9 @@ private:
                              Fortran::lower::ImplicitIterSpace *impSpace)
       : converter{converter}, builder{converter.getFirOpBuilder()},
         stmtCtx{stmtCtx}, symMap{symMap},
-        explicitSpace(expSpace->isActive() ? expSpace : nullptr),
-        implicitSpace(impSpace->empty() ? nullptr : impSpace), semant{sem} {
+        explicitSpace((expSpace && expSpace->isActive()) ? expSpace : nullptr),
+        implicitSpace((impSpace && !impSpace->empty()) ? impSpace : nullptr),
+        semant{sem} {
     // Generate any mask expressions, as necessary. This is the compute step
     // that creates the effective masks. See 10.2.3.2 in particular.
     genMasks();
