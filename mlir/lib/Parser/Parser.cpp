@@ -24,6 +24,7 @@
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/bit.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include <algorithm>
@@ -2019,8 +2020,8 @@ ParseResult OperationParser::parseRegionBody(Region &region, SMLoc startLoc,
                    .attachNote(getEncodedSourceLocation(*defLoc))
                << "previously referenced here";
       }
-      Location loc = entryArg.sourceLoc.hasValue()
-                         ? entryArg.sourceLoc.getValue()
+      Location loc = entryArg.sourceLoc.has_value()
+                         ? entryArg.sourceLoc.value()
                          : getEncodedSourceLocation(argInfo.location);
       BlockArgument arg = block->addArgument(entryArg.type, loc);
 
@@ -2349,7 +2350,7 @@ public:
                          "expected hex string blob for key '" + key +
                              "' to encode alignment in first 4 bytes");
     }
-    uint32_t align = 0;
+    llvm::support::ulittle32_t align;
     memcpy(&align, blobData->data(), sizeof(uint32_t));
 
     // Get the data portion of the blob.

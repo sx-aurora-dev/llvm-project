@@ -81,6 +81,20 @@ static llvm::cl::opt<unsigned> clInitialBufferSize(
         "set the incremental array construction buffer size (default=32)"),
     llvm::cl::init(32u));
 
+// Lower TRANSPOSE as an "elemental" function that swaps the array
+// expression's iteration space, so that no runtime call is needed.
+// This lowering may help get rid of unnecessary creation of temporary
+// arrays. Note that the runtime TRANSPOSE implementation may be different
+// from the "inline" FIR, e.g. it may diagnose out-of-memory conditions
+// during the temporary allocation whereas the inline implementation
+// relies on AllocMemOp that will silently return null in case
+// there is not enough memory. So it may be a good idea to set
+// this option to false for -O0.
+static llvm::cl::opt<bool> optimizeTranspose(
+    "opt-transpose",
+    llvm::cl::desc("lower transpose without using a runtime call"),
+    llvm::cl::init(true));
+
 /// The various semantics of a program constituent (or a part thereof) as it may
 /// appear in an expression.
 ///
@@ -579,6 +593,38 @@ isIntrinsicModuleProcRef(const Fortran::evaluate::ProcedureRef &procRef) {
       symbol->GetUltimate().owner().GetSymbol();
   return module && module->attrs().test(Fortran::semantics::Attr::INTRINSIC) &&
          module->name().ToString().find("omp_lib") == std::string::npos;
+}
+
+// A set of visitors to detect if the given expression
+// is a TRANSPOSE call that should be lowered without using
+// runtime TRANSPOSE implementation.
+template <typename T>
+static bool isOptimizableTranspose(const T &) {
+  return false;
+}
+
+static bool
+isOptimizableTranspose(const Fortran::evaluate::ProcedureRef &procRef) {
+  const Fortran::evaluate::SpecificIntrinsic *intrin =
+      procRef.proc().GetSpecificIntrinsic();
+  return optimizeTranspose && intrin && intrin->name == "transpose";
+}
+
+template <typename T>
+static bool
+isOptimizableTranspose(const Fortran::evaluate::FunctionRef<T> &funcRef) {
+  return isOptimizableTranspose(
+      static_cast<const Fortran::evaluate::ProcedureRef &>(funcRef));
+}
+
+template <typename T>
+static bool isOptimizableTranspose(Fortran::evaluate::Expr<T> expr) {
+  // If optimizeTranspose is not enabled, return false right away.
+  if (!optimizeTranspose)
+    return false;
+
+  return std::visit([&](const auto &e) { return isOptimizableTranspose(e); },
+                    expr.u);
 }
 
 namespace {
@@ -3243,7 +3289,7 @@ public:
     // is used to not create a new temporary storage.
     if (isScalar(x) ||
         Fortran::evaluate::UnwrapWholeSymbolOrComponentDataRef(x) ||
-        isTransformationalRef(x))
+        (isTransformationalRef(x) && !isOptimizableTranspose(x)))
       return std::visit([&](const auto &e) { return genref(e); }, x.u);
     if (useBoxArg)
       return asArrayArg(x);
@@ -4266,7 +4312,7 @@ private:
     auto [iterSpace, insPt] = genIterSpace(resultTy);
     auto exv = f(iterSpace);
     iterSpace.setElement(std::move(exv));
-    auto lambda = ccStoreToDest.hasValue()
+    auto lambda = ccStoreToDest
                       ? ccStoreToDest.getValue()
                       : defaultStoreToDestination(/*substring=*/nullptr);
     mlir::Value updVal = fir::getBase(lambda(iterSpace));
@@ -4603,7 +4649,7 @@ private:
     }
 
     // Generate the lazy mask allocation, if one was given.
-    if (ccPrelude.hasValue())
+    if (ccPrelude)
       ccPrelude.getValue()(shape);
 
     // Now handle the implicit loops.
@@ -4663,7 +4709,7 @@ private:
   fir::ArrayLoadOp
   createAndLoadSomeArrayTemp(mlir::Type type,
                              llvm::ArrayRef<mlir::Value> shape) {
-    if (ccLoadDest.hasValue())
+    if (ccLoadDest)
       return ccLoadDest.getValue()(shape);
     auto seqTy = type.dyn_cast<fir::SequenceType>();
     assert(seqTy && "must be an array");
@@ -5047,11 +5093,55 @@ private:
         };
   }
 
+  /// Lower TRANSPOSE call without using runtime TRANSPOSE.
+  /// Return continuation for generating the TRANSPOSE result.
+  /// The continuation just swaps the iteration space before
+  /// invoking continuation for the argument.
+  CC genTransposeProcRef(const Fortran::evaluate::ProcedureRef &procRef) {
+    assert(procRef.arguments().size() == 1 &&
+           "TRANSPOSE must have one argument.");
+    const auto *argExpr = procRef.arguments()[0].value().UnwrapExpr();
+    assert(argExpr);
+
+    llvm::SmallVector<mlir::Value> savedDestShape = destShape;
+    assert((destShape.empty() || destShape.size() == 2) &&
+           "TRANSPOSE destination must have rank 2.");
+
+    if (!savedDestShape.empty())
+      std::swap(destShape[0], destShape[1]);
+
+    PushSemantics(ConstituentSemantics::RefTransparent);
+    llvm::SmallVector<CC> operands{genElementalArgument(*argExpr)};
+
+    if (!savedDestShape.empty()) {
+      // If destShape was set before transpose lowering, then
+      // restore it. Otherwise, ...
+      destShape = savedDestShape;
+    } else if (!destShape.empty()) {
+      // ... if destShape has been set from the argument lowering,
+      // then reverse it.
+      assert(destShape.size() == 2 &&
+             "TRANSPOSE destination must have rank 2.");
+      std::swap(destShape[0], destShape[1]);
+    }
+
+    return [=](IterSpace iters) {
+      assert(iters.iterVec().size() == 2 &&
+             "TRANSPOSE expects 2D iterations space.");
+      IterationSpace newIters(iters, {iters.iterValue(1), iters.iterValue(0)});
+      return operands.front()(newIters);
+    };
+  }
+
   /// Generate a procedure reference. This code is shared for both functions and
   /// subroutines, the difference being reflected by `retTy`.
   CC genProcRef(const Fortran::evaluate::ProcedureRef &procRef,
                 llvm::Optional<mlir::Type> retTy) {
     mlir::Location loc = getLoc();
+
+    if (isOptimizableTranspose(procRef))
+      return genTransposeProcRef(procRef);
+
     if (procRef.IsElemental()) {
       if (const Fortran::evaluate::SpecificIntrinsic *intrin =
               procRef.proc().GetSpecificIntrinsic()) {
@@ -5934,7 +6024,7 @@ private:
       // always loaded at the beginning of the statement and merged at the
       // end.
       destination = arrLoad;
-      auto lambda = ccStoreToDest.hasValue()
+      auto lambda = ccStoreToDest
                         ? ccStoreToDest.getValue()
                         : defaultStoreToDestination(components.substring);
       return [=](IterSpace iters) -> ExtValue { return lambda(iters); };
@@ -6573,7 +6663,7 @@ private:
 
     // Return the continuation.
     if (fir::isa_char(seqTy.getEleTy())) {
-      if (charLen.hasValue()) {
+      if (charLen) {
         auto len = builder.create<fir::LoadOp>(loc, charLen.getValue());
         return genarr(fir::CharArrayBoxValue{mem, len, extents});
       }
@@ -7291,14 +7381,14 @@ private:
 
   void setUnordered(bool b) { unordered = b; }
 
-  inline bool isPointerAssignment() const { return lbounds.hasValue(); }
+  inline bool isPointerAssignment() const { return lbounds.has_value(); }
 
   inline bool isBoundsSpec() const {
-    return isPointerAssignment() && !ubounds.hasValue();
+    return isPointerAssignment() && !ubounds.has_value();
   }
 
   inline bool isBoundsRemap() const {
-    return isPointerAssignment() && ubounds.hasValue();
+    return isPointerAssignment() && ubounds.has_value();
   }
 
   void setPointerAssignmentBounds(
@@ -7625,7 +7715,7 @@ void Fortran::lower::createArrayLoads(
   auto genLoad = [&](const auto *x) -> fir::ArrayLoadOp {
     return genArrayLoad(loc, converter, builder, x, symMap, stmtCtx);
   };
-  if (esp.lhsBases[counter].hasValue()) {
+  if (esp.lhsBases[counter]) {
     auto &base = esp.lhsBases[counter].getValue();
     auto load = std::visit(genLoad, base);
     esp.initialArgs.push_back(load);
@@ -7650,7 +7740,7 @@ void Fortran::lower::createArrayMergeStores(
                                              load.getMemref(), load.getSlice(),
                                              load.getTypeparams());
     }
-  if (esp.loopCleanup.hasValue()) {
+  if (esp.loopCleanup) {
     esp.loopCleanup.getValue()(builder);
     esp.loopCleanup = llvm::None;
   }

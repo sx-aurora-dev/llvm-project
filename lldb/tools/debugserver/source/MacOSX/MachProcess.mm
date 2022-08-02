@@ -746,12 +746,13 @@ const char *MachProcess::GetPlatformString(unsigned char platform) {
   return nullptr;
 }
 
-static bool mach_header_validity_test (uint32_t magic, uint32_t cputype) {
+static bool mach_header_validity_test(uint32_t magic, uint32_t cputype) {
   if (magic != MH_MAGIC && magic != MH_CIGAM && magic != MH_MAGIC_64 &&
       magic != MH_CIGAM_64)
     return false;
-  if (cputype != CPU_TYPE_X86_64 && cputype != CPU_TYPE_ARM &&
-      cputype != CPU_TYPE_ARM64 && cputype != CPU_TYPE_ARM64_32)
+  if (cputype != CPU_TYPE_I386 && cputype != CPU_TYPE_X86_64 &&
+      cputype != CPU_TYPE_ARM && cputype != CPU_TYPE_ARM64 &&
+      cputype != CPU_TYPE_ARM64_32)
     return false;
   return true;
 }
