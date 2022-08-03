@@ -404,6 +404,7 @@ private:
   SDValue PromoteIntOp_SET_ROUNDING(SDNode *N);
   SDValue PromoteIntOp_VP(SDNode *N, unsigned OpNo);
   SDValue PromoteIntOp_STACKMAP(SDNode *N, unsigned OpNo);
+  SDValue PromoteIntOp_PATCHPOINT(SDNode *N, unsigned OpNo);
 
   void PromoteSetCCOperands(SDValue &LHS,SDValue &RHS, ISD::CondCode Code);
 
@@ -496,6 +497,7 @@ private:
   SDValue ExpandIntOp_ATOMIC_STORE(SDNode *N);
   SDValue ExpandIntOp_SPLAT_VECTOR(SDNode *N);
   SDValue ExpandIntOp_STACKMAP(SDNode *N, unsigned OpNo);
+  SDValue ExpandIntOp_PATCHPOINT(SDNode *N, unsigned OpNo);
 
   void IntegerExpandSetCCOperands(SDValue &NewLHS, SDValue &NewRHS,
                                   ISD::CondCode &CCCode, const SDLoc &dl);
@@ -745,6 +747,7 @@ private:
   SDValue SoftPromoteHalfOp_SELECT_CC(SDNode *N, unsigned OpNo);
   SDValue SoftPromoteHalfOp_STORE(SDNode *N, unsigned OpNo);
   SDValue SoftPromoteHalfOp_STACKMAP(SDNode *N, unsigned OpNo);
+  SDValue SoftPromoteHalfOp_PATCHPOINT(SDNode *N, unsigned OpNo);
 
   //===--------------------------------------------------------------------===//
   // Scalarization Support: LegalizeVectorTypes.cpp
