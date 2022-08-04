@@ -20,7 +20,11 @@ using namespace mlir::tblgen;
 // AttrOrTypeBuilder
 //===----------------------------------------------------------------------===//
 
-/// Returns true if this builder is able to infer the MLIRContext parameter.
+Optional<StringRef> AttrOrTypeBuilder::getReturnType() const {
+  Optional<StringRef> type = def->getValueAsOptionalString("returnType");
+  return type && !type->empty() ? type : llvm::None;
+}
+
 bool AttrOrTypeBuilder::hasInferredContextParameter() const {
   return def->getValueAsBit("hasInferredContextParam");
 }
@@ -239,7 +243,7 @@ StringRef AttrOrTypeParameter::getComparator() const {
 StringRef AttrOrTypeParameter::getCppType() const {
   if (auto *stringType = dyn_cast<llvm::StringInit>(getDef()))
     return stringType->getValue();
-  return getDefValue<llvm::StringInit>("cppType").getValue();
+  return getDefValue<llvm::StringInit>("cppType").value();
 }
 
 StringRef AttrOrTypeParameter::getCppAccessorType() const {

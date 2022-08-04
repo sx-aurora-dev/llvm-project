@@ -347,7 +347,7 @@ void ObjFile::parseSections(ArrayRef<SectionHeader> sectionHeaders) {
       section.subsections.push_back({0, isec});
     } else if (auto recordSize = getRecordSize(segname, name)) {
       splitRecords(*recordSize);
-    } else if (config->parseEhFrames && name == section_names::ehFrame &&
+    } else if (name == section_names::ehFrame &&
                segname == segment_names::text) {
       splitEhFrames(data, *sections.back());
     } else if (segname == segment_names::llvm) {
@@ -1117,7 +1117,7 @@ template <class LP> void ObjFile::parse() {
   }
   if (compactUnwindSection)
     registerCompactUnwind(*compactUnwindSection);
-  if (config->parseEhFrames && ehFrameSection)
+  if (ehFrameSection)
     registerEhFrames(*ehFrameSection);
 }
 
@@ -1240,11 +1240,23 @@ void ObjFile::registerCompactUnwind(Section &compactUnwindSection) {
         continue;
       }
       d->unwindEntry = isec;
-      // Since we've sliced away the functionAddress, we should remove the
-      // corresponding relocation too. Given that clang emits relocations in
-      // reverse order of address, this relocation should be at the end of the
-      // vector for most of our input object files, so this is typically an O(1)
-      // operation.
+      // Now that the symbol points to the unwind entry, we can remove the reloc
+      // that points from the unwind entry back to the symbol.
+      //
+      // First, the symbol keeps the unwind entry alive (and not vice versa), so
+      // this keeps dead-stripping simple.
+      //
+      // Moreover, it reduces the work that ICF needs to do to figure out if
+      // functions with unwind info are foldable.
+      //
+      // However, this does make it possible for ICF to fold CUEs that point to
+      // distinct functions (if the CUEs are otherwise identical).
+      // UnwindInfoSection takes care of this by re-duplicating the CUEs so that
+      // each one can hold a distinct functionAddress value.
+      //
+      // Given that clang emits relocations in reverse order of address, this
+      // relocation should be at the end of the vector for most of our input
+      // object files, so this erase() is typically an O(1) operation.
       it = isec->relocs.erase(it);
     }
   }
@@ -1687,7 +1699,6 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
     umbrella = this;
   this->umbrella = umbrella;
 
-  auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
   auto *hdr = reinterpret_cast<const mach_header *>(mb.getBufferStart());
 
   // Initialize installName.
@@ -1722,39 +1733,53 @@ DylibFile::DylibFile(MemoryBufferRef mb, DylibFile *umbrella,
 
   // Initialize symbols.
   exportingFile = isImplicitlyLinked(installName) ? this : this->umbrella;
-  if (const load_command *cmd = findCommand(hdr, LC_DYLD_INFO_ONLY)) {
-    auto *c = reinterpret_cast<const dyld_info_command *>(cmd);
-    struct TrieEntry {
-      StringRef name;
-      uint64_t flags;
-    };
 
-    std::vector<TrieEntry> entries;
-    // Find all the $ld$* symbols to process first.
-    parseTrie(buf + c->export_off, c->export_size,
-              [&](const Twine &name, uint64_t flags) {
-                StringRef savedName = saver().save(name);
-                if (handleLDSymbol(savedName))
-                  return;
-                entries.push_back({savedName, flags});
-              });
-
-    // Process the "normal" symbols.
-    for (TrieEntry &entry : entries) {
-      if (exportingFile->hiddenSymbols.contains(
-              CachedHashStringRef(entry.name)))
-        continue;
-
-      bool isWeakDef = entry.flags & EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
-      bool isTlv = entry.flags & EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL;
-
-      symbols.push_back(
-          symtab->addDylib(entry.name, exportingFile, isWeakDef, isTlv));
-    }
-
-  } else {
-    error("LC_DYLD_INFO_ONLY not found in " + toString(this));
+  const auto *dyldInfo = findCommand<dyld_info_command>(hdr, LC_DYLD_INFO_ONLY);
+  const auto *exportsTrie =
+      findCommand<linkedit_data_command>(hdr, LC_DYLD_EXPORTS_TRIE);
+  if (dyldInfo && exportsTrie) {
+    // It's unclear what should happen in this case. Maybe we should only error
+    // out if the two load commands refer to different data?
+    error("dylib " + toString(this) +
+          " has both LC_DYLD_INFO_ONLY and LC_DYLD_EXPORTS_TRIE");
     return;
+  } else if (dyldInfo) {
+    parseExportedSymbols(dyldInfo->export_off, dyldInfo->export_size);
+  } else if (exportsTrie) {
+    parseExportedSymbols(exportsTrie->dataoff, exportsTrie->datasize);
+  } else {
+    error("No LC_DYLD_INFO_ONLY or LC_DYLD_EXPORTS_TRIE found in " +
+          toString(this));
+    return;
+  }
+}
+
+void DylibFile::parseExportedSymbols(uint32_t offset, uint32_t size) {
+  struct TrieEntry {
+    StringRef name;
+    uint64_t flags;
+  };
+
+  auto *buf = reinterpret_cast<const uint8_t *>(mb.getBufferStart());
+  std::vector<TrieEntry> entries;
+  // Find all the $ld$* symbols to process first.
+  parseTrie(buf + offset, size, [&](const Twine &name, uint64_t flags) {
+    StringRef savedName = saver().save(name);
+    if (handleLDSymbol(savedName))
+      return;
+    entries.push_back({savedName, flags});
+  });
+
+  // Process the "normal" symbols.
+  for (TrieEntry &entry : entries) {
+    if (exportingFile->hiddenSymbols.contains(CachedHashStringRef(entry.name)))
+      continue;
+
+    bool isWeakDef = entry.flags & EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
+    bool isTlv = entry.flags & EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL;
+
+    symbols.push_back(
+        symtab->addDylib(entry.name, exportingFile, isWeakDef, isTlv));
   }
 }
 

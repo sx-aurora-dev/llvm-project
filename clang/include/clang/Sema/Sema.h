@@ -5170,6 +5170,11 @@ public:
   void DiagnoseSelfMove(const Expr *LHSExpr, const Expr *RHSExpr,
                         SourceLocation OpLoc);
 
+  /// Returns a field in a CXXRecordDecl that has the same name as the decl \p
+  /// SelfAssigned when inside a CXXMethodDecl.
+  const FieldDecl *
+  getSelfAssignmentClassMemberCandidate(const ValueDecl *SelfAssigned);
+
   /// Warn if we're implicitly casting from a _Nullable pointer type to a
   /// _Nonnull one.
   void diagnoseNullableToNonnullConversion(QualType DstType, QualType SrcType,
@@ -13033,6 +13038,8 @@ private:
   void CheckConstructorCall(FunctionDecl *FDecl, QualType ThisType,
                             ArrayRef<const Expr *> Args,
                             const FunctionProtoType *Proto, SourceLocation Loc);
+
+  void checkAIXMemberAlignment(SourceLocation Loc, const Expr *Arg);
 
   void CheckArgAlignment(SourceLocation Loc, NamedDecl *FDecl,
                          StringRef ParamName, QualType ArgTy, QualType ParamTy);

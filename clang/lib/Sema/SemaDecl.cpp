@@ -3233,9 +3233,15 @@ static bool EquivalentArrayTypes(QualType Old, QualType New,
   }
 
   // Only compare size, ignore Size modifiers and CVR.
-  if (Old->isConstantArrayType() && New->isConstantArrayType())
+  if (Old->isConstantArrayType() && New->isConstantArrayType()) {
     return Ctx.getAsConstantArrayType(Old)->getSize() ==
            Ctx.getAsConstantArrayType(New)->getSize();
+  }
+
+  // Don't try to compare dependent sized array
+  if (Old->isDependentSizedArrayType() && New->isDependentSizedArrayType()) {
+    return true;
+  }
 
   return Old == New;
 }
@@ -15508,7 +15514,7 @@ void Sema::AddKnownFunctionAttributesForReplaceableGlobalAllocationFunction(
   //         specified by the value of this argument.
   if (AlignmentParam && !FD->hasAttr<AllocAlignAttr>()) {
     FD->addAttr(AllocAlignAttr::CreateImplicit(
-        Context, ParamIdx(AlignmentParam.getValue(), FD), FD->getLocation()));
+        Context, ParamIdx(AlignmentParam.value(), FD), FD->getLocation()));
   }
 
   // FIXME:

@@ -532,6 +532,9 @@ case VE::BASEOPC##vml_v: \
 case VE::BASEOPC##vml:
 
 void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
+  VE_MC::verifyInstructionPredicates(MI->getOpcode(),
+                                     getSubtargetInfo().getFeatureBits());
+
   switch (MI->getOpcode()) {
   default:
     break;

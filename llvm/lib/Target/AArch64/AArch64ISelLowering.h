@@ -549,6 +549,10 @@ public:
   /// should be stack expanded.
   bool isShuffleMaskLegal(ArrayRef<int> M, EVT VT) const override;
 
+  /// Similar to isShuffleMaskLegal. Return true is the given 'select with zero'
+  /// shuffle mask can be codegen'd directly.
+  bool isVectorClearMaskLegal(ArrayRef<int> M, EVT VT) const override;
+
   /// Return the ISD::SETCC ValueType.
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;
@@ -1153,10 +1157,6 @@ private:
   // with BITCAST used otherwise.
   // This function does not handle predicate bitcasts.
   SDValue getSVESafeBitCast(EVT VT, SDValue Op, SelectionDAG &DAG) const;
-
-  // Returns a safe bitcast between two scalable vector predicates, where
-  // any newly created lanes from a widening bitcast are defined as zero.
-  SDValue getSVEPredicateBitCast(EVT VT, SDValue Op, SelectionDAG &DAG) const;
 
   bool isConstantUnsignedBitfieldExtractLegal(unsigned Opc, LLT Ty1,
                                               LLT Ty2) const override;

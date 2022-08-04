@@ -9,6 +9,7 @@
 #ifndef LLVM_LIBC_SRC_STDIO_PRINTF_CORE_FLOAT_HEX_CONVERTER_H
 #define LLVM_LIBC_SRC_STDIO_PRINTF_CORE_FLOAT_HEX_CONVERTER_H
 
+#include "src/__support/FPUtil/FEnvImpl.h"
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/stdio/printf_core/converter_utils.h"
 #include "src/stdio/printf_core/core_structs.h"
@@ -89,7 +90,7 @@ int inline convert_float_hex_exp(Writer *writer, const FormatSection &to_conv) {
                         FormatFlags::LEFT_JUSTIFIED))
       RET_IF_RESULT_NEGATIVE(writer->write_chars(' ', padding));
 
-    return 0;
+    return WRITE_OK;
   }
 
   // Handle the exponent for numbers with a 0 exponent
@@ -133,11 +134,25 @@ int inline convert_float_hex_exp(Writer *writer, const FormatSection &to_conv) {
 
     mantissa >>= shift_amount;
 
-    // Round to nearest, if it's exactly halfway then round to even.
-    if (truncated_bits > halfway_const)
-      ++mantissa;
-    else if (truncated_bits == halfway_const)
-      mantissa = mantissa + (mantissa & 1);
+    switch (fputil::get_round()) {
+    case FE_TONEAREST:
+      // Round to nearest, if it's exactly halfway then round to even.
+      if (truncated_bits > halfway_const)
+        ++mantissa;
+      else if (truncated_bits == halfway_const)
+        mantissa = mantissa + (mantissa & 1);
+      break;
+    case FE_DOWNWARD:
+      if (truncated_bits > 0 && is_negative)
+        ++mantissa;
+      break;
+    case FE_UPWARD:
+      if (truncated_bits > 0 && !is_negative)
+        ++mantissa;
+      break;
+    case FE_TOWARDZERO:
+      break;
+    }
 
     // If the rounding caused an overflow, shift the mantissa and adjust the
     // exponent to match.
@@ -264,7 +279,7 @@ int inline convert_float_hex_exp(Writer *writer, const FormatSection &to_conv) {
     RET_IF_RESULT_NEGATIVE(
         writer->write(exp_buffer + exp_cur, EXP_LEN - exp_cur));
   }
-  return 0;
+  return WRITE_OK;
 }
 
 } // namespace printf_core
