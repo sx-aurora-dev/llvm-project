@@ -568,18 +568,10 @@ Value *CachingVPExpander::expandPredication(VPIntrinsic &VPI) {
   // Try lowering to a LLVM instruction first.
   auto OC = VPI.getFunctionalOpcode();
 
-  if (OC) {
-    if (Instruction::isUnaryOp(*OC))
-      return expandPredicationInUnaryOperator(Builder, VPI);
-    if (Instruction::isBinaryOp(*OC))
-      return expandPredicationInBinaryOperator(Builder, VPI);
-  }
-
-  if (auto *VPR = dyn_cast<VPReductionIntrinsic>(&VPI))
-    return expandPredicationInReduction(Builder, *VPR);
-
-  llvm::errs() << VPI << "\n";
-  report_fatal_error("Missing expansion path for this VP intrinsic");
+  if (OC && Instruction::isUnaryOp(*OC))
+    return expandPredicationInUnaryOperator(Builder, VPI);
+  if (OC && Instruction::isBinaryOp(*OC))
+    return expandPredicationInBinaryOperator(Builder, VPI);
 
   if (auto *VPRI = dyn_cast<VPReductionIntrinsic>(&VPI))
     return expandPredicationInReduction(Builder, *VPRI);
