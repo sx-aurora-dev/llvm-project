@@ -521,6 +521,14 @@ define fastcc <256 x i1> @load__vm256_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB7_2:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    svm %s16, %vm10, 0
+; CHECK-NEXT:    st %s16, 288(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 1
+; CHECK-NEXT:    st %s16, 296(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 2
+; CHECK-NEXT:    st %s16, 304(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 3
+; CHECK-NEXT:    st %s16, 312(, %s17) # 32-byte Folded Spill
 ; CHECK-NEXT:    or %s18, 0, %s0
 ; CHECK-NEXT:    lea %s0, 15(, %s0)
 ; CHECK-NEXT:    and %s0, -16, %s0
@@ -533,22 +541,14 @@ define fastcc <256 x i1> @load__vm256_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    ld %s1, 16(, %s0)
 ; CHECK-NEXT:    ld %s1, 8(, %s0)
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    ld %s16, 288(, %s17)
-; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, 296(, %s17)
-; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, 304(, %s17)
-; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, 312(, %s17)
-; CHECK-NEXT:    lvm %vm1, 3, %s16
-; CHECK-NEXT:    svm %s16, %vm1, 0
-; CHECK-NEXT:    st %s16, 256(, %s17)
-; CHECK-NEXT:    svm %s16, %vm1, 1
-; CHECK-NEXT:    st %s16, 264(, %s17)
-; CHECK-NEXT:    svm %s16, %vm1, 2
-; CHECK-NEXT:    st %s16, 272(, %s17)
-; CHECK-NEXT:    svm %s16, %vm1, 3
-; CHECK-NEXT:    st %s16, 280(, %s17) # 32-byte Folded Spill
+; CHECK-NEXT:    ld %s16, 256(, %s17)
+; CHECK-NEXT:    lvm %vm10, 0, %s16
+; CHECK-NEXT:    ld %s16, 264(, %s17)
+; CHECK-NEXT:    lvm %vm10, 1, %s16
+; CHECK-NEXT:    ld %s16, 272(, %s17)
+; CHECK-NEXT:    lvm %vm10, 2, %s16
+; CHECK-NEXT:    ld %s16, 280(, %s17)
+; CHECK-NEXT:    lvm %vm10, 3, %s16
 ; CHECK-NEXT:    lea %s0, dummy@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, dummy@hi(, %s0)
@@ -558,14 +558,15 @@ define fastcc <256 x i1> @load__vm256_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    lea.sl %s12, pass@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 0, %s18
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    ld %s16, 256(, %s17)
-; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, 264(, %s17)
-; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, 272(, %s17)
-; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, 280(, %s17) # 32-byte Folded Reload
-; CHECK-NEXT:    lvm %vm1, 3, %s16
+; CHECK-NEXT:    andm %vm1, %vm0, %vm10
+; CHECK-NEXT:    ld %s16, 288(, %s17)
+; CHECK-NEXT:    lvm %vm10, 0, %s16
+; CHECK-NEXT:    ld %s16, 296(, %s17)
+; CHECK-NEXT:    lvm %vm10, 1, %s16
+; CHECK-NEXT:    ld %s16, 304(, %s17)
+; CHECK-NEXT:    lvm %vm10, 2, %s16
+; CHECK-NEXT:    ld %s16, 312(, %s17) # 32-byte Folded Reload
+; CHECK-NEXT:    lvm %vm10, 3, %s16
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
 ; CHECK-NEXT:    ld %s17, 40(, %s11)
@@ -1098,6 +1099,22 @@ define fastcc <512 x i1> @load__vm512_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB15_2:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    svm %s16, %vm10, 0
+; CHECK-NEXT:    st %s16, 352(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 1
+; CHECK-NEXT:    st %s16, 360(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 2
+; CHECK-NEXT:    st %s16, 368(, %s17)
+; CHECK-NEXT:    svm %s16, %vm10, 3
+; CHECK-NEXT:    st %s16, 376(, %s17) # 32-byte Folded Spill
+; CHECK-NEXT:    svm %s16, %vm11, 0
+; CHECK-NEXT:    st %s16, 320(, %s17)
+; CHECK-NEXT:    svm %s16, %vm11, 1
+; CHECK-NEXT:    st %s16, 328(, %s17)
+; CHECK-NEXT:    svm %s16, %vm11, 2
+; CHECK-NEXT:    st %s16, 336(, %s17)
+; CHECK-NEXT:    svm %s16, %vm11, 3
+; CHECK-NEXT:    st %s16, 344(, %s17) # 32-byte Folded Spill
 ; CHECK-NEXT:    or %s18, 0, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 6
 ; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
@@ -1113,39 +1130,23 @@ define fastcc <512 x i1> @load__vm512_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    ld %s1, 16(, %s0)
 ; CHECK-NEXT:    ld %s1, 8(, %s0)
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    # implicit-def: $vmp1
-; CHECK-NEXT:    ld %s16, 320(, %s17)
-; CHECK-NEXT:    lvm %vm3, 0, %s16
-; CHECK-NEXT:    ld %s16, 328(, %s17)
-; CHECK-NEXT:    lvm %vm3, 1, %s16
-; CHECK-NEXT:    ld %s16, 336(, %s17)
-; CHECK-NEXT:    lvm %vm3, 2, %s16
-; CHECK-NEXT:    ld %s16, 344(, %s17)
-; CHECK-NEXT:    lvm %vm3, 3, %s16
-; CHECK-NEXT:    ld %s16, 352(, %s17)
-; CHECK-NEXT:    lvm %vm2, 0, %s16
-; CHECK-NEXT:    ld %s16, 360(, %s17)
-; CHECK-NEXT:    lvm %vm2, 1, %s16
-; CHECK-NEXT:    ld %s16, 368(, %s17)
-; CHECK-NEXT:    lvm %vm2, 2, %s16
-; CHECK-NEXT:    ld %s16, 376(, %s17)
-; CHECK-NEXT:    lvm %vm2, 3, %s16
-; CHECK-NEXT:    svm %s16, %vm3, 0
-; CHECK-NEXT:    st %s16, 256(, %s17)
-; CHECK-NEXT:    svm %s16, %vm3, 1
-; CHECK-NEXT:    st %s16, 264(, %s17)
-; CHECK-NEXT:    svm %s16, %vm3, 2
-; CHECK-NEXT:    st %s16, 272(, %s17)
-; CHECK-NEXT:    svm %s16, %vm3, 3
-; CHECK-NEXT:    st %s16, 280(, %s17)
-; CHECK-NEXT:    svm %s16, %vm2, 0
-; CHECK-NEXT:    st %s16, 288(, %s17)
-; CHECK-NEXT:    svm %s16, %vm2, 1
-; CHECK-NEXT:    st %s16, 296(, %s17)
-; CHECK-NEXT:    svm %s16, %vm2, 2
-; CHECK-NEXT:    st %s16, 304(, %s17)
-; CHECK-NEXT:    svm %s16, %vm2, 3
-; CHECK-NEXT:    st %s16, 312(, %s17) # 64-byte Folded Spill
+; CHECK-NEXT:    # implicit-def: $vmp5
+; CHECK-NEXT:    ld %s16, 256(, %s17)
+; CHECK-NEXT:    lvm %vm11, 0, %s16
+; CHECK-NEXT:    ld %s16, 264(, %s17)
+; CHECK-NEXT:    lvm %vm11, 1, %s16
+; CHECK-NEXT:    ld %s16, 272(, %s17)
+; CHECK-NEXT:    lvm %vm11, 2, %s16
+; CHECK-NEXT:    ld %s16, 280(, %s17)
+; CHECK-NEXT:    lvm %vm11, 3, %s16
+; CHECK-NEXT:    ld %s16, 288(, %s17)
+; CHECK-NEXT:    lvm %vm10, 0, %s16
+; CHECK-NEXT:    ld %s16, 296(, %s17)
+; CHECK-NEXT:    lvm %vm10, 1, %s16
+; CHECK-NEXT:    ld %s16, 304(, %s17)
+; CHECK-NEXT:    lvm %vm10, 2, %s16
+; CHECK-NEXT:    ld %s16, 312(, %s17)
+; CHECK-NEXT:    lvm %vm10, 3, %s16
 ; CHECK-NEXT:    lea %s0, dummy@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, dummy@hi(, %s0)
@@ -1155,23 +1156,24 @@ define fastcc <512 x i1> @load__vm512_stk_dyn_align_spill(i64 noundef %0) {
 ; CHECK-NEXT:    lea.sl %s12, pass@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 0, %s18
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    # implicit-def: $vmp1
-; CHECK-NEXT:    ld %s16, 256(, %s17)
-; CHECK-NEXT:    lvm %vm3, 0, %s16
-; CHECK-NEXT:    ld %s16, 264(, %s17)
-; CHECK-NEXT:    lvm %vm3, 1, %s16
-; CHECK-NEXT:    ld %s16, 272(, %s17)
-; CHECK-NEXT:    lvm %vm3, 2, %s16
-; CHECK-NEXT:    ld %s16, 280(, %s17)
-; CHECK-NEXT:    lvm %vm3, 3, %s16
-; CHECK-NEXT:    ld %s16, 288(, %s17)
-; CHECK-NEXT:    lvm %vm2, 0, %s16
-; CHECK-NEXT:    ld %s16, 296(, %s17)
-; CHECK-NEXT:    lvm %vm2, 1, %s16
-; CHECK-NEXT:    ld %s16, 304(, %s17)
-; CHECK-NEXT:    lvm %vm2, 2, %s16
-; CHECK-NEXT:    ld %s16, 312(, %s17) # 64-byte Folded Reload
-; CHECK-NEXT:    lvm %vm2, 3, %s16
+; CHECK-NEXT:    andm %vm2, %vm0, %vm10
+; CHECK-NEXT:    andm %vm3, %vm0, %vm11
+; CHECK-NEXT:    ld %s16, 320(, %s17)
+; CHECK-NEXT:    lvm %vm11, 0, %s16
+; CHECK-NEXT:    ld %s16, 328(, %s17)
+; CHECK-NEXT:    lvm %vm11, 1, %s16
+; CHECK-NEXT:    ld %s16, 336(, %s17)
+; CHECK-NEXT:    lvm %vm11, 2, %s16
+; CHECK-NEXT:    ld %s16, 344(, %s17) # 32-byte Folded Reload
+; CHECK-NEXT:    lvm %vm11, 3, %s16
+; CHECK-NEXT:    ld %s16, 352(, %s17)
+; CHECK-NEXT:    lvm %vm10, 0, %s16
+; CHECK-NEXT:    ld %s16, 360(, %s17)
+; CHECK-NEXT:    lvm %vm10, 1, %s16
+; CHECK-NEXT:    ld %s16, 368(, %s17)
+; CHECK-NEXT:    lvm %vm10, 2, %s16
+; CHECK-NEXT:    ld %s16, 376(, %s17) # 32-byte Folded Reload
+; CHECK-NEXT:    lvm %vm10, 3, %s16
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
 ; CHECK-NEXT:    ld %s17, 40(, %s11)
