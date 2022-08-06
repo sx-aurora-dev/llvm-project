@@ -455,13 +455,13 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 /// any side effects other than loading from the stack slot.
 unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
                                           int &FrameIndex) const {
-  if (MI.getOpcode() == VE::LDrii ||            // I64
-      MI.getOpcode() == VE::LDLSXrii ||         // I32
-      MI.getOpcode() == VE::LDUrii ||           // F32
-      MI.getOpcode() == VE::LDQrii ||           // F128 (pseudo)
-      MI.getOpcode() == VE::LDVRrii ||          // V64 (pseudo)
-      MI.getOpcode() == VE::LDVMrii ||          // VM (pseudo)
-      MI.getOpcode() == VE::LDVM512rii          // VM512 (pseudo)
+  if (MI.getOpcode() == VE::LDrii ||    // I64
+      MI.getOpcode() == VE::LDLSXrii || // I32
+      MI.getOpcode() == VE::LDUrii ||   // F32
+      MI.getOpcode() == VE::LDQrii ||   // F128 (pseudo)
+      MI.getOpcode() == VE::LDVRrii ||  // V64 (pseudo)
+      MI.getOpcode() == VE::LDVMrii ||  // VM (pseudo)
+      MI.getOpcode() == VE::LDVM512rii  // VM512 (pseudo)
   ) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0 && MI.getOperand(3).isImm() &&
@@ -480,14 +480,14 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
 /// any side effects other than storing to the stack slot.
 unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
                                          int &FrameIndex) const {
-  if (MI.getOpcode() == VE::STrii ||            // I64
-      MI.getOpcode() == VE::STLrii ||           // I32
-      MI.getOpcode() == VE::STUrii ||           // F32
-      MI.getOpcode() == VE::STQrii ||           // F128 (pseudo)
-      MI.getOpcode() == VE::STVRrii ||          // V64 (pseudo)
-      MI.getOpcode() == VE::STVPrii ||          // VP (pseudo)
-      MI.getOpcode() == VE::STVMrii ||          // VM (pseudo)
-      MI.getOpcode() == VE::STVM512rii          // VM512 (pseudo)
+  if (MI.getOpcode() == VE::STrii ||   // I64
+      MI.getOpcode() == VE::STLrii ||  // I32
+      MI.getOpcode() == VE::STUrii ||  // F32
+      MI.getOpcode() == VE::STQrii ||  // F128 (pseudo)
+      MI.getOpcode() == VE::STVRrii || // V64 (pseudo)
+      MI.getOpcode() == VE::STVPrii || // VP (pseudo)
+      MI.getOpcode() == VE::STVMrii || // VM (pseudo)
+      MI.getOpcode() == VE::STVM512rii // VM512 (pseudo)
   ) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0 && MI.getOperand(2).isImm() &&

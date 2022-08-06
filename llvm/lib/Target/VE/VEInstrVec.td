@@ -5,9 +5,10 @@
 // Pseudo instructions for VR/VM/VM512 spill/restore
 //
 // These pseudo instructions are used for only spill/restore since
-// InlineSpiller asusmes storeRegToStackSlot/loadRegFromStackSlot functions
-// emit only single instruction.  Those functions emit a single store/load
-// instruction or one of these pseudo store/load instructions.
+// InlineSpiller assumes storeRegToStackSlot/loadRegFromStackSlot
+// functions emit only single instruction.  Those functions emit a
+// single store/load instruction or one of these pseudo store/load
+// instructions.
 //
 // Specifies hasSideEffects = 0 to disable UnmodeledSideEffects.
 
