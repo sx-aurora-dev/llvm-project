@@ -412,7 +412,7 @@ noptr-declarator := declarator-id
 noptr-declarator := noptr-declarator parameters-and-qualifiers
 noptr-declarator := noptr-declarator [ constant-expression_opt ]
 noptr-declarator := ( ptr-declarator )
-parameters-and-qualifiers := ( parameter-declaration-clause_opt ) cv-qualifier-seq_opt ref-qualifier_opt noexcept-specifier_opt
+parameters-and-qualifiers := ( parameter-declaration-clause_opt [recover=Brackets] ) cv-qualifier-seq_opt ref-qualifier_opt noexcept-specifier_opt
 trailing-return-type := -> type-id
 ptr-operator := * cv-qualifier-seq_opt
 ptr-operator := &
@@ -748,10 +748,10 @@ pointer-literal := NULLPTR
 #! Placeholders for literal text in the grammar that lex as other things.
 contextual-override := IDENTIFIER [guard=Override]
 contextual-final := IDENTIFIER [guard=Final]
-contextual-zero := NUMERIC_CONSTANT
-module-keyword := IDENTIFIER
-import-keyword := IDENTIFIER
-export-keyword := IDENTIFIER
+contextual-zero := NUMERIC_CONSTANT [guard=Zero]
+module-keyword := IDENTIFIER [guard=Module]
+import-keyword := IDENTIFIER [guard=Import]
+export-keyword := IDENTIFIER [guard=Export]
 
 #! greatergreater token -- clang lexer always lexes it as a single token, we
 #! split it into two tokens to make the GLR parser aware of the nested-template
