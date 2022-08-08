@@ -151,6 +151,8 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
     CmdArgs.push_back(Args.MakeArgString(std::move(Path)));
 
   CmdArgs.push_back("-lc++");
+  if (Args.hasArg(options::OPT_fexperimental_library))
+    CmdArgs.push_back("-lc++experimental");
   CmdArgs.push_back("-lc++abi");
   CmdArgs.push_back("-lunwind");
   // libc++ requires -lpthread under glibc environment
