@@ -604,6 +604,28 @@ TEST_F(GLRTest, RecoveryEndToEnd) {
             "[  5, end) └─} := tok[5]\n");
 }
 
+TEST_F(GLRTest, RecoverTerminal) {
+  build(R"bnf(
+    _ := stmt
+
+    stmt := IDENTIFIER ; [recover=Skip]
+  )bnf");
+  TestLang.Table = LRTable::buildSLR(TestLang.G);
+  TestLang.RecoveryStrategies.try_emplace(
+      extensionID("Skip"),
+      [](Token::Index Start, const TokenStream &) { return Start + 1; });
+  clang::LangOptions LOptions;
+  TokenStream Tokens = cook(lex("foo", LOptions), LOptions);
+
+  const ForestNode &Parsed =
+      glrParse({Tokens, Arena, GSStack}, id("stmt"), TestLang);
+  EXPECT_EQ(Parsed.dumpRecursive(TestLang.G),
+            "[  0, end) stmt := IDENTIFIER ; [recover=Skip]\n"
+            "[  0,   1) ├─IDENTIFIER := tok[0]\n"
+            "[  1, end) └─; := <opaque>\n");
+}
+
+
 TEST_F(GLRTest, NoExplicitAccept) {
   build(R"bnf(
     _ := test
@@ -634,11 +656,12 @@ TEST_F(GLRTest, GuardExtension) {
     start := IDENTIFIER [guard]
   )bnf");
   TestLang.Guards.try_emplace(
-      ruleFor("start"),
-      [&](llvm::ArrayRef<const ForestNode *> RHS, const TokenStream &Tokens) {
-        assert(RHS.size() == 1 &&
-               RHS.front()->symbol() == tokenSymbol(clang::tok::identifier));
-        return Tokens.tokens()[RHS.front()->startTokenIndex()].text() == "test";
+      ruleFor("start"), [&](const GuardParams &P) {
+        assert(P.RHS.size() == 1 &&
+               P.RHS.front()->symbol() ==
+                   tokenSymbol(clang::tok::identifier));
+        return P.Tokens.tokens()[P.RHS.front()->startTokenIndex()]
+                   .text() == "test";
       });
   clang::LangOptions LOptions;
   TestLang.Table = LRTable::buildSLR(TestLang.G);

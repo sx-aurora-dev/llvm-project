@@ -226,6 +226,7 @@ namespace sema {
   class FunctionScopeInfo;
   class LambdaScopeInfo;
   class PossiblyUnreachableDiag;
+  class RISCVIntrinsicManager;
   class SemaPPCallbacks;
   class TemplateDeductionInfo;
 }
@@ -1587,7 +1588,12 @@ public:
   /// assignment.
   llvm::DenseMap<const VarDecl *, int> RefsMinusAssignments;
 
+  /// Indicate RISC-V vector builtin functions enabled or not.
+  bool DeclareRISCVVBuiltins = false;
+
 private:
+  std::unique_ptr<sema::RISCVIntrinsicManager> RVIntrinsicManager;
+
   Optional<std::unique_ptr<DarwinSDKInfo>> CachedDarwinSDKInfo;
 
   bool WarnedDarwinSDKInfoMissing = false;
@@ -2272,13 +2278,15 @@ private:
 
   bool isAcceptableSlow(const NamedDecl *D, AcceptableKind Kind);
 
-  // Determine whether the module M belongs to the  current TU.
-  bool isModuleUnitOfCurrentTU(const Module *M) const;
-
 public:
   /// Get the module unit whose scope we are currently within.
   Module *getCurrentModule() const {
     return ModuleScopes.empty() ? nullptr : ModuleScopes.back().Module;
+  }
+
+  /// Is the module scope we are an interface?
+  bool currentModuleIsInterface() const {
+    return ModuleScopes.empty() ? false : ModuleScopes.back().ModuleInterface;
   }
 
   /// Get the module owning an entity.
@@ -2289,6 +2297,9 @@ public:
   bool isModuleDirectlyImported(const Module *M) {
     return DirectModuleImports.contains(M);
   }
+
+  // Determine whether the module M belongs to the  current TU.
+  bool isModuleUnitOfCurrentTU(const Module *M) const;
 
   /// Make a merged definition of an existing hidden definition \p ND
   /// visible at the specified location.
@@ -4468,6 +4479,8 @@ public:
   bool CheckRedeclarationModuleOwnership(NamedDecl *New, NamedDecl *Old);
   bool CheckRedeclarationExported(NamedDecl *New, NamedDecl *Old);
   bool CheckRedeclarationInModule(NamedDecl *New, NamedDecl *Old);
+  bool IsRedefinitionInModule(const NamedDecl *New,
+                                 const NamedDecl *Old) const;
 
   void DiagnoseAmbiguousLookup(LookupResult &Result);
   //@}
@@ -6807,9 +6820,6 @@ public:
   /// output parameter (containing the full nested-name-specifier,
   /// including this new type).
   ///
-  /// \param ErrorRecoveryLookup If true, then this method is called to improve
-  /// error recovery. In this case do not emit error message.
-  ///
   /// \param IsCorrectedToColon If not null, suggestions to replace '::' -> ':'
   /// are allowed.  The bool value pointed by this parameter is set to 'true'
   /// if the identifier is treated as if it was followed by ':', not '::'.
@@ -7129,8 +7139,8 @@ public:
   /// check (either a concept or a constrained entity).
   /// \param ConstraintExprs a list of constraint expressions, treated as if
   /// they were 'AND'ed together.
-  /// \param TemplateArgs the list of template arguments to substitute into the
-  /// constraint expression.
+  /// \param TemplateArgLists the list of template arguments to substitute into
+  /// the constraint expression.
   /// \param TemplateIDRange The source range of the template id that
   /// caused the constraints check.
   /// \param Satisfaction if true is returned, will contain details of the
@@ -7140,7 +7150,7 @@ public:
   /// false otherwise.
   bool CheckConstraintSatisfaction(
       const NamedDecl *Template, ArrayRef<const Expr *> ConstraintExprs,
-      ArrayRef<TemplateArgument> TemplateArgs,
+      const MultiLevelTemplateArgumentList &TemplateArgLists,
       SourceRange TemplateIDRange, ConstraintSatisfaction &Satisfaction);
 
   /// \brief Check whether the given non-dependent constraint expression is
@@ -7176,9 +7186,10 @@ public:
   ///
   /// \returns true if the constrains are not satisfied or could not be checked
   /// for satisfaction, false if the constraints are satisfied.
-  bool EnsureTemplateArgumentListConstraints(TemplateDecl *Template,
-                                       ArrayRef<TemplateArgument> TemplateArgs,
-                                             SourceRange TemplateIDRange);
+  bool EnsureTemplateArgumentListConstraints(
+      TemplateDecl *Template,
+      const MultiLevelTemplateArgumentList &TemplateArgs,
+      SourceRange TemplateIDRange);
 
   /// \brief Emit diagnostics explaining why a constraint expression was deemed
   /// unsatisfied.
@@ -8254,6 +8265,9 @@ public:
   Decl *ActOnConceptDefinition(
       Scope *S, MultiTemplateParamsArg TemplateParameterLists,
       IdentifierInfo *Name, SourceLocation NameLoc, Expr *ConstraintExpr);
+
+  void CheckConceptRedefinition(ConceptDecl *NewDecl, LookupResult &Previous,
+                                bool &AddToScope);
 
   RequiresExprBodyDecl *
   ActOnStartRequiresExpr(SourceLocation RequiresKWLoc,
@@ -12165,7 +12179,8 @@ public:
   // For simple assignment, pass both expressions and a null converted type.
   // For compound assignment, pass both expressions and the converted type.
   QualType CheckAssignmentOperands( // C99 6.5.16.[1,2]
-    Expr *LHSExpr, ExprResult &RHS, SourceLocation Loc, QualType CompoundType);
+      Expr *LHSExpr, ExprResult &RHS, SourceLocation Loc, QualType CompoundType,
+      BinaryOperatorKind Opc);
 
   ExprResult checkPseudoObjectIncDec(Scope *S, SourceLocation OpLoc,
                                      UnaryOperatorKind Opcode, Expr *Op);
@@ -13581,6 +13596,8 @@ void Sema::PragmaStack<Sema::AlignPackInfo>::Act(SourceLocation PragmaLocation,
                                                  llvm::StringRef StackSlotLabel,
                                                  AlignPackInfo Value);
 
+std::unique_ptr<sema::RISCVIntrinsicManager>
+CreateRISCVIntrinsicManager(Sema &S);
 } // end namespace clang
 
 namespace llvm {
