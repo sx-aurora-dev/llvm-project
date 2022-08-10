@@ -35,6 +35,9 @@ enum NodeType : unsigned {
   SRA_W,
   SRL_W,
 
+  ROTL_W,
+  ROTR_W,
+
   // FPR<->GPR transfer operations
   MOVGR2FR_W_LA64,
   MOVFR2GR_S_LA64,
@@ -44,6 +47,9 @@ enum NodeType : unsigned {
   BSTRINS,
   BSTRPICK,
 
+  // Byte swapping operations
+  REVB_2H,
+  REVB_2W,
 };
 } // end namespace LoongArchISD
 
@@ -85,15 +91,18 @@ public:
 
 private:
   /// Target-specific function used to lower LoongArch calling conventions.
-  typedef bool LoongArchCCAssignFn(unsigned ValNo, MVT ValVT,
+  typedef bool LoongArchCCAssignFn(const DataLayout &DL, LoongArchABI::ABI ABI,
+                                   unsigned ValNo, MVT ValVT,
                                    CCValAssign::LocInfo LocInfo,
-                                   CCState &State);
+                                   ISD::ArgFlagsTy ArgFlags, CCState &State,
+                                   bool IsFixed, bool IsReg, Type *OrigTy);
 
-  void analyzeInputArgs(CCState &CCInfo,
-                        const SmallVectorImpl<ISD::InputArg> &Ins,
+  void analyzeInputArgs(MachineFunction &MF, CCState &CCInfo,
+                        const SmallVectorImpl<ISD::InputArg> &Ins, bool IsRet,
                         LoongArchCCAssignFn Fn) const;
-  void analyzeOutputArgs(CCState &CCInfo,
+  void analyzeOutputArgs(MachineFunction &MF, CCState &CCInfo,
                          const SmallVectorImpl<ISD::OutputArg> &Outs,
+                         bool IsRet, CallLoweringInfo *CLI,
                          LoongArchCCAssignFn Fn) const;
 
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -107,6 +116,7 @@ private:
   SDValue lowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBITCAST(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerUINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
 
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;

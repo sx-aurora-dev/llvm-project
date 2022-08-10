@@ -22,14 +22,21 @@ using namespace mlir::math;
 #include "mlir/Dialect/Math/IR/MathOps.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// AbsOp folder
+// AbsFOp folder
 //===----------------------------------------------------------------------===//
 
-OpFoldResult math::AbsOp::fold(ArrayRef<Attribute> operands) {
-  return constFoldUnaryOp<FloatAttr>(operands, [](const APFloat &a) {
-    const APFloat &result(a);
-    return abs(result);
-  });
+OpFoldResult math::AbsFOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldUnaryOp<FloatAttr>(operands,
+                                     [](const APFloat &a) { return abs(a); });
+}
+
+//===----------------------------------------------------------------------===//
+// AbsIOp folder
+//===----------------------------------------------------------------------===//
+
+OpFoldResult math::AbsIOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldUnaryOp<IntegerAttr>(operands,
+                                       [](const APInt &a) { return a.abs(); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -47,6 +54,28 @@ OpFoldResult math::AtanOp::fold(ArrayRef<Attribute> operands) {
         default:
           return {};
         }
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// Atan2Op folder
+//===----------------------------------------------------------------------===//
+
+OpFoldResult math::Atan2Op::fold(ArrayRef<Attribute> operands) {
+  return constFoldBinaryOpConditional<FloatAttr>(
+      operands, [](const APFloat &a, const APFloat &b) -> Optional<APFloat> {
+        if (a.isZero() && b.isZero())
+          return llvm::APFloat::getNaN(a.getSemantics());
+
+        if (a.getSizeInBits(a.getSemantics()) == 64 &&
+            b.getSizeInBits(b.getSemantics()) == 64)
+          return APFloat(atan2(a.convertToDouble(), b.convertToDouble()));
+
+        if (a.getSizeInBits(a.getSemantics()) == 32 &&
+            b.getSizeInBits(b.getSemantics()) == 32)
+          return APFloat(atan2f(a.convertToFloat(), b.convertToFloat()));
+
+        return {};
       });
 }
 

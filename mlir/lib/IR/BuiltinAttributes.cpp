@@ -686,52 +686,9 @@ DenseElementsAttr::ComplexIntElementIterator::operator*() const {
 // DenseArrayAttr
 //===----------------------------------------------------------------------===//
 
-/// Custom storage to ensure proper memory alignment for the allocation of
-/// DenseArray of any element type.
-struct mlir::detail::DenseArrayBaseAttrStorage : public AttributeStorage {
-  using KeyTy =
-      std::tuple<ShapedType, DenseArrayBaseAttr::EltType, ArrayRef<char>>;
-  DenseArrayBaseAttrStorage(ShapedType type,
-                            DenseArrayBaseAttr::EltType eltType,
-                            ArrayRef<char> elements)
-      : type(type), eltType(eltType), elements(elements) {}
-
-  bool operator==(const KeyTy &key) const {
-    return (type == std::get<0>(key)) && (eltType == std::get<1>(key)) &&
-           (elements == std::get<2>(key));
-  }
-
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
-                              std::get<2>(key));
-  }
-
-  static DenseArrayBaseAttrStorage *
-  construct(AttributeStorageAllocator &allocator, const KeyTy &key) {
-    auto type = std::get<0>(key);
-    auto eltType = std::get<1>(key);
-    auto elements = std::get<2>(key);
-    if (!elements.empty()) {
-      char *alloc = static_cast<char *>(
-          allocator.allocate(elements.size(), alignof(uint64_t)));
-      std::uninitialized_copy(elements.begin(), elements.end(), alloc);
-      elements = ArrayRef<char>(alloc, elements.size());
-    }
-    return new (allocator.allocate<DenseArrayBaseAttrStorage>())
-        DenseArrayBaseAttrStorage(type, eltType, elements);
-  }
-
-  ShapedType type;
-  DenseArrayBaseAttr::EltType eltType;
-  ArrayRef<char> elements;
-};
-
-DenseArrayBaseAttr::EltType DenseArrayBaseAttr::getElementType() const {
-  return getImpl()->eltType;
+const bool *DenseArrayBaseAttr::value_begin_impl(OverloadToken<bool>) const {
+  return cast<DenseBoolArrayAttr>().asArrayRef().begin();
 }
-
-ShapedType DenseArrayBaseAttr::getType() const { return getImpl()->type; }
-
 const int8_t *
 DenseArrayBaseAttr::value_begin_impl(OverloadToken<int8_t>) const {
   return cast<DenseI8ArrayAttr>().asArrayRef().begin();
@@ -762,6 +719,9 @@ void DenseArrayBaseAttr::print(AsmPrinter &printer) const {
 
 void DenseArrayBaseAttr::printWithoutBraces(raw_ostream &os) const {
   switch (getElementType()) {
+  case DenseArrayBaseAttr::EltType::I1:
+    this->cast<DenseBoolArrayAttr>().printWithoutBraces(os);
+    return;
   case DenseArrayBaseAttr::EltType::I8:
     this->cast<DenseI8ArrayAttr>().printWithoutBraces(os);
     return;
@@ -797,15 +757,20 @@ void DenseArrayAttr<T>::print(AsmPrinter &printer) const {
 
 template <typename T>
 void DenseArrayAttr<T>::printWithoutBraces(raw_ostream &os) const {
-  ArrayRef<T> values{*this};
-  llvm::interleaveComma(values, os);
+  llvm::interleaveComma(asArrayRef(), os);
+}
+
+/// Specialization for bool to print `true` or `false`.
+template <>
+void DenseArrayAttr<bool>::printWithoutBraces(raw_ostream &os) const {
+  llvm::interleaveComma(asArrayRef(), os,
+                        [&](bool v) { os << (v ? "true" : "false"); });
 }
 
 /// Specialization for int8_t for forcing printing as number instead of chars.
 template <>
 void DenseArrayAttr<int8_t>::printWithoutBraces(raw_ostream &os) const {
-  ArrayRef<int8_t> values{*this};
-  llvm::interleaveComma(values, os, [&](int64_t v) { os << v; });
+  llvm::interleaveComma(asArrayRef(), os, [&](int64_t v) { os << v; });
 }
 
 template <typename T>
@@ -816,7 +781,7 @@ void DenseArrayAttr<T>::print(raw_ostream &os) const {
 }
 
 /// Parse a single element: generic template for int types, specialized for
-/// floating points below.
+/// floating point and boolean values below.
 template <typename T>
 static ParseResult parseDenseArrayAttrElt(AsmParser &parser, T &value) {
   return parser.parseInteger(value);
@@ -869,7 +834,7 @@ Attribute DenseArrayAttr<T>::parse(AsmParser &parser, Type odsType) {
 /// Conversion from DenseArrayAttr<T> to ArrayRef<T>.
 template <typename T>
 DenseArrayAttr<T>::operator ArrayRef<T>() const {
-  ArrayRef<char> raw = getImpl()->elements;
+  ArrayRef<char> raw = getRawData();
   assert((raw.size() % sizeof(T)) == 0);
   return ArrayRef<T>(reinterpret_cast<const T *>(raw.data()),
                      raw.size() / sizeof(T));
@@ -879,6 +844,14 @@ namespace {
 /// Mapping from C++ element type to MLIR DenseArrayAttr internals.
 template <typename T>
 struct denseArrayAttrEltTypeBuilder;
+template <>
+struct denseArrayAttrEltTypeBuilder<bool> {
+  constexpr static auto eltType = DenseArrayBaseAttr::EltType::I1;
+  static ShapedType getShapedType(MLIRContext *context,
+                                  ArrayRef<int64_t> shape) {
+    return RankedTensorType::get(shape, IntegerType::get(context, 1));
+  }
+};
 template <>
 struct denseArrayAttrEltTypeBuilder<int8_t> {
   constexpr static auto eltType = DenseArrayBaseAttr::EltType::I8;
@@ -953,6 +926,7 @@ bool DenseArrayAttr<T>::classof(Attribute attr) {
 namespace mlir {
 namespace detail {
 // Explicit instantiation for all the supported DenseArrayAttr.
+template class DenseArrayAttr<bool>;
 template class DenseArrayAttr<int8_t>;
 template class DenseArrayAttr<int16_t>;
 template class DenseArrayAttr<int32_t>;

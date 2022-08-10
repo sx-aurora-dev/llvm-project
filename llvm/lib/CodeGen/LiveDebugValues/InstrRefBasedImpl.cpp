@@ -297,6 +297,8 @@ public:
     for (auto Location : MTracker->locations()) {
       LocIdx Idx = Location.Idx;
       ValueIDNum &VNum = MLocs[Idx.asU64()];
+      if (VNum == ValueIDNum::EmptyValue)
+        continue;
       VarLocs.push_back(VNum);
 
       // Is there a variable that wants a location for this value? If not, skip.
@@ -1931,7 +1933,7 @@ void InstrRefBasedLDV::produceMLocTransferFunction(
         Result.first->second = P;
     }
 
-    // Accumulate any bitmask operands into the clobberred reg mask for this
+    // Accumulate any bitmask operands into the clobbered reg mask for this
     // block.
     for (auto &P : MTracker->Masks) {
       BlockMasks[CurBB].clearBitsNotInMask(P.first->getRegMask(), BVWords);
@@ -2933,12 +2935,17 @@ void InstrRefBasedLDV::initialSetup(MachineFunction &MF) {
   // Compute mappings of block <=> RPO order.
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   unsigned int RPONumber = 0;
-  for (MachineBasicBlock *MBB : RPOT) {
+  auto processMBB = [&](MachineBasicBlock *MBB) {
     OrderToBB[RPONumber] = MBB;
     BBToOrder[MBB] = RPONumber;
     BBNumToRPO[MBB->getNumber()] = RPONumber;
     ++RPONumber;
-  }
+  };
+  for (MachineBasicBlock *MBB : RPOT)
+    processMBB(MBB);
+  for (MachineBasicBlock &MBB : MF)
+    if (BBToOrder.find(&MBB) == BBToOrder.end())
+      processMBB(&MBB);
 
   // Order value substitutions by their "source" operand pair, for quick lookup.
   llvm::sort(MF.DebugValueSubstitutions);

@@ -1166,7 +1166,19 @@ public:
 
   /// \return The expected cost of vector Insert and Extract.
   /// Use -1 to indicate that there is no information on the index value.
+  /// This is used when the instruction is not available; a typical use
+  /// case is to provision the cost of vectorization/scalarization in
+  /// vectorizer passes.
   InstructionCost getVectorInstrCost(unsigned Opcode, Type *Val,
+                                     unsigned Index = -1) const;
+
+  /// \return The expected cost of vector Insert and Extract.
+  /// This is used when instruction is available, and implementation
+  /// asserts 'I' is not nullptr.
+  ///
+  /// A typical suitable use case is cost estimation when vector instruction
+  /// exists (e.g., from basic blocks during transformation).
+  InstructionCost getVectorInstrCost(const Instruction &I, Type *Val,
                                      unsigned Index = -1) const;
 
   /// \return The cost of replication shuffle of \p VF elements typed \p EltTy
@@ -1452,6 +1464,10 @@ public:
   /// \returns the size cost of rematerializing a GlobalValue address relative
   /// to a stack reload.
   unsigned getGISelRematGlobalCost() const;
+
+  /// \returns the lower bound of a trip count to decide on vectorization
+  /// while tail-folding.
+  unsigned getMinTripCountTailFoldingThreshold() const;
 
   /// \returns True if the target supports scalable vectors.
   bool supportsScalableVectors() const;
@@ -1747,6 +1763,8 @@ public:
                                              const Instruction *I) = 0;
   virtual InstructionCost getVectorInstrCost(unsigned Opcode, Type *Val,
                                              unsigned Index) = 0;
+  virtual InstructionCost getVectorInstrCost(const Instruction &I, Type *Val,
+                                             unsigned Index) = 0;
 
   virtual InstructionCost
   getReplicationShuffleCost(Type *EltTy, int ReplicationFactor, int VF,
@@ -1849,6 +1867,7 @@ public:
                                                ReductionFlags) const = 0;
   virtual bool shouldExpandReduction(const IntrinsicInst *II) const = 0;
   virtual unsigned getGISelRematGlobalCost() const = 0;
+  virtual unsigned getMinTripCountTailFoldingThreshold() const = 0;
   virtual bool enableScalableVectorization() const = 0;
   virtual bool supportsScalableVectors() const = 0;
   virtual bool hasActiveVectorLength(unsigned Opcode, Type *DataType,
@@ -2305,6 +2324,10 @@ public:
                                      unsigned Index) override {
     return Impl.getVectorInstrCost(Opcode, Val, Index);
   }
+  InstructionCost getVectorInstrCost(const Instruction &I, Type *Val,
+                                     unsigned Index) override {
+    return Impl.getVectorInstrCost(I, Val, Index);
+  }
   InstructionCost
   getReplicationShuffleCost(Type *EltTy, int ReplicationFactor, int VF,
                             const APInt &DemandedDstElts,
@@ -2482,6 +2505,10 @@ public:
 
   unsigned getGISelRematGlobalCost() const override {
     return Impl.getGISelRematGlobalCost();
+  }
+
+  unsigned getMinTripCountTailFoldingThreshold() const override {
+    return Impl.getMinTripCountTailFoldingThreshold();
   }
 
   bool supportsScalableVectors() const override {

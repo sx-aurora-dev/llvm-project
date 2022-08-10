@@ -605,7 +605,7 @@ public:
   ParseResult parseInteger(IntT &result) {
     auto loc = getCurrentLocation();
     OptionalParseResult parseResult = parseOptionalInteger(result);
-    if (!parseResult.hasValue())
+    if (!parseResult.has_value())
       return emitError(loc, "expected integer value");
     return *parseResult;
   }
@@ -620,7 +620,7 @@ public:
     // Parse the unsigned variant.
     APInt uintResult;
     OptionalParseResult parseResult = parseOptionalInteger(uintResult);
-    if (!parseResult.hasValue() || failed(*parseResult))
+    if (!parseResult.has_value() || failed(*parseResult))
       return parseResult;
 
     // Try to convert to the provided integer type.  sextOrTrunc is correct even
@@ -726,7 +726,7 @@ public:
     bool hasValue() const { return result.has_value(); }
 
     /// Return the result of the switch.
-    LLVM_NODISCARD operator ResultT() {
+    [[nodiscard]] operator ResultT() {
       if (!result)
         return parser.emitError(loc, "unexpected keyword: ") << keyword;
       return std::move(*result);
@@ -976,7 +976,7 @@ public:
                                              StringRef attrName,
                                              NamedAttrList &attrs) {
     OptionalParseResult parseResult = parseOptionalAttribute(result, type);
-    if (parseResult.hasValue() && succeeded(*parseResult))
+    if (parseResult.has_value() && succeeded(*parseResult))
       attrs.append(attrName, result);
     return parseResult;
   }
@@ -1502,9 +1502,9 @@ public:
   ParseResult parseAssignmentList(SmallVectorImpl<Argument> &lhs,
                                   SmallVectorImpl<UnresolvedOperand> &rhs) {
     OptionalParseResult result = parseOptionalAssignmentList(lhs, rhs);
-    if (!result.hasValue())
+    if (!result.has_value())
       return emitError(getCurrentLocation(), "expected '('");
-    return result.getValue();
+    return result.value();
   }
 
   virtual OptionalParseResult

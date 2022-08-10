@@ -173,6 +173,7 @@ public:
   InstructionCost getCFInstrCost(unsigned Opcode, TTI::TargetCostKind CostKind,
                                  const Instruction *I = nullptr);
 
+  using BaseT::getVectorInstrCost;
   InstructionCost getVectorInstrCost(unsigned Opcode, Type *Val,
                                      unsigned Index);
 
@@ -332,6 +333,10 @@ public:
 
   unsigned getGISelRematGlobalCost() const {
     return 2;
+  }
+
+  unsigned getMinTripCountTailFoldingThreshold() const {
+    return ST->hasSVE() ? 5 : 0;
   }
 
   PredicationStyle emitGetActiveLaneMask() const {

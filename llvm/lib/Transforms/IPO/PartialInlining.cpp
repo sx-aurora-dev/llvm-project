@@ -753,7 +753,7 @@ BranchProbability PartialInlinerImpl::getOutliningCallBBRelativeFreq(
   // is predicted to be less likely, the predicted probablity is usually
   // higher than the actual. For instance, the actual probability of the
   // less likely target is only 5%, but the guessed probablity can be
-  // 40%. In the latter case, there is no need for further adjustement.
+  // 40%. In the latter case, there is no need for further adjustment.
   // FIXME: add an option for this.
   if (OutlineRegionRelFreq < BranchProbability(45, 100))
     return OutlineRegionRelFreq;
@@ -854,6 +854,7 @@ PartialInlinerImpl::computeBBInlineCost(BasicBlock *BB,
                                         TargetTransformInfo *TTI) {
   InstructionCost InlineCost = 0;
   const DataLayout &DL = BB->getParent()->getParent()->getDataLayout();
+  int InstrCost = InlineConstants::getInstrCost();
   for (Instruction &I : BB->instructionsWithoutDebug()) {
     // Skip free instructions.
     switch (I.getOpcode()) {
@@ -900,10 +901,10 @@ PartialInlinerImpl::computeBBInlineCost(BasicBlock *BB,
     }
 
     if (SwitchInst *SI = dyn_cast<SwitchInst>(&I)) {
-      InlineCost += (SI->getNumCases() + 1) * InlineConstants::InstrCost;
+      InlineCost += (SI->getNumCases() + 1) * InstrCost;
       continue;
     }
-    InlineCost += InlineConstants::InstrCost;
+    InlineCost += InstrCost;
   }
 
   return InlineCost;
@@ -932,7 +933,7 @@ PartialInlinerImpl::computeOutliningCosts(FunctionCloner &Cloner) const {
   // additional unconditional branches. Those branches will be eliminated
   // later with bb layout. The cost should be adjusted accordingly:
   OutlinedFunctionCost -=
-      2 * InlineConstants::InstrCost * Cloner.OutlinedFunctions.size();
+      2 * InlineConstants::getInstrCost() * Cloner.OutlinedFunctions.size();
 
   InstructionCost OutliningRuntimeOverhead =
       OutliningFuncCallCost +

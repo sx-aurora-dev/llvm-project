@@ -1,6 +1,5 @@
 set(files
   __algorithm/adjacent_find.h
-  __algorithm/algorithm_family.h
   __algorithm/all_of.h
   __algorithm/any_of.h
   __algorithm/binary_search.h
@@ -73,6 +72,7 @@ set(files
   __algorithm/ranges_all_of.h
   __algorithm/ranges_any_of.h
   __algorithm/ranges_binary_search.h
+  __algorithm/ranges_clamp.h
   __algorithm/ranges_copy.h
   __algorithm/ranges_copy_backward.h
   __algorithm/ranges_copy_if.h
@@ -97,6 +97,7 @@ set(files
   __algorithm/ranges_is_heap.h
   __algorithm/ranges_is_heap_until.h
   __algorithm/ranges_is_partitioned.h
+  __algorithm/ranges_is_permutation.h
   __algorithm/ranges_is_sorted.h
   __algorithm/ranges_is_sorted_until.h
   __algorithm/ranges_iterator_concept.h
@@ -134,6 +135,7 @@ set(files
   __algorithm/ranges_replace_if.h
   __algorithm/ranges_reverse.h
   __algorithm/ranges_reverse_copy.h
+  __algorithm/ranges_rotate.h
   __algorithm/ranges_rotate_copy.h
   __algorithm/ranges_sample.h
   __algorithm/ranges_search.h

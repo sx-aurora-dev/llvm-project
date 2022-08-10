@@ -32,8 +32,8 @@ Read-only,is_sorted_until,Nikolas Klauser,`D125608 <https://llvm.org/D125608>`_,
 Read-only,includes,Hui Xie,`D130116 <https://llvm.org/D130116>`_,✅
 Read-only,is_heap,Konstantin Varlamov,`D130547 <https://llvm.org/D130547>`_,✅
 Read-only,is_heap_until,Konstantin Varlamov,`D130547 <https://llvm.org/D130547>`_,✅
-Read-only,clamp,Nikolas Klauser,`D126193 <https://llvm.org/D126193>`_,Under review
-Read-only,is_permutation,Nikolas Klauser,`D127194 <https://llvm.org/D127194>`_,Under review
+Read-only,clamp,Nikolas Klauser,`D126193 <https://llvm.org/D126193>`_,✅
+Read-only,is_permutation,Nikolas Klauser,`D127194 <https://llvm.org/D127194>`_,✅
 Read-only,for_each,Nikolas Klauser,`D124332 <https://llvm.org/D124332>`_,✅
 Read-only,for_each_n,Nikolas Klauser,`D124332 <https://llvm.org/D124332>`_,✅
 Write,copy,Nikolas Klauser,`D122982 <https://llvm.org/D122982>`_,✅
@@ -68,7 +68,7 @@ Merge,set_union,Hui Xie,`D129657 <https://llvm.org/D129657>`_,✅
 Permutation,remove,Nikolas Klauser,`D128618 <https://llvm.org/D128618>`_,✅
 Permutation,remove_if,Nikolas Klauser,`D128618 <https://llvm.org/D128618>`_,✅
 Permutation,reverse,Nikolas Klauser,`D125752 <https://llvm.org/D125752>`_,✅
-Permutation,rotate,Nikolas Klauser,`D124122 <https://llvm.org/D124122>`_,Under review
+Permutation,rotate,Konstantin Varlamov and Nikolas Klauser,`D130758 <https://llvm.org/D130758>`_,✅
 Permutation,shuffle,Konstantin Varlamov,`D130321 <https://llvm.org/D130321>`_,✅
 Permutation,unique,Hui Xie,`D130404 <https://llvm.org/D130404>`_,✅
 Permutation,partition,Konstantin Varlamov,`D129624 <https://llvm.org/D129624>`_,✅

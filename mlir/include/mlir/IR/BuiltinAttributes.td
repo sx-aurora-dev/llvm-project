@@ -143,6 +143,18 @@ def Builtin_ArrayAttr : Builtin_Attr<"Array", [
 // DenseArrayBaseAttr
 //===----------------------------------------------------------------------===//
 
+def Builtin_DenseArrayRawDataParameter : ArrayRefParameter<
+    "char", "64-bit aligned storage for dense array elements"> {
+  let allocator = [{
+    if (!$_self.empty()) {
+      auto *alloc = static_cast<char *>(
+          $_allocator.allocate($_self.size(), alignof(uint64_t)));
+      std::uninitialized_copy($_self.begin(), $_self.end(), alloc);
+      $_dst = ArrayRef<char>(alloc, $_self.size());
+    }
+  }];
+}
+
 def Builtin_DenseArrayBase : Builtin_Attr<
     "DenseArrayBase", [ElementsAttrInterface, TypedAttrInterface]> {
   let summary = "A dense array of i8, i16, i32, i64, f32, or f64.";
@@ -176,11 +188,11 @@ def Builtin_DenseArrayBase : Builtin_Attr<
     ```
   }];
   let parameters = (ins AttributeSelfTypeParameter<"", "ShapedType">:$type,
-                        "DenseArrayBaseAttr::EltType":$eltType,
-                        ArrayRefParameter<"char">:$elements);
+                        "DenseArrayBaseAttr::EltType":$elementType,
+                        Builtin_DenseArrayRawDataParameter:$rawData);
   let extraClassDeclaration = [{
     // All possible supported element type.
-    enum class EltType { I8, I16, I32, I64, F32, F64 };
+    enum class EltType { I1, I8, I16, I32, I64, F32, F64 };
 
     /// Allow implicit conversion to ElementsAttr.
     operator ElementsAttr() const {
@@ -189,7 +201,8 @@ def Builtin_DenseArrayBase : Builtin_Attr<
 
     /// ElementsAttr implementation.
     using ContiguousIterableTypesT =
-        std::tuple<int8_t, int16_t, int32_t, int64_t, float, double>;
+        std::tuple<bool, int8_t, int16_t, int32_t, int64_t, float, double>;
+    const bool *value_begin_impl(OverloadToken<bool>) const;
     const int8_t *value_begin_impl(OverloadToken<int8_t>) const;
     const int16_t *value_begin_impl(OverloadToken<int16_t>) const;
     const int32_t *value_begin_impl(OverloadToken<int32_t>) const;
@@ -197,22 +210,12 @@ def Builtin_DenseArrayBase : Builtin_Attr<
     const float *value_begin_impl(OverloadToken<float>) const;
     const double *value_begin_impl(OverloadToken<double>) const;
 
-    /// Returns the shaped type, containing the number of elements in the array
-    /// and the array element type.
-    ShapedType getType() const;
-    /// Returns the element type.
-    EltType getElementType() const;
-
     /// Printer for the short form: will dispatch to the appropriate subclass.
     void print(AsmPrinter &printer) const;
     void print(raw_ostream &os) const;
     /// Print the short form `42, 100, -1` without any braces or prefix.
     void printWithoutBraces(raw_ostream &os) const;
   }];
-  // Do not generate the storage class, we need to handle custom storage alignment.
-  let genStorageClass = 0;
-  let genAccessors = 0;
-  let skipDefaultBuilders = 1;
 }
 
 //===----------------------------------------------------------------------===//

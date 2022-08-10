@@ -46,12 +46,14 @@ define i8 @cttz_i8(i8 %x)  {
 define i16 @cttz_i16(i16 %x)  {
 ; X86-LABEL: cttz_i16:
 ; X86:       # %bb.0:
-; X86-NEXT:    rep bsfw {{[0-9]+}}(%esp), %ax
+; X86-NEXT:    rep bsfl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X86-NEXT:    retl
 ;
 ; X64-LABEL: cttz_i16:
 ; X64:       # %bb.0:
-; X64-NEXT:    rep bsfw %di, %ax
+; X64-NEXT:    rep bsfl %edi, %eax
+; X64-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X64-NEXT:    retq
 ;
 ; X86-CLZ-LABEL: cttz_i16:
@@ -565,10 +567,12 @@ define i16 @cttz_i16_zero_test(i16 %n) {
 ; X86-NEXT:    testw %ax, %ax
 ; X86-NEXT:    je .LBB13_1
 ; X86-NEXT:  # %bb.2: # %cond.false
-; X86-NEXT:    rep bsfw %ax, %ax
+; X86-NEXT:    rep bsfl %eax, %eax
+; X86-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X86-NEXT:    retl
 ; X86-NEXT:  .LBB13_1:
 ; X86-NEXT:    movw $16, %ax
+; X86-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X86-NEXT:    retl
 ;
 ; X64-LABEL: cttz_i16_zero_test:
@@ -576,20 +580,27 @@ define i16 @cttz_i16_zero_test(i16 %n) {
 ; X64-NEXT:    testw %di, %di
 ; X64-NEXT:    je .LBB13_1
 ; X64-NEXT:  # %bb.2: # %cond.false
-; X64-NEXT:    rep bsfw %di, %ax
+; X64-NEXT:    rep bsfl %edi, %eax
+; X64-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X64-NEXT:    retq
 ; X64-NEXT:  .LBB13_1:
 ; X64-NEXT:    movw $16, %ax
+; X64-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X64-NEXT:    retq
 ;
 ; X86-CLZ-LABEL: cttz_i16_zero_test:
 ; X86-CLZ:       # %bb.0:
-; X86-CLZ-NEXT:    tzcntw {{[0-9]+}}(%esp), %ax
+; X86-CLZ-NEXT:    movl $65536, %eax # imm = 0x10000
+; X86-CLZ-NEXT:    orl {{[0-9]+}}(%esp), %eax
+; X86-CLZ-NEXT:    tzcntl %eax, %eax
+; X86-CLZ-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X86-CLZ-NEXT:    retl
 ;
 ; X64-CLZ-LABEL: cttz_i16_zero_test:
 ; X64-CLZ:       # %bb.0:
-; X64-CLZ-NEXT:    tzcntw %di, %ax
+; X64-CLZ-NEXT:    orl $65536, %edi # imm = 0x10000
+; X64-CLZ-NEXT:    tzcntl %edi, %eax
+; X64-CLZ-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X64-CLZ-NEXT:    retq
   %tmp1 = call i16 @llvm.cttz.i16(i16 %n, i1 false)
   ret i16 %tmp1
@@ -638,7 +649,8 @@ define i64 @cttz_i64_zero_test(i64 %n) {
 ; X86-NOCMOV-LABEL: cttz_i64_zero_test:
 ; X86-NOCMOV:       # %bb.0:
 ; X86-NOCMOV-NEXT:    movl {{[0-9]+}}(%esp), %ecx
-; X86-NOCMOV-NEXT:    rep bsfl {{[0-9]+}}(%esp), %edx
+; X86-NOCMOV-NOT:     rep
+; X86-NOCMOV-NEXT:    bsfl {{[0-9]+}}(%esp), %edx
 ; X86-NOCMOV-NEXT:    movl $32, %eax
 ; X86-NOCMOV-NEXT:    je .LBB15_2
 ; X86-NOCMOV-NEXT:  # %bb.1:
@@ -658,11 +670,13 @@ define i64 @cttz_i64_zero_test(i64 %n) {
 ; X86-CMOV-LABEL: cttz_i64_zero_test:
 ; X86-CMOV:       # %bb.0:
 ; X86-CMOV-NEXT:    movl {{[0-9]+}}(%esp), %eax
-; X86-CMOV-NEXT:    rep bsfl {{[0-9]+}}(%esp), %ecx
+; X86-CMOV-NOT:     rep
+; X86-CMOV-NEXT:    bsfl {{[0-9]+}}(%esp), %ecx
 ; X86-CMOV-NEXT:    movl $32, %edx
 ; X86-CMOV-NEXT:    cmovnel %ecx, %edx
 ; X86-CMOV-NEXT:    addl $32, %edx
-; X86-CMOV-NEXT:    rep bsfl %eax, %eax
+; X86-CMOV-NOT:     rep
+; X86-CMOV-NEXT:    bsfl %eax, %eax
 ; X86-CMOV-NEXT:    cmovel %edx, %eax
 ; X86-CMOV-NEXT:    xorl %edx, %edx
 ; X86-CMOV-NEXT:    retl
@@ -1133,7 +1147,7 @@ define i32 @cttz_i32_osize(i32 %x) optsize {
 ; X64-CLZ:       # %bb.0:
 ; X64-CLZ-NEXT:    tzcntl %edi, %eax
 ; X64-CLZ-NEXT:    retq
-  %tmp = call i32 @llvm.cttz.i32( i32 %x, i1 true )
+  %tmp = call i32 @llvm.cttz.i32( i32 %x, i1 true)
   ret i32 %tmp
 }
 
@@ -1159,6 +1173,6 @@ define i32 @cttz_i32_msize(i32 %x) minsize {
 ; X64-CLZ:       # %bb.0:
 ; X64-CLZ-NEXT:    tzcntl %edi, %eax
 ; X64-CLZ-NEXT:    retq
-  %tmp = call i32 @llvm.cttz.i32( i32 %x, i1 true )
+  %tmp = call i32 @llvm.cttz.i32( i32 %x, i1 true)
   ret i32 %tmp
 }
