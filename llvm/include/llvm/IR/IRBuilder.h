@@ -692,6 +692,10 @@ public:
       MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr,
       MDNode *NoAliasTag = nullptr);
 
+private:
+  CallInst *getReductionIntrinsic(Intrinsic::ID ID, Value *Src);
+
+public:
   /// Create a sequential vector fadd reduction intrinsic of the source vector.
   /// The first parameter is a scalar accumulator value. An unordered reduction
   /// can be created by adding the reassoc fast-math flag to the resulting
@@ -749,6 +753,9 @@ public:
   ///
   /// If the pointer isn't i8* it will be converted.
   CallInst *CreateInvariantStart(Value *Ptr, ConstantInt *Size = nullptr);
+
+  /// Create a call to llvm.threadlocal.address intrinsic.
+  CallInst *CreateThreadLocalAddress(Value *Ptr);
 
   /// Create a call to Masked Load intrinsic
   CallInst *CreateMaskedLoad(Type *Ty, Value *Ptr, Align Alignment, Value *Mask,
@@ -993,7 +1000,7 @@ public:
   /// This is a convenience function for code that uses aggregate return values
   /// as a vehicle for having multiple return values.
   ReturnInst *CreateAggregateRet(Value *const *retVals, unsigned N) {
-    Value *V = UndefValue::get(getCurrentFunctionReturnType());
+    Value *V = PoisonValue::get(getCurrentFunctionReturnType());
     for (unsigned i = 0; i != N; ++i)
       V = CreateInsertValue(V, retVals[i], i, "mrv");
     return Insert(ReturnInst::Create(Context, V));
@@ -2245,6 +2252,13 @@ public:
     return Insert(Phi, Name);
   }
 
+private:
+  CallInst *createCallHelper(Function *Callee, ArrayRef<Value *> Ops,
+                             const Twine &Name = "",
+                             Instruction *FMFSource = nullptr,
+                             ArrayRef<OperandBundleDef> OpBundles = {});
+
+public:
   CallInst *CreateCall(FunctionType *FTy, Value *Callee,
                        ArrayRef<Value *> Args = None, const Twine &Name = "",
                        MDNode *FPMathTag = nullptr) {

@@ -258,6 +258,65 @@ StringRef InputFile::getNameForScript() const {
   return nameForScriptCache;
 }
 
+// An ELF object file may contain a `.deplibs` section. If it exists, the
+// section contains a list of library specifiers such as `m` for libm. This
+// function resolves a given name by finding the first matching library checking
+// the various ways that a library can be specified to LLD. This ELF extension
+// is a form of autolinking and is called `dependent libraries`. It is currently
+// unique to LLVM and lld.
+static void addDependentLibrary(StringRef specifier, const InputFile *f) {
+  if (!config->dependentLibraries)
+    return;
+  if (Optional<std::string> s = searchLibraryBaseName(specifier))
+    driver->addFile(saver().save(*s), /*withLOption=*/true);
+  else if (Optional<std::string> s = findFromSearchPaths(specifier))
+    driver->addFile(saver().save(*s), /*withLOption=*/true);
+  else if (fs::exists(specifier))
+    driver->addFile(specifier, /*withLOption=*/false);
+  else
+    error(toString(f) +
+          ": unable to find library from dependent library specifier: " +
+          specifier);
+}
+
+// Record the membership of a section group so that in the garbage collection
+// pass, section group members are kept or discarded as a unit.
+template <class ELFT>
+static void handleSectionGroup(ArrayRef<InputSectionBase *> sections,
+                               ArrayRef<typename ELFT::Word> entries) {
+  bool hasAlloc = false;
+  for (uint32_t index : entries.slice(1)) {
+    if (index >= sections.size())
+      return;
+    if (InputSectionBase *s = sections[index])
+      if (s != &InputSection::discarded && s->flags & SHF_ALLOC)
+        hasAlloc = true;
+  }
+
+  // If any member has the SHF_ALLOC flag, the whole group is subject to garbage
+  // collection. See the comment in markLive(). This rule retains .debug_types
+  // and .rela.debug_types.
+  if (!hasAlloc)
+    return;
+
+  // Connect the members in a circular doubly-linked list via
+  // nextInSectionGroup.
+  InputSectionBase *head;
+  InputSectionBase *prev = nullptr;
+  for (uint32_t index : entries.slice(1)) {
+    InputSectionBase *s = sections[index];
+    if (!s || s == &InputSection::discarded)
+      continue;
+    if (prev)
+      prev->nextInSectionGroup = s;
+    else
+      head = s;
+    prev = s;
+  }
+  if (prev)
+    prev->nextInSectionGroup = head;
+}
+
 template <class ELFT> DWARFCache *ObjFile<ELFT>::getDwarf() {
   llvm::call_once(initDwarf, [this]() {
     dwarf = std::make_unique<DWARFCache>(std::make_unique<DWARFContext>(
@@ -448,65 +507,6 @@ bool ObjFile<ELFT>::shouldMerge(const Elf_Shdr &sec, StringRef name) {
 // initialized with null pointers.
 template <class ELFT> void ObjFile<ELFT>::initializeJustSymbols() {
   sections.resize(numELFShdrs);
-}
-
-// An ELF object file may contain a `.deplibs` section. If it exists, the
-// section contains a list of library specifiers such as `m` for libm. This
-// function resolves a given name by finding the first matching library checking
-// the various ways that a library can be specified to LLD. This ELF extension
-// is a form of autolinking and is called `dependent libraries`. It is currently
-// unique to LLVM and lld.
-static void addDependentLibrary(StringRef specifier, const InputFile *f) {
-  if (!config->dependentLibraries)
-    return;
-  if (Optional<std::string> s = searchLibraryBaseName(specifier))
-    driver->addFile(*s, /*withLOption=*/true);
-  else if (Optional<std::string> s = findFromSearchPaths(specifier))
-    driver->addFile(*s, /*withLOption=*/true);
-  else if (fs::exists(specifier))
-    driver->addFile(specifier, /*withLOption=*/false);
-  else
-    error(toString(f) +
-          ": unable to find library from dependent library specifier: " +
-          specifier);
-}
-
-// Record the membership of a section group so that in the garbage collection
-// pass, section group members are kept or discarded as a unit.
-template <class ELFT>
-static void handleSectionGroup(ArrayRef<InputSectionBase *> sections,
-                               ArrayRef<typename ELFT::Word> entries) {
-  bool hasAlloc = false;
-  for (uint32_t index : entries.slice(1)) {
-    if (index >= sections.size())
-      return;
-    if (InputSectionBase *s = sections[index])
-      if (s != &InputSection::discarded && s->flags & SHF_ALLOC)
-        hasAlloc = true;
-  }
-
-  // If any member has the SHF_ALLOC flag, the whole group is subject to garbage
-  // collection. See the comment in markLive(). This rule retains .debug_types
-  // and .rela.debug_types.
-  if (!hasAlloc)
-    return;
-
-  // Connect the members in a circular doubly-linked list via
-  // nextInSectionGroup.
-  InputSectionBase *head;
-  InputSectionBase *prev = nullptr;
-  for (uint32_t index : entries.slice(1)) {
-    InputSectionBase *s = sections[index];
-    if (!s || s == &InputSection::discarded)
-      continue;
-    if (prev)
-      prev->nextInSectionGroup = s;
-    else
-      head = s;
-    prev = s;
-  }
-  if (prev)
-    prev->nextInSectionGroup = head;
 }
 
 template <class ELFT>
@@ -1710,34 +1710,27 @@ void BinaryFile::parse() {
                                        data.size(), 0, nullptr});
 }
 
-InputFile *elf::createObjectFile(MemoryBufferRef mb, StringRef archiveName,
-                                 uint64_t offsetInArchive) {
-  if (isBitcode(mb))
-    return make<BitcodeFile>(mb, archiveName, offsetInArchive, /*lazy=*/false);
-
+ELFFileBase *elf::createObjFile(MemoryBufferRef mb, StringRef archiveName,
+                                bool lazy) {
+  ELFFileBase *f;
   switch (getELFKind(mb, archiveName)) {
   case ELF32LEKind:
-    return make<ObjFile<ELF32LE>>(mb, archiveName);
+    f = make<ObjFile<ELF32LE>>(mb, archiveName);
+    break;
   case ELF32BEKind:
-    return make<ObjFile<ELF32BE>>(mb, archiveName);
+    f = make<ObjFile<ELF32BE>>(mb, archiveName);
+    break;
   case ELF64LEKind:
-    return make<ObjFile<ELF64LE>>(mb, archiveName);
+    f = make<ObjFile<ELF64LE>>(mb, archiveName);
+    break;
   case ELF64BEKind:
-    return make<ObjFile<ELF64BE>>(mb, archiveName);
+    f = make<ObjFile<ELF64BE>>(mb, archiveName);
+    break;
   default:
     llvm_unreachable("getELFKind");
   }
-}
-
-InputFile *elf::createLazyFile(MemoryBufferRef mb, StringRef archiveName,
-                               uint64_t offsetInArchive) {
-  if (isBitcode(mb))
-    return make<BitcodeFile>(mb, archiveName, offsetInArchive, /*lazy=*/true);
-
-  auto *file =
-      cast<ELFFileBase>(createObjectFile(mb, archiveName, offsetInArchive));
-  file->lazy = true;
-  return file;
+  f->lazy = lazy;
+  return f;
 }
 
 template <class ELFT> void ObjFile<ELFT>::parseLazy() {
@@ -1763,7 +1756,7 @@ template <class ELFT> void ObjFile<ELFT>::parseLazy() {
 }
 
 bool InputFile::shouldExtractForCommon(StringRef name) {
-  if (isBitcode(mb))
+  if (isa<BitcodeFile>(this))
     return isBitcodeNonCommonDef(mb, name, archiveName);
 
   return isNonCommonDef(mb, name, archiveName);

@@ -798,8 +798,7 @@ public:
 
   // Override this function to handle the more complex control flow around the
   // three loops.
-  std::pair<BasicBlock *, Value *>
-  createVectorizedLoopSkeleton() final override {
+  std::pair<BasicBlock *, Value *> createVectorizedLoopSkeleton() final {
     return createEpilogueVectorizedLoopSkeleton();
   }
 
@@ -835,8 +834,7 @@ public:
                                        EPI, LVL, CM, BFI, PSI, Check) {}
   /// Implements the interface for creating a vectorized skeleton using the
   /// *main loop* strategy (ie the first pass of vplan execution).
-  std::pair<BasicBlock *, Value *>
-  createEpilogueVectorizedLoopSkeleton() final override;
+  std::pair<BasicBlock *, Value *> createEpilogueVectorizedLoopSkeleton() final;
 
 protected:
   /// Emits an iteration count bypass check once for the main loop (when \p
@@ -866,8 +864,7 @@ public:
   }
   /// Implements the interface for creating a vectorized skeleton using the
   /// *epilogue loop* strategy (ie the second pass of vplan execution).
-  std::pair<BasicBlock *, Value *>
-  createEpilogueVectorizedLoopSkeleton() final override;
+  std::pair<BasicBlock *, Value *> createEpilogueVectorizedLoopSkeleton() final;
 
 protected:
   /// Emits an iteration count bypass check after the main vector loop has
@@ -1454,8 +1451,14 @@ public:
     // don't need to mark it as a predicated instruction. Tail folding may
     // introduce additional predication, but we're guaranteed to always have
     // at least one active lane.  We call Legal->blockNeedsPredication here
-    // because it doesn't query tail-folding.
-    if (Legal->isUniformMemOp(*I) && isa<LoadInst>(I) &&
+    // because it doesn't query tail-folding.  For stores, we need to prove
+    // both speculation safety (which follows from the same argument as loads),
+    // but also must prove the value being stored is correct.  The easiest
+    // form of the later is to require that all values stored are the same.
+    if (Legal->isUniformMemOp(*I) &&
+        (isa<LoadInst>(I) ||
+         (isa<StoreInst>(I) &&
+          TheLoop->isLoopInvariant(cast<StoreInst>(I)->getValueOperand()))) &&
         !Legal->blockNeedsPredication(I->getParent()))
       return false;
     if (!blockNeedsPredicationForAnyReason(I->getParent()))
@@ -1656,10 +1659,6 @@ private:
   /// convenience wrapper for the type-based getScalarizationOverhead API.
   InstructionCost getScalarizationOverhead(Instruction *I,
                                            ElementCount VF) const;
-
-  /// Returns whether the instruction is a load or store and will be a emitted
-  /// as a vector operation.
-  bool isConsecutiveLoadOrStore(Instruction *I);
 
   /// Returns true if an artificially high cost for emulated masked memrefs
   /// should be used.
@@ -6774,19 +6773,29 @@ void LoopVectorizationCostModel::setCostBasedWideningDecision(ElementCount VF) {
         NumPredStores++;
 
       if (Legal->isUniformMemOp(I)) {
-        // TODO: Avoid replicating loads and stores instead of
-        // relying on instcombine to remove them.
+        // Lowering story for uniform memory ops is currently a bit complicated.
+        // Scalarization works for everything which isn't a store with scalable
+        // VF.  Fixed len VFs just scalarize and then DCE later; scalarization
+        // knows how to handle uniform-per-part values (i.e. the first lane
+        // in each unrolled VF) and can thus handle scalable loads too.  For
+        // scalable stores, we use a scatter if legal.  If not, we have no way
+        // to lower (currently) and thus have to abort vectorization.
+        if (isa<StoreInst>(&I) && VF.isScalable()) {
+          if (isLegalGatherOrScatter(&I, VF))
+            setWideningDecision(&I, VF, CM_GatherScatter,
+                                getGatherScatterCost(&I, VF));
+          else
+            // Error case, abort vectorization
+            setWideningDecision(&I, VF, CM_Scalarize,
+                                InstructionCost::getInvalid());
+          continue;
+        }
         // Load: Scalar load + broadcast
         // Store: Scalar store + isLoopInvariantStoreValue ? 0 : extract
-        InstructionCost Cost;
-        if (isa<StoreInst>(&I) && VF.isScalable() &&
-            isLegalGatherOrScatter(&I, VF)) {
-          Cost = getGatherScatterCost(&I, VF);
-          setWideningDecision(&I, VF, CM_GatherScatter, Cost);
-        } else {
-          Cost = getUniformMemOpCost(&I, VF);
-          setWideningDecision(&I, VF, CM_Scalarize, Cost);
-        }
+        // TODO: Avoid replicating loads and stores instead of relying on
+        // instcombine to remove them.
+        setWideningDecision(&I, VF, CM_Scalarize,
+                            getUniformMemOpCost(&I, VF));
         continue;
       }
 
@@ -7141,13 +7150,10 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
       InstWidening Decision = getWideningDecision(I, Width);
       assert(Decision != CM_Unknown &&
              "CM decision should be taken at this point");
-      if (Decision == CM_Scalarize) {
-        if (VF.isScalable() && isa<StoreInst>(I))
-          // We can't scalarize a scalable vector store (even a uniform one
-          // currently), return an invalid cost so as to prevent vectorization.
-          return InstructionCost::getInvalid();
+      if (getWideningCost(I, VF) == InstructionCost::getInvalid())
+        return InstructionCost::getInvalid();
+      if (Decision == CM_Scalarize)
         Width = ElementCount::getFixed(1);
-      }
     }
     VectorTy = ToVectorTy(getLoadStoreType(I), Width);
     return getMemoryInstructionCost(I, VF);
@@ -7302,14 +7308,6 @@ Pass *createLoopVectorizePass(bool InterleaveOnlyWhenForced,
 }
 
 } // end namespace llvm
-
-bool LoopVectorizationCostModel::isConsecutiveLoadOrStore(Instruction *Inst) {
-  // Check if the pointer operand of a load or store instruction is
-  // consecutive.
-  if (auto *Ptr = getLoadStorePointerOperand(Inst))
-    return Legal->isConsecutivePtr(getLoadStoreType(Inst), Ptr);
-  return false;
-}
 
 void LoopVectorizationCostModel::collectValuesToIgnore() {
   // Ignore ephemeral values.
@@ -9564,12 +9562,19 @@ void VPReplicateRecipe::execute(VPTransformState &State) {
     return;
   }
 
-  // Generate scalar instances for all VF lanes of all UF parts, unless the
-  // instruction is uniform inwhich case generate only the first lane for each
-  // of the UF parts.
-  unsigned EndLane = IsUniform ? 1 : State.VF.getKnownMinValue();
-  assert((!State.VF.isScalable() || IsUniform) &&
-         "Can't scalarize a scalable vector");
+  if (IsUniform) {
+    // Uniform within VL means we need to generate lane 0 only for each
+    // unrolled copy.
+    for (unsigned Part = 0; Part < State.UF; ++Part)
+      State.ILV->scalarizeInstruction(getUnderlyingInstr(), this,
+                                      VPIteration(Part, 0), IsPredicated,
+                                      State);
+    return;
+  }
+
+  // Generate scalar instances for all VF lanes of all UF parts.
+  assert(!State.VF.isScalable() && "Can't scalarize a scalable vector");
+  const unsigned EndLane = State.VF.getKnownMinValue();
   for (unsigned Part = 0; Part < State.UF; ++Part)
     for (unsigned Lane = 0; Lane < EndLane; ++Lane)
       State.ILV->scalarizeInstruction(getUnderlyingInstr(), this,
