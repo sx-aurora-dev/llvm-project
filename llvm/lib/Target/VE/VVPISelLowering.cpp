@@ -992,7 +992,7 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, VECustomDAG &CDAG,
   LLVM_DEBUG(dbgs() << "::splitVectorOp: "; CDAG.print(dbgs(), Op) << "\n");
   auto OcOpt = getVVPOpcode(Op.getOpcode());
   assert(OcOpt.has_value());
-  unsigned VVPOC = OcOpt.getValue();
+  unsigned VVPOC = OcOpt.value();
 
   // Special cases ('impure' SIMD instructions)
   if (VVPOC == VEISD::VVP_LOAD || VVPOC == VEISD::VVP_STORE)
@@ -1145,18 +1145,18 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op,
 VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
   Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
-  if (!VecVTOpt.has_value() || !VecVTOpt.getValue().isVector()) {
+  if (!VecVTOpt.has_value() || !VecVTOpt.value().isVector()) {
     LLVM_DEBUG(if (VecVTOpt) dbgs()
                << "VecVT: " << VecVTOpt->getEVTString() << "\n");
     LLVM_DEBUG(dbgs() << "\tno idiomatic vector VT.\n");
     return VVPWideningInfo();
   }
-  EVT OpVecVT = VecVTOpt.getValue();
+  EVT OpVecVT = VecVTOpt.value();
 
   // try to narrow the vector length
   Optional<unsigned> NarrowLen = peekForNarrow(Op);
   unsigned OpVectorLength =
-      NarrowLen ? NarrowLen.getValue() : OpVecVT.getVectorNumElements();
+      NarrowLen ? NarrowLen.value() : OpVecVT.getVectorNumElements();
 
   LLVM_DEBUG(dbgs() << "\tdetected AVL:" << OpVectorLength << "\n";);
 
@@ -1288,7 +1288,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
-  EVT OpVecTy = OpVecTyOpt.getValue();
+  EVT OpVecTy = OpVecTyOpt.value();
 
   if (!OpVecTyOpt.has_value()) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: cannot infer idiomatic vector type\n");
@@ -1373,7 +1373,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
   if (IsUnaryOp) {
     assert(VVPOC.has_value());
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+    return CDAG.getNode(VVPOC.value(), ResVecTy,
                         {LegalOperands[0], MaskingArgs.Mask, MaskingArgs.AVL});
   }
 
@@ -1385,16 +1385,16 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return VVPN;
   }
 
-  switch (VVPOC.getValue()) {
+  switch (VVPOC.value()) {
   case VEISD::VVP_FFMA: {
     // VE has a swizzled operand order in FMA (compared to LLVM IR and
     // SDNodes).
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+    return CDAG.getNode(VVPOC.value(), ResVecTy,
                         {LegalOperands[2], LegalOperands[0], LegalOperands[1],
                          MaskingArgs.Mask, MaskingArgs.AVL});
   }
   case VEISD::VVP_SETCC: {
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+    return CDAG.getNode(VVPOC.value(), ResVecTy,
                         {LegalOperands[0], LegalOperands[1], LegalOperands[2],
                          MaskingArgs.Mask, MaskingArgs.AVL});
   }
@@ -1408,12 +1408,12 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   if (IsConvOp) {
-    return CDAG.getLegalConvOpVVP(VVPOC.getValue(), ResVecTy, LegalOperands[0],
+    return CDAG.getLegalConvOpVVP(VVPOC.value(), ResVecTy, LegalOperands[0],
                                   MaskingArgs.Mask, MaskingArgs.AVL);
   }
 
   if (IsReduceOp) {
-    auto HasStartV = getVVPReductionStartParamPos(VVPOC.getValue());
+    auto HasStartV = getVVPReductionStartParamPos(VVPOC.value());
     SDValue StartV = HasStartV ? LegalOperands[0] : SDValue();
     SDValue VectorV = HasStartV ? LegalOperands[1] : LegalOperands[0];
     assert(VVPOC.has_value());
@@ -1518,7 +1518,7 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   // Otw, widen this VVP operation to the next OR native vector width
   Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   assert(OpVecTyOpt);
-  EVT OpVecTy = OpVecTyOpt.getValue();
+  EVT OpVecTy = OpVecTyOpt.value();
 
   // Check how this should be handled.
   VECustomDAG CDAG(*this, DAG, Op);
