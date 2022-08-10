@@ -140,7 +140,7 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                               {&VecTy, VecPtrTy});
   ShortValueVec Args{&Val, VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_store).getValue();
     StoreCall.addParamAttr(
@@ -156,7 +156,7 @@ Value &VPBuilder::CreateContiguousLoad(Type *ReturnTy,
       &getModule(), Intrinsic::vp_load, ReturnTy, {&ElemPointer});
   ShortValueVec Args{&ElemPointer, &RequestPred(), &RequestEVL()};
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_load).getValue();
     LoadCall.addParamAttr(
@@ -173,7 +173,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
   ShortValueVec Args{&Val, &PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &ScatterCall = *Builder.CreateCall(ScatterFunc, Args);
 #if 0
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_scatter).getValue();
     // FIXME 'align' invalid here.
@@ -191,7 +191,7 @@ Value &VPBuilder::CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignO
   ShortValueVec Args{&PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &GatherCall = *Builder.CreateCall(GatherFunc, Args);
 #if 0
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_gather).getValue();
     // FIXME 'align' invalid here.

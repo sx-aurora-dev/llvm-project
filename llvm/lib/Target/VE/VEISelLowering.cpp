@@ -4198,7 +4198,7 @@ unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
   // fastcc - map everything to vregs.
   auto LK = getCustomTypeConversion(Context, VT);
   // Non-custom converted type - back to builtin logic.
-  if (!LK.hasValue())
+  if (!LK.has_value())
     return DefaultImpl();
 
   // Compute the fixed point of the custom type conversion rules.
@@ -4239,7 +4239,7 @@ unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
     }
 
     LK = getCustomTypeConversion(Context, NextVT);
-  } while (LK.hasValue());
+  } while (LK.has_value());
 
   RegisterVT = NextVT.getSimpleVT();
 

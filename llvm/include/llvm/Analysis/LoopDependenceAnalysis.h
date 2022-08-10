@@ -53,7 +53,7 @@ struct LoopDependence {
   }
 
   bool isWorstPossible() const {
-    if (!VectorizationFactor.hasValue())
+    if (!VectorizationFactor.has_value())
       return false;
     return (VectorizationFactor.getValue() == 1);
   }

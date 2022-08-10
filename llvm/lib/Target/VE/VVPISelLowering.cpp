@@ -117,7 +117,7 @@ static bool shouldLowerToVVP(SDNode &N) {
   }
 
   Optional<EVT> IdiomVT = getIdiomaticType(&N);
-  if (!IdiomVT.hasValue() || !isLegalVectorVT(*IdiomVT))
+  if (!IdiomVT.has_value() || !isLegalVectorVT(*IdiomVT))
     return false;
 
   // Promote if the result type is not a legal vector
@@ -398,7 +398,7 @@ VETargetLowering::widenInternalVectorOperation(SDNode *N,
 #if 0
    // Otw, widen this VVP operation to the next OR native vector width
   Optional<EVT> OpVecTyOpt = getIdiomaticType(N);
-  assert(OpVecTyOpt.hasValue());
+  assert(OpVecTyOpt.has_value());
   EVT OpVecTy = OpVecTyOpt.getValue();
 #endif
 
@@ -991,7 +991,7 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, VECustomDAG &CDAG,
                                         VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "::splitVectorOp: "; CDAG.print(dbgs(), Op) << "\n");
   auto OcOpt = getVVPOpcode(Op.getOpcode());
-  assert(OcOpt.hasValue());
+  assert(OcOpt.has_value());
   unsigned VVPOC = OcOpt.getValue();
 
   // Special cases ('impure' SIMD instructions)
@@ -1145,7 +1145,7 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op,
 VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
   Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
-  if (!VecVTOpt.hasValue() || !VecVTOpt.getValue().isVector()) {
+  if (!VecVTOpt.has_value() || !VecVTOpt.getValue().isVector()) {
     LLVM_DEBUG(if (VecVTOpt) dbgs()
                << "VecVT: " << VecVTOpt->getEVTString() << "\n");
     LLVM_DEBUG(dbgs() << "\tno idiomatic vector VT.\n");
@@ -1290,7 +1290,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
-  if (!OpVecTyOpt.hasValue()) {
+  if (!OpVecTyOpt.has_value()) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: cannot infer idiomatic vector type\n");
     return SDValue();
   }
@@ -1372,13 +1372,13 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   if (IsUnaryOp) {
-    assert(VVPOC.hasValue());
+    assert(VVPOC.has_value());
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                         {LegalOperands[0], MaskingArgs.Mask, MaskingArgs.AVL});
   }
 
   if (IsBinaryOp) {
-    assert(VVPOC.hasValue());
+    assert(VVPOC.has_value());
     auto VVPN = CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0],
                                          LegalOperands[1], MaskingArgs.Mask,
                                          MaskingArgs.AVL, Op->getFlags());
@@ -1416,7 +1416,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     auto HasStartV = getVVPReductionStartParamPos(VVPOC.getValue());
     SDValue StartV = HasStartV ? LegalOperands[0] : SDValue();
     SDValue VectorV = HasStartV ? LegalOperands[1] : LegalOperands[0];
-    assert(VVPOC.hasValue());
+    assert(VVPOC.has_value());
     return CDAG.getLegalReductionOpVVP(*VVPOC, ResVecTy, StartV, VectorV,
                                        MaskingArgs.Mask, MaskingArgs.AVL,
                                        Op->getFlags());

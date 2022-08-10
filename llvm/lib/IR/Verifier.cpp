@@ -2468,7 +2468,7 @@ void Verifier::verifyConstrainedFPBundles(const Instruction &I) {
     Check(RoundString,
           "Constraint fp rounding mode is not a metadata string.", RoundInput);
     auto RoundOpt = VPIntrin->getRoundingMode();
-    Check(RoundOpt.hasValue(), "Invalid rounding mode metadata.", RoundString);
+    Check(RoundOpt.has_value(), "Invalid rounding mode metadata.", RoundString);
   }
 
   if (ExceptBundle) {
@@ -2481,7 +2481,7 @@ void Verifier::verifyConstrainedFPBundles(const Instruction &I) {
     Check(ExceptString,
           "Constraint fp exception mode is not a metadata string.", ExceptInput);
     auto ExceptOpt = VPIntrin->getExceptionBehavior();
-    Check(ExceptOpt.hasValue(), "Invalid exception mode metadata.", ExceptString);
+    Check(ExceptOpt.has_value(), "Invalid exception mode metadata.", ExceptString);
   }
 }
 

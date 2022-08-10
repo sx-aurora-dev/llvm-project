@@ -843,7 +843,7 @@ SDValue VECustomDAG::inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const {
 SDValue VECustomDAG::getSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const {
   // Pick VL
   SDValue VectorLen;
-  if (OpVectorLength.hasValue()) {
+  if (OpVectorLength.has_value()) {
     VectorLen = OpVectorLength.getValue();
   } else {
     VectorLen = DAG.getConstant(

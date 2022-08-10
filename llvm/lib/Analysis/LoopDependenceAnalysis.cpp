@@ -1640,9 +1640,9 @@ static bool isInNest(Instruction &I, LoopNestInfo NestInfo) {
 }
 
 bool operator<(const ConstVF V1, const ConstVF V2) {
-  if (!V1.hasValue())
+  if (!V1.has_value())
     return false;
-  if (!V2.hasValue())
+  if (!V2.has_value())
     return true;
   return V1.getValue() < V2.getValue();
 }
@@ -2010,7 +2010,7 @@ static void printAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
   assert(L);
   LoopDependence Res = LDI->getDependenceInfo(*L);
   dbgs() << "\nLoop: " << L->getName() << ": ";
-  if (!Res.VectorizationFactor.hasValue()) {
+  if (!Res.VectorizationFactor.has_value()) {
     dbgs() << "Is vectorizable for any factor\n";
   } else {
     uint64_t VF = Res.VectorizationFactor.getValue();
