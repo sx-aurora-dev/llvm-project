@@ -18,7 +18,7 @@
 if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
 libomptarget_say("Building the llvm-omp-device-info tool")
 
-add_llvm_tool(llvm-omp-device-info llvm-omp-device-info.cpp)
+add_openmp_tool(llvm-omp-device-info llvm-omp-device-info.cpp)
 
 llvm_update_compile_flags(llvm-omp-device-info)
 
