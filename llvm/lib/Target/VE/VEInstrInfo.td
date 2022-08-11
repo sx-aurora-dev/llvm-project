@@ -2817,9 +2817,3 @@ include "VEInstrPatternsVec.td"
 
 // Patterns and intermediate SD nodes (VVP_*).
 include "VVPInstrPatternsVec.td"
-
-// Patterns and intermediate SD nodes for fixed length vector instructions.
-// let Predicates = [IsSimdSubTarget] in {
-  include "SIMDInstrPatterns.td"
-// }
-// include "SIMDInstrPatternsVec.td"

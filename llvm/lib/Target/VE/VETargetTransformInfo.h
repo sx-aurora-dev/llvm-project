@@ -112,9 +112,6 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 #undef VEC_VP_CASE
   }
 
-  // Experimental simd-style fixed length vectorization
-  bool simd() const { return getST()->simd(); }
-
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
@@ -122,7 +119,7 @@ public:
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool VectorRegs = (ClassID == 1);
-    if (!makeVectorOpsExpensive() && (simd() || enableVPU()) && VectorRegs) {
+    if (!makeVectorOpsExpensive() && enableVPU() && VectorRegs) {
       return 64;
     }
 
@@ -146,7 +143,7 @@ public:
   }
 
   unsigned getMinVectorRegisterBitWidth() const {
-    return !makeVectorOpsExpensive() && (simd() || enableVPU())
+    return !makeVectorOpsExpensive() && enableVPU()
                ? StandardVectorWidth * 64
                : 0;
   }

@@ -83,22 +83,7 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
-static const MVT WholeVectorVTs[] = {
-    MVT::v512i32, MVT::v512f32, MVT::v256i32, MVT::v256f32, MVT::v256i64,
-    MVT::v256f64, MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
-    MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,  MVT::v32i32,
-    MVT::v32f32,  MVT::v32i64,  MVT::v32f64,  MVT::v16i32,  MVT::v16f32,
-    MVT::v16i64,  MVT::v16f64,  MVT::v8i32,   MVT::v8f32,   MVT::v8i64,
-    MVT::v8f64,   MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
-    MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
-};
-
 static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
-
-static const MVT All256MaskVTs[] = {
-    MVT::v256i1, MVT::v128i1, MVT::v64i1, MVT::v32i1,
-    MVT::v16i1,  MVT::v8i1,   MVT::v4i1,  MVT::v2i1,
-};
 
 static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32, MVT::v512f64,
                                       MVT::v512i64};
@@ -114,16 +99,6 @@ void VETargetLowering::initRegisterClasses() {
   if (Subtarget->enableVPU()) {
     // VVP backend.
     initRegisterClasses_VVP();
-    return;
-  }
-
-  if (Subtarget->simd()) {
-    // Fixed SIMD backend.
-    for (MVT VecVT : WholeVectorVTs)
-      addRegisterClass(VecVT, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    for (MVT MaskVT : All256MaskVTs)
-      addRegisterClass(MaskVT, &VE::VMRegClass);
     return;
   }
 }
@@ -1315,17 +1290,6 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   return true;
 }
 
-// bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-//                                         const SelectionDAG &DAG) const {
-//   // VE's simd-style vectorization is experimental, so disable to use vector
-//   // stores if simd feature is disabled.
-//   if (!Subtarget->simd()) {
-//     if (MemVT.isVector()) {
-//       return false;
-//     }
-//   }
-// }
-
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
@@ -1345,9 +1309,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VVP layer isel actions.
   initVPUActions();
-
-  // Fixed SIMD layer isel actions.
-  initSIMDActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
@@ -2319,8 +2280,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     if (Subtarget->enableVPU())
       return LowerOperation_VVP(Op, DAG);
-    else if (Subtarget->simd())
-      return LowerOperation_SIMD(Op, DAG);
     llvm_unreachable("Unexpected Opcode in LowerOperation");
 
   case ISD::ATOMIC_FENCE:
