@@ -264,21 +264,6 @@ SDValue VETargetLowering::computeGatherScatterAddress(
   return splitVectorOp(ResPtr, CDAG, VVPExpansionMode::ToNativeWidth);
 }
 
-static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
-                                   MVT::v256f32, MVT::v512f32, MVT::v256f64,
-                                   MVT::v512f64, MVT::v512i64};
-
-void VETargetLowering::initRegisterClasses_VVP() {
-  // VVP-based backend.
-  for (MVT VecVT : AllVectorVTs)
-    addRegisterClass(VecVT, &VE::V64RegClass);
-
-  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-  addRegisterClass(MVT::v512f64, &VE::VPRegClass);
-  addRegisterClass(MVT::v512i64, &VE::VPRegClass);
-  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-}
-
 EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
                                          SelectionDAG &DAG,
                                          VVPExpansionMode Mode) const {

@@ -83,13 +83,17 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
+static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
+                                   MVT::v256f32, MVT::v512f32, MVT::v256f64,
+                                   MVT::v512f64, MVT::v512i64};
+
 static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
 
 static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32, MVT::v512f64,
                                       MVT::v512i64};
 
 void VETargetLowering::initRegisterClasses() {
-  // Scalar registers.
+  // Set up the register classes.
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
@@ -97,9 +101,12 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
   if (Subtarget->enableVPU()) {
-    // VVP backend.
-    initRegisterClasses_VVP();
-    return;
+    for (MVT VecVT : AllVectorVTs)
+      addRegisterClass(VecVT, &VE::V64RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    addRegisterClass(MVT::v512f64, &VE::VPRegClass);
+    addRegisterClass(MVT::v512i64, &VE::VPRegClass);
   }
 }
 
