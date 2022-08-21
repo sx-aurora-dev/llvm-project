@@ -204,7 +204,8 @@ define zeroext i32 @_Z23atomic_swap_relaxed_u32RNSt3__16atomicIjEEj(%"struct.std
 define i64 @_Z23atomic_swap_relaxed_i64RNSt3__16atomicIlEEl(%"struct.std::__1::atomic.30"* nocapture nonnull align 8 dereferenceable(8) %0, i64 %1) {
 ; CHECK-LABEL: _Z23atomic_swap_relaxed_i64RNSt3__16atomicIlEEl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.30", %"struct.std::__1::atomic.30"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -216,7 +217,8 @@ define i64 @_Z23atomic_swap_relaxed_i64RNSt3__16atomicIlEEl(%"struct.std::__1::a
 define i64 @_Z23atomic_swap_relaxed_u64RNSt3__16atomicImEEm(%"struct.std::__1::atomic.35"* nocapture nonnull align 8 dereferenceable(8) %0, i64 %1) {
 ; CHECK-LABEL: _Z23atomic_swap_relaxed_u64RNSt3__16atomicImEEm:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.35", %"struct.std::__1::atomic.35"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -427,7 +429,8 @@ define zeroext i32 @_Z23atomic_swap_acquire_u32RNSt3__16atomicIjEEj(%"struct.std
 define i64 @_Z23atomic_swap_acquire_i64RNSt3__16atomicIlEEl(%"struct.std::__1::atomic.30"* nocapture nonnull align 8 dereferenceable(8) %0, i64 %1) {
 ; CHECK-LABEL: _Z23atomic_swap_acquire_i64RNSt3__16atomicIlEEl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -440,7 +443,8 @@ define i64 @_Z23atomic_swap_acquire_i64RNSt3__16atomicIlEEl(%"struct.std::__1::a
 define i64 @_Z23atomic_swap_acquire_u64RNSt3__16atomicImEEm(%"struct.std::__1::atomic.35"* nocapture nonnull align 8 dereferenceable(8) %0, i64 %1) {
 ; CHECK-LABEL: _Z23atomic_swap_acquire_u64RNSt3__16atomicImEEm:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -660,7 +664,8 @@ define i64 @_Z23atomic_swap_seq_cst_i64RNSt3__16atomicIlEEl(%"struct.std::__1::a
 ; CHECK-LABEL: _Z23atomic_swap_seq_cst_i64RNSt3__16atomicIlEEl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -674,7 +679,8 @@ define i64 @_Z23atomic_swap_seq_cst_u64RNSt3__16atomicImEEm(%"struct.std::__1::a
 ; CHECK-LABEL: _Z23atomic_swap_seq_cst_u64RNSt3__16atomicImEEm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    ts1am.l %s1, (%s0), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s1, (%s0), %s2
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -894,7 +900,8 @@ define zeroext i32 @_Z27atomic_swap_relaxed_stk_u32j(i32 zeroext %0) {
 define i64 @_Z27atomic_swap_relaxed_stk_i64l(i64 %0) {
 ; CHECK-LABEL: _Z27atomic_swap_relaxed_stk_i64l:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ts1am.l %s0, 8(%s11), 127
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    ts1am.l %s0, 8(%s11), %s1
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = alloca %"struct.std::__1::atomic.30", align 8
@@ -910,7 +917,8 @@ define i64 @_Z27atomic_swap_relaxed_stk_i64l(i64 %0) {
 define i64 @_Z27atomic_swap_relaxed_stk_u64m(i64 %0) {
 ; CHECK-LABEL: _Z27atomic_swap_relaxed_stk_u64m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ts1am.l %s0, 8(%s11), 127
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    ts1am.l %s0, 8(%s11), %s1
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = alloca %"struct.std::__1::atomic.35", align 8
@@ -1139,7 +1147,8 @@ define i64 @_Z26atomic_swap_relaxed_gv_i64l(i64 %0) {
 ; CHECK-NEXT:    lea %s1, gv_i64@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, gv_i64@hi(, %s1)
-; CHECK-NEXT:    ts1am.l %s0, (%s1), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s0, (%s1), %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = atomicrmw xchg i64* getelementptr inbounds (%"struct.std::__1::atomic.30", %"struct.std::__1::atomic.30"* @gv_i64, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0), i64 %0 monotonic
   ret i64 %2
@@ -1152,7 +1161,8 @@ define i64 @_Z26atomic_swap_relaxed_gv_u64m(i64 %0) {
 ; CHECK-NEXT:    lea %s1, gv_u64@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, gv_u64@hi(, %s1)
-; CHECK-NEXT:    ts1am.l %s0, (%s1), 127
+; CHECK-NEXT:    lea %s2, 255
+; CHECK-NEXT:    ts1am.l %s0, (%s1), %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = atomicrmw xchg i64* getelementptr inbounds (%"struct.std::__1::atomic.35", %"struct.std::__1::atomic.35"* @gv_u64, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0), i64 %0 monotonic
   ret i64 %2
