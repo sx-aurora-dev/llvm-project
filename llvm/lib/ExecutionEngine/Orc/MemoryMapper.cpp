@@ -11,6 +11,8 @@
 #include "llvm/ExecutionEngine/Orc/Shared/OrcRTBridge.h"
 #include "llvm/Support/WindowsError.h"
 
+#include <algorithm>
+
 #if defined(LLVM_ON_UNIX) && !defined(__ANDROID__)
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -60,6 +62,7 @@ char *InProcessMemoryMapper::prepare(ExecutorAddr Addr, size_t ContentSize) {
 void InProcessMemoryMapper::initialize(MemoryMapper::AllocInfo &AI,
                                        OnInitializedFunction OnInitialized) {
   ExecutorAddr MinAddr(~0ULL);
+  ExecutorAddr MaxAddr(0);
 
   for (auto &Segment : AI.Segments) {
     auto Base = AI.MappingBase + Segment.Offset;
@@ -67,6 +70,9 @@ void InProcessMemoryMapper::initialize(MemoryMapper::AllocInfo &AI,
 
     if (Base < MinAddr)
       MinAddr = Base;
+
+    if (Base + Size > MaxAddr)
+      MaxAddr = Base + Size;
 
     std::memset((Base + Segment.ContentSize).toPtr<void *>(), 0,
                 Segment.ZeroFillSize);
@@ -85,6 +91,9 @@ void InProcessMemoryMapper::initialize(MemoryMapper::AllocInfo &AI,
 
   {
     std::lock_guard<std::mutex> Lock(Mutex);
+
+    // This is the maximum range whose permission have been possibly modified
+    Allocations[MinAddr].Size = MaxAddr - MinAddr;
     Allocations[MinAddr].DeinitializationActions =
         std::move(*DeinitializeActions);
     Reservations[AI.MappingBase.toPtr<void *>()].Allocations.push_back(MinAddr);
@@ -106,6 +115,14 @@ void InProcessMemoryMapper::deinitialize(
       if (Error Err = shared::runDeallocActions(
               Allocations[Base].DeinitializationActions)) {
         AllErr = joinErrors(std::move(AllErr), std::move(Err));
+      }
+
+      // Reset protections to read/write so the area can be reused
+      if (auto EC = sys::Memory::protectMappedMemory(
+              {Base.toPtr<void *>(), Allocations[Base].Size},
+              sys::Memory::ProtectionFlags::MF_READ |
+                  sys::Memory::ProtectionFlags::MF_WRITE)) {
+        AllErr = joinErrors(std::move(AllErr), errorCodeToError(EC));
       }
 
       Allocations.erase(Base);
@@ -285,8 +302,10 @@ char *SharedMemoryMapper::prepare(ExecutorAddr Addr, size_t ContentSize) {
 
 void SharedMemoryMapper::initialize(MemoryMapper::AllocInfo &AI,
                                     OnInitializedFunction OnInitialized) {
-  auto Reservation = Reservations.find(AI.MappingBase);
-  assert(Reservation != Reservations.end() &&
+  auto Reservation = std::lower_bound(
+      Reservations.rbegin(), Reservations.rend(), AI.MappingBase,
+      [](const auto &A, const auto &B) { return A.first > B; });
+  assert(Reservation != Reservations.rend() &&
          "Attempt to initialize unreserved range");
 
   tpctypes::SharedMemoryFinalizeRequest FR;
@@ -321,7 +340,7 @@ void SharedMemoryMapper::initialize(MemoryMapper::AllocInfo &AI,
 
         OnInitialized(std::move(Result));
       },
-      SAs.Instance, AI.MappingBase, std::move(FR));
+      SAs.Instance, Reservation->first, std::move(FR));
 }
 
 void SharedMemoryMapper::deinitialize(
@@ -392,23 +411,18 @@ void SharedMemoryMapper::release(ArrayRef<ExecutorAddr> Bases,
 }
 
 SharedMemoryMapper::~SharedMemoryMapper() {
-  std::vector<ExecutorAddr> ReservationAddrs;
-  if (!Reservations.empty()) {
-    std::lock_guard<std::mutex> Lock(Mutex);
-    {
-      ReservationAddrs.reserve(Reservations.size());
-      for (const auto &R : Reservations) {
-        ReservationAddrs.push_back(R.first);
-      }
-    }
-  }
+  for (const auto R : Reservations) {
 
-  std::promise<MSVCPError> P;
-  auto F = P.get_future();
-  release(ReservationAddrs, [&](Error Err) { P.set_value(std::move(Err)); });
-  // FIXME: Release can actually fail. The error should be propagated.
-  // Meanwhile, a better option is to explicitly call release().
-  cantFail(F.get());
+#if defined(LLVM_ON_UNIX) && !defined(__ANDROID__)
+
+    munmap(R.second.LocalAddr, R.second.Size);
+
+#elif defined(_WIN32)
+
+    UnmapViewOfFile(R.second.LocalAddr);
+
+#endif
+  }
 }
 
 } // namespace orc

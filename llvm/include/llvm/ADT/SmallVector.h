@@ -92,8 +92,8 @@ protected:
 
 template <class T>
 using SmallVectorSizeType =
-    typename std::conditional<sizeof(T) < 4 && sizeof(void *) >= 8, uint64_t,
-                              uint32_t>::type;
+    std::conditional_t<sizeof(T) < 4 && sizeof(void *) >= 8, uint64_t,
+                       uint32_t>;
 
 /// Figure out the offset of the first element.
 template <class T, typename = void> struct SmallVectorAlignmentAndSize {
@@ -312,8 +312,8 @@ public:
 /// copy these types with memcpy, there is no way for the type to observe this.
 /// This catches the important case of std::pair<POD, POD>, which is not
 /// trivially assignable.
-template <typename T, bool = (is_trivially_copy_constructible<T>::value) &&
-                             (is_trivially_move_constructible<T>::value) &&
+template <typename T, bool = (std::is_trivially_copy_constructible<T>::value) &&
+                             (std::is_trivially_move_constructible<T>::value) &&
                              std::is_trivially_destructible<T>::value>
 class SmallVectorTemplateBase : public SmallVectorTemplateCommon<T> {
   friend class SmallVectorTemplateCommon<T>;
@@ -1284,6 +1284,15 @@ SmallVector<ValueTypeFromRangeType<R>, Size> to_vector(R &&Range) {
 }
 template <typename R>
 SmallVector<ValueTypeFromRangeType<R>> to_vector(R &&Range) {
+  return {std::begin(Range), std::end(Range)};
+}
+
+template <typename Out, unsigned Size, typename R>
+SmallVector<Out, Size> to_vector_of(R &&Range) {
+  return {std::begin(Range), std::end(Range)};
+}
+
+template <typename Out, typename R> SmallVector<Out> to_vector_of(R &&Range) {
   return {std::begin(Range), std::end(Range)};
 }
 

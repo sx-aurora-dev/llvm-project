@@ -1895,9 +1895,9 @@ bool AndroidPackedRelocationSection<ELFT>::updateAllocSize() {
     add(config->wordsize);
     add(target->relativeRel);
     if (config->isRela) {
-      for (auto i = g.begin() + 1, e = g.end(); i != e; ++i) {
-        add(i->r_addend - addend);
-        addend = i->r_addend;
+      for (const auto &i : llvm::drop_begin(g)) {
+        add(i.r_addend - addend);
+        addend = i.r_addend;
       }
     }
 
@@ -2007,8 +2007,8 @@ template <class ELFT> bool RelrSection<ELFT>::updateAllocSize() {
 
   // Get offsets for all relative relocations and sort them.
   std::unique_ptr<uint64_t[]> offsets(new uint64_t[relocs.size()]);
-  for (auto it : llvm::enumerate(relocs))
-    offsets[it.index()] = it.value().getOffset();
+  for (auto [i, r] : llvm::enumerate(relocs))
+    offsets[i] = r.getOffset();
   llvm::sort(offsets.get(), offsets.get() + relocs.size());
 
   // For each leading relocation, find following ones that can be folded

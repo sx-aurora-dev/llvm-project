@@ -60,58 +60,59 @@ getOmpObjectSymbol(const Fortran::parser::OmpObject &ompObject) {
   return sym;
 }
 
-template <typename T>
 static void
-createPrivateVarSyms(Fortran::lower::AbstractConverter &converter,
-                     const T *clause,
-                     [[maybe_unused]] Block *lastPrivBlock = nullptr) {
-  const Fortran::parser::OmpObjectList &ompObjectList = clause->v;
-  for (const Fortran::parser::OmpObject &ompObject : ompObjectList.v) {
-    Fortran::semantics::Symbol *sym = getOmpObjectSymbol(ompObject);
-    // Privatization for symbols which are pre-determined (like loop index
-    // variables) happen separately, for everything else privatize here.
-    if (sym->test(Fortran::semantics::Symbol::Flag::OmpPreDetermined))
-      continue;
-    bool success = converter.createHostAssociateVarClone(*sym);
-    (void)success;
-    assert(success && "Privatization failed due to existing binding");
-    if constexpr (std::is_same_v<T, Fortran::parser::OmpClause::Firstprivate>) {
-      converter.copyHostAssociateVar(*sym);
-    } else if constexpr (std::is_same_v<
-                             T, Fortran::parser::OmpClause::Lastprivate>) {
-      converter.copyHostAssociateVar(*sym, lastPrivBlock);
-    }
-  }
+privatizeSymbol(Fortran::lower::AbstractConverter &converter,
+                const Fortran::semantics::Symbol *sym,
+                [[maybe_unused]] mlir::Block *lastPrivBlock = nullptr) {
+  // Privatization for symbols which are pre-determined (like loop index
+  // variables) happen separately, for everything else privatize here.
+  if (sym->test(Fortran::semantics::Symbol::Flag::OmpPreDetermined))
+    return;
+  bool success = converter.createHostAssociateVarClone(*sym);
+  (void)success;
+  assert(success && "Privatization failed due to existing binding");
+  if (sym->test(Fortran::semantics::Symbol::Flag::OmpFirstPrivate))
+    converter.copyHostAssociateVar(*sym);
+  if (sym->test(Fortran::semantics::Symbol::Flag::OmpLastPrivate))
+    converter.copyHostAssociateVar(*sym, lastPrivBlock);
 }
 
 template <typename Op>
 static bool privatizeVars(Op &op, Fortran::lower::AbstractConverter &converter,
-                          const Fortran::parser::OmpClauseList &opClauseList) {
+                          const Fortran::parser::OmpClauseList &opClauseList,
+                          Fortran::lower::pft::Evaluation &eval) {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
   auto insPt = firOpBuilder.saveInsertionPoint();
-  firOpBuilder.setInsertionPointToStart(firOpBuilder.getAllocaBlock());
-  bool hasFirstPrivateOp = false;
-  bool hasLastPrivateOp = false;
+  // Symbols in private, firstprivate, and/or lastprivate clauses.
+  llvm::SetVector<const Fortran::semantics::Symbol *> privatizedSymbols;
+  auto collectOmpObjectListSymbol =
+      [&](const Fortran::parser::OmpObjectList &ompObjectList,
+          llvm::SetVector<const Fortran::semantics::Symbol *> &symbolSet) {
+        for (const Fortran::parser::OmpObject &ompObject : ompObjectList.v) {
+          Fortran::semantics::Symbol *sym = getOmpObjectSymbol(ompObject);
+          symbolSet.insert(sym);
+        }
+      };
   // We need just one ICmpOp for multiple LastPrivate clauses.
   mlir::arith::CmpIOp cmpOp;
-
+  mlir::Block *lastPrivBlock = nullptr;
+  bool hasLastPrivateOp = false;
   for (const Fortran::parser::OmpClause &clause : opClauseList.v) {
     if (const auto &privateClause =
             std::get_if<Fortran::parser::OmpClause::Private>(&clause.u)) {
-      createPrivateVarSyms(converter, privateClause);
+      collectOmpObjectListSymbol(privateClause->v, privatizedSymbols);
     } else if (const auto &firstPrivateClause =
                    std::get_if<Fortran::parser::OmpClause::Firstprivate>(
                        &clause.u)) {
-      createPrivateVarSyms(converter, firstPrivateClause);
-      hasFirstPrivateOp = true;
+      collectOmpObjectListSymbol(firstPrivateClause->v, privatizedSymbols);
     } else if (const auto &lastPrivateClause =
                    std::get_if<Fortran::parser::OmpClause::Lastprivate>(
                        &clause.u)) {
       // TODO: Add lastprivate support for sections construct, simd construct
       if (std::is_same_v<Op, omp::WsLoopOp>) {
         omp::WsLoopOp *wsLoopOp = dyn_cast<omp::WsLoopOp>(&op);
-        fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
-        auto insPt = firOpBuilder.saveInsertionPoint();
+        mlir::Operation *lastOper = wsLoopOp->region().back().getTerminator();
+        firOpBuilder.setInsertionPoint(lastOper);
 
         // Our goal here is to introduce the following control flow
         // just before exiting the worksharing loop.
@@ -135,10 +136,6 @@ static bool privatizeVars(Op &op, Fortran::lower::AbstractConverter &converter,
         //    omp.yield
         // }
 
-        Operation *lastOper = wsLoopOp->region().back().getTerminator();
-
-        firOpBuilder.setInsertionPoint(lastOper);
-
         // TODO: The following will not work when there is collapse present.
         // Have to modify this in future.
         for (const Fortran::parser::OmpClause &clause : opClauseList.v)
@@ -147,7 +144,7 @@ static bool privatizeVars(Op &op, Fortran::lower::AbstractConverter &converter,
             TODO(converter.getCurrentLocation(),
                  "Collapse clause with lastprivate");
         // Only generate the compare once in presence of multiple LastPrivate
-        // clauses
+        // clauses.
         if (!hasLastPrivateOp) {
           cmpOp = firOpBuilder.create<mlir::arith::CmpIOp>(
               wsLoopOp->getLoc(), mlir::arith::CmpIPredicate::eq,
@@ -156,19 +153,77 @@ static bool privatizeVars(Op &op, Fortran::lower::AbstractConverter &converter,
         }
         mlir::scf::IfOp ifOp = firOpBuilder.create<mlir::scf::IfOp>(
             wsLoopOp->getLoc(), cmpOp, /*else*/ false);
-
-        firOpBuilder.restoreInsertionPoint(insPt);
-        createPrivateVarSyms(converter, lastPrivateClause,
-                             &(ifOp.getThenRegion().front()));
+        lastPrivBlock = &ifOp.getThenRegion().front();
       } else {
         TODO(converter.getCurrentLocation(),
-             "lastprivate clause in constructs other than work-share loop");
+             "lastprivate clause in constructs other than worksharing-loop");
       }
+      collectOmpObjectListSymbol(lastPrivateClause->v, privatizedSymbols);
       hasLastPrivateOp = true;
     }
   }
-  if (hasFirstPrivateOp)
+
+  // Symbols in regions with default(private/firstprivate) clause.
+  // FIXME: Collect the symbols with private/firstprivate flag in the region of
+  // the construct with default(private/firstprivate) clause excluding the
+  // symbols with the same private/firstprivate flag in the inner nested
+  // regions.
+  llvm::SetVector<const Fortran::semantics::Symbol *> defaultSymbols;
+  llvm::SetVector<const Fortran::semantics::Symbol *> symbolsInNestedRegions;
+  llvm::SetVector<const Fortran::semantics::Symbol *> symbolsInParentRegions;
+  auto collectSymbols = [&](Fortran::semantics::Symbol::Flag flag) {
+    converter.collectSymbolSet(eval, defaultSymbols, flag,
+                               /*collectSymbols=*/true,
+                               /*collectHostAssociatedSymbols=*/true);
+    for (auto &e : eval.getNestedEvaluations()) {
+      if (e.hasNestedEvaluations())
+        converter.collectSymbolSet(e, symbolsInNestedRegions, flag,
+                                   /*collectSymbols=*/true,
+                                   /*collectHostAssociatedSymbols=*/false);
+      else
+        converter.collectSymbolSet(e, symbolsInParentRegions, flag,
+                                   /*collectSymbols=*/false,
+                                   /*collectHostAssociatedSymbols=*/true);
+    }
+  };
+
+  for (const Fortran::parser::OmpClause &clause : opClauseList.v) {
+    if (const auto &defaultClause =
+            std::get_if<Fortran::parser::OmpClause::Default>(&clause.u)) {
+      if (defaultClause->v.v ==
+          Fortran::parser::OmpDefaultClause::Type::Private)
+        collectSymbols(Fortran::semantics::Symbol::Flag::OmpPrivate);
+      else if (defaultClause->v.v ==
+               Fortran::parser::OmpDefaultClause::Type::Firstprivate)
+        collectSymbols(Fortran::semantics::Symbol::Flag::OmpFirstPrivate);
+    }
+  }
+
+  bool needBarrier = false;
+  firOpBuilder.setInsertionPointToStart(firOpBuilder.getAllocaBlock());
+  for (auto sym : privatizedSymbols) {
+    privatizeSymbol(converter, sym, lastPrivBlock);
+    if (sym->test(Fortran::semantics::Symbol::Flag::OmpFirstPrivate) &&
+        sym->test(Fortran::semantics::Symbol::Flag::OmpLastPrivate))
+      needBarrier = true;
+  }
+
+  for (auto sym : defaultSymbols)
+    if (!symbolsInNestedRegions.contains(sym) &&
+        !symbolsInParentRegions.contains(sym) &&
+        !privatizedSymbols.contains(sym))
+      privatizeSymbol(converter, sym);
+
+  // Emit implicit barrier to synchronize threads and avoid data races on
+  // initialization of firstprivate variables and post-update of lastprivate
+  // variables.
+  // FIXME: Emit barrier for lastprivate clause when 'sections' directive has
+  // 'nowait' clause. Otherwise, emit barrier when 'sections' directive has
+  // both firstprivate and lastprivate clause.
+  // Emit implicit barrier for linear clause. Maybe on somewhere else.
+  if (needBarrier)
     firOpBuilder.create<mlir::omp::BarrierOp>(converter.getCurrentLocation());
+
   firOpBuilder.restoreInsertionPoint(insPt);
   return hasLastPrivateOp;
 }
@@ -233,9 +288,9 @@ static void threadPrivatizeVars(Fortran::lower::AbstractConverter &converter,
   };
 
   llvm::SetVector<const Fortran::semantics::Symbol *> threadprivateSyms;
-  converter.collectSymbolSet(eval, threadprivateSyms,
-                             Fortran::semantics::Symbol::Flag::OmpThreadprivate,
-                             /*isUltimateSymbol=*/false);
+  converter.collectSymbolSet(
+      eval, threadprivateSyms,
+      Fortran::semantics::Symbol::Flag::OmpThreadprivate);
   std::set<Fortran::semantics::SourceName> threadprivateSymNames;
 
   // For a COMMON block, the ThreadprivateOp is generated for itself instead of
@@ -459,7 +514,7 @@ createBodyOfOp(Op &op, Fortran::lower::AbstractConverter &converter,
 
   // Handle privatization. Do not privatize if this is the outer operation.
   if (clauses && !outerCombined) {
-    bool lastPrivateOp = privatizeVars(op, converter, *clauses);
+    bool lastPrivateOp = privatizeVars(op, converter, *clauses, eval);
     // LastPrivatization, due to introduction of
     // new control flow, changes the insertion point,
     // thus restore it.

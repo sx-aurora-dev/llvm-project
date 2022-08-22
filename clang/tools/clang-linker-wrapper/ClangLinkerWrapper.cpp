@@ -853,8 +853,8 @@ std::unique_ptr<lto::LTO> createLTO(
 // `__start_` and `__stop_` symbols.
 bool isValidCIdentifier(StringRef S) {
   return !S.empty() && (isAlpha(S[0]) || S[0] == '_') &&
-         std::all_of(S.begin() + 1, S.end(),
-                     [](char C) { return C == '_' || isAlnum(C); });
+         llvm::all_of(llvm::drop_begin(S),
+                      [](char C) { return C == '_' || isAlnum(C); });
 }
 
 Error linkBitcodeFiles(SmallVectorImpl<OffloadFile> &InputFiles,
@@ -1072,8 +1072,7 @@ Expected<StringRef> writeOffloadFile(const OffloadFile &File) {
   if (!OutputOrErr)
     return OutputOrErr.takeError();
   std::unique_ptr<FileOutputBuffer> Output = std::move(*OutputOrErr);
-  std::copy(Binary.getImage().bytes_begin(), Binary.getImage().bytes_end(),
-            Output->getBufferStart());
+  llvm::copy(Binary.getImage(), Output->getBufferStart());
   if (Error E = Output->commit())
     return std::move(E);
 
@@ -1419,13 +1418,13 @@ Expected<SmallVector<OffloadFile>> getDeviceInput(const ArgList &Args) {
     ErrorOr<std::unique_ptr<MemoryBuffer>> BufferOrErr =
         MemoryBuffer::getFileOrSTDIN(Filename);
     if (std::error_code EC = BufferOrErr.getError())
-      reportError(createFileError(Filename, EC));
+      return createFileError(Filename, EC);
 
     bool IsLazy =
         identify_magic((*BufferOrErr)->getBuffer()) == file_magic::archive;
     if (Error Err = extractFromBuffer(std::move(*BufferOrErr),
                                       IsLazy ? LazyInputFiles : InputFiles))
-      reportError(std::move(Err));
+      return std::move(Err);
   }
 
   // Try to extract input from input libraries.
@@ -1438,14 +1437,14 @@ Expected<SmallVector<OffloadFile>> getDeviceInput(const ArgList &Args) {
 
       if (Error Err =
               extractFromBuffer(std::move(*BufferOrErr), LazyInputFiles))
-        reportError(std::move(Err));
+        return std::move(Err);
     }
   }
 
   for (StringRef Library : Args.getAllArgValues(OPT_bitcode_library_EQ)) {
     auto FileOrErr = getInputBitcodeLibrary(Library);
     if (!FileOrErr)
-      reportError(FileOrErr.takeError());
+      return FileOrErr.takeError();
     InputFiles.push_back(std::move(*FileOrErr));
   }
 

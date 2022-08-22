@@ -3218,7 +3218,7 @@ Instruction *InstCombinerImpl::visitSwitchInst(SwitchInst &SI) {
 
   // Compute the number of leading bits we can ignore.
   // TODO: A better way to determine this would use ComputeNumSignBits().
-  for (auto &C : SI.cases()) {
+  for (const auto &C : SI.cases()) {
     LeadingKnownZeros = std::min(
         LeadingKnownZeros, C.getCaseValue()->getValue().countLeadingZeros());
     LeadingKnownOnes = std::min(
@@ -3897,26 +3897,26 @@ bool InstCombinerImpl::freezeOtherUses(FreezeInst &FI) {
   // *all* uses if the operand is an invoke/callbr and the use is in a phi on
   // the normal/default destination. This is why the domination check in the
   // replacement below is still necessary.
-  Instruction *MoveBefore = nullptr;
+  BasicBlock::iterator MoveBefore;
   if (isa<Argument>(Op)) {
-    MoveBefore = &FI.getFunction()->getEntryBlock().front();
-    while (isa<AllocaInst>(MoveBefore))
-      MoveBefore = MoveBefore->getNextNode();
+    MoveBefore = FI.getFunction()->getEntryBlock().begin();
+    while (isa<AllocaInst>(*MoveBefore))
+      ++MoveBefore;
   } else if (auto *PN = dyn_cast<PHINode>(Op)) {
-    MoveBefore = PN->getParent()->getFirstNonPHI();
+    MoveBefore = PN->getParent()->getFirstInsertionPt();
   } else if (auto *II = dyn_cast<InvokeInst>(Op)) {
-    MoveBefore = II->getNormalDest()->getFirstNonPHI();
+    MoveBefore = II->getNormalDest()->getFirstInsertionPt();
   } else if (auto *CB = dyn_cast<CallBrInst>(Op)) {
-    MoveBefore = CB->getDefaultDest()->getFirstNonPHI();
+    MoveBefore = CB->getDefaultDest()->getFirstInsertionPt();
   } else {
     auto *I = cast<Instruction>(Op);
     assert(!I->isTerminator() && "Cannot be a terminator");
-    MoveBefore = I->getNextNode();
+    MoveBefore = std::next(I->getIterator());
   }
 
   bool Changed = false;
-  if (&FI != MoveBefore) {
-    FI.moveBefore(MoveBefore);
+  if (FI.getIterator() != MoveBefore) {
+    FI.moveBefore(*MoveBefore->getParent(), MoveBefore);
     Changed = true;
   }
 
@@ -4377,7 +4377,7 @@ public:
       const auto *MDScopeList = dyn_cast_or_null<MDNode>(ScopeList);
       if (!MDScopeList || !Container.insert(MDScopeList).second)
         return;
-      for (auto &MDOperand : MDScopeList->operands())
+      for (const auto &MDOperand : MDScopeList->operands())
         if (auto *MDScope = dyn_cast<MDNode>(MDOperand))
           Container.insert(MDScope);
     };

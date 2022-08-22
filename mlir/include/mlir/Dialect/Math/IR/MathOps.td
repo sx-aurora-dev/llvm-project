@@ -43,6 +43,17 @@ class Math_FloatUnaryOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "$operand attr-dict `:` type($result)";
 }
 
+// Base class for binary math operations on integer types. Require two
+// operands and one result of the same type. This type can be an integer
+// type, vector or tensor thereof.
+class Math_IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
+    Math_Op<mnemonic, traits # [SameOperandsAndResultType]> {
+  let arguments = (ins SignlessIntegerLike:$lhs, SignlessIntegerLike:$rhs);
+  let results = (outs SignlessIntegerLike:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+}
+
 // Base class for binary math operations on floating point types. Require two
 // operands and one result of the same type. This type can be a floating point
 // type, vector or tensor thereof.
@@ -504,6 +515,33 @@ def Math_FmaOp : Math_FloatTernaryOp<"fma"> {
 }
 
 //===----------------------------------------------------------------------===//
+// IPowIOp
+//===----------------------------------------------------------------------===//
+
+def Math_IPowIOp : Math_IntegerBinaryOp<"ipowi"> {
+  let summary = "signed integer raised to the power of operation";
+  let description = [{
+    Syntax:
+
+    ```
+    operation ::= ssa-id `=` `math.ipowi` ssa-use `,` ssa-use `:` type
+    ```
+
+    The `ipowi` operation takes two operands of integer type (i.e., scalar,
+    tensor or vector) and returns one result of the same type. Operands
+    must have the same type.
+
+    Example:
+
+    ```mlir
+    // Scalar signed integer exponentiation.
+    %a = math.ipowi %b, %c : i32
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // LogOp
 //===----------------------------------------------------------------------===//
 
@@ -730,6 +768,53 @@ def Math_RoundOp : Math_FloatUnaryOp<"round"> {
     %a = math.round %b : f64
     ```
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// FPowIOp
+//===----------------------------------------------------------------------===//
+
+def Math_FPowIOp : Math_Op<"fpowi",
+    [SameOperandsAndResultShape, AllTypesMatch<["lhs", "result"]>]> {
+  let summary = "floating point raised to the signed integer power";
+  let description = [{
+    Syntax:
+
+    ```
+    operation ::= ssa-id `=` `math.fpowi` ssa-use `,` ssa-use `:` type
+    ```
+
+    The `fpowi` operation takes a `base` operand of floating point type
+    (i.e. scalar, tensor or vector) and a `power` operand of integer type
+    (also scalar, tensor or vector) and returns one result of the same type
+    as `base`. The result is `base` raised to the power of `power`.
+    The operation is elementwise for non-scalars, e.g.:
+
+    ```mlir
+    %v = math.fpowi %base, %power : vector<2xf32>, vector<2xi32
+    ```
+
+    The result is a vector of:
+
+    ```
+    [<math.fpowi %base[0], %power[0]>, <math.fpowi %base[1], %power[1]>]
+    ```
+
+    Example:
+
+    ```mlir
+    // Scalar exponentiation.
+    %a = math.fpowi %base, %power : f64, i32
+    ```
+  }];
+
+  let arguments = (ins FloatLike:$lhs, SignlessIntegerLike:$rhs);
+  let results = (outs FloatLike:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
+
+  // TODO: add a constant folder using pow[f] for cases, when
+  //       the power argument is exactly representable in floating
+  //       point type of the base.
 }
 
 #endif // MATH_OPS

@@ -217,8 +217,7 @@ std::string MakeOpName(SourceName name) {
 
 bool IsCommonBlockContaining(const Symbol &block, const Symbol &object) {
   const auto &objects{block.get<CommonBlockDetails>().objects()};
-  auto found{std::find(objects.begin(), objects.end(), object)};
-  return found != objects.end();
+  return llvm::is_contained(objects, object);
 }
 
 bool IsUseAssociated(const Symbol &symbol, const Scope &scope) {
@@ -1294,7 +1293,7 @@ template <ComponentKind componentKind>
 std::string
 ComponentIterator<componentKind>::const_iterator::BuildResultDesignatorName()
     const {
-  std::string designator{""};
+  std::string designator;
   for (const auto &node : componentPath_) {
     designator += "%" + DEREF(node.component()).name().ToString();
   }

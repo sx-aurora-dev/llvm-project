@@ -97,6 +97,11 @@ func.func @test_shape_of(%arg0: tensor<?xf32>) -> tensor<?xindex> {
   return %0 : tensor<?xindex>
 }
 
+func.func @test_value_of(%arg0: !shape.value_shape) -> tensor<?xf32> {
+  %0 = shape.value_of %arg0 : tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+
 func.func @test_constraints() {
   %0 = shape.const_shape [] : !shape.shape
   %1 = shape.const_shape [1, 2, 3] : !shape.shape
@@ -216,6 +221,12 @@ func.func @get_extent_on_extent_tensor(%arg : tensor<?xindex>) -> index {
   return %result : index
 }
 
+func.func @get_dim(%arg : memref<?x?xindex>) -> index {
+  %c0 = arith.constant 0 : index
+  %result = shape.dim %arg, %c0 : memref<?x?xindex>, index -> index
+  return %result : index
+}
+
 func.func @get_extent_on_mixed_operands(%arg : tensor<?xindex>) -> !shape.size {
   %c0 = shape.const_size 0
   %result = shape.get_extent %arg, %c0 : tensor<?xindex>, !shape.size -> !shape.size
@@ -325,3 +336,9 @@ func.func @size_lower_bounded_by_constant(%a: !shape.size) -> !shape.size {
     !shape.size, !shape.size -> !shape.size
   return %2 : !shape.size
 }
+
+func.func @meet_index(%arg0 : index, %arg1 : index) -> index {
+  %result = shape.meet %arg0, %arg1 : index, index -> index
+  return %result : index
+}
+

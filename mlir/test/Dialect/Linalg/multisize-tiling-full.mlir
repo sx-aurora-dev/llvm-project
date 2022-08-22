@@ -3,7 +3,7 @@
 transform.with_pdl_patterns {
 ^bb0(%arg0: !pdl.operation):
   // This implements a 2D multisize tiling with target sizes [3, 10].
-  transform.sequence %arg0 {
+  transform.sequence %arg0 failures(propagate) {
   ^bb1(%arg1: !pdl.operation):
     %0 = transform.structured.match ops{["linalg.generic"]} in %arg1
     %1:3 = transform.structured.multitile_sizes %0 { dimension = 0, target_size = 3}
@@ -59,7 +59,7 @@ func.func @two_d(%arg0: tensor<10x34xf32>,
   // CHECK:          %[[RESPARTIAL:.+]] = tensor.insert_slice %[[RESSLICE_1]] into %[[ITERARG_2]]
   // CHECK:          scf.yield %[[RESPARTIAL]]
 
-  // CHECK:        %[[INSERTED:.+]] = tensor.insert_slice %[[LOOPRES]] into %[[OUTSLICE_1]][%[[I1]], 0] [2, 16] [1, 1]
+  // CHECK:        %[[INSERTED:.+]] = tensor.insert_slice %[[LOOPRES]] into %[[OUTSLICE_1]][0, 0] [2, 16] [1, 1]
   // CHECK:        %[[OUTSLICE_3:.+]] = tensor.extract_slice %[[INSERTED]][0, 16] [2, 18] [1, 1]
   // CHECK:        scf.for %{{.*}} iter_args(%{{.*}} = %[[OUTSLICE_3]])
   // CHECK-COUNT-2:  tensor.extract_slice

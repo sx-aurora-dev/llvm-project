@@ -77,12 +77,11 @@ template <typename T> struct make_const_ref {
 };
 
 namespace detail {
-template <typename...> using void_t = void;
 template <class, template <class...> class Op, class... Args> struct detector {
   using value_t = std::false_type;
 };
 template <template <class...> class Op, class... Args>
-struct detector<void_t<Op<Args...>>, Op, Args...> {
+struct detector<std::void_t<Op<Args...>>, Op, Args...> {
   using value_t = std::true_type;
 };
 } // end namespace detail
@@ -96,16 +95,6 @@ struct detector<void_t<Op<Args...>>, Op, Args...> {
 ///   bool fooHasCopyAssign = is_detected<has_copy_assign_t, FooClass>::value;
 template <template <class...> class Op, class... Args>
 using is_detected = typename detail::detector<void, Op, Args...>::value_t;
-
-namespace detail {
-template <typename Callable, typename... Args>
-using is_invocable =
-    decltype(std::declval<Callable &>()(std::declval<Args>()...));
-} // namespace detail
-
-/// Check if a Callable type can be invoked with the given set of arg types.
-template <typename Callable, typename... Args>
-using is_invocable = is_detected<detail::is_invocable, Callable, Args...>;
 
 /// This class provides various trait information about a callable object.
 ///   * To access the number of arguments: Traits::num_args
@@ -155,12 +144,12 @@ struct function_traits<ReturnType (&)(Args...), false>
 /// traits class for checking whether type T is one of any of the given
 /// types in the variadic list.
 template <typename T, typename... Ts>
-using is_one_of = disjunction<std::is_same<T, Ts>...>;
+using is_one_of = std::disjunction<std::is_same<T, Ts>...>;
 
 /// traits class for checking whether type T is a base class for all
 ///  the given types in the variadic list.
 template <typename T, typename... Ts>
-using are_base_of = conjunction<std::is_base_of<T, Ts>...>;
+using are_base_of = std::conjunction<std::is_base_of<T, Ts>...>;
 
 namespace detail {
 template <typename T, typename... Us> struct TypesAreDistinct;
@@ -376,21 +365,12 @@ struct has_rbegin : has_rbegin_impl<typename std::remove_reference<Ty>::type> {
 };
 
 // Returns an iterator_range over the given container which iterates in reverse.
-// Note that the container must have rbegin()/rend() methods for this to work.
-template <typename ContainerTy>
-auto reverse(ContainerTy &&C,
-             std::enable_if_t<has_rbegin<ContainerTy>::value> * = nullptr) {
-  return make_range(C.rbegin(), C.rend());
-}
-
-// Returns an iterator_range over the given container which iterates in reverse.
-// Note that the container must have begin()/end() methods which return
-// bidirectional iterators for this to work.
-template <typename ContainerTy>
-auto reverse(ContainerTy &&C,
-             std::enable_if_t<!has_rbegin<ContainerTy>::value> * = nullptr) {
-  return make_range(std::make_reverse_iterator(std::end(C)),
-                    std::make_reverse_iterator(std::begin(C)));
+template <typename ContainerTy> auto reverse(ContainerTy &&C) {
+  if constexpr (has_rbegin<ContainerTy>::value)
+    return make_range(C.rbegin(), C.rend());
+  else
+    return make_range(std::make_reverse_iterator(std::end(C)),
+                      std::make_reverse_iterator(std::begin(C)));
 }
 
 /// An iterator adaptor that filters the elements of given inner iterators.
@@ -1386,12 +1366,12 @@ template <> struct rank<0> {};
 /// traits class for checking whether type T is one of any of the given
 /// types in the variadic list.
 template <typename T, typename... Ts>
-using is_one_of = disjunction<std::is_same<T, Ts>...>;
+using is_one_of = std::disjunction<std::is_same<T, Ts>...>;
 
 /// traits class for checking whether type T is a base class for all
 ///  the given types in the variadic list.
 template <typename T, typename... Ts>
-using are_base_of = conjunction<std::is_base_of<T, Ts>...>;
+using are_base_of = std::conjunction<std::is_base_of<T, Ts>...>;
 
 namespace detail {
 template <typename... Ts> struct Visitor;
@@ -1550,30 +1530,25 @@ namespace detail {
 template <typename T>
 // We can use qsort if the iterator type is a pointer and the underlying value
 // is trivially copyable.
-using sort_trivially_copyable = conjunction<
+using sort_trivially_copyable = std::conjunction<
     std::is_pointer<T>,
     std::is_trivially_copyable<typename std::iterator_traits<T>::value_type>>;
 } // namespace detail
 
 // Provide wrappers to std::sort which shuffle the elements before sorting
 // to help uncover non-deterministic behavior (PR35135).
-template <typename IteratorTy,
-          std::enable_if_t<!detail::sort_trivially_copyable<IteratorTy>::value,
-                           int> = 0>
+template <typename IteratorTy>
 inline void sort(IteratorTy Start, IteratorTy End) {
+  if constexpr (detail::sort_trivially_copyable<IteratorTy>::value) {
+    // Forward trivially copyable types to array_pod_sort. This avoids a large
+    // amount of code bloat for a minor performance hit.
+    array_pod_sort(Start, End);
+  } else {
 #ifdef EXPENSIVE_CHECKS
-  detail::presortShuffle<IteratorTy>(Start, End);
+    detail::presortShuffle<IteratorTy>(Start, End);
 #endif
-  std::sort(Start, End);
-}
-
-// Forward trivially copyable types to array_pod_sort. This avoids a large
-// amount of code bloat for a minor performance hit.
-template <typename IteratorTy,
-          std::enable_if_t<detail::sort_trivially_copyable<IteratorTy>::value,
-                           int> = 0>
-inline void sort(IteratorTy Start, IteratorTy End) {
-  array_pod_sort(Start, End);
+    std::sort(Start, End);
+  }
 }
 
 template <typename Container> inline void sort(Container &&C) {
