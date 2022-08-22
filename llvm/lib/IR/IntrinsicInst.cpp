@@ -705,7 +705,7 @@ VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
 #include "llvm/IR/VPIntrinsics.def"
   }
 
-  return HasExcept && HasExcept.getValue();
+  return HasExcept && HasExcept.value();
 }
 
 bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
@@ -720,7 +720,7 @@ bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
 #include "llvm/IR/VPIntrinsics.def"
   }
 
-  return HasRound && HasRound.getValue();
+  return HasRound && HasRound.value();
 }
 
 Intrinsic::ID VPIntrinsic::getForIntrinsic(Intrinsic::ID IntrinsicID) {

@@ -762,6 +762,11 @@ ProgramStateRef ExprEngine::bindReturnValue(const CallEvent &Call,
           svalBuilder.evalBinOp(State, BO_Mul, ElementCount, ElementSize,
                                 svalBuilder.getArrayIndexType());
 
+      // FIXME: This line is to prevent a crash. For more details please check
+      // issue #56264.
+      if (Size.isUndef())
+        Size = UnknownVal();
+
       State = setDynamicExtent(State, MR, Size.castAs<DefinedOrUnknownSVal>(),
                                svalBuilder);
     } else {
@@ -889,7 +894,7 @@ ExprEngine::mayInlineCallKind(const CallEvent &Call, const ExplodedNode *Pred,
     break;
   }
   case CE_CXXDeallocator:
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case CE_CXXAllocator:
     if (Opts.MayInlineCXXAllocator)
       break;

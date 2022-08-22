@@ -1735,16 +1735,6 @@ defm SHMH : SHMm<"shm.h", 0x31, I64>;
 let ry = 0, DecoderMethod = "DecodeStoreASI64" in
 defm SHMB : SHMm<"shm.b", 0x31, I64>;
 
-// Atomic swap
-def : Pat<(i32 (ts1am i64:$src, i32:$flag, i32:$new)),
-          (TS1AMWrir $src, 0, $flag, $new)>;
-// def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
-//           (TS1AMWrii MEMriRRM:$src, 3, $new)>;
-def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
-          (TS1AMWrii MEMriRRM:$src, 15, $new)>;
-def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
-          (TS1AMLrii MEMriRRM:$src, 127, $new)>;
-
 //===----------------------------------------------------------------------===//
 // Pattern Matchings
 //===----------------------------------------------------------------------===//
@@ -2817,9 +2807,3 @@ include "VEInstrPatternsVec.td"
 
 // Patterns and intermediate SD nodes (VVP_*).
 include "VVPInstrPatternsVec.td"
-
-// Patterns and intermediate SD nodes for fixed length vector instructions.
-// let Predicates = [IsSimdSubTarget] in {
-  include "SIMDInstrPatterns.td"
-// }
-// include "SIMDInstrPatternsVec.td"

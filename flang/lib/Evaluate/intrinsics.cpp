@@ -749,6 +749,8 @@ static const IntrinsicInterface genericIntrinsicFunction[]{
             {"ncopies", AnyInt, Rank::scalar}},
         SameType, Rank::rankPlus1, IntrinsicClass::transformationalFunction},
     {"sqrt", {{"x", SameFloating}}, SameFloating},
+    {"stopped_images", {OptionalTEAM, SizeDefaultKIND}, KINDInt, Rank::vector,
+        IntrinsicClass::transformationalFunction},
     {"storage_size", {{"a", AnyData, Rank::anyOrAssumedRank}, SizeDefaultKIND},
         KINDInt, Rank::scalar, IntrinsicClass::inquiryFunction},
     {"sum", {{"array", SameNumeric, Rank::array}, RequiredDIM, OptionalMASK},
@@ -840,8 +842,7 @@ static const IntrinsicInterface genericIntrinsicFunction[]{
 };
 
 // TODO: Coarray intrinsic functions
-//   LCOBOUND, UCOBOUND, IMAGE_INDEX,
-//   STOPPED_IMAGES, COSHAPE
+//   LCOBOUND, UCOBOUND, IMAGE_INDEX, COSHAPE
 // TODO: Non-standard intrinsic functions
 //  LSHIFT, RSHIFT, SHIFT, ZEXT, IZEXT,
 //  COMPL, EQV, NEQV, INT8, JINT, JNINT, KNINT,
@@ -2556,7 +2557,14 @@ std::optional<SpecificCall> IntrinsicProcTable::Implementation::Probe(
     if (call.name == "__builtin_c_f_pointer") {
       return HandleC_F_Pointer(arguments, context);
     } else if (call.name == "random_seed") {
-      if (arguments.size() != 0 && arguments.size() != 1) {
+      int optionalCount{0};
+      for (const auto &arg : arguments) {
+        if (const auto *expr{arg->UnwrapExpr()}) {
+          optionalCount +=
+              Fortran::evaluate::MayBePassedAsAbsentOptional(*expr, context);
+        }
+      }
+      if (arguments.size() - optionalCount > 1) {
         context.messages().Say(
             "RANDOM_SEED must have either 1 or no arguments"_err_en_US);
       }

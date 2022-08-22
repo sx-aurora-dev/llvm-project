@@ -283,7 +283,8 @@ std::string InputSectionBase::getObjMsg(uint64_t off) {
     archive = (" in archive " + file->archiveName).str();
 
   // Find a symbol that encloses a given location. getObjMsg may be called
-  // before ObjFile::initializeLocalSymbols where local symbols are initialized.
+  // before ObjFile::initSectionsAndLocalSyms where local symbols are
+  // initialized.
   for (Symbol *b : file->getSymbols())
     if (auto *d = dyn_cast_or_null<Defined>(b))
       if (d->section == this && d->value <= off && off < d->value + d->size)
@@ -929,7 +930,7 @@ void InputSection::relocateNonAlloc(uint8_t *buf, ArrayRef<RelTy> rels) {
     // at runtime, the notion of PC-relative doesn't make sense here. So,
     // this is a usage error. However, GNU linkers historically accept such
     // relocations without any errors and relocate them as if they were at
-    // address 0. For bug-compatibilty, we accept them with warnings. We
+    // address 0. For bug-compatibility, we accept them with warnings. We
     // know Steel Bank Common Lisp as of 2018 have this bug.
     warn(msg);
     target.relocateNoSym(
@@ -1327,9 +1328,12 @@ void EhInputSection::split(ArrayRef<RelTy> rels) {
 uint64_t EhInputSection::getParentOffset(uint64_t offset) const {
   auto it = partition_point(
       fdes, [=](EhSectionPiece p) { return p.inputOff <= offset; });
-  if (it == fdes.begin() || it[-1].inputOff + it[-1].size <= offset)
+  if (it == fdes.begin() || it[-1].inputOff + it[-1].size <= offset) {
     it = partition_point(
         cies, [=](EhSectionPiece p) { return p.inputOff <= offset; });
+    if (it == cies.begin()) // invalid piece
+      return offset;
+  }
   if (it[-1].outputOff == -1) // invalid piece
     return offset - it[-1].inputOff;
   return it[-1].outputOff + (offset - it[-1].inputOff);

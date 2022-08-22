@@ -22,16 +22,11 @@ def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Enable the VPU">;
 
-def FeatureSimd
-  : SubtargetFeature<"simd", "Simd", "true",
-                     "Enable simd-style fixed length vectorize (experimental)">;
-
 // Whether to use VVP-based isel.
 def UseVVP : Predicate<"Subtarget->enableVPU()">;
 
 // Whether to use Fixed-SIMD based isel.
-def IsSimdSubTarget : Predicate<"Subtarget->simd()">;
-def IsNotSimdSubTarget : Predicate<"!Subtarget->simd()">;
+def IsSimdSubTarget : Predicate<"false">;
 
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 

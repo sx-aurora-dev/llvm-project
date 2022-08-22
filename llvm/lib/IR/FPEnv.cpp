@@ -132,7 +132,7 @@ Value *GetConstrainedFPExcept(LLVMContext &Context,
                               fp::ExceptionBehavior UseExcept) {
   Optional<StringRef> ExceptStr = convertExceptionBehaviorToStr(UseExcept);
   assert(ExceptStr.hasValue() && "Garbage strict exception behavior!");
-  auto *ExceptMDS = MDString::get(Context, ExceptStr.getValue());
+  auto *ExceptMDS = MDString::get(Context, ExceptStr.value());
 
   return MetadataAsValue::get(Context, ExceptMDS);
 }
@@ -141,7 +141,7 @@ Value *GetConstrainedFPRounding(LLVMContext &Context,
                                 RoundingMode UseRounding) {
   Optional<StringRef> RoundingStr = convertRoundingModeToStr(UseRounding);
   assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
-  auto *RoundingMDS = MDString::get(Context, RoundingStr.getValue());
+  auto *RoundingMDS = MDString::get(Context, RoundingStr.value());
 
   return MetadataAsValue::get(Context, RoundingMDS);
 }

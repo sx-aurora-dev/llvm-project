@@ -541,9 +541,10 @@ define i64 @test_atomic_exchange_8() {
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, l@hi(, %s0)
+; CHECK-NEXT:    lea %s2, 255
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
-; CHECK-NEXT:    ts1am.l %s0, (%s1), 127
+; CHECK-NEXT:    ts1am.l %s0, (%s1), %s2
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -559,9 +560,10 @@ define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-NEXT:    lea %s0, scl1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, scl1@hi(, %s0)
+; CHECK-NEXT:    lea %s2, 255
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
-; CHECK-NEXT:    ts1am.l %s0, 1(%s1), 127
+; CHECK-NEXT:    ts1am.l %s0, 1(%s1), %s2
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -577,9 +579,10 @@ define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-NEXT:    lea %s0, sil1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, sil1@hi(, %s0)
+; CHECK-NEXT:    lea %s2, 255
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
-; CHECK-NEXT:    ts1am.l %s0, 4(%s1), 127
+; CHECK-NEXT:    ts1am.l %s0, 4(%s1), %s2
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:

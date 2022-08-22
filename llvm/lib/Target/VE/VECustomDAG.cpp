@@ -564,7 +564,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   // For reductions -> the reduced vector type
   PosOpt RedVecPos = getReductionVectorParamPos(Op->getOpcode());
   if (RedVecPos)
-    return Op->getOperand(RedVecPos.getValue())->getValueType(0);
+    return Op->getOperand(RedVecPos.value())->getValueType(0);
 
   unsigned OC = Op->getOpcode();
 
@@ -635,7 +635,7 @@ VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B) {
     return B;
   if (!B)
     return A;
-  return std::min<unsigned>(A.getValue(), B.getValue());
+  return std::min<unsigned>(A.value(), B.value());
 }
 
 // Whether direct codegen for this type will result in a packed operation
@@ -843,8 +843,8 @@ SDValue VECustomDAG::inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const {
 SDValue VECustomDAG::getSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const {
   // Pick VL
   SDValue VectorLen;
-  if (OpVectorLength.hasValue()) {
-    VectorLen = OpVectorLength.getValue();
+  if (OpVectorLength.has_value()) {
+    VectorLen = OpVectorLength.value();
   } else {
     VectorLen = DAG.getConstant(
         selectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);

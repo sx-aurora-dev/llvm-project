@@ -202,7 +202,7 @@ public:
   MVT getRegisterTypeForCallingConv(LLVMContext &Context, CallingConv::ID CC,
                                     EVT VT) const override {
     auto Opt = getRegistersForCallingConv(Context, CC, VT);
-    if (!Opt.hasValue())
+    if (!Opt.has_value())
       return TargetLowering::getRegisterTypeForCallingConv(Context, CC, VT);
     return Opt->first;
   }
@@ -211,7 +211,7 @@ public:
                                          CallingConv::ID CC,
                                          EVT VT) const override {
     auto Opt = getRegistersForCallingConv(Context, CC, VT);
-    if (!Opt.hasValue())
+    if (!Opt.has_value())
       return TargetLowering::getNumRegistersForCallingConv(Context, CC, VT);
     return Opt->second;
   }

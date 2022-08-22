@@ -26,7 +26,20 @@ pipeline {
         stage('Checkout LLVM') {
             steps {
                 dir('llvm-project') {
-                    checkout scm
+                    // checkout scm
+                    checkout([
+                      $class: 'GitSCM',
+                      branches: scm.branches,
+                      doGenerateSubmoduleConfigurations:
+                        scm.doGenerateSubmoduleConfigurations,
+                      extensions: [[
+                        $class: 'CloneOption',
+                        noTags: true,
+                        reference: '',
+                        shallow: true
+                      ]],
+                      userRemoteConfigs: scm.userRemoteConfigs
+                    ])
                 }
 
                 dir('llvm-dev') {

@@ -60,7 +60,7 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   // construct VP vector operands (including pred and evl)
   SmallVector<Value *, 6> VecParams;
   for (size_t i = 0; i < Inst.getNumOperands() + 5; ++i) {
-    if (MaskPosOpt && (i == (size_t)MaskPosOpt.getValue())) {
+    if (MaskPosOpt && (i == (size_t)MaskPosOpt.value())) {
       // First operand of select is mask (singular exception)
       if (VPID != Intrinsic::vp_select) {
         Value * VecMask = nullptr;
@@ -72,10 +72,10 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
         VecParams.push_back(&RequestPred());
       }
     }
-    if (VLenPosOpt && (i == (size_t)VLenPosOpt.getValue())) {
+    if (VLenPosOpt && (i == (size_t)VLenPosOpt.value())) {
       VecParams.push_back(&RequestEVL());
     }
-    if (CmpPredPos && (i == (size_t)CmpPredPos.getValue())) {
+    if (CmpPredPos && (i == (size_t)CmpPredPos.value())) {
       auto &CmpI = cast<CmpInst>(Inst);
       VecParams.push_back(ConstantInt::get(
           Type::getInt8Ty(Builder.getContext()), CmpI.getPredicate()));
@@ -98,13 +98,13 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
     auto RoundOpt = CFPIntrin->getRoundingMode();
     if (RoundOpt) {
       auto *RoundParam =
-          GetConstrainedFPRounding(Builder.getContext(), RoundOpt.getValue());
+          GetConstrainedFPRounding(Builder.getContext(), RoundOpt.value());
       ConstraintBundles.emplace_back("cfp-round", RoundParam);
     }
     auto ExceptOpt = CFPIntrin->getExceptionBehavior();
     if (ExceptOpt) {
       auto *ExceptParam =
-          GetConstrainedFPExcept(Builder.getContext(), ExceptOpt.getValue());
+          GetConstrainedFPExcept(Builder.getContext(), ExceptOpt.value());
       ConstraintBundles.emplace_back("cfp-except", ExceptParam);
     }
   }
@@ -140,11 +140,11 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                               {&VecTy, VecPtrTy});
   ShortValueVec Args{&Val, VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
-        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_store).getValue();
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_store).value();
     StoreCall.addParamAttr(
-        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.value()));
   }
   return StoreCall;
 }
@@ -156,11 +156,11 @@ Value &VPBuilder::CreateContiguousLoad(Type *ReturnTy,
       &getModule(), Intrinsic::vp_load, ReturnTy, {&ElemPointer});
   ShortValueVec Args{&ElemPointer, &RequestPred(), &RequestEVL()};
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
-        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_load).getValue();
+        VPIntrinsic::getMemoryPointerParamPos(Intrinsic::vp_load).value();
     LoadCall.addParamAttr(
-        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.value()));
   }
   return LoadCall;
 }
@@ -173,7 +173,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
   ShortValueVec Args{&Val, &PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &ScatterCall = *Builder.CreateCall(ScatterFunc, Args);
 #if 0
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_scatter).getValue();
     // FIXME 'align' invalid here.
@@ -191,7 +191,7 @@ Value &VPBuilder::CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignO
   ShortValueVec Args{&PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &GatherCall = *Builder.CreateCall(GatherFunc, Args);
 #if 0
-  if (AlignOpt.hasValue()) {
+  if (AlignOpt.has_value()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_gather).getValue();
     // FIXME 'align' invalid here.
