@@ -65,7 +65,19 @@ Bug Fixes
 - Fix a crash when evaluating a multi-dimensional array's array filler
   expression is element-dependent. This fixes
   `Issue 50601 <https://github.com/llvm/llvm-project/issues/56016>`_.
-
+- Fixed a crash-on-valid with consteval evaluation of a list-initialized
+  constructor for a temporary object. This fixes
+  `Issue 55871 <https://github.com/llvm/llvm-project/issues/55871>`_.
+- Fix `#57008 <https://github.com/llvm/llvm-project/issues/57008>`_ - Builtin
+  C++ language extension type traits instantiated by a template with unexpected
+  number of arguments cause an assertion fault.
+- Fix multi-level pack expansion of undeclared function parameters.
+  This fixes `Issue 56094 <https://github.com/llvm/llvm-project/issues/56094>`_.
+- Fix `#57151 <https://github.com/llvm/llvm-project/issues/57151>`_.
+  ``-Wcomma`` is emitted for void returning functions.
+- ``-Wtautological-compare`` missed warnings for tautological comparisons
+  involving a negative integer literal. This fixes
+  `Issue 42918 <https://github.com/llvm/llvm-project/issues/42918>`_.
 
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -85,6 +97,15 @@ Improvements to Clang's diagnostics
 - ``-Wbitfield-constant-conversion`` now diagnoses implicit truncation when 1 is
   assigned to a 1-bit signed integer bitfield. This fixes
   `Issue 53253 <https://github.com/llvm/llvm-project/issues/53253>`_.
+- ``-Wincompatible-function-pointer-types`` now defaults to an error in all C
+  language modes. It may be downgraded to a warning with
+  ``-Wno-error=incompatible-function-pointer-types`` or disabled entirely with
+  ``-Wno-implicit-function-pointer-types``.
+- Clang will now print more information about failed static assertions. In
+  particular, simple static assertion expressions are evaluated to their
+  compile-time value and printed out if the assertion fails.
+- Diagnostics about uninitialized ``constexpr`` varaibles have been improved
+  to mention the missing constant initializer.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -123,6 +144,9 @@ C2x Feature Support
 C++ Language Changes in Clang
 -----------------------------
 
+- Implemented DR692, DR1395 and DR1432. Use the ``-fclang-abi-compat=14`` option
+  to get the old partial ordering behavior regarding packs.
+
 C++20 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -132,7 +156,12 @@ C++20 Feature Support
   `GH54300 <https://github.com/llvm/llvm-project/issues/54300>`_,
   `GH54301 <https://github.com/llvm/llvm-project/issues/54301>`_,
   and `GH49430 <https://github.com/llvm/llvm-project/issues/49430>`_.
-
+- Consider explicitly defaulted constexpr/consteval special member function
+  template instantiation to be constexpr/consteval even though a call to such
+  a function cannot appear in a constant expression.
+  (C++14 [dcl.constexpr]p6 (CWG DR647/CWG DR1358))
+- Correctly defer dependent immediate function invocations until template instantiation.
+  This fixes `GH55601 <https://github.com/llvm/llvm-project/issues/55601>`_.
 
 
 
@@ -162,6 +191,12 @@ CUDA Support in Clang
 ---------------------
 
 - ...
+
+RISC-V Support in Clang
+-----------------------
+
+- ``sifive-7-rv32`` and ``sifive-7-rv64`` are no longer supported for `-mcpu`.
+  Use `sifive-e76`, `sifive-s76`, or `sifive-u74` instead.
 
 X86 Support in Clang
 --------------------

@@ -71,6 +71,7 @@ namespace llvm {
 
 class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   using BaseT = BasicTTIImplBase<VETTIImpl>;
+  using TTI = TargetTransformInfo;
   friend BaseT;
 
   const VESubtarget *ST;
@@ -236,26 +237,29 @@ public:
   }
 #endif
 
-  unsigned getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
-                           unsigned AddressSpace,
-                           TargetTransformInfo::TargetCostKind CostKind,
-                           const Instruction *I = nullptr) const {
+  InstructionCost
+  getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
+                  unsigned AddressSpace,
+                  TTI::TargetCostKind CostKind,
+                  TTI::OperandValueKind OpdInfo = TTI::OK_AnyValue,
+                  const Instruction *I = nullptr) const {
     return getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                  CostKind);
   }
 
-  unsigned getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
-                                  const Value *Ptr, bool VariableMask,
-                                  Align Alignment,
-                                  TargetTransformInfo::TargetCostKind CostKind,
-                                  const Instruction *I = nullptr) const {
+  InstructionCost
+  getGatherScatterOpCost(unsigned Opcode, Type *DataTy, const Value *Ptr,
+                         bool VariableMask,
+                         Align Alignment,
+                         TTI::TargetCostKind CostKind,
+                         const Instruction *I = nullptr) const {
     return getMaskedMemoryOpCost(Opcode, DataTy, Align(), 0, CostKind);
   }
 
-  unsigned
+  InstructionCost
   getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                         unsigned AddressSpace,
-                        TargetTransformInfo::TargetCostKind CostKind) const {
+                        TTI::TargetCostKind CostKind) const {
     if (isa<FixedVectorType>(Src) && (!isVectorRegisterType(*Src)))
       return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;

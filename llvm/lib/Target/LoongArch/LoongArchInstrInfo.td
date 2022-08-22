@@ -59,6 +59,10 @@ def loongarch_bstrpick
     : SDNode<"LoongArchISD::BSTRPICK", SDT_LoongArchBStrPick>;
 def loongarch_revb_2h : SDNode<"LoongArchISD::REVB_2H", SDTUnaryOp>;
 def loongarch_revb_2w : SDNode<"LoongArchISD::REVB_2W", SDTUnaryOp>;
+def loongarch_bitrev_4b : SDNode<"LoongArchISD::BITREV_4B", SDTUnaryOp>;
+def loongarch_bitrev_w : SDNode<"LoongArchISD::BITREV_W", SDTUnaryOp>;
+def loongarch_clzw : SDNode<"LoongArchISD::CLZ_W", SDTIntBitCountUnaryOp>;
+def loongarch_ctzw : SDNode<"LoongArchISD::CTZ_W", SDTIntBitCountUnaryOp>;
 
 //===----------------------------------------------------------------------===//
 // Operand and SDNode transformation definitions.
@@ -146,9 +150,16 @@ def simm16_lsl2_br : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperand<16, 2>";
 }
 
-def simm20 : Operand<GRLenVT> {
-  let ParserMatchClass = SImmAsmOperand<20>;
+class SImm20Operand : Operand<GRLenVT> {
   let DecoderMethod = "decodeSImmOperand<20>";
+}
+
+def simm20 : SImm20Operand {
+  let ParserMatchClass = SImmAsmOperand<20>;
+}
+
+def simm20_pcalau12i : SImm20Operand {
+  let ParserMatchClass = SImmAsmOperand<20, "pcalau12i">;
 }
 
 def simm21_lsl2 : Operand<OtherVT> {
@@ -157,8 +168,24 @@ def simm21_lsl2 : Operand<OtherVT> {
   let DecoderMethod = "decodeSImmOperand<21, 2>";
 }
 
-def simm26_lsl2 : Operand<OtherVT> {
-  let ParserMatchClass = SImmAsmOperand<26, "lsl2">;
+// TODO: Need split the ParserMethod/PredicateMethod for call/jump/tailcall.
+def SImm26Operand: AsmOperandClass {
+  let Name = "SImm26Operand";
+  let RenderMethod = "addImmOperands";
+  let DiagnosticType = "InvalidSImm26Operand";
+  let ParserMethod = "parseSImm26Operand";
+}
+
+// A symbol or an imm used in B/PseudoBR.
+def simm26_b : Operand<OtherVT> {
+  let ParserMatchClass = SImm26Operand;
+  let EncoderMethod = "getImmOpValueAsr2";
+  let DecoderMethod = "decodeSImmOperand<26, 2>";
+}
+
+// A symbol or an imm used in BL/PseudoCALL.
+def simm26_bl : Operand<GRLenVT> {
+  let ParserMatchClass = SImm26Operand;
   let EncoderMethod = "getImmOpValueAsr2";
   let DecoderMethod = "decodeSImmOperand<26, 2>";
 }
@@ -185,17 +212,6 @@ def ImmSubFrom32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(32 - N->getZExtValue(), SDLoc(N),
                                    N->getValueType(0));
 }]>;
-
-def CallSymbol: AsmOperandClass {
-  let Name = "CallSymbol";
-  let RenderMethod = "addImmOperands";
-  let PredicateMethod = "isImm";
-}
-
-// A bare symbol used in call only.
-def call_symbol : Operand<iPTR> {
-  let ParserMatchClass = CallSymbol;
-}
 
 def BaseAddr : ComplexPattern<iPTR, 1, "SelectBaseAddr">;
 
@@ -255,7 +271,7 @@ class BrCCZ_1RI21<bits<6> op, string opstr>
   let isTerminator = 1;
 }
 class Br_I26<bits<6> op, string opstr>
-    : FmtI26<op, (outs), (ins simm26_lsl2:$imm26), opstr, "$imm26"> {
+    : FmtI26<op, (outs), (ins simm26_b:$imm26), opstr, "$imm26"> {
   let isBranch = 1;
   let isTerminator = 1;
 }
@@ -319,7 +335,7 @@ def SLTI  : ALU_2RI12<0b0000001000, "slti", simm12>;
 def SLTUI : ALU_2RI12<0b0000001001, "sltui", simm12>;
 def PCADDI    : ALU_1RI20<0b0001100, "pcaddi", simm20>;
 def PCADDU12I : ALU_1RI20<0b0001110, "pcaddu12i", simm20>;
-def PCALAU12I : ALU_1RI20<0b0001101, "pcalau12i", simm20>;
+def PCALAU12I : ALU_1RI20<0b0001101, "pcalau12i", simm20_pcalau12i>;
 def AND  : ALU_3R<0b00000000000101001, "and">;
 def OR   : ALU_3R<0b00000000000101010, "or">;
 def NOR  : ALU_3R<0b00000000000101000, "nor">;
@@ -383,8 +399,8 @@ def BEQZ : BrCCZ_1RI21<0b010000, "beqz">;
 def BNEZ : BrCCZ_1RI21<0b010001, "bnez">;
 def B : Br_I26<0b010100, "b">;
 
-let isCall = 1 in
-def BL : FmtI26<0b010101, (outs), (ins simm26_lsl2:$imm26), "bl", "$imm26">;
+let isCall = 1, Defs=[R1] in
+def BL : FmtI26<0b010101, (outs), (ins simm26_bl:$imm26), "bl", "$imm26">;
 def JIRL : Fmt2RI16<0b010011, (outs GPR:$rd),
                     (ins GPR:$rj, simm16_lsl2:$imm16), "jirl",
                     "$rd, $rj, $imm16">;
@@ -589,6 +605,8 @@ class PatGprGpr<SDPatternOperator OpNode, LAInst Inst>
     : Pat<(OpNode GPR:$rj, GPR:$rk), (Inst GPR:$rj, GPR:$rk)>;
 class PatGprGpr_32<SDPatternOperator OpNode, LAInst Inst>
     : Pat<(sext_inreg (OpNode GPR:$rj, GPR:$rk), i32), (Inst GPR:$rj, GPR:$rk)>;
+class PatGpr<SDPatternOperator OpNode, LAInst Inst>
+    : Pat<(OpNode GPR:$rj), (Inst GPR:$rj)>;
 
 class PatGprImm<SDPatternOperator OpNode, LAInst Inst, Operand ImmOpnd>
     : Pat<(OpNode GPR:$rj, ImmOpnd:$imm),
@@ -683,6 +701,26 @@ def : Pat<(not GPR:$rj), (NOR GPR:$rj, R0)>;
 def : Pat<(not (or GPR:$rj, GPR:$rk)), (NOR GPR:$rj, GPR:$rk)>;
 def : Pat<(or GPR:$rj, (not GPR:$rk)), (ORN GPR:$rj, GPR:$rk)>;
 def : Pat<(and GPR:$rj, (not GPR:$rk)), (ANDN GPR:$rj, GPR:$rk)>;
+
+/// Bit counting operations
+
+let Predicates = [IsLA64] in {
+def : PatGpr<ctlz, CLZ_D>;
+def : PatGpr<cttz, CTZ_D>;
+def : Pat<(ctlz (not GPR:$rj)), (CLO_D GPR:$rj)>;
+def : Pat<(cttz (not GPR:$rj)), (CTO_D GPR:$rj)>;
+def : PatGpr<loongarch_clzw, CLZ_W>;
+def : PatGpr<loongarch_ctzw, CTZ_W>;
+def : Pat<(loongarch_clzw (not GPR:$rj)), (CLO_W GPR:$rj)>;
+def : Pat<(loongarch_ctzw (not GPR:$rj)), (CTO_W GPR:$rj)>;
+} // Predicates = [IsLA64]
+
+let Predicates = [IsLA32] in {
+def : PatGpr<ctlz, CLZ_W>;
+def : PatGpr<cttz, CTZ_W>;
+def : Pat<(ctlz (not GPR:$rj)), (CLO_W GPR:$rj)>;
+def : Pat<(cttz (not GPR:$rj)), (CTO_W GPR:$rj)>;
+} // Predicates = [IsLA32]
 
 /// FrameIndex calculations
 let Predicates = [IsLA32] in {
@@ -795,9 +833,14 @@ def : BccSwapPat<setule, BGEU>;
 // condition was calculated elsewhere).
 def : Pat<(brcond GPR:$rj, bb:$imm21), (BNEZ GPR:$rj, bb:$imm21)>;
 
+def : Pat<(brcond (GRLenVT (seteq GPR:$rj, 0)), bb:$imm21),
+          (BEQZ GPR:$rj, bb:$imm21)>;
+def : Pat<(brcond (GRLenVT (setne GPR:$rj, 0)), bb:$imm21),
+          (BNEZ GPR:$rj, bb:$imm21)>;
+
 let isBarrier = 1, isBranch = 1, isTerminator = 1 in
-def PseudoBR : Pseudo<(outs), (ins simm26_lsl2:$imm26), [(br bb:$imm26)]>,
-               PseudoInstExpansion<(B simm26_lsl2:$imm26)>;
+def PseudoBR : Pseudo<(outs), (ins simm26_b:$imm26), [(br bb:$imm26)]>,
+               PseudoInstExpansion<(B simm26_b:$imm26)>;
 
 let isBarrier = 1, isBranch = 1, isIndirectBranch = 1, isTerminator = 1 in
 def PseudoBRIND : Pseudo<(outs), (ins GPR:$rj, simm16_lsl2:$imm16), []>,
@@ -808,7 +851,7 @@ def : Pat<(brind (add GPR:$rj, simm16_lsl2:$imm16)),
           (PseudoBRIND GPR:$rj, simm16_lsl2:$imm16)>;
 
 let isCall = 1, Defs = [R1] in
-def PseudoCALL : Pseudo<(outs), (ins call_symbol:$func), []> {
+def PseudoCALL : Pseudo<(outs), (ins simm26_bl:$func), []> {
   let AsmString = "bl\t$func";
 }
 
@@ -840,17 +883,25 @@ def : Pat<(loongarch_bstrpick GPR:$rj, uimm6:$msbd, uimm6:$lsbd),
           (BSTRPICK_D GPR:$rj, uimm6:$msbd, uimm6:$lsbd)>;
 } // Predicates = [IsLA64]
 
-/// Byte-swapping
+/// Byte-swapping and bit-reversal
 
 def : Pat<(loongarch_revb_2h GPR:$rj), (REVB_2H GPR:$rj)>;
+def : Pat<(loongarch_bitrev_4b GPR:$rj), (BITREV_4B GPR:$rj)>;
 
 let Predicates = [IsLA32] in {
 def : Pat<(bswap GPR:$rj), (ROTRI_W (REVB_2H GPR:$rj), 16)>;
+def : Pat<(bitreverse GPR:$rj), (BITREV_W GPR:$rj)>;
+def : Pat<(bswap (bitreverse GPR:$rj)), (BITREV_4B GPR:$rj)>;
+def : Pat<(bitreverse (bswap GPR:$rj)), (BITREV_4B GPR:$rj)>;
 } // Predicates = [IsLA32]
 
 let Predicates = [IsLA64] in {
 def : Pat<(loongarch_revb_2w GPR:$rj), (REVB_2W GPR:$rj)>;
 def : Pat<(bswap GPR:$rj), (REVB_D GPR:$rj)>;
+def : Pat<(loongarch_bitrev_w GPR:$rj), (BITREV_W GPR:$rj)>;
+def : Pat<(bitreverse GPR:$rj), (BITREV_D GPR:$rj)>;
+def : Pat<(bswap (bitreverse GPR:$rj)), (BITREV_8B GPR:$rj)>;
+def : Pat<(bitreverse (bswap GPR:$rj)), (BITREV_8B GPR:$rj)>;
 } // Predicates = [IsLA64]
 
 /// Loads
@@ -956,6 +1007,10 @@ def ADJCALLSTACKUP   : Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
 
 def : InstAlias<"nop", (ANDI R0, R0, 0)>;
 def : InstAlias<"move $dst, $src", (OR GPR:$dst, GPR:$src, R0)>;
+// `ret` is supported since binutils commit 20f2e2686c79a5ac (version 2.40 and
+// later).
+def : InstAlias<"ret", (JIRL R0, R1, 0)>;
+def : InstAlias<"jr $rj", (JIRL R0, GPR:$rj, 0)>;
 
 //===----------------------------------------------------------------------===//
 // Basic Floating-Point Instructions

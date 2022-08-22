@@ -1,4 +1,4 @@
-// RUN: mlir-opt %s --test-transform-dialect-interpreter -canonicalize -split-input-file | FileCheck %s
+// RUN: mlir-opt %s --test-transform-dialect-interpreter -canonicalize -cse -split-input-file | FileCheck %s
 
 // Offset per thread:
 // CHECK-DAG: affine_map<(d0)[s0] -> (d0 * (s0 ceildiv 10))>
@@ -22,7 +22,7 @@ module {
   //      CHECK:   %[[RES:.*]] = linalg.matmul
   // CHECK-SAME:      ins(%[[tA]], %[[tB]] : tensor<?x?xf32>, tensor<?x?xf32>)
   // CHECK-SAME:     outs(%[[tC]] : tensor<?x?xf32>) -> tensor<?x?xf32>
-  // CHECK-NEXT:   scf.foreach_thread.perform_concurrently {
+  //      CHECK:   scf.foreach_thread.perform_concurrently {
   // CHECK-NEXT:     tensor.parallel_insert_slice %[[RES]] into %[[C]]{{.*}} :
   // CHECK-SAME:       tensor<?x?xf32> into tensor<?x?xf32>
   // CHECK-NEXT:   }
@@ -34,7 +34,7 @@ module {
 
   transform.with_pdl_patterns {
   ^bb0(%arg0: !pdl.operation):
-    transform.sequence %arg0 {
+    transform.sequence %arg0 failures(propagate) {
     ^bb1(%arg1: !pdl.operation):
       %0 = transform.structured.match ops{["linalg.matmul"]} in %arg1
       %1:2 = transform.structured.tile_to_foreach_thread_op %0 num_threads [10, 20] (mapped to dims [1, 0])
@@ -64,11 +64,9 @@ func.func @matmul_static(%A: tensor<100x200xf32>, %B: tensor<200x300xf32>, %C: t
   //  CHECK-NOT:   affine.min
   //  CHECK-NOT:   affine.max
   //      CHECK:   %[[LB0:.+]] = affine.apply #[[$map2]](%[[IV0]])
+  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tA:.+]] = tensor.extract_slice %[[A]][%[[LB0]], 0] [10, 200] [1, 1] :
-  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tB:.+]] = tensor.extract_slice %[[B]][0, %[[LB1]]] [200, %[[TS]]] [1, 1] :
-  //      CHECK:   %[[LB0:.+]] = affine.apply #[[$map2]](%[[IV0]])
-  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tC:.+]] = tensor.extract_slice %[[C]][%[[LB0]], %[[LB1]]] [10, %[[TS]]] [1, 1] :
   //      CHECK:   linalg.matmul
   //      CHECK:   scf.foreach_thread.perform_concurrently
@@ -80,7 +78,7 @@ func.func @matmul_static(%A: tensor<100x200xf32>, %B: tensor<200x300xf32>, %C: t
 
 transform.with_pdl_patterns {
 ^bb0(%arg0: !pdl.operation):
-  transform.sequence %arg0 {
+  transform.sequence %arg0 failures(propagate) {
   ^bb1(%arg1: !pdl.operation):
     %0 = transform.structured.match ops{["linalg.matmul"]} in %arg1
     %1:2 = transform.structured.tile_to_foreach_thread_op %0 num_threads [10, 21]
@@ -106,8 +104,6 @@ func.func @matmul_tile_size_dynamic(%A: tensor<?x?xf32>, %B: tensor<?x?xf32>, %C
   //      CHECK: %[[N:.+]] = tensor.dim %[[B]], %c1 : 
   //      CHECK: %[[NT0:.+]] = affine.apply #map0()[%[[M]]]
   //      CHECK: %[[NT1:.+]] = affine.apply #map1()[%[[N]]]
-  //      CHECK: %[[M:.+]] = tensor.dim %[[A]], %c0 :
-  //      CHECK: %[[N:.+]] = tensor.dim %[[B]], %c1 :
   //      CHECK: scf.foreach_thread (%[[IV0:.+]], %[[IV1:.+]]) in (%[[NT0]], %[[NT1]])
   //      CHECK:   %[[TS0:.+]] = affine.min #[[$map2]](%[[IV0]])[%[[M]]]  
   //      CHECK:   %[[TS1:.+]] = affine.min #[[$map4]](%[[IV1]])[%[[N]]]
@@ -115,8 +111,6 @@ func.func @matmul_tile_size_dynamic(%A: tensor<?x?xf32>, %B: tensor<?x?xf32>, %C
   //      CHECK    tensor.extract_slice %[[A]]
   //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map6]](%[[IV1]])
   //      CHECK    tensor.extract_slice %[[B]]
-  //      CHECK:   %[[LB0:.+]] = affine.apply #[[$map5]](%[[IV0]])
-  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map6]](%[[IV1]])
   //      CHECK    tensor.extract_slice %[[C]]
   //      CHECK:   linalg.matmul
   //      CHECK:   scf.foreach_thread.perform_concurrently
@@ -128,7 +122,7 @@ func.func @matmul_tile_size_dynamic(%A: tensor<?x?xf32>, %B: tensor<?x?xf32>, %C
 
 transform.with_pdl_patterns {
 ^bb0(%arg0: !pdl.operation):
-  transform.sequence %arg0 {
+  transform.sequence %arg0 failures(propagate) {
   ^bb1(%arg1: !pdl.operation):    
     %0 = transform.structured.match ops{["linalg.matmul"]} in %arg1
     %1:2 = transform.structured.tile_to_foreach_thread_op %0 tile_sizes [10, 20]
@@ -155,11 +149,9 @@ func.func @matmul_tile_size_static(%A: tensor<100x200xf32>, %B: tensor<200x300xf
   //  CHECK-NOT:   affine.max
   //  CHECK-NOT:   affine.min
   //      CHECK:   %[[LB0:.+]] = affine.apply #[[$map2]](%[[IV0]])
+  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tA:.+]] = tensor.extract_slice %[[A]][%[[LB0]], 0] [10, 200] [1, 1] :
-  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tB:.+]] = tensor.extract_slice %[[B]][0, %[[LB1]]] [200, %[[TS]]] [1, 1] :
-  //      CHECK:   %[[LB0:.+]] = affine.apply #[[$map2]](%[[IV0]])
-  //      CHECK:   %[[LB1:.+]] = affine.apply #[[$map3]](%[[IV1]])
   //      CHECK:   %[[tC:.+]] = tensor.extract_slice %[[C]][%[[LB0]], %[[LB1]]] [10, %[[TS]]] [1, 1] :
   //      CHECK:   linalg.matmul
   //      CHECK:   scf.foreach_thread.perform_concurrently
@@ -171,9 +163,43 @@ func.func @matmul_tile_size_static(%A: tensor<100x200xf32>, %B: tensor<200x300xf
 
 transform.with_pdl_patterns {
 ^bb0(%arg0: !pdl.operation):
-  transform.sequence %arg0 {
+  transform.sequence %arg0 failures(propagate) {
   ^bb1(%arg1: !pdl.operation):
     %0 = transform.structured.match ops{["linalg.matmul"]} in %arg1
     %1:2 = transform.structured.tile_to_foreach_thread_op %0 tile_sizes [10, 21]
   }
 }
+
+// -----
+
+module {
+  func.func @extract_source(%A: tensor<4xf32>, %B: tensor<16xf32>) -> tensor<4xf32> {
+    %B1 = tensor.extract_slice %B[10] [4] [1] : tensor<16xf32> to tensor<4xf32>
+    %result = linalg.generic {indexing_maps = [
+      affine_map<(d0) -> (d0)>,affine_map<(d0) -> (d0)>],
+      iterator_types = ["parallel"]}
+      ins(%A : tensor<4xf32>) outs(%B1 : tensor<4xf32>) {
+      ^bb0(%arg3: f32, %arg4: f32):  // no predecessors
+        %2 = arith.addf %arg3, %arg3 : f32
+        linalg.yield %2 : f32
+    } -> tensor<4xf32>
+    return %result : tensor<4xf32>
+  }
+
+  transform.with_pdl_patterns {
+  ^bb0(%arg0: !pdl.operation):
+    transform.sequence %arg0 failures(propagate) {
+    ^bb1(%arg1: !pdl.operation):
+      %0 = transform.structured.match ops{["linalg.generic"]} in %arg1
+      %1:2 = transform.structured.tile_to_foreach_thread_op %0 num_threads [2] (mapped to dims [0])
+    }
+  }
+}
+// CHECK-DAG: #[[$map0:.+]] = affine_map<(d0) -> (d0 * 2)>
+
+// CHECK-LABEL: extract_source(
+//       CHECK:  %[[C2:.*]] = arith.constant 2 : index
+//       CHECK:  scf.foreach_thread (%[[ARG:.*]]) in (%[[C2]]) -> (tensor<4xf32>) {
+//       CHECK:    %[[OFF:.*]] = affine.apply #[[$map0]](%[[ARG]])
+//       CHECK:    scf.foreach_thread.perform_concurrently {
+//       CHECK:      tensor.parallel_insert_slice %{{.*}} into %{{.*}}[%[[OFF]]] [2] [1] : tensor<2xf32> into tensor<4xf32>

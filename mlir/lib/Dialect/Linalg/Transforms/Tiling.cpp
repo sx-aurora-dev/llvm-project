@@ -177,18 +177,6 @@ mlir::linalg::computeMultiTileSizes(OpBuilder &builder, LinalgOp op,
   return spec;
 }
 
-/// Given a `subsetExtractOp`, a `source` and a `dest`, create a new
-/// `ParallelInsertSlice` op of `source` into `dest` at the same subset location
-/// as `subsetExtractOp`.
-static void
-createMatchingParallelSubsetInsertOp(OpBuilder &b, Location loc,
-                                     tensor::ExtractSliceOp subsetExtractOp,
-                                     Value source, Value dest) {
-  b.create<tensor::ParallelInsertSliceOp>(
-      loc, source, dest, subsetExtractOp.getMixedOffsets(),
-      subsetExtractOp.getMixedSizes(), subsetExtractOp.getMixedStrides());
-}
-
 /// Returns true if the maximum tile offset `tileSize * numThreads-1` is less
 /// than `iterationSize`.
 static bool canOmitTileOffsetInBoundsCheck(OpFoldResult tileSize,
@@ -333,16 +321,21 @@ static FailureOr<ForeachThreadTilingResult> tileToForeachThreadOpImpl(
 
   auto tilingInterfaceOp = dyn_cast<TilingInterface>(tiledOp);
   assert(tilingInterfaceOp && "Tiled op does not implement TilingInterface");
-
-  auto tiledDestOperands = tilingInterfaceOp.getDestinationOperands(b);
-
-  // Create terminator with parallel subset insert operations.
-  b.setInsertionPointToStart(foreachThreadOp.getTerminator().getBody());
-  for (auto it : llvm::zip(tiledDestOperands, tilingInterfaceOp->getResults(),
-                           destOperands)) {
-    createMatchingParallelSubsetInsertOp(
-        b, loc, cast<tensor::ExtractSliceOp>(std::get<0>(it).getDefiningOp()),
-        std::get<1>(it), std::get<2>(it));
+  OpBuilder::InsertPoint insertPt = b.saveInsertionPoint();
+  for (auto it :
+       llvm::zip(llvm::seq(unsigned(0), unsigned(destOperands.size())),
+                 tilingInterfaceOp->getResults(), destOperands)) {
+    b.setInsertionPoint(insertPt.getBlock(), insertPt.getPoint());
+    SmallVector<OpFoldResult> resultOffsets, resultSizes;
+    if (failed(op.getResultTilePosition(b, std::get<0>(it), tiledOffsets,
+                                        tiledSizes, resultOffsets,
+                                        resultSizes)))
+      return op->emitOpError("output offsets couldn't be calculated");
+    SmallVector<OpFoldResult> strides(resultSizes.size(), b.getIndexAttr(1));
+    b.setInsertionPointToStart(foreachThreadOp.getTerminator().getBody());
+    b.create<tensor::ParallelInsertSliceOp>(loc, std::get<1>(it),
+                                            std::get<2>(it), resultOffsets,
+                                            resultSizes, strides);
   }
   return ForeachThreadTilingResult{foreachThreadOp, tiledOp};
 }
@@ -450,6 +443,31 @@ tileLinalgOpImpl(RewriterBase &b, LinalgOp op, ArrayRef<OpFoldResult> tileSizes,
     applyPermutationToVector(iteratorTypes, permutation);
   }
 
+  // Handle distribution. Create a vector of the same size of loops that are to
+  // be tiled.
+  SmallVector<linalg::ProcInfo> procInfo;
+  if (options.distribution) {
+    procInfo.resize(
+        iteratorTypes.size(),
+        linalg::ProcInfo{nullptr, nullptr, linalg::DistributionMethod::None});
+    // Collect loop ranges of tiled loopss, loops that are parallel.
+    SmallVector<Range> parallelLoopRanges;
+    for (auto iteratorType : llvm::enumerate(iteratorTypes)) {
+      if (!isParallelIterator(iteratorType.value()))
+        break;
+      parallelLoopRanges.push_back(loopRanges[iteratorType.index()]);
+    }
+    auto returnedProcInfo =
+        options.distribution->procInfo(b, op.getLoc(), parallelLoopRanges);
+    unsigned procIdIdx = 0;
+    // Update the distribution information for the loops.
+    for (auto iteratorType : llvm::enumerate(iteratorTypes)) {
+      if (!isParallelIterator(iteratorType.value()))
+        break;
+      procInfo[iteratorType.index()] = returnedProcInfo[procIdIdx++];
+    }
+  }
+
   // 2. Create the tiled loops.
   LinalgOp res = op;
   SmallVector<Value, 4> ivs, tensorResults;
@@ -489,8 +507,7 @@ tileLinalgOpImpl(RewriterBase &b, LinalgOp op, ArrayRef<OpFoldResult> tileSizes,
     return scf::ValueVector(tensorResults.begin(), tensorResults.end());
   };
   GenerateLoopNest<LoopTy>::doit(b, op.getLoc(), loopRanges, op, iteratorTypes,
-                                 tiledLoopBodyBuilder, options.distribution,
-                                 options.distributionTypes);
+                                 tiledLoopBodyBuilder, procInfo);
 
   // 3. Transform IndexOp results w.r.t. the tiling.
   transformIndexOps(b, res, ivs, loopIndexToRangeIndex);

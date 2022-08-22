@@ -71,10 +71,9 @@ struct AllocOpLowering : public AllocLikeOpLLVMLowering {
     // descriptor.
     Type elementPtrType = this->getElementPtrType(memRefType);
     auto allocFuncOp = getAllocFn(allocOp->getParentOfType<ModuleOp>());
-    auto results = createLLVMCall(rewriter, loc, allocFuncOp, {sizeBytes},
-                                  getVoidPtrType());
-    Value allocatedPtr =
-        rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, results[0]);
+    auto results = rewriter.create<LLVM::CallOp>(loc, allocFuncOp, sizeBytes);
+    Value allocatedPtr = rewriter.create<LLVM::BitcastOp>(loc, elementPtrType,
+                                                          results.getResult());
 
     Value alignedPtr = allocatedPtr;
     if (alignment) {
@@ -168,11 +167,10 @@ struct AlignedAllocOpLowering : public AllocLikeOpLLVMLowering {
 
     Type elementPtrType = this->getElementPtrType(memRefType);
     auto allocFuncOp = getAllocFn(allocOp->getParentOfType<ModuleOp>());
-    auto results =
-        createLLVMCall(rewriter, loc, allocFuncOp, {allocAlignment, sizeBytes},
-                       getVoidPtrType());
-    Value allocatedPtr =
-        rewriter.create<LLVM::BitcastOp>(loc, elementPtrType, results[0]);
+    auto results = rewriter.create<LLVM::CallOp>(
+        loc, allocFuncOp, ValueRange({allocAlignment, sizeBytes}));
+    Value allocatedPtr = rewriter.create<LLVM::BitcastOp>(loc, elementPtrType,
+                                                          results.getResult());
 
     return std::make_tuple(allocatedPtr, allocatedPtr);
   }
@@ -330,8 +328,7 @@ struct DeallocOpLowering : public ConvertOpToLLVMPattern<memref::DeallocOp> {
     Value casted = rewriter.create<LLVM::BitcastOp>(
         op.getLoc(), getVoidPtrType(),
         memref.allocatedPtr(rewriter, op.getLoc()));
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, TypeRange(), SymbolRefAttr::get(freeFunc), casted);
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, freeFunc, casted);
     return success();
   }
 };
@@ -533,10 +530,8 @@ struct GenericAtomicRMWOpLowering
         loc, pairType, dataPtr, loopArgument, result, successOrdering,
         failureOrdering);
     // Extract the %new_loaded and %ok values from the pair.
-    Value newLoaded = rewriter.create<LLVM::ExtractValueOp>(
-        loc, valueType, cmpxchg, rewriter.getI64ArrayAttr({0}));
-    Value ok = rewriter.create<LLVM::ExtractValueOp>(
-        loc, boolType, cmpxchg, rewriter.getI64ArrayAttr({1}));
+    Value newLoaded = rewriter.create<LLVM::ExtractValueOp>(loc, cmpxchg, 0);
+    Value ok = rewriter.create<LLVM::ExtractValueOp>(loc, cmpxchg, 1);
 
     // Conditionally branch to the end or back to the loop depending on %ok.
     rewriter.create<LLVM::CondBrOp>(loc, ok, endBlock, ArrayRef<Value>(),
