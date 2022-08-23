@@ -3404,35 +3404,18 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
     return SDValue();
 
   // For setcc, we generally create following instructions.
-  //   CMP       %cmp, %a, %b
-  //   LEA       %res, 0
-  //   CMOV.cond %res, 1, %cmp
+  //   INSN                     LATENCY
+  //   CMP       %cmp, %a, %b   1
+  //   LEA       %res, 0        1
+  //   CMOV.cond %res, 1, %cmp  3
   //
-  // However, CMOV is slower than ALU instructions and a LEA result may hold a
-  // register for a while if LEA instruction moved around.  It happens often
-  // more than what I expected.  So, we are going to optimize these instructions
-  // using bit calculations like below.
+  // This uses 3 instructions.  CMP and LEA can be executed simultaneously.
+  // So, this requires 4 to 5 cycles to complete.  In addition, the result
+  // of LEA instruction may hold a register for a while if LEA instruction
+  // is moved around.
   //
-  // For SETEQ/SETNE, we use LDZ to count the number of bits holding 0.
-  //   SETEQ
-  //   CMP %t1, %a, %b
-  //   LDZ %t2, %t1     ; 64 iff %t1 is equal to 0
-  //   SRL %res, %t2, 6 ; 64 becomes 1 now
-  //
-  //   SETNE
-  //   CMP %t1, %a, %b
-  //   CMPU %t2, 0, %t1
-  //   SRL %res, %t2, 63/31
-  //
-  // For other comparison, we use sign bit to generate result value.
-  //   SETLT                   SETLE
-  //   CMP %t1, %a, %b         CMP %t1, %b, %a
-  //   SRL %res, %t1, 63/31    SRL %t2, %t1, 63/31
-  //                           XOR %res, %t2, 1
-  //
-  // We can use similar instructions for floating point also iff comparison
-  // is unordered.  VE's comparison may return qNaN which MSB is on.
-  // FIXME: support floating point.
+  // Therefore, we decide to optimize these instructions using better
+  // instructions.
 
   ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
   SelectionDAG &DAG = DCI.DAG;
@@ -3440,81 +3423,58 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   default:
     break;
   case ISD::SETEQ:
-#if 1
-    // a == b -> (LDZ (CMP a, b)) >> 6
-    //   3 insns are equal to CMP+LEA+CMOV but faster.
+    //   INSN                     LATENCY
+    //   CMP %t1, %a, %b          1
+    //   LDZ %t2, %t1             1       ; 64 iff %t1 is equal to 0
+    //   SRL %res, %t2, 6         1       ; 64 becomes 1 now
+    // Convert a DAG like below.
+    //   a == b -> (LDZ (CMP a, b)) >> 6
+    // 3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentLdz(N, false, DAG);
-#else
-    // a == b -> cmov (a EQV b), 1, (a EQV b), SETNE iff a/b are i64
-    //           cmov (a CMP b), 1, 0, SETEQ otherwise
-    //   2 insns which is less than CMP+LEA+CMOV
-    if (SrcVT == MVT::i64)
-      return generateEquivalentBitOp(N, VEISD::EQV, DAG);
-      // FIXME: generate CMP+LEA+CMOV here.
-      // return generateEquivalentCmp(N, false, DAG);
-#endif
     break;
+
   case ISD::SETNE:
-    // Generate code for "setugt a, 0" instead of "setne a, 0" since it is
-    // faster on VE.
+    // Generate code for "setugt a, 0" instead of "setne a, 0" since it
+    // requires only 2 cycles.
     if (isNullConstant(N->getOperand(1)))
       return generateEquivalentSub(N, false, false, true, DAG);
     LLVM_FALLTHROUGH;
   case ISD::SETUNE: {
-#if 1
     // Generate code for "setugt (cmp a, b), 0" instead of "setne a, b"
-    // since it is faster on VE.
+    // since it requires only 3 cycles.
     SDLoc DL(N);
     EVT CompVT = decideCompType(SrcVT);
     SDValue CompNode = generateComparison(
         SrcVT, N->getOperand(0), N->getOperand(1), true, true, DL, DAG);
-#if 0
-    return DAG.getNode(ISD::SETCC, DL, MVT::i32, CompNode,
-                       DAG.getConstant(0, DL, CompVT),
-                       DAG.getCondCode(ISD::SETUGT));
-#else
-#if 1
     SDValue SetCC = DAG.getNode(ISD::SETCC, DL, MVT::i32, CompNode,
                                 DAG.getConstant(0, DL, CompVT),
                                 DAG.getCondCode(ISD::SETUGT));
     return generateEquivalentSub(SetCC.getNode(), false, false, true, DAG);
-#if 0
-    CompNode = generateComparison(CompVT, DAG.getConstant(0, DL, CompVT),
-                                  CompNode, false, false, DL, DAG);
-    return generateEquivalentSub(CompNode.getNode(), false, false, true, DAG);
-#endif
-#endif
-#endif
-#else
-#if 1
-    // a != b -> (XOR (LDZ (CMP a, b)) >> 6, 1)
-    //   4 insns are more than CMP+LEA+CMOV but faster.
-    return generateEquivalentLdz(N, true, DAG);
-#else
-    // a != b -> cmov (a XOR b), 1, (a XOR b), SETNE iff a/b are i64
-    //           cmov (a CMP b), 1, (a CMP b), SETNE otherwise
-    //   2 insns which is less than CMP+LEA+CMOV
-    if (SrcVT == MVT::i64)
-      return generateEquivalentBitOp(N, VEISD::XOR, DAG);
-    return generateEquivalentCmp(N, true, DAG);
-#endif
-#endif
   }
   case ISD::SETLT:
-    // a < b -> (CMP a, b) >> size(a)-1
-    //   2 insns are less than CMP+LEA+CMOV
+    //   INSN                     LATENCY
+    //   CMP %t1, %a, %b          1
+    //   SRL %res, %t1, 63/31     1
+    // Convert a DAG like below.
+    //   a < b -> (CMP a, b) >> size(a)-1
+    // 2 insns are less than CMP+LEA+CMOV.
     return generateEquivalentSub(N, true, false, false, DAG);
   case ISD::SETGT:
-    // a > b -> (CMP b, a) >> size(a)-1
-    //   2 insns are less than CMP+LEA+CMOV
+    // Convert a DAG like below.
+    //   a > b -> (CMP b, a) >> size(a)-1
+    // 2 insns are less than CMP+LEA+CMOV.
     return generateEquivalentSub(N, true, false, true, DAG);
   case ISD::SETLE:
-    // a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
-    //   3 insns are equal to CMP+LEA+CMOV but faster.
+    //   INSN                     LATENCY
+    //   CMP %t1, %b, %a          1
+    //   SRL %t2, %t1, 63/31      1
+    //   XOR %res, %t2, 1         1
+    // Convert a DAG like below.
+    //   a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
+    // 3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentSub(N, true, true, true, DAG);
   case ISD::SETGE:
     // a >= b -> (XOR (CMP a, b) >> size(a)-1, 1)
-    //   3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentSub(N, true, true, false, DAG);
   case ISD::SETULT:
     // a < b -> (CMP a, b) >> size(a)-1
