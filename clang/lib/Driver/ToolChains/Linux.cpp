@@ -8,6 +8,7 @@
 
 #include "Linux.h"
 #include "Arch/ARM.h"
+#include "Arch/LoongArch.h"
 #include "Arch/Mips.h"
 #include "Arch/PPC.h"
 #include "Arch/RISCV.h"
@@ -466,6 +467,20 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader = HF ? "ld-linux-armhf.so.3" : "ld-linux.so.3";
     break;
   }
+  case llvm::Triple::loongarch32: {
+    LibDir = "lib32";
+    Loader = ("ld-linux-loongarch-" +
+              tools::loongarch::getLoongArchABI(Args, Triple) + ".so.1")
+                 .str();
+    break;
+  }
+  case llvm::Triple::loongarch64: {
+    LibDir = "lib64";
+    Loader = ("ld-linux-loongarch-" +
+              tools::loongarch::getLoongArchABI(Args, Triple) + ".so.1")
+                 .str();
+    break;
+  }
   case llvm::Triple::m68k:
     LibDir = "lib";
     Loader = "ld.so.1";
@@ -692,11 +707,8 @@ void Linux::AddIAMCUIncludeArgs(const ArgList &DriverArgs,
 }
 
 bool Linux::isPIEDefault(const llvm::opt::ArgList &Args) const {
-  // TODO: Remove the special treatment for Flang once its frontend driver can
-  // generate position independent code.
-  return !getDriver().IsFlangMode() &&
-         (CLANG_DEFAULT_PIE_ON_LINUX || getTriple().isAndroid() ||
-          getTriple().isMusl() || getSanitizerArgs(Args).requiresPIE());
+  return CLANG_DEFAULT_PIE_ON_LINUX || getTriple().isAndroid() ||
+         getTriple().isMusl() || getSanitizerArgs(Args).requiresPIE();
 }
 
 bool Linux::IsAArch64OutlineAtomicsDefault(const ArgList &Args) const {

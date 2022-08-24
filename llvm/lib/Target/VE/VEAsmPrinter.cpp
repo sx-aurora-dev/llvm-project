@@ -618,7 +618,6 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   case MachineOperand::MO_Register:
     O << "%" << StringRef(getRegisterName(MO.getReg())).lower();
     break;
-
   case MachineOperand::MO_Immediate:
     O << (int)MO.getImm();
     break;
