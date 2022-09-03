@@ -1385,7 +1385,7 @@ ToolChain::RuntimeLibType DarwinClang::GetRuntimeLibType(
     const ArgList &Args) const {
   if (Arg* A = Args.getLastArg(options::OPT_rtlib_EQ)) {
     StringRef Value = A->getValue();
-    if (Value != "compiler-rt")
+    if (Value != "compiler-rt" && Value != "platform")
       getDriver().Diag(clang::diag::err_drv_unsupported_rtlib_for_platform)
           << Value << "darwin";
   }
@@ -2241,7 +2241,6 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
 
   DarwinEnvironmentKind Environment = OSTarget->getEnvironment();
   // Recognize iOS targets with an x86 architecture as the iOS simulator.
-  // FIXME: Remove this.
   if (Environment == NativeEnvironment && Platform != MacOS &&
       Platform != DriverKit && OSTarget->canInferSimulatorFromArch() &&
       getTriple().isX86())

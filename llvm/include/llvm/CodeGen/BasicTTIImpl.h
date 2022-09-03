@@ -902,6 +902,7 @@ public:
         // ShuffleVectorInst::isSingleSourceMask).
         any_of(Mask, [Limit](int I) { return I >= Limit; }))
       return Kind;
+    int Index;
     switch (Kind) {
     case TTI::SK_PermuteSingleSrc:
       if (ShuffleVectorInst::isReverseMask(Mask))
@@ -914,6 +915,8 @@ public:
         return TTI::SK_Select;
       if (ShuffleVectorInst::isTransposeMask(Mask))
         return TTI::SK_Transpose;
+      if (ShuffleVectorInst::isSpliceMask(Mask, Index))
+        return TTI::SK_Splice;
       break;
     case TTI::SK_Select:
     case TTI::SK_Reverse:
@@ -1221,7 +1224,7 @@ public:
   InstructionCost
   getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
                   unsigned AddressSpace, TTI::TargetCostKind CostKind,
-                  TTI::OperandValueKind OpdInfo = TTI::OK_AnyValue,
+                  TTI::OperandValueInfo OpInfo = {TTI::OK_AnyValue, TTI::OP_None},
                   const Instruction *I = nullptr) {
     assert(!Src->isVoidTy() && "Invalid type");
     // Assume types, such as structs, are expensive.
