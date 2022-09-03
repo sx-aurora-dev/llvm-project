@@ -61,12 +61,6 @@ struct ModuleID {
   }
 };
 
-struct ModuleIDHasher {
-  std::size_t operator()(const ModuleID &MID) const {
-    return llvm::hash_combine(MID.ModuleName, MID.ContextHash);
-  }
-};
-
 /// An output from a module compilation, such as the path of the module file.
 enum class ModuleOutputKind {
   /// The module file (.pcm). Required.
@@ -119,11 +113,9 @@ struct ModuleDeps {
   // the primary TU.
   bool ImportedByMainFile = false;
 
-  /// Compiler invocation that can be used to build this module (without paths).
-  CompilerInvocation BuildInvocation;
-
-  /// Gets the canonical command line suitable for passing to clang.
-  std::vector<std::string> getCanonicalCommandLine() const;
+  /// Compiler invocation that can be used to build this module. Does not
+  /// include argv[0].
+  std::vector<std::string> BuildArguments;
 };
 
 class ModuleDepCollector;
@@ -155,8 +147,6 @@ private:
   ModuleDepCollector &MDC;
   /// Working set of direct modular dependencies.
   llvm::SetVector<const Module *> DirectModularDeps;
-  /// Working set of direct modular dependencies that have already been built.
-  llvm::SetVector<const Module *> DirectPrebuiltModularDeps;
 
   void handleImport(const Module *Imported);
 
@@ -191,11 +181,15 @@ class ModuleDepCollector final : public DependencyCollector {
 public:
   ModuleDepCollector(std::unique_ptr<DependencyOutputOptions> Opts,
                      CompilerInstance &ScanInstance, DependencyConsumer &C,
-                     CompilerInvocation &&OriginalCI, bool OptimizeArgs,
+                     CompilerInvocation OriginalCI, bool OptimizeArgs,
                      bool EagerLoadModules);
 
   void attachToPreprocessor(Preprocessor &PP) override;
   void attachToASTReader(ASTReader &R) override;
+
+  /// Apply any changes implied by the discovered dependencies to the given
+  /// invocation, (e.g. disable implicit modules, add explicit module paths).
+  void applyDiscoveredDependencies(CompilerInvocation &CI);
 
 private:
   friend ModuleDepCollectorPP;
@@ -213,6 +207,11 @@ private:
   std::vector<std::string> FileDeps;
   /// Direct and transitive modular dependencies of the main source file.
   llvm::MapVector<const Module *, std::unique_ptr<ModuleDeps>> ModularDeps;
+  /// Secondary mapping for \c ModularDeps allowing lookup by ModuleID without
+  /// a preprocessor. Storage owned by \c ModularDeps.
+  llvm::DenseMap<ModuleID, ModuleDeps *> ModuleDepsByID;
+  /// Direct modular dependencies that have already been built.
+  llvm::MapVector<const Module *, PrebuiltModuleDep> DirectPrebuiltModularDeps;
   /// Options that control the dependency output generation.
   std::unique_ptr<DependencyOutputOptions> Opts;
   /// The original Clang invocation passed to dependency scanner.
@@ -237,12 +236,39 @@ private:
       const ModuleDeps &Deps,
       llvm::function_ref<void(CompilerInvocation &)> Optimize) const;
 
+  /// Add module map files to the invocation, if needed.
+  void addModuleMapFiles(CompilerInvocation &CI,
+                         ArrayRef<ModuleID> ClangModuleDeps) const;
+  /// Add module files (pcm) to the invocation, if needed.
+  void addModuleFiles(CompilerInvocation &CI,
+                      ArrayRef<ModuleID> ClangModuleDeps) const;
+
   /// Add paths that require looking up outputs to the given dependencies.
-  void addOutputPaths(ModuleDeps &Deps);
+  void addOutputPaths(CompilerInvocation &CI, ModuleDeps &Deps);
+
+  /// Compute the context hash for \p Deps, and create the mapping
+  /// \c ModuleDepsByID[Deps.ID] = &Deps.
+  void associateWithContextHash(const CompilerInvocation &CI, ModuleDeps &Deps);
 };
 
 } // end namespace dependencies
 } // end namespace tooling
 } // end namespace clang
+
+namespace llvm {
+template <> struct DenseMapInfo<clang::tooling::dependencies::ModuleID> {
+  using ModuleID = clang::tooling::dependencies::ModuleID;
+  static inline ModuleID getEmptyKey() { return ModuleID{"", ""}; }
+  static inline ModuleID getTombstoneKey() {
+    return ModuleID{"~", "~"}; // ~ is not a valid module name or context hash
+  }
+  static unsigned getHashValue(const ModuleID &ID) {
+    return hash_combine(ID.ModuleName, ID.ContextHash);
+  }
+  static bool isEqual(const ModuleID &LHS, const ModuleID &RHS) {
+    return LHS == RHS;
+  }
+};
+} // namespace llvm
 
 #endif // LLVM_CLANG_TOOLING_DEPENDENCYSCANNING_MODULEDEPCOLLECTOR_H

@@ -965,6 +965,7 @@ private:
   SDValue WidenVecRes_STRICT_FSETCC(SDNode* N);
   SDValue WidenVecRes_UNDEF(SDNode *N);
   SDValue WidenVecRes_VECTOR_SHUFFLE(ShuffleVectorSDNode *N);
+  SDValue WidenVecRes_VECTOR_REVERSE(SDNode *N);
 
   SDValue WidenVecRes_Ternary(SDNode *N);
   SDValue WidenVecRes_Binary(SDNode *N);

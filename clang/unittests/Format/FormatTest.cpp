@@ -1860,6 +1860,69 @@ TEST_F(FormatTest, FormatShortBracedStatements) {
                "  f();\n"
                "}",
                AllowSimpleBracedStatements);
+
+  FormatStyle Style = getLLVMStyle();
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterControlStatement = FormatStyle::BWACS_Always;
+
+  verifyFormat("while (i > 0)\n"
+               "{\n"
+               "  --i;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  ++b;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = 1;\n"
+               "} else\n"
+               "{\n"
+               "  b = 0;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = 1;\n"
+               "} else if (c)\n"
+               "{\n"
+               "  b = 2;\n"
+               "} else\n"
+               "{\n"
+               "  b = 0;\n"
+               "}",
+               Style);
+
+  Style.BraceWrapping.BeforeElse = true;
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = 1;\n"
+               "}\n"
+               "else\n"
+               "{\n"
+               "  b = 0;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a)\n"
+               "{\n"
+               "  b = 1;\n"
+               "}\n"
+               "else if (c)\n"
+               "{\n"
+               "  b = 2;\n"
+               "}\n"
+               "else\n"
+               "{\n"
+               "  b = 0;\n"
+               "}",
+               Style);
 }
 
 TEST_F(FormatTest, UnderstandsMacros) {
@@ -10534,6 +10597,11 @@ TEST_F(FormatTest, UnderstandsUsesOfStarAndAmp) {
   verifyFormat("class {\n"
                "} &&ptr = {};",
                Style);
+
+  Style.PointerAlignment = FormatStyle::PAS_Left;
+  verifyFormat("delete[] *ptr;", Style);
+  verifyFormat("delete[] **ptr;", Style);
+  verifyFormat("delete[] *(ptr);", Style);
 
   verifyIndependentOfContext("MACRO(int *i);");
   verifyIndependentOfContext("MACRO(auto *a);");
@@ -25201,6 +25269,13 @@ TEST_F(FormatTest, InsertBraces) {
                "  f();",
                Style);
 
+  verifyFormat("if (a) { //\n"
+               "  b = 1;\n"
+               "}",
+               "if (a) //\n"
+               "  b = 1;",
+               Style);
+
   verifyFormat("if (a) { // comment\n"
                "  // comment\n"
                "  f();\n"
@@ -25265,6 +25340,17 @@ TEST_F(FormatTest, InsertBraces) {
                "}",
                "if (a + b > c)\n"
                "  f();",
+               Style);
+
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterControlStatement = FormatStyle::BWACS_Always;
+
+  verifyFormat("if (a) //\n"
+               "{\n"
+               "  b = 1;\n"
+               "}",
+               "if (a) //\n"
+               "  b = 1;",
                Style);
 }
 
@@ -25815,6 +25901,14 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                Style);
 
+  verifyFormat("if (a) // comment\n"
+               "  b = 1;",
+               "if (a) // comment\n"
+               "{\n"
+               "  b = 1;\n"
+               "}",
+               Style);
+
   verifyFormat("if (a) {\n"
                "Label:\n"
                "}",
@@ -26002,6 +26096,14 @@ TEST_F(FormatTest, RemoveBraces) {
                "}",
                "if (a) { //\n"
                "  foo();\n"
+               "}",
+               Style);
+
+  verifyFormat("if (a) // comment\n"
+               "  b = 1;",
+               "if (a) // comment\n"
+               "{\n"
+               "  b = 1;\n"
                "}",
                Style);
 

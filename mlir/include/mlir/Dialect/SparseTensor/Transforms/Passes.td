@@ -11,7 +11,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def Sparsification : Pass<"sparsification", "ModuleOp"> {
+def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
   let summary = "Automatically generate sparse tensor code from sparse tensor types";
   let description = [{
     A pass that implements the core functionality of a **sparse compiler**.
@@ -76,17 +76,17 @@ def Sparsification : Pass<"sparsification", "ModuleOp"> {
   ];
 }
 
-def SparseTensorConversion : Pass<"sparse-tensor-conversion", "ModuleOp"> {
-  let summary = "Apply conversion rules to sparse tensor primitives and types";
+def SparseTensorConversionPass : Pass<"sparse-tensor-conversion", "ModuleOp"> {
+  let summary = "Convert sparse tensors and primitives to library calls";
   let description = [{
-    A pass that converts sparse tensor primitives to calls into a runtime
-    support library. All sparse tensor types are converted into opaque
-    pointers to the underlying sparse storage schemes.
+    A pass that converts sparse tensor primitives into calls into a runtime
+    support library. Sparse tensor types are converted into opaque pointers
+    to the underlying sparse storage schemes.
 
-    Note that this is a current implementation choice to keep the conversion
-    relatively simple. In principle, these primitives could also be
-    converted to actual elaborate IR code that implements the primitives
-    on the selected sparse tensor storage schemes.
+    The use of opaque pointers together with runtime support library keeps
+    the conversion relatively simple, but at the expense of IR opacity,
+    which obscures opportunities for subsequent optimization of the IR.
+    An alternative is provided by the SparseTensorCodegen pass.
 
     Example of the conversion:
 
@@ -121,5 +121,68 @@ def SparseTensorConversion : Pass<"sparse-tensor-conversion", "ModuleOp"> {
            "Set the strategy for sparse-to-sparse conversion">,
   ];
 }
+
+def SparseTensorCodegen : Pass<"sparse-tensor-codegen", "ModuleOp"> {
+  let summary = "Convert sparse tensors and primitives to actual code";
+  let description = [{
+    A pass that converts sparse tensor types and primitives to actual
+    compiler visible buffers and compiler IR that implements these
+    primitives on the selected sparse tensor storage schemes.
+
+    This pass provides an alternative to the SparseTensorConversion pass,
+    eliminating the dependence on a runtime support library, and providing
+    much more opportunities for subsequent compiler optimization of the
+    generated code.
+
+    Example of the conversion:
+
+    ```mlir
+    TBD
+    ```
+  }];
+  let constructor = "mlir::createSparseTensorCodegenPass()";
+  let dependentDialects = [
+    "arith::ArithmeticDialect",
+    "bufferization::BufferizationDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+}
+
+def SparseTensorStorageExpansion : Pass<"sparse-tensor-storage-expansion", "ModuleOp"> {
+  let summary = "Expand compounded sparse tensor storage into individual SSA values";
+  let description = [{
+    A pass that expands sparse tensor storage (aggregated by tuple) into
+    individual SSA values. It also lowers sparse tensor storage operations,
+    e.g., sparse_tensor.storage_get and sparse_tensor.storage_set.
+
+    Example of the conversion:
+
+    ```mlir
+    Before:
+      func.func @sparse_storage_set(%arg0: tuple<memref<?xf64>,
+                                                 memref<?xf64>,
+                                                 f64>)
+                                        -> tuple<memref<?xf64>,
+                                                 memref<?xf64>,
+                                                 f64> {
+        return %arg0 : tuple<memref<?xf64>, memref<?xf64>, f64>
+      }
+    After:
+      func.func @sparse_storage_set(%arg0: memref<?xf64>,
+                                    %arg1: memref<?xf64>,
+                                    %arg2: f64)
+                                    -> (memref<?xf64>, memref<?xf64>, f64) {
+        return %arg0, %arg1, %arg2 : memref<?xf64>, memref<?xf64>, f64
+      }
+    ```
+  }];
+  let constructor = "mlir::createSparseTensorStorageExpansionPass()";
+  let dependentDialects = [
+    "sparse_tensor::SparseTensorDialect",
+  ];
+}
+
 
 #endif // MLIR_DIALECT_SPARSETENSOR_TRANSFORMS_PASSES

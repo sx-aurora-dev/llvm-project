@@ -9,8 +9,8 @@
 #ifndef LLVM_LIBC_SRC_SUPPORT_FPUTIL_X86_64_LONG_DOUBLE_BITS_H
 #define LLVM_LIBC_SRC_SUPPORT_FPUTIL_X86_64_LONG_DOUBLE_BITS_H
 
-#include "src/__support/CPP/UInt128.h"
 #include "src/__support/CPP/bit.h"
+#include "src/__support/UInt128.h"
 #include "src/__support/architectures.h"
 
 #if !defined(LLVM_LIBC_ARCH_X86)
@@ -183,6 +183,15 @@ template <> struct FPBits<long double> {
     bits.set_implicit_bit(1);
     bits.set_mantissa(v);
     return bits;
+  }
+
+  inline static FPBits<long double>
+  create_value(bool sign, UIntType unbiased_exp, UIntType mantissa) {
+    FPBits<long double> result;
+    result.set_sign(sign);
+    result.set_unbiased_exponent(unbiased_exp);
+    result.set_mantissa(mantissa);
+    return result;
   }
 };
 

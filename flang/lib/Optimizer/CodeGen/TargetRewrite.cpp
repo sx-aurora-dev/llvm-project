@@ -14,12 +14,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "flang/Optimizer/CodeGen/CodeGen.h"
+
 #include "Target.h"
 #include "flang/Optimizer/Builder/Character.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/Todo.h"
-#include "flang/Optimizer/CodeGen/CodeGen.h"
 #include "flang/Optimizer/Dialect/FIRDialect.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/FIROpsSupport.h"
@@ -29,6 +29,11 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+
+namespace fir {
+#define GEN_PASS_DEF_TARGETREWRITEPASS
+#include "flang/Optimizer/CodeGen/CGPasses.h.inc"
+} // namespace fir
 
 #define DEBUG_TYPE "flang-target-rewrite"
 
@@ -66,7 +71,7 @@ struct FixupTy {
 /// generation that traverses the FIR and modifies types and operations to a
 /// form that is appropriate for the specific target. LLVM IR has specific
 /// idioms that are used for distinct target processor and ABI combinations.
-class TargetRewrite : public fir::TargetRewriteBase<TargetRewrite> {
+class TargetRewrite : public fir::impl::TargetRewritePassBase<TargetRewrite> {
 public:
   TargetRewrite(const fir::TargetRewriteOptions &options) {
     noCharacterConversion = options.noCharacterConversion;
@@ -434,7 +439,7 @@ public:
     return mlir::success();
   }
 
-  /// If the signature does not need any special target-specific converions,
+  /// If the signature does not need any special target-specific conversions,
   /// then it is considered portable for any target, and this function will
   /// return `true`. Otherwise, the signature is not portable and `false` is
   /// returned.
@@ -756,7 +761,7 @@ public:
   }
 
   inline bool functionArgIsSRet(unsigned index, mlir::func::FuncOp func) {
-    if (auto attr = func.getArgAttrOfType<mlir::UnitAttr>(index, "llvm.sret"))
+    if (auto attr = func.getArgAttrOfType<mlir::TypeAttr>(index, "llvm.sret"))
       return true;
     return false;
   }
@@ -782,16 +787,22 @@ public:
       if (auto align = attr.getAlignment())
         fixups.emplace_back(
             FixupTy::Codes::ReturnAsStore, argNo, [=](mlir::func::FuncOp func) {
-              func.setArgAttr(argNo, "llvm.sret", rewriter->getUnitAttr());
+              auto elemType = fir::dyn_cast_ptrOrBoxEleTy(
+                  func.getFunctionType().getInput(argNo));
+              func.setArgAttr(argNo, "llvm.sret",
+                              mlir::TypeAttr::get(elemType));
               func.setArgAttr(argNo, "llvm.align",
                               rewriter->getIntegerAttr(
                                   rewriter->getIntegerType(32), align));
             });
       else
-        fixups.emplace_back(
-            FixupTy::Codes::ReturnAsStore, argNo, [=](mlir::func::FuncOp func) {
-              func.setArgAttr(argNo, "llvm.sret", rewriter->getUnitAttr());
-            });
+        fixups.emplace_back(FixupTy::Codes::ReturnAsStore, argNo,
+                            [=](mlir::func::FuncOp func) {
+                              auto elemType = fir::dyn_cast_ptrOrBoxEleTy(
+                                  func.getFunctionType().getInput(argNo));
+                              func.setArgAttr(argNo, "llvm.sret",
+                                              mlir::TypeAttr::get(elemType));
+                            });
       newInTys.push_back(argTy);
       return;
     } else {
@@ -833,7 +844,10 @@ public:
           fixups.emplace_back(
               FixupTy::Codes::ArgumentAsLoad, argNo,
               [=](mlir::func::FuncOp func) {
-                func.setArgAttr(argNo, "llvm.byval", rewriter->getUnitAttr());
+                auto elemType = fir::dyn_cast_ptrOrBoxEleTy(
+                    func.getFunctionType().getInput(argNo));
+                func.setArgAttr(argNo, "llvm.byval",
+                                mlir::TypeAttr::get(elemType));
                 func.setArgAttr(argNo, "llvm.align",
                                 rewriter->getIntegerAttr(
                                     rewriter->getIntegerType(32), align));
@@ -841,8 +855,10 @@ public:
         else
           fixups.emplace_back(FixupTy::Codes::ArgumentAsLoad, newInTys.size(),
                               [=](mlir::func::FuncOp func) {
+                                auto elemType = fir::dyn_cast_ptrOrBoxEleTy(
+                                    func.getFunctionType().getInput(argNo));
                                 func.setArgAttr(argNo, "llvm.byval",
-                                                rewriter->getUnitAttr());
+                                                mlir::TypeAttr::get(elemType));
                               });
       } else {
         if (auto align = attr.getAlignment())

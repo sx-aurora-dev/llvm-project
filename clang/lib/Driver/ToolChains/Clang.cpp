@@ -2394,10 +2394,8 @@ void Clang::AddWebAssemblyTargetArgs(const ArgList &Args,
                                      ArgStringList &CmdArgs) const {
   // Default to "hidden" visibility.
   if (!Args.hasArg(options::OPT_fvisibility_EQ,
-                   options::OPT_fvisibility_ms_compat)) {
-    CmdArgs.push_back("-fvisibility");
-    CmdArgs.push_back("hidden");
-  }
+                   options::OPT_fvisibility_ms_compat))
+    CmdArgs.push_back("-fvisibility=hidden");
 }
 
 void Clang::AddVETargetArgs(const ArgList &Args, ArgStringList &CmdArgs) const {
@@ -2587,6 +2585,13 @@ static void CollectArgsForIntegratedAssembler(Compilation &C,
 
       switch (C.getDefaultToolChain().getArch()) {
       default:
+        break;
+      case llvm::Triple::wasm32:
+      case llvm::Triple::wasm64:
+        if (Value == "--no-type-check") {
+          CmdArgs.push_back("-mno-type-check");
+          continue;
+        }
         break;
       case llvm::Triple::thumb:
       case llvm::Triple::thumbeb:
@@ -3528,7 +3533,6 @@ static void RenderHLSLOptions(const ArgList &Args, ArgStringList &CmdArgs,
   // Add the default headers if dxc_no_stdinc is not set.
   if (!Args.hasArg(options::OPT_dxc_no_stdinc))
     CmdArgs.push_back("-finclude-default-header");
-  CmdArgs.push_back("-fallow-half-arguments-and-returns");
 }
 
 static void RenderARCMigrateToolOptions(const Driver &D, const ArgList &Args,
@@ -5429,6 +5433,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CM == "tiny") {
       if (Triple.isOSAIX() && CM == "medium")
         CmdArgs.push_back("-mcmodel=large");
+      else if (Triple.isAArch64() && (CM == "kernel" || CM == "medium"))
+        D.Diag(diag::err_drv_invalid_argument_to_option)
+            << CM << A->getOption().getName();
       else
         A->render(Args, CmdArgs);
     } else {
@@ -5981,21 +5988,17 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (const Arg *A = Args.getLastArg(options::OPT_fvisibility_EQ,
                                      options::OPT_fvisibility_ms_compat)) {
     if (A->getOption().matches(options::OPT_fvisibility_EQ)) {
-      CmdArgs.push_back("-fvisibility");
-      CmdArgs.push_back(A->getValue());
+      A->render(Args, CmdArgs);
     } else {
       assert(A->getOption().matches(options::OPT_fvisibility_ms_compat));
-      CmdArgs.push_back("-fvisibility");
-      CmdArgs.push_back("hidden");
-      CmdArgs.push_back("-ftype-visibility");
-      CmdArgs.push_back("default");
+      CmdArgs.push_back("-fvisibility=hidden");
+      CmdArgs.push_back("-ftype-visibility=default");
     }
   } else if (IsOpenMPDevice) {
     // When compiling for the OpenMP device we want protected visibility by
     // default. This prevents the device from accidentally preempting code on
     // the host, makes the system more robust, and improves performance.
-    CmdArgs.push_back("-fvisibility");
-    CmdArgs.push_back("protected");
+    CmdArgs.push_back("-fvisibility=protected");
   }
 
   if (!RawTriple.isPS4())
@@ -8309,36 +8312,6 @@ void OffloadBundler::ConstructJobMultipleOutputs(
       JA, *this, ResponseFileSupport::None(),
       TCArgs.MakeArgString(getToolChain().GetProgramPath(getShortName())),
       CmdArgs, None, Outputs));
-}
-
-void OffloadWrapper::ConstructJob(Compilation &C, const JobAction &JA,
-                                  const InputInfo &Output,
-                                  const InputInfoList &Inputs,
-                                  const ArgList &Args,
-                                  const char *LinkingOutput) const {
-  ArgStringList CmdArgs;
-
-  const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
-
-  // Add the "effective" target triple.
-  CmdArgs.push_back("-target");
-  CmdArgs.push_back(Args.MakeArgString(Triple.getTriple()));
-
-  // Add the output file name.
-  assert(Output.isFilename() && "Invalid output.");
-  CmdArgs.push_back("-o");
-  CmdArgs.push_back(Output.getFilename());
-
-  // Add inputs.
-  for (const InputInfo &I : Inputs) {
-    assert(I.isFilename() && "Invalid input.");
-    CmdArgs.push_back(I.getFilename());
-  }
-
-  C.addCommand(std::make_unique<Command>(
-      JA, *this, ResponseFileSupport::None(),
-      Args.MakeArgString(getToolChain().GetProgramPath(getShortName())),
-      CmdArgs, Inputs, Output));
 }
 
 void OffloadPackager::ConstructJob(Compilation &C, const JobAction &JA,

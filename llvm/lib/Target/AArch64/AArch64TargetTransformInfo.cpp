@@ -383,6 +383,10 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
     break;
   }
   case Intrinsic::ctpop: {
+    if (!ST->hasNEON()) {
+      // 32-bit or 64-bit ctpop without NEON is 12 instructions.
+      return getTypeLegalizationCost(RetTy).first * 12;
+    }
     static const CostTblEntry CtpopCostTbl[] = {
         {ISD::CTPOP, MVT::v2i64, 4},
         {ISD::CTPOP, MVT::v4i32, 3},
@@ -1602,10 +1606,26 @@ InstructionCost AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst,
 
   static const TypeConversionCostTblEntry
   ConversionTbl[] = {
-    { ISD::TRUNCATE, MVT::v4i16, MVT::v4i32,  1 },
-    { ISD::TRUNCATE, MVT::v4i32, MVT::v4i64,  0 },
-    { ISD::TRUNCATE, MVT::v8i8,  MVT::v8i32,  3 },
-    { ISD::TRUNCATE, MVT::v16i8, MVT::v16i32, 6 },
+    { ISD::TRUNCATE, MVT::v2i8,   MVT::v2i64,  1},  // xtn
+    { ISD::TRUNCATE, MVT::v2i16,  MVT::v2i64,  1},  // xtn
+    { ISD::TRUNCATE, MVT::v2i32,  MVT::v2i64,  1},  // xtn
+    { ISD::TRUNCATE, MVT::v4i8,   MVT::v4i32,  1},  // xtn
+    { ISD::TRUNCATE, MVT::v4i8,   MVT::v4i64,  3},  // 2 xtn + 1 uzp1
+    { ISD::TRUNCATE, MVT::v4i16,  MVT::v4i32,  1},  // xtn
+    { ISD::TRUNCATE, MVT::v4i16,  MVT::v4i64,  2},  // 1 uzp1 + 1 xtn
+    { ISD::TRUNCATE, MVT::v4i32,  MVT::v4i64,  1},  // 1 uzp1
+    { ISD::TRUNCATE, MVT::v8i8,   MVT::v8i16,  1},  // 1 xtn
+    { ISD::TRUNCATE, MVT::v8i8,   MVT::v8i32,  2},  // 1 uzp1 + 1 xtn
+    { ISD::TRUNCATE, MVT::v8i8,   MVT::v8i64,  4},  // 3 x uzp1 + xtn
+    { ISD::TRUNCATE, MVT::v8i16,  MVT::v8i32,  1},  // 1 uzp1
+    { ISD::TRUNCATE, MVT::v8i16,  MVT::v8i64,  3},  // 3 x uzp1
+    { ISD::TRUNCATE, MVT::v8i32,  MVT::v8i64,  2},  // 2 x uzp1
+    { ISD::TRUNCATE, MVT::v16i8,  MVT::v16i16, 1},  // uzp1
+    { ISD::TRUNCATE, MVT::v16i8,  MVT::v16i32, 3},  // (2 + 1) x uzp1
+    { ISD::TRUNCATE, MVT::v16i8,  MVT::v16i64, 7},  // (4 + 2 + 1) x uzp1
+    { ISD::TRUNCATE, MVT::v16i16, MVT::v16i32, 2},  // 2 x uzp1
+    { ISD::TRUNCATE, MVT::v16i16, MVT::v16i64, 6},  // (4 + 2) x uzp1
+    { ISD::TRUNCATE, MVT::v16i32, MVT::v16i64, 4},  // 4 x uzp1
 
     // Truncations on nxvmiN
     { ISD::TRUNCATE, MVT::nxv2i1, MVT::nxv2i16, 1 },
@@ -2774,6 +2794,13 @@ InstructionCost AArch64TTIImpl::getSpliceCost(VectorType *Tp, int Index) {
       { TTI::SK_Splice, MVT::nxv4f32,  1 },
       { TTI::SK_Splice, MVT::nxv2f64,  1 },
   };
+
+  // The code-generator is currently not able to handle scalable vectors
+  // of <vscale x 1 x eltty> yet, so return an invalid cost to avoid selecting
+  // it. This change will be removed when code-generation for these types is
+  // sufficiently reliable.
+  if (Tp->getElementCount() == ElementCount::getScalable(1))
+    return InstructionCost::getInvalid();
 
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Tp);
   Type *LegalVTy = EVT(LT.second).getTypeForEVT(Tp->getContext());

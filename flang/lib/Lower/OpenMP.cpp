@@ -14,6 +14,7 @@
 #include "flang/Common/idioms.h"
 #include "flang/Lower/Bridge.h"
 #include "flang/Lower/ConvertExpr.h"
+#include "flang/Lower/ConvertVariable.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/StatementContext.h"
 #include "flang/Optimizer/Builder/BoxValue.h"
@@ -854,9 +855,26 @@ static int getOperationIdentity(llvm::StringRef reductionOpName,
 static Value getReductionInitValue(mlir::Location loc, mlir::Type type,
                                    llvm::StringRef reductionOpName,
                                    fir::FirOpBuilder &builder) {
+  assert(type.isIntOrIndexOrFloat() && "only integer and float types are currently supported");
+  if (type.isa<FloatType>())
+    return builder.create<mlir::arith::ConstantOp>(
+        loc, type,
+        builder.getFloatAttr(
+            type, (double)getOperationIdentity(reductionOpName, loc)));
+
   return builder.create<mlir::arith::ConstantOp>(
       loc, type,
       builder.getIntegerAttr(type, getOperationIdentity(reductionOpName, loc)));
+}
+
+template <typename FloatOp, typename IntegerOp>
+static Value getReductionOperation(fir::FirOpBuilder &builder, mlir::Type type,
+                                   mlir::Location loc, mlir::Value op1,
+                                   mlir::Value op2) {
+  assert(type.isIntOrIndexOrFloat() && "only integer and float types are currently supported");
+  if (type.isIntOrIndex())
+    return builder.create<IntegerOp>(loc, op1, op2);
+  return builder.create<FloatOp>(loc, op1, op2);
 }
 
 /// Creates an OpenMP reduction declaration and inserts it into the provided
@@ -890,19 +908,23 @@ static omp::ReductionDeclareOp createReductionDecl(
   mlir::Value op1 = decl.reductionRegion().front().getArgument(0);
   mlir::Value op2 = decl.reductionRegion().front().getArgument(1);
 
-  Value res;
+  Value reductionOp;
   switch (intrinsicOp) {
   case Fortran::parser::DefinedOperator::IntrinsicOperator::Add:
-    res = builder.create<mlir::arith::AddIOp>(loc, op1, op2);
+    reductionOp =
+        getReductionOperation<mlir::arith::AddFOp, mlir::arith::AddIOp>(
+            builder, type, loc, op1, op2);
     break;
   case Fortran::parser::DefinedOperator::IntrinsicOperator::Multiply:
-    res = builder.create<mlir::arith::MulIOp>(loc, op1, op2);
+    reductionOp =
+        getReductionOperation<mlir::arith::MulFOp, mlir::arith::MulIOp>(
+            builder, type, loc, op1, op2);
     break;
   default:
     TODO(loc, "Reduction of some intrinsic operators is not supported");
   }
 
-  builder.create<omp::YieldOp>(loc, res);
+  builder.create<omp::YieldOp>(loc, reductionOp);
   return decl;
 }
 
@@ -1105,7 +1127,7 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
               mlir::Type redType =
                   symVal.getType().cast<fir::ReferenceType>().getEleTy();
               reductionVars.push_back(symVal);
-              if (redType.isIntOrIndex()) {
+              if (redType.isIntOrIndexOrFloat()) {
                 decl = createReductionDecl(
                     firOpBuilder, getReductionName(intrinsicOp, redType),
                     intrinsicOp, redType, currentLocation);
@@ -1666,6 +1688,39 @@ void Fortran::lower::genThreadprivateOp(
     // Generate the threadprivate value for the common block member.
     symThreadprivateValue =
         genCommonBlockMember(converter, sym, commonThreadprivateValue);
+  } else if (!var.isGlobal()) {
+    // Non-global variable which can be in threadprivate directive must be one
+    // variable in main program, and it has implicit SAVE attribute. Take it as
+    // with SAVE attribute, so to create GlobalOp for it to simplify the
+    // translation to LLVM IR.
+    mlir::Type ty = converter.genType(sym);
+    std::string globalName = converter.mangleName(sym);
+    mlir::StringAttr linkage = firOpBuilder.createInternalLinkage();
+    fir::GlobalOp global =
+        firOpBuilder.createGlobal(currentLocation, ty, globalName, linkage);
+
+    // Create default initialization for non-character scalar.
+    if (Fortran::semantics::IsAllocatableOrPointer(sym)) {
+      mlir::Type baseAddrType = ty.dyn_cast<fir::BoxType>().getEleTy();
+      Fortran::lower::createGlobalInitialization(
+          firOpBuilder, global, [&](fir::FirOpBuilder &b) {
+            mlir::Value nullAddr =
+                b.createNullConstant(currentLocation, baseAddrType);
+            mlir::Value box =
+                b.create<fir::EmboxOp>(currentLocation, ty, nullAddr);
+            b.create<fir::HasValueOp>(currentLocation, box);
+          });
+    } else {
+      Fortran::lower::createGlobalInitialization(
+          firOpBuilder, global, [&](fir::FirOpBuilder &b) {
+            mlir::Value undef = b.create<fir::UndefOp>(currentLocation, ty);
+            b.create<fir::HasValueOp>(currentLocation, undef);
+          });
+    }
+    mlir::Value symValue = firOpBuilder.create<fir::AddrOfOp>(
+        currentLocation, global.resultType(), global.getSymbol());
+    symThreadprivateValue = firOpBuilder.create<mlir::omp::ThreadprivateOp>(
+        currentLocation, symValue.getType(), symValue);
   } else {
     mlir::Value symValue = converter.getSymbolAddress(sym);
     symThreadprivateValue = firOpBuilder.create<mlir::omp::ThreadprivateOp>(
@@ -1751,7 +1806,7 @@ void Fortran::lower::genOpenMPReduction(
               mlir::Value reductionVal = converter.getSymbolAddress(*symbol);
               mlir::Type reductionType =
                   reductionVal.getType().cast<fir::ReferenceType>().getEleTy();
-              if (!reductionType.isIntOrIndex())
+              if (!reductionType.isIntOrIndexOrFloat())
                 continue;
 
               for (mlir::OpOperand &reductionValUse : reductionVal.getUses()) {

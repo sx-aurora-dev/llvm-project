@@ -144,7 +144,10 @@ if ("flang" IN_LIST LLVM_ENABLE_PROJECTS)
 endif()
 
 # Select the runtimes to build
-set(LLVM_DEFAULT_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind;openmp")
+#
+# As we migrate runtimes to using the bootstrapping build, the set of default runtimes
+# should grow as we remove those runtimes from LLVM_ENABLE_PROJECTS above.
+set(LLVM_DEFAULT_RUNTIMES "libcxx;libcxxabi;libunwind")
 set(LLVM_SUPPORTED_RUNTIMES "libc;libunwind;libcxxabi;pstl;libcxx;compiler-rt;openmp;llvm-libgcc")
 set(LLVM_ENABLE_RUNTIMES "" CACHE STRING
   "Semicolon-separated list of runtimes to build, or \"all\" (${LLVM_DEFAULT_RUNTIMES}). Supported runtimes are ${LLVM_SUPPORTED_RUNTIMES}.")
@@ -483,6 +486,8 @@ endif()
 set(LLVM_ENABLE_ZLIB "ON" CACHE STRING "Use zlib for compression/decompression if available. Can be ON, OFF, or FORCE_ON")
 
 set(LLVM_ENABLE_ZSTD "ON" CACHE STRING "Use zstd for compression/decompression if available. Can be ON, OFF, or FORCE_ON")
+
+set(LLVM_USE_STATIC_ZSTD FALSE CACHE BOOL "Use static version of zstd. Can be TRUE, FALSE")
 
 set(LLVM_ENABLE_CURL "OFF" CACHE STRING "Use libcurl for the HTTP client if available. Can be ON, OFF, or FORCE_ON")
 
@@ -936,24 +941,26 @@ configure_file(
   )
 
 # They are not referenced. See set_output_directory().
-set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${LLVM_TOOLS_BINARY_DIR} )
-set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LLVM_LIBRARY_DIR} )
-set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${LLVM_LIBRARY_DIR} )
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/bin )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX} )
+set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX} )
 
 if(LLVM_INCLUDE_TESTS)
   include(GetErrcMessages)
   get_errc_messages(LLVM_LIT_ERRC_MESSAGES)
 endif()
 
-# For up-to-date instructions for installing the Tensorflow dependency, refer to
+# For up-to-date instructions for installing the TFLite dependency, refer to
 # the bot setup script: https://github.com/google/ml-compiler-opt/blob/main/buildbot/buildbot_init.sh
-# In this case, the latest C API library is available for download from
-# https://www.tensorflow.org/install/lang_c.
-# We will expose the conditional compilation variable,
-# LLVM_HAVE_TF_API, through llvm-config.h, so that a user of the LLVM library may
-# also leverage the dependency.
 set(TENSORFLOW_C_LIB_PATH "" CACHE PATH "Path to TensorFlow C library install")
-if (TENSORFLOW_C_LIB_PATH)
+set(LLVM_HAVE_TFLITE "" CACHE BOOL "Use tflite")
+if (LLVM_HAVE_TFLITE)
+  find_package(protobuf REQUIRED)
+  find_package(tensorflow-lite REQUIRED)
+  set(LLVM_HAVE_TF_API "ON" CACHE BOOL "Full Tensorflow API available")
+  set(LLVM_PROTOBUF_OUT_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/protobuf_gen)
+  include_directories(${LLVM_PROTOBUF_OUT_DIR})
+elseif (TENSORFLOW_C_LIB_PATH)
   find_library(tensorflow_c_api tensorflow PATHS ${TENSORFLOW_C_LIB_PATH}/lib NO_DEFAULT_PATH REQUIRED)
   # Currently, the protobuf headers are distributed with the pip package that corresponds to the version
   # of the C API library.
@@ -990,7 +997,13 @@ if (NOT TENSORFLOW_AOT_PATH STREQUAL "")
   set(TENSORFLOW_AOT_COMPILER
     "${TENSORFLOW_AOT_PATH}/../../../../bin/saved_model_cli"
     CACHE PATH "Path to the Tensorflow AOT compiler")
-  include_directories(${TENSORFLOW_AOT_PATH}/include)
+  # This needs to happen to avoid clashing protobuf codegen when building both AOT and development mode.
+  # We plan to replace protobuf with a simpler alternative, so this will go away.
+  file(COPY ${TENSORFLOW_AOT_PATH}/include DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/tensorflow
+    NO_SOURCE_PERMISSIONS
+    PATTERN "google/*" EXCLUDE
+    PATTERN "*.pb.h" EXCLUDE) 
+  include_directories(${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/tensorflow/include)
   add_subdirectory(${TENSORFLOW_AOT_PATH}/xla_aot_runtime_src
     ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/tf_runtime)
   install(TARGETS tf_xla_runtime EXPORT LLVMExports

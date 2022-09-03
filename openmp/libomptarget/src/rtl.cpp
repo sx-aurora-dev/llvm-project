@@ -39,9 +39,7 @@ static const char *RTLNames[] = {
 
 PluginManager *PM;
 
-#if OMPTARGET_PROFILE_ENABLED
 static char *ProfileTraceFile = nullptr;
-#endif
 
 __attribute__((constructor(101))) void init() {
   DP("Init target library!\n");
@@ -60,12 +58,10 @@ __attribute__((constructor(101))) void init() {
 
   PM = new PluginManager(UseEventsForAtomicTransfers);
 
-#ifdef OMPTARGET_PROFILE_ENABLED
   ProfileTraceFile = getenv("LIBOMPTARGET_PROFILE");
   // TODO: add a configuration option for time granularity
   if (ProfileTraceFile)
     timeTraceProfilerInitialize(500 /* us */, "libomptarget");
-#endif
 }
 
 __attribute__((destructor(101))) void deinit() {
@@ -89,7 +85,6 @@ __attribute__((destructor(101))) void deinit() {
 
   delete PM;
 
-#ifdef OMPTARGET_PROFILE_ENABLED
   if (ProfileTraceFile) {
     // TODO: add env var for file output
     if (auto E = timeTraceProfilerWrite(ProfileTraceFile, "-"))
@@ -97,7 +92,6 @@ __attribute__((destructor(101))) void deinit() {
 
     timeTraceProfilerCleanup();
   }
-#endif
 }
 
 void RTLsTy::loadRTLs() {
@@ -480,6 +474,8 @@ void RTLsTy::registerLib(__tgt_bin_desc *Desc) {
       DP("Registering image " DPxMOD " with RTL %s!\n", DPxPTR(Img->ImageStart),
          R.RTLName.c_str());
       registerImageIntoTranslationTable(TransTable, R, Img);
+      R.UsedImages.insert(Img);
+
       PM->TrlTblMtx.unlock();
       FoundRTL = &R;
 
@@ -507,7 +503,6 @@ void RTLsTy::unregisterLib(__tgt_bin_desc *Desc) {
   for (auto &ImageAndInfo : PM->Images) {
     // Obtain the image and information that was previously extracted.
     __tgt_device_image *Img = &ImageAndInfo.first;
-    __tgt_image_info *Info = &ImageAndInfo.second;
 
     RTLInfoTy *FoundRTL = NULL;
 
@@ -517,20 +512,9 @@ void RTLsTy::unregisterLib(__tgt_bin_desc *Desc) {
 
       assert(R->IsUsed && "Expecting used RTLs.");
 
-      if (R->is_valid_binary_info) {
-        if (!R->is_valid_binary_info(Img, Info)) {
-          DP("Image " DPxMOD " is NOT compatible with RTL %s!\n",
-             DPxPTR(Img->ImageStart), R->RTLName.c_str());
-          continue;
-        }
-      } else if (!R->is_valid_binary(Img)) {
-        DP("Image " DPxMOD " is NOT compatible with RTL %s!\n",
-           DPxPTR(Img->ImageStart), R->RTLName.c_str());
+      // Ensure that we do not use any unused images associated with this RTL.
+      if (!R->UsedImages.contains(Img))
         continue;
-      }
-
-      DP("Image " DPxMOD " is compatible with RTL " DPxMOD "!\n",
-         DPxPTR(Img->ImageStart), DPxPTR(R->LibraryHandler.get()));
 
       FoundRTL = R;
 
