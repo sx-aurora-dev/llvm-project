@@ -87,6 +87,11 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "ptrauth operand bundle id drifted!");
   (void)PtrauthEntry;
 
+  auto *KCFIEntry = pImpl->getOrInsertBundleTag("kcfi");
+  assert(KCFIEntry->second == LLVMContext::OB_kcfi &&
+         "kcfi operand bundle id drifted!");
+  (void)KCFIEntry;
+
   auto *CFPRoundEntry = pImpl->getOrInsertBundleTag("cfp-round");
   assert(CFPRoundEntry->second == LLVMContext::OB_cfp_round &&
          "cfp-round operand bundle id drifted!");

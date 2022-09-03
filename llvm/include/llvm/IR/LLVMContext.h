@@ -94,8 +94,9 @@ public:
     OB_gc_live = 5,                // "gc-live"
     OB_clang_arc_attachedcall = 6, // "clang.arc.attachedcall"
     OB_ptrauth = 7,                // "ptrauth"
-    OB_cfp_round = 8,              // "cfp-round"
-    OB_cfp_except = 9,             // "cfp-except"
+    OB_kcfi = 8,                   // "kcfi"
+    OB_cfp_round = 9,              // "cfp-round"
+    OB_cfp_except = 10,            // "cfp-except"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.
