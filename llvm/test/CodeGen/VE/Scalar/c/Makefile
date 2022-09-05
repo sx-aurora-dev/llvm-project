@@ -26,7 +26,7 @@ TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
           fp_log.ll fp_log10.ll fp_log2.ll           \
           fp_lrint.ll fp_lround.ll                   \
-          fp_maxnum.ll fp_nearbyint.ll               \
+          fp_maxnum.ll fp_minnum.ll fp_nearbyint.ll  \
           fp_pow.ll fp_rint.ll fp_round.ll fp_roundeven.ll \
           fp_trunc.ll                     \
           selectcc_int1.ll  \
