@@ -64,11 +64,6 @@ fp_roundeven.ll: fp_round.ll
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
 	$(PATCH_TEST) $@
 
-fp_frem.ll: fp_frem_mod.ll
-	sed -e 's/= fdiv/= frem/' -e 's/fdiv_/frem_/' $? > $@
-	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
-	$(PATCH_TEST) $@
-
 stackframe_call.ll : stackframe_call.c
 	$(CLANG) $(CFLAGS) -S -emit-llvm $<
 	sed -e '/^!2 /d' $@ > $@.tmp && mv $@.tmp $@
