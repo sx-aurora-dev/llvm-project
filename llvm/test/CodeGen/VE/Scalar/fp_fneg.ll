@@ -25,8 +25,8 @@
 ;;; Note:
 ;;;   We test only float/double/fp128.
 
-; Function Attrs: norecurse nounwind readnone
-define float @fneg_float(float %0) {
+; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
+define float @fneg_float(float noundef %0) {
 ; CHECK-LABEL: fneg_float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    sra.l %s0, %s0, 32
@@ -35,22 +35,22 @@ define float @fneg_float(float %0) {
 ; CHECK-NEXT:    xor %s0, %s0, %s1
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = fneg float %0
+  %2 = fneg fast float %0
   ret float %2
 }
 
-; Function Attrs: norecurse nounwind readnone
-define double @fneg_double(double %0) {
+; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
+define double @fneg_double(double noundef %0) {
 ; CHECK-LABEL: fneg_double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    xor %s0, %s0, (1)1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = fneg double %0
+  %2 = fneg fast double %0
   ret double %2
 }
 
-; Function Attrs: norecurse nounwind readnone
-define fp128 @fneg_quad(fp128 %0) {
+; Function Attrs: mustprogress nofree norecurse nosync nounwind readnone willreturn
+define fp128 @fneg_quad(fp128 noundef %0) {
 ; CHECK-LABEL: fneg_quad:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    st %s1, (, %s11)
@@ -63,6 +63,6 @@ define fp128 @fneg_quad(fp128 %0) {
 ; CHECK-NEXT:    ld %s0, 8(, %s11)
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = fneg fp128 %0
+  %2 = fneg fast fp128 %0
   ret fp128 %2
 }

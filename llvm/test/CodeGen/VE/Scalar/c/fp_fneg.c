@@ -27,7 +27,7 @@
 
 #define FP_FNEG(TY) \
 TY fneg_ ## TY(TY a) { \
-  return  -a ; \
+  return  -a; \
 }
 
 FP_FNEG(float)
