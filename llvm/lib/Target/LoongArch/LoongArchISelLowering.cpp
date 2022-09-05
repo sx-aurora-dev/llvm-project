@@ -104,13 +104,19 @@ LoongArchTargetLowering::LoongArchTargetLowering(const TargetMachine &TM,
   if (Subtarget.hasBasicF()) {
     setCondCodeAction(FPCCToExpand, MVT::f32, Expand);
     setOperationAction(ISD::SELECT_CC, MVT::f32, Expand);
+    setOperationAction(ISD::BR_CC, MVT::f32, Expand);
   }
   if (Subtarget.hasBasicD()) {
     setCondCodeAction(FPCCToExpand, MVT::f64, Expand);
     setOperationAction(ISD::SELECT_CC, MVT::f64, Expand);
+    setOperationAction(ISD::BR_CC, MVT::f64, Expand);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f32, Expand);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f32, Expand);
   }
+
+  // Effectively disable jump table generation.
+  setMinimumJumpTableEntries(INT_MAX);
+  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
 
   setOperationAction(ISD::BR_CC, GRLenVT, Expand);
   setOperationAction(ISD::SELECT_CC, GRLenVT, Expand);
@@ -1743,9 +1749,13 @@ bool LoongArchTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
   return (Imm.isZero() || Imm.isExactlyValue(+1.0));
 }
 
-bool LoongArchTargetLowering::isCheapToSpeculateCttz() const { return true; }
+bool LoongArchTargetLowering::isCheapToSpeculateCttz(Type *) const {
+  return true;
+}
 
-bool LoongArchTargetLowering::isCheapToSpeculateCtlz() const { return true; }
+bool LoongArchTargetLowering::isCheapToSpeculateCtlz(Type *) const {
+  return true;
+}
 
 bool LoongArchTargetLowering::shouldInsertFencesForAtomic(
     const Instruction *I) const {
@@ -1763,4 +1773,9 @@ bool LoongArchTargetLowering::shouldInsertFencesForAtomic(
   }
 
   return false;
+}
+
+bool LoongArchTargetLowering::hasAndNot(SDValue Y) const {
+  // TODO: Support vectors.
+  return Y.getValueType().isScalarInteger() && !isa<ConstantSDNode>(Y);
 }

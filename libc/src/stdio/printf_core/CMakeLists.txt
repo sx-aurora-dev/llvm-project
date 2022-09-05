@@ -3,6 +3,9 @@ add_header_library(
   core_structs
   HDRS
     core_structs.h
+  DEPENDS
+    libc.src.__support.CPP.string_view
+    libc.src.__support.FPUtil.fp_bits
 )
 
 add_object_library(
@@ -17,7 +20,7 @@ add_object_library(
     libc.src.__support.ctype_utils
     libc.src.__support.str_to_integer
     libc.src.__support.CPP.bit
-    libc.src.string.memory_utils.memset_implementation
+    libc.src.__support.CPP.string_view
 )
 
 add_object_library(
@@ -27,7 +30,9 @@ add_object_library(
   HDRS
     string_writer.h
   DEPENDS
+    libc.src.__support.CPP.string_view
     libc.src.string.memory_utils.memcpy_implementation
+    libc.src.string.memory_utils.memset_implementation
     .core_structs
 )
 
@@ -37,8 +42,6 @@ add_object_library(
     writer.cpp
   HDRS
     writer.h
-  DEPENDS
-    libc.src.string.memory_utils.memset_implementation
 )
 
 add_object_library(
@@ -62,7 +65,8 @@ add_object_library(
     libc.src.__support.CPP.limits
     libc.src.__support.CPP.span
     libc.src.__support.CPP.string_view
-    libc.src.__support.FPUtil.fputil
+    libc.src.__support.FPUtil.fp_bits
+    libc.src.__support.FPUtil.fenv_impl
     libc.src.__support.integer_to_string
 )
 
@@ -95,6 +99,8 @@ add_object_library(
     file_writer.h
   DEPENDS
     libc.src.__support.File.file
+    libc.src.__support.CPP.string_view
+    libc.src.string.memory_utils.memset_implementation
     .core_structs
 )
 

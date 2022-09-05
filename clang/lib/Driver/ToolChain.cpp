@@ -351,12 +351,6 @@ Tool *ToolChain::getOffloadBundler() const {
   return OffloadBundler.get();
 }
 
-Tool *ToolChain::getOffloadWrapper() const {
-  if (!OffloadWrapper)
-    OffloadWrapper.reset(new tools::OffloadWrapper(*this));
-  return OffloadWrapper.get();
-}
-
 Tool *ToolChain::getOffloadPackager() const {
   if (!OffloadPackager)
     OffloadPackager.reset(new tools::OffloadPackager(*this));
@@ -406,8 +400,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
 
-  case Action::OffloadWrapperJobClass:
-    return getOffloadWrapper();
   case Action::OffloadPackagerJobClass:
     return getOffloadPackager();
   case Action::LinkerWrapperJobClass:
@@ -1089,6 +1081,9 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
       getTriple().getArch() == llvm::Triple::arm || getTriple().isWasm() ||
       getTriple().isAArch64() || getTriple().isRISCV())
     Res |= SanitizerKind::CFIICall;
+  if (getTriple().getArch() == llvm::Triple::x86_64 ||
+      getTriple().isAArch64(64))
+    Res |= SanitizerKind::KCFI;
   if (getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().isAArch64(64) || getTriple().isRISCV())
     Res |= SanitizerKind::ShadowCallStack;

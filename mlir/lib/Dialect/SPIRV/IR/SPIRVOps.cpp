@@ -2614,6 +2614,35 @@ LogicalResult spirv::GroupNonUniformBroadcastOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// spv.GroupNonUniformShuffle*
+//===----------------------------------------------------------------------===//
+
+template <typename OpTy>
+static LogicalResult verifyGroupNonUniformShuffleOp(OpTy op) {
+  spirv::Scope scope = op.execution_scope();
+  if (scope != spirv::Scope::Workgroup && scope != spirv::Scope::Subgroup)
+    return op.emitOpError("execution scope must be 'Workgroup' or 'Subgroup'");
+
+  if (op.getOperands().back().getType().isSignedInteger())
+    return op.emitOpError("second operand must be a singless/unsigned integer");
+
+  return success();
+}
+
+LogicalResult spirv::GroupNonUniformShuffleOp::verify() {
+  return verifyGroupNonUniformShuffleOp(*this);
+}
+LogicalResult spirv::GroupNonUniformShuffleDownOp::verify() {
+  return verifyGroupNonUniformShuffleOp(*this);
+}
+LogicalResult spirv::GroupNonUniformShuffleUpOp::verify() {
+  return verifyGroupNonUniformShuffleOp(*this);
+}
+LogicalResult spirv::GroupNonUniformShuffleXorOp::verify() {
+  return verifyGroupNonUniformShuffleOp(*this);
+}
+
+//===----------------------------------------------------------------------===//
 // spv.SubgroupBlockReadINTEL
 //===----------------------------------------------------------------------===//
 
@@ -2871,9 +2900,9 @@ LogicalResult spirv::IAddCarryOp::verify() {
   if (resultType.getNumElements() != 2)
     return emitOpError("expected result struct type containing two members");
 
-  if (!llvm::is_splat({operand1().getType(), operand2().getType(),
-                       resultType.getElementType(0),
-                       resultType.getElementType(1)}))
+  if (!llvm::all_equal({operand1().getType(), operand2().getType(),
+                        resultType.getElementType(0),
+                        resultType.getElementType(1)}))
     return emitOpError(
         "expected all operand types and struct member types are the same");
 
@@ -2920,9 +2949,9 @@ LogicalResult spirv::ISubBorrowOp::verify() {
   if (resultType.getNumElements() != 2)
     return emitOpError("expected result struct type containing two members");
 
-  if (!llvm::is_splat({operand1().getType(), operand2().getType(),
-                       resultType.getElementType(0),
-                       resultType.getElementType(1)}))
+  if (!llvm::all_equal({operand1().getType(), operand2().getType(),
+                        resultType.getElementType(0),
+                        resultType.getElementType(1)}))
     return emitOpError(
         "expected all operand types and struct member types are the same");
 

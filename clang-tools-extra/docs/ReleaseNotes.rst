@@ -116,16 +116,37 @@ New check aliases
 Changes in existing checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+- Fixed a false positive in :doc:`bugprone-assignment-in-if-condition
+  <clang-tidy/checks/bugprone/assignment-in-if-condition>` check when there
+  was an assignement in a lambda found in the condition of an ``if``.
+
 - Improved :doc:`bugprone-signal-handler
   <clang-tidy/checks/bugprone/signal-handler>` check. Partial
   support for C++14 signal handler rules was added. Bug report generation was
   improved.
-  
-- Improved `modernize-use-emplace <clang-tidy/checks/modernize/use-emplace.html>`_ check.
+
+- Fixed a false positive in :doc:`cppcoreguidelines-pro-type-member-init
+  <clang-tidy/checks/cppcoreguidelines/pro-type-member-init>` when warnings
+  would be emitted for uninitialized members of an anonymous union despite
+  there being an initializer for one of the other members.
+
+- Improved :doc:`modernize-use-emplace <clang-tidy/checks/modernize/use-emplace>`
+  check.
 
   The check now supports detecting inefficient invocations of ``push`` and
   ``push_front`` on STL-style containers and replacing them with ``emplace``
   or ``emplace_front``.
+
+  The check now supports detecting alias cases of ``push_back`` ``push`` and
+  ``push_front`` on STL-style containers and replacing them with ``emplace_back``,
+  ``emplace`` or ``emplace_front``.
+
+- Improved :doc:`modernize-use-equals-default <clang-tidy/checks/modernize/use-equals-default>`
+  check.
+
+  The check now skips unions since in this case a default constructor with empty body
+  is not equivalent to the explicitly defaulted one. The check also skips copy assignment
+  operators with nonstandard return types. The check is restricted to c++11-or-later.
 
 Removed checks
 ^^^^^^^^^^^^^^

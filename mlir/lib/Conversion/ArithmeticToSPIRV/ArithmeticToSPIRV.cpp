@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h"
-#include "../PassDetail.h"
+
 #include "../SPIRVCommon/Pattern.h"
 #include "mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -19,6 +19,11 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Debug.h"
+
+namespace mlir {
+#define GEN_PASS_DEF_CONVERTARITHMETICTOSPIRV
+#include "mlir/Conversion/Passes.h.inc"
+} // namespace mlir
 
 #define DEBUG_TYPE "arith-to-spirv-pattern"
 
@@ -195,12 +200,13 @@ public:
                   ConversionPatternRewriter &rewriter) const override;
 };
 
-/// Converts arith.addi_carry to spv.IAddCarry.
-class AddICarryOpPattern final : public OpConversionPattern<arith::AddICarryOp> {
+/// Converts arith.addui_carry to spv.IAddCarry.
+class AddICarryOpPattern final
+    : public OpConversionPattern<arith::AddUICarryOp> {
 public:
-  using OpConversionPattern<arith::AddICarryOp>::OpConversionPattern;
+  using OpConversionPattern<arith::AddUICarryOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(arith::AddICarryOp op, OpAdaptor adaptor,
+  matchAndRewrite(arith::AddUICarryOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override;
 };
 
@@ -850,14 +856,12 @@ LogicalResult CmpFOpNanNonePattern::matchAndRewrite(
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-AddICarryOpPattern::matchAndRewrite(arith::AddICarryOp op, OpAdaptor adaptor,
+AddICarryOpPattern::matchAndRewrite(arith::AddUICarryOp op, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
   Type dstElemTy = adaptor.getLhs().getType();
-  auto resultTy = spirv::StructType::get({dstElemTy, dstElemTy});
-
   Location loc = op->getLoc();
-  Value result = rewriter.create<spirv::IAddCarryOp>(
-      loc, resultTy, adaptor.getLhs(), adaptor.getRhs());
+  Value result = rewriter.create<spirv::IAddCarryOp>(loc, adaptor.getLhs(),
+                                                     adaptor.getRhs());
 
   Value sumResult = rewriter.create<spirv::CompositeExtractOp>(
       loc, result, llvm::makeArrayRef(0));
@@ -866,8 +870,7 @@ AddICarryOpPattern::matchAndRewrite(arith::AddICarryOp op, OpAdaptor adaptor,
 
   // Convert the carry value to boolean.
   Value one = spirv::ConstantOp::getOne(dstElemTy, loc, rewriter);
-  Value carryResult =
-      rewriter.create<spirv::IEqualOp>(loc, carryValue, one);
+  Value carryResult = rewriter.create<spirv::IEqualOp>(loc, carryValue, one);
 
   rewriter.replaceOp(op, {sumResult, carryResult});
   return success();
@@ -950,7 +953,7 @@ void mlir::arith::populateArithmeticToSPIRVPatterns(
 
 namespace {
 struct ConvertArithmeticToSPIRVPass
-    : public ConvertArithmeticToSPIRVBase<ConvertArithmeticToSPIRVPass> {
+    : public impl::ConvertArithmeticToSPIRVBase<ConvertArithmeticToSPIRVPass> {
   void runOnOperation() override {
     Operation *op = getOperation();
     auto targetAttr = spirv::lookupTargetEnvOrDefault(op);

@@ -399,6 +399,9 @@ def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
 def TargetWebAssembly : TargetArch<["wasm32", "wasm64"]>;
+def TargetWindows : TargetSpec {
+  let OSes = ["Win32"];
+}
 def TargetHasDLLImportExport : TargetSpec {
   let CustomCode = [{ Target.getTriple().hasDLLImportExport() }];
 }
@@ -607,6 +610,9 @@ class DeclOrTypeAttr : InheritableAttr;
 
 /// A attribute is either a declaration attribute or a statement attribute.
 class DeclOrStmtAttr : InheritableAttr;
+
+/// An attribute class for HLSL Annotations.
+class HLSLAnnotationAttr : InheritableAttr;
 
 /// A target-specific attribute.  This class is meant to be used as a mixin
 /// with InheritableAttr or Attr depending on the attribute's needs.
@@ -2086,6 +2092,13 @@ def NoThrow : InheritableAttr {
   let Documentation = [NoThrowDocs];
 }
 
+def NoUwtable : InheritableAttr {
+  let Spellings = [Clang<"nouwtable">];
+  let Subjects = SubjectList<[FunctionLike]>;
+  let Documentation = [NoUwtableDocs];
+  let SimpleHandler = 1;
+}
+
 def NvWeak : IgnoredAttr {
   // No Declspec spelling of this attribute; the CUDA headers use
   // __attribute__((nv_weak)) unconditionally. Does not receive an [[]]
@@ -3491,10 +3504,10 @@ def MSAllocator : InheritableAttr {
   let Documentation = [MSAllocatorDocs];
 }
 
-def CFGuard : InheritableAttr {
+def CFGuard : InheritableAttr, TargetSpecificAttr<TargetWindows> {
   // Currently only the __declspec(guard(nocf)) modifier is supported. In future
   // we might also want to support __declspec(guard(suppress)).
-  let Spellings = [Declspec<"guard">];
+  let Spellings = [Declspec<"guard">, Clang<"guard">];
   let Subjects = SubjectList<[Function]>;
   let Args = [EnumArgument<"Guard", "GuardArg", ["nocf"], ["nocf"]>];
   let Documentation = [CFGuardDocs];
@@ -4011,7 +4024,7 @@ def HLSLNumThreads: InheritableAttr {
   let Documentation = [NumThreadsDocs];
 }
 
-def HLSLSV_GroupIndex: InheritableAttr {
+def HLSLSV_GroupIndex: HLSLAnnotationAttr {
   let Spellings = [HLSLSemantic<"SV_GroupIndex">];
   let Subjects = SubjectList<[ParmVar, GlobalVar]>;
   let LangOpts = [HLSL];

@@ -3846,6 +3846,9 @@ def warn_impcast_integer_64_32 : Warning<
 def warn_impcast_integer_precision_constant : Warning<
   "implicit conversion from %2 to %3 changes value from %0 to %1">,
   InGroup<ConstantConversion>;
+def warn_impcast_single_bit_bitield_precision_constant : Warning<
+  "implicit truncation from %2 to a one-bit wide bit-field changes value from "
+  "%0 to %1">, InGroup<SingleBitBitFieldConstantConversion>;
 def warn_impcast_bitfield_precision_constant : Warning<
   "implicit truncation from %2 to bit-field changes value from %0 to %1">,
   InGroup<BitFieldConstantConversion>;
@@ -4048,6 +4051,9 @@ def warn_transparent_union_attribute_zero_fields : Warning<
   InGroup<IgnoredAttributes>;
 def warn_attribute_type_not_supported : Warning<
   "%0 attribute argument not supported: %1">,
+  InGroup<IgnoredAttributes>;
+def warn_attribute_type_not_supported_global : Warning<
+  "%0 attribute argument '%1' not supported on a global variable">,
   InGroup<IgnoredAttributes>;
 def warn_attribute_unknown_visibility : Warning<"unknown visibility %0">,
   InGroup<IgnoredAttributes>;
@@ -11643,6 +11649,9 @@ def err_hlsl_numthreads_argument_oor : Error<"argument '%select{X|Y|Z}0' to numt
 def err_hlsl_numthreads_invalid : Error<"total number of threads cannot exceed %0">;
 def err_hlsl_missing_numthreads : Error<"missing numthreads attribute for %0 shader entry">;
 def err_hlsl_attribute_param_mismatch : Error<"%0 attribute parameters do not match the previous declaration">;
+def err_hlsl_missing_semantic_annotation : Error<
+  "semantic annotations must be present for all parameters of an entry "
+  "function or patch constant function">;
 
 def err_hlsl_pointers_unsupported : Error<
   "%select{pointers|references}0 are unsupported in HLSL">;

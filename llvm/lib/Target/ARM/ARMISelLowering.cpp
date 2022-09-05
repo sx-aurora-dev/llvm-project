@@ -13706,7 +13706,7 @@ static SDValue PerformSHLSimplify(SDNode *N,
     return SDValue();
 
   // Check that all the users could perform the shl themselves.
-  for (auto U : N->uses()) {
+  for (auto *U : N->uses()) {
     switch(U->getOpcode()) {
     default:
       return SDValue();
@@ -21157,11 +21157,11 @@ bool ARMTargetLowering::canCombineStoreAndExtract(Type *VectorTy, Value *Idx,
   return false;
 }
 
-bool ARMTargetLowering::isCheapToSpeculateCttz() const {
+bool ARMTargetLowering::isCheapToSpeculateCttz(Type *Ty) const {
   return Subtarget->hasV6T2Ops();
 }
 
-bool ARMTargetLowering::isCheapToSpeculateCtlz() const {
+bool ARMTargetLowering::isCheapToSpeculateCtlz(Type *Ty) const {
   return Subtarget->hasV6T2Ops();
 }
 

@@ -286,14 +286,22 @@ class ValueCheck:
             test_base.assertEqual(self.expect_name, val.GetName(),
                                   this_error_msg)
         if self.expect_value:
-            test_base.assertEqual(self.expect_value, val.GetValue(),
-                                  this_error_msg)
+            if isinstance(self.expect_value, re.Pattern):
+                test_base.assertRegex(val.GetValue(), self.expect_value,
+                                      this_error_msg)
+            else:
+                test_base.assertEqual(self.expect_value, val.GetValue(),
+                                      this_error_msg)
         if self.expect_type:
             test_base.assertEqual(self.expect_type, val.GetDisplayTypeName(),
                                   this_error_msg)
         if self.expect_summary:
-            test_base.assertEqual(self.expect_summary, val.GetSummary(),
-                                  this_error_msg)
+            if isinstance(self.expect_summary, re.Pattern):
+                test_base.assertRegex(val.GetSummary(), self.expect_summary,
+                                      this_error_msg)
+            else:
+                test_base.assertEqual(self.expect_summary, val.GetSummary(),
+                                      this_error_msg)
         if self.children is not None:
             self.check_value_children(test_base, val, error_msg)
 
@@ -1247,21 +1255,23 @@ class Base(unittest2.TestCase):
         """Returns the architecture of the lldb binary."""
         if not hasattr(self, 'lldbArchitecture'):
 
-            # spawn local process
+            # These two target settings prevent lldb from doing setup that does
+            # nothing but slow down the end goal of printing the architecture.
             command = [
                 lldbtest_config.lldbExec,
-                "-o",
-                "file " + lldbtest_config.lldbExec,
-                "-o",
-                "quit"
+                "-x",
+                "-b",
+                "-o", "settings set target.preload-symbols false",
+                "-o", "settings set target.load-script-from-symbol-file false",
+                "-o", "file " + lldbtest_config.lldbExec,
             ]
 
             output = check_output(command)
-            str = output.decode("utf-8")
+            str = output.decode()
 
             for line in str.splitlines():
                 m = re.search(
-                    "Current executable set to '.*' \\((.*)\\)\\.", line)
+                    r"Current executable set to '.*' \((.*)\)\.", line)
                 if m:
                     self.lldbArchitecture = m.group(1)
                     break

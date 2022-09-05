@@ -939,6 +939,8 @@ bool IsProcedure(const Expr<SomeType> &);
 bool IsFunction(const Expr<SomeType> &);
 bool IsProcedurePointerTarget(const Expr<SomeType> &);
 bool IsBareNullPointer(const Expr<SomeType> *); // NULL() w/o MOLD=
+bool IsNullObjectPointer(const Expr<SomeType> &);
+bool IsNullProcedurePointer(const Expr<SomeType> &);
 bool IsNullPointer(const Expr<SomeType> &);
 bool IsObjectPointer(const Expr<SomeType> &, FoldingContext &);
 
@@ -1131,6 +1133,7 @@ bool IsKindTypeParameter(const Symbol &);
 bool IsLenTypeParameter(const Symbol &);
 bool IsExtensibleType(const DerivedTypeSpec *);
 bool IsBuiltinDerivedType(const DerivedTypeSpec *derived, const char *name);
+bool IsBuiltinCPtr(const Symbol &);
 // Is this derived type TEAM_TYPE from module ISO_FORTRAN_ENV?
 bool IsTeamType(const DerivedTypeSpec *);
 // Is this derived type TEAM_TYPE, C_PTR, or C_FUNPTR?

@@ -12,6 +12,7 @@
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "../Encoding.h"
 #include "mlir/AsmParser/AsmParser.h"
+#include "mlir/Bytecode/BytecodeImplementation.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpImplementation.h"
@@ -66,7 +67,7 @@ public:
 
   /// Emit an error using the given arguments.
   template <typename... Args>
-  LogicalResult emitError(Args &&...args) const {
+  InFlightDiagnostic emitError(Args &&...args) const {
     return ::emitError(fileLoc).append(std::forward<Args>(args)...);
   }
 
@@ -125,6 +126,17 @@ public:
     if (LLVM_UNLIKELY(result == 0))
       return parseBytes(sizeof(result), reinterpret_cast<uint8_t *>(&result));
     return parseMultiByteVarInt(result);
+  }
+
+  /// Parse a signed variable length encoded integer from the byte stream. A
+  /// signed varint is encoded as a normal varint with zigzag encoding applied,
+  /// i.e. the low bit of the value is used to indicate the sign.
+  LogicalResult parseSignedVarInt(uint64_t &result) {
+    if (failed(parseVarInt(result)))
+      return failure();
+    // Essentially (but using unsigned): (x >> 1) ^ -(x & 1)
+    result = (result >> 1) ^ (~(result & 1) + 1);
+    return success();
   }
 
   /// Parse a variable length encoded integer whose low bit is used to encode an
@@ -241,6 +253,69 @@ static LogicalResult parseEntry(EncodingReader &reader, RangeT &entries,
 }
 
 //===----------------------------------------------------------------------===//
+// StringSectionReader
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This class is used to read references to the string section from the
+/// bytecode.
+class StringSectionReader {
+public:
+  /// Initialize the string section reader with the given section data.
+  LogicalResult initialize(Location fileLoc, ArrayRef<uint8_t> sectionData);
+
+  /// Parse a shared string from the string section. The shared string is
+  /// encoded using an index to a corresponding string in the string section.
+  LogicalResult parseString(EncodingReader &reader, StringRef &result) {
+    return parseEntry(reader, strings, result, "string");
+  }
+
+private:
+  /// The table of strings referenced within the bytecode file.
+  SmallVector<StringRef> strings;
+};
+} // namespace
+
+LogicalResult StringSectionReader::initialize(Location fileLoc,
+                                              ArrayRef<uint8_t> sectionData) {
+  EncodingReader stringReader(sectionData, fileLoc);
+
+  // Parse the number of strings in the section.
+  uint64_t numStrings;
+  if (failed(stringReader.parseVarInt(numStrings)))
+    return failure();
+  strings.resize(numStrings);
+
+  // Parse each of the strings. The sizes of the strings are encoded in reverse
+  // order, so that's the order we populate the table.
+  size_t stringDataEndOffset = sectionData.size();
+  for (StringRef &string : llvm::reverse(strings)) {
+    uint64_t stringSize;
+    if (failed(stringReader.parseVarInt(stringSize)))
+      return failure();
+    if (stringDataEndOffset < stringSize) {
+      return stringReader.emitError(
+          "string size exceeds the available data size");
+    }
+
+    // Extract the string from the data, dropping the null character.
+    size_t stringOffset = stringDataEndOffset - stringSize;
+    string = StringRef(
+        reinterpret_cast<const char *>(sectionData.data() + stringOffset),
+        stringSize - 1);
+    stringDataEndOffset = stringOffset;
+  }
+
+  // Check that the only remaining data was for the strings, i.e. the reader
+  // should be at the same offset as the first string.
+  if ((sectionData.size() - stringReader.size()) != stringDataEndOffset) {
+    return stringReader.emitError("unexpected trailing data between the "
+                                  "offsets for strings and their data");
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // BytecodeDialect
 //===----------------------------------------------------------------------===//
 
@@ -263,12 +338,22 @@ struct BytecodeDialect {
           "-allow-unregistered-dialect with the MLIR tool used.");
     }
     dialect = loadedDialect;
+
+    // If the dialect was actually loaded, check to see if it has a bytecode
+    // interface.
+    if (loadedDialect)
+      interface = dyn_cast<BytecodeDialectInterface>(loadedDialect);
     return success();
   }
 
   /// The loaded dialect entry. This field is None if we haven't attempted to
   /// load, nullptr if we failed to load, otherwise the loaded dialect.
   Optional<Dialect *> dialect;
+
+  /// The bytecode interface of the dialect, or nullptr if the dialect does not
+  /// implement the bytecode interface. This field should only be checked if the
+  /// `dialect` field is non-None.
+  const BytecodeDialectInterface *interface = nullptr;
 
   /// The name of the dialect.
   StringRef name;
@@ -334,7 +419,8 @@ class AttrTypeReader {
   using TypeEntry = Entry<Type>;
 
 public:
-  AttrTypeReader(Location fileLoc) : fileLoc(fileLoc) {}
+  AttrTypeReader(StringSectionReader &stringReader, Location fileLoc)
+      : stringReader(stringReader), fileLoc(fileLoc) {}
 
   /// Initialize the attribute and type information within the reader.
   LogicalResult initialize(MutableArrayRef<BytecodeDialect> dialects,
@@ -348,18 +434,54 @@ public:
   }
   Type resolveType(size_t index) { return resolveEntry(types, index, "Type"); }
 
+  /// Parse a reference to an attribute or type using the given reader.
+  LogicalResult parseAttribute(EncodingReader &reader, Attribute &result) {
+    uint64_t attrIdx;
+    if (failed(reader.parseVarInt(attrIdx)))
+      return failure();
+    result = resolveAttribute(attrIdx);
+    return success(!!result);
+  }
+  LogicalResult parseType(EncodingReader &reader, Type &result) {
+    uint64_t typeIdx;
+    if (failed(reader.parseVarInt(typeIdx)))
+      return failure();
+    result = resolveType(typeIdx);
+    return success(!!result);
+  }
+
+  template <typename T>
+  LogicalResult parseAttribute(EncodingReader &reader, T &result) {
+    Attribute baseResult;
+    if (failed(parseAttribute(reader, baseResult)))
+      return failure();
+    if ((result = baseResult.dyn_cast<T>()))
+      return success();
+    return reader.emitError("expected attribute of type: ",
+                            llvm::getTypeName<T>(), ", but got: ", baseResult);
+  }
+
 private:
   /// Resolve the given entry at `index`.
   template <typename T>
   T resolveEntry(SmallVectorImpl<Entry<T>> &entries, size_t index,
                  StringRef entryType);
 
-  /// Parse the value defined within the given reader. `code` indicates how the
-  /// entry was encoded.
-  LogicalResult parseEntry(EncodingReader &reader, bool hasCustomEncoding,
-                           Attribute &result);
-  LogicalResult parseEntry(EncodingReader &reader, bool hasCustomEncoding,
-                           Type &result);
+  /// Parse an entry using the given reader that was encoded using the textual
+  /// assembly format.
+  template <typename T>
+  LogicalResult parseAsmEntry(T &result, EncodingReader &reader,
+                              StringRef entryType);
+
+  /// Parse an entry using the given reader that was encoded using a custom
+  /// bytecode format.
+  template <typename T>
+  LogicalResult parseCustomEntry(Entry<T> &entry, EncodingReader &reader,
+                                 StringRef entryType);
+
+  /// The string section reader used to resolve string references when parsing
+  /// custom encoded attribute/type entries.
+  StringSectionReader &stringReader;
 
   /// The set of attribute and type entries.
   SmallVector<AttrEntry> attributes;
@@ -367,6 +489,93 @@ private:
 
   /// A location used for error emission.
   Location fileLoc;
+};
+
+class DialectReader : public DialectBytecodeReader {
+public:
+  DialectReader(AttrTypeReader &attrTypeReader,
+                StringSectionReader &stringReader, EncodingReader &reader)
+      : attrTypeReader(attrTypeReader), stringReader(stringReader),
+        reader(reader) {}
+
+  InFlightDiagnostic emitError(const Twine &msg) override {
+    return reader.emitError(msg);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // IR
+  //===--------------------------------------------------------------------===//
+
+  LogicalResult readAttribute(Attribute &result) override {
+    return attrTypeReader.parseAttribute(reader, result);
+  }
+
+  LogicalResult readType(Type &result) override {
+    return attrTypeReader.parseType(reader, result);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Primitives
+  //===--------------------------------------------------------------------===//
+
+  LogicalResult readVarInt(uint64_t &result) override {
+    return reader.parseVarInt(result);
+  }
+
+  LogicalResult readSignedVarInt(int64_t &result) override {
+    uint64_t unsignedResult;
+    if (failed(reader.parseSignedVarInt(unsignedResult)))
+      return failure();
+    result = static_cast<int64_t>(unsignedResult);
+    return success();
+  }
+
+  FailureOr<APInt> readAPIntWithKnownWidth(unsigned bitWidth) override {
+    // Small values are encoded using a single byte.
+    if (bitWidth <= 8) {
+      uint8_t value;
+      if (failed(reader.parseByte(value)))
+        return failure();
+      return APInt(bitWidth, value);
+    }
+
+    // Large values up to 64 bits are encoded using a single varint.
+    if (bitWidth <= 64) {
+      uint64_t value;
+      if (failed(reader.parseSignedVarInt(value)))
+        return failure();
+      return APInt(bitWidth, value);
+    }
+
+    // Otherwise, for really big values we encode the array of active words in
+    // the value.
+    uint64_t numActiveWords;
+    if (failed(reader.parseVarInt(numActiveWords)))
+      return failure();
+    SmallVector<uint64_t, 4> words(numActiveWords);
+    for (uint64_t i = 0; i < numActiveWords; ++i)
+      if (failed(reader.parseSignedVarInt(words[i])))
+        return failure();
+    return APInt(bitWidth, words);
+  }
+
+  FailureOr<APFloat>
+  readAPFloatWithKnownSemantics(const llvm::fltSemantics &semantics) override {
+    FailureOr<APInt> intVal =
+        readAPIntWithKnownWidth(APFloat::getSizeInBits(semantics));
+    if (failed(intVal))
+      return failure();
+    return APFloat(semantics, *intVal);
+  }
+
+  LogicalResult readString(StringRef &result) override {
+    return stringReader.parseString(reader, result);
+  }
+
+private:
+  AttrTypeReader &attrTypeReader;
+  StringSectionReader &stringReader;
+  EncodingReader &reader;
 };
 } // namespace
 
@@ -391,7 +600,7 @@ AttrTypeReader::initialize(MutableArrayRef<BytecodeDialect> dialects,
     size_t currentIndex = 0, endIndex = range.size();
 
     // Parse an individual entry.
-    auto parseEntryFn = [&](BytecodeDialect *dialect) {
+    auto parseEntryFn = [&](BytecodeDialect *dialect) -> LogicalResult {
       auto &entry = range[currentIndex++];
 
       uint64_t entrySize;
@@ -443,61 +652,67 @@ T AttrTypeReader::resolveEntry(SmallVectorImpl<Entry<T>> &entries, size_t index,
 
   // Parse the entry.
   EncodingReader reader(entry.data, fileLoc);
-  if (failed(parseEntry(reader, entry.hasCustomEncoding, entry.entry)))
+
+  // Parse based on how the entry was encoded.
+  if (entry.hasCustomEncoding) {
+    if (failed(parseCustomEntry(entry, reader, entryType)))
+      return T();
+  } else if (failed(parseAsmEntry(entry.entry, reader, entryType))) {
     return T();
+  }
+
   if (!reader.empty()) {
-    (void)reader.emitError("unexpected trailing bytes after " + entryType +
-                           " entry");
+    reader.emitError("unexpected trailing bytes after " + entryType + " entry");
     return T();
   }
   return entry.entry;
 }
 
-LogicalResult AttrTypeReader::parseEntry(EncodingReader &reader,
-                                         bool hasCustomEncoding,
-                                         Attribute &result) {
-  // Handle the fallback case, where the attribute was encoded using its
-  // assembly format.
-  if (!hasCustomEncoding) {
-    StringRef attrStr;
-    if (failed(reader.parseNullTerminatedString(attrStr)))
-      return failure();
+template <typename T>
+LogicalResult AttrTypeReader::parseAsmEntry(T &result, EncodingReader &reader,
+                                            StringRef entryType) {
+  StringRef asmStr;
+  if (failed(reader.parseNullTerminatedString(asmStr)))
+    return failure();
 
-    size_t numRead = 0;
-    if (!(result = parseAttribute(attrStr, fileLoc->getContext(), numRead)))
-      return failure();
-    if (numRead != attrStr.size()) {
-      return reader.emitError(
-          "trailing characters found after Attribute assembly format: ",
-          attrStr.drop_front(numRead));
-    }
-    return success();
+  // Invoke the MLIR assembly parser to parse the entry text.
+  size_t numRead = 0;
+  MLIRContext *context = fileLoc->getContext();
+  if constexpr (std::is_same_v<T, Type>)
+    result = ::parseType(asmStr, context, numRead);
+  else
+    result = ::parseAttribute(asmStr, context, numRead);
+  if (!result)
+    return failure();
+
+  // Ensure there weren't dangling characters after the entry.
+  if (numRead != asmStr.size()) {
+    return reader.emitError("trailing characters found after ", entryType,
+                            " assembly format: ", asmStr.drop_front(numRead));
   }
-
-  return reader.emitError("unexpected Attribute encoding");
+  return success();
 }
 
-LogicalResult AttrTypeReader::parseEntry(EncodingReader &reader,
-                                         bool hasCustomEncoding, Type &result) {
-  // Handle the fallback case, where the type was encoded using its
-  // assembly format.
-  if (!hasCustomEncoding) {
-    StringRef typeStr;
-    if (failed(reader.parseNullTerminatedString(typeStr)))
-      return failure();
+template <typename T>
+LogicalResult AttrTypeReader::parseCustomEntry(Entry<T> &entry,
+                                               EncodingReader &reader,
+                                               StringRef entryType) {
+  if (failed(entry.dialect->load(reader, fileLoc.getContext())))
+    return failure();
 
-    size_t numRead = 0;
-    if (!(result = parseType(typeStr, fileLoc->getContext(), numRead)))
-      return failure();
-    if (numRead != typeStr.size()) {
-      return reader.emitError(
-          "trailing characters found after Type assembly format: " +
-          typeStr.drop_front(numRead));
-    }
-    return success();
+  // Ensure that the dialect implements the bytecode interface.
+  if (!entry.dialect->interface) {
+    return reader.emitError("dialect '", entry.dialect->name,
+                            "' does not implement the bytecode interface");
   }
 
-  return reader.emitError("unexpected Type encoding");
+  // Ask the dialect to parse the entry.
+  DialectReader dialectReader(*this, stringReader, reader);
+  if constexpr (std::is_same_v<T, Type>)
+    entry.entry = entry.dialect->interface->readType(dialectReader);
+  else
+    entry.entry = entry.dialect->interface->readAttribute(dialectReader);
+  return success(!!entry.entry);
 }
 
 //===----------------------------------------------------------------------===//
@@ -509,7 +724,7 @@ namespace {
 class BytecodeReader {
 public:
   BytecodeReader(Location fileLoc, const ParserConfig &config)
-      : config(config), fileLoc(fileLoc), attrTypeReader(fileLoc),
+      : config(config), fileLoc(fileLoc), attrTypeReader(stringReader, fileLoc),
         // Use the builtin unrealized conversion cast operation to represent
         // forward references to values that aren't yet defined.
         forwardRefOpState(UnknownLoc::get(config.getContext()),
@@ -537,20 +752,13 @@ private:
   //===--------------------------------------------------------------------===//
   // Attribute/Type Section
 
-  /// Parse an attribute or type using the given reader. Returns nullptr in the
-  /// case of failure.
-  Attribute parseAttribute(EncodingReader &reader);
-  Type parseType(EncodingReader &reader);
-
+  /// Parse an attribute or type using the given reader.
   template <typename T>
-  T parseAttribute(EncodingReader &reader) {
-    if (Attribute attr = parseAttribute(reader)) {
-      if (auto derivedAttr = attr.dyn_cast<T>())
-        return derivedAttr;
-      (void)reader.emitError("expected attribute of type: ",
-                             llvm::getTypeName<T>(), ", but got: ", attr);
-    }
-    return T();
+  LogicalResult parseAttribute(EncodingReader &reader, T &result) {
+    return attrTypeReader.parseAttribute(reader, result);
+  }
+  LogicalResult parseType(EncodingReader &reader, Type &result) {
+    return attrTypeReader.parseType(reader, result);
   }
 
   //===--------------------------------------------------------------------===//
@@ -594,17 +802,6 @@ private:
   LogicalResult parseRegion(EncodingReader &reader, RegionReadState &readState);
   LogicalResult parseBlock(EncodingReader &reader, RegionReadState &readState);
   LogicalResult parseBlockArguments(EncodingReader &reader, Block *block);
-
-  //===--------------------------------------------------------------------===//
-  // String Section
-
-  LogicalResult parseStringSection(ArrayRef<uint8_t> sectionData);
-
-  /// Parse a shared string from the string section. The shared string is
-  /// encoded using an index to a corresponding string in the string section.
-  LogicalResult parseSharedString(EncodingReader &reader, StringRef &result) {
-    return parseEntry(reader, strings, result, "string");
-  }
 
   //===--------------------------------------------------------------------===//
   // Value Processing
@@ -667,7 +864,7 @@ private:
   SmallVector<BytecodeOperationName> opNames;
 
   /// The table of strings referenced within the bytecode file.
-  SmallVector<StringRef> strings;
+  StringSectionReader stringReader;
 
   /// The current set of available IR value scopes.
   std::vector<ValueScope> valueScopes;
@@ -726,7 +923,8 @@ LogicalResult BytecodeReader::read(llvm::MemoryBufferRef buffer, Block *block) {
   }
 
   // Process the string section first.
-  if (failed(parseStringSection(*sectionDatas[bytecode::Section::kString])))
+  if (failed(stringReader.initialize(
+          fileLoc, *sectionDatas[bytecode::Section::kString])))
     return failure();
 
   // Process the dialect section.
@@ -777,13 +975,13 @@ BytecodeReader::parseDialectSection(ArrayRef<uint8_t> sectionData) {
 
   // Parse each of the dialects.
   for (uint64_t i = 0; i < numDialects; ++i)
-    if (failed(parseSharedString(sectionReader, dialects[i].name)))
+    if (failed(stringReader.parseString(sectionReader, dialects[i].name)))
       return failure();
 
   // Parse the operation names, which are grouped by dialect.
   auto parseOpName = [&](BytecodeDialect *dialect) {
     StringRef opName;
-    if (failed(parseSharedString(sectionReader, opName)))
+    if (failed(stringReader.parseString(sectionReader, opName)))
       return failure();
     opNames.emplace_back(dialect, opName);
     return success();
@@ -811,23 +1009,6 @@ FailureOr<OperationName> BytecodeReader::parseOpName(EncodingReader &reader) {
 }
 
 //===----------------------------------------------------------------------===//
-// Attribute/Type Section
-
-Attribute BytecodeReader::parseAttribute(EncodingReader &reader) {
-  uint64_t attrIdx;
-  if (failed(reader.parseVarInt(attrIdx)))
-    return Attribute();
-  return attrTypeReader.resolveAttribute(attrIdx);
-}
-
-Type BytecodeReader::parseType(EncodingReader &reader) {
-  uint64_t typeIdx;
-  if (failed(reader.parseVarInt(typeIdx)))
-    return Type();
-  return attrTypeReader.resolveType(typeIdx);
-}
-
-//===----------------------------------------------------------------------===//
 // IR Section
 
 LogicalResult BytecodeReader::parseIRSection(ArrayRef<uint8_t> sectionData,
@@ -844,7 +1025,7 @@ LogicalResult BytecodeReader::parseIRSection(ArrayRef<uint8_t> sectionData,
   regionStack.back().curBlock = regionStack.back().curRegion->begin();
   if (failed(parseBlock(reader, regionStack.back())))
     return failure();
-  valueScopes.emplace_back(ValueScope());
+  valueScopes.emplace_back();
   valueScopes.back().push(regionStack.back());
 
   // Iteratively parse regions until everything has been resolved.
@@ -902,7 +1083,7 @@ BytecodeReader::parseRegions(EncodingReader &reader,
 
           // If the op is isolated from above, push a new value scope.
           if (isIsolatedFromAbove)
-            valueScopes.emplace_back(ValueScope());
+            valueScopes.emplace_back();
           return success();
         }
       }
@@ -943,8 +1124,8 @@ BytecodeReader::parseOpWithoutRegions(EncodingReader &reader,
     return failure();
 
   /// Parse the location.
-  LocationAttr opLoc = parseAttribute<LocationAttr>(reader);
-  if (!opLoc)
+  LocationAttr opLoc;
+  if (failed(parseAttribute(reader, opLoc)))
     return failure();
 
   // With the location and name resolved, we can start building the operation
@@ -953,8 +1134,8 @@ BytecodeReader::parseOpWithoutRegions(EncodingReader &reader,
 
   // Parse the attributes of the operation.
   if (opMask & bytecode::OpEncodingMask::kHasAttrs) {
-    DictionaryAttr dictAttr = parseAttribute<DictionaryAttr>(reader);
-    if (!dictAttr)
+    DictionaryAttr dictAttr;
+    if (failed(parseAttribute(reader, dictAttr)))
       return failure();
     opState.attributes = dictAttr;
   }
@@ -966,7 +1147,7 @@ BytecodeReader::parseOpWithoutRegions(EncodingReader &reader,
       return failure();
     opState.types.resize(numResults);
     for (int i = 0, e = numResults; i < e; ++i)
-      if (!(opState.types[i] = parseType(reader)))
+      if (failed(parseType(reader, opState.types[i])))
         return failure();
   }
 
@@ -1077,11 +1258,10 @@ LogicalResult BytecodeReader::parseBlockArguments(EncodingReader &reader,
   argLocs.reserve(numArgs);
 
   while (numArgs--) {
-    Type argType = parseType(reader);
-    if (!argType)
-      return failure();
-    LocationAttr argLoc = parseAttribute<LocationAttr>(reader);
-    if (!argLoc)
+    Type argType;
+    LocationAttr argLoc;
+    if (failed(parseType(reader, argType)) ||
+        failed(parseAttribute(reader, argLoc)))
       return failure();
 
     argTypes.push_back(argType);
@@ -1089,51 +1269,6 @@ LogicalResult BytecodeReader::parseBlockArguments(EncodingReader &reader,
   }
   block->addArguments(argTypes, argLocs);
   return defineValues(reader, block->getArguments());
-}
-
-//===----------------------------------------------------------------------===//
-// String Section
-
-LogicalResult
-BytecodeReader::parseStringSection(ArrayRef<uint8_t> sectionData) {
-  EncodingReader stringReader(sectionData, fileLoc);
-
-  // Parse the number of strings in the section.
-  uint64_t numStrings;
-  if (failed(stringReader.parseVarInt(numStrings)))
-    return failure();
-  strings.resize(numStrings);
-
-  // Parse each of the strings. The sizes of the strings are encoded in reverse
-  // order, so that's the order we populate the table.
-  size_t stringDataEndOffset = sectionData.size();
-  size_t totalStringDataSize = 0;
-  for (StringRef &string : llvm::reverse(strings)) {
-    uint64_t stringSize;
-    if (failed(stringReader.parseVarInt(stringSize)))
-      return failure();
-    if (stringDataEndOffset < stringSize) {
-      return stringReader.emitError(
-          "string size exceeds the available data size");
-    }
-
-    // Extract the string from the data, dropping the null character.
-    size_t stringOffset = stringDataEndOffset - stringSize;
-    string = StringRef(
-        reinterpret_cast<const char *>(sectionData.data() + stringOffset),
-        stringSize - 1);
-    stringDataEndOffset = stringOffset;
-
-    // Update the total string data size.
-    totalStringDataSize += stringSize;
-  }
-
-  // Check that the only remaining data was for the strings
-  if (stringReader.size() != totalStringDataSize) {
-    return stringReader.emitError("unexpected trailing data between the "
-                                  "offsets for strings and their data");
-  }
-  return success();
 }
 
 //===----------------------------------------------------------------------===//

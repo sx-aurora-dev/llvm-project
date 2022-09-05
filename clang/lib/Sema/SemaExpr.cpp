@@ -17598,6 +17598,11 @@ static void RemoveNestedImmediateInvocation(
       DRSet.erase(E);
       return E;
     }
+    ExprResult TransformLambdaExpr(LambdaExpr *E) {
+      // Do not rebuild lambdas to avoid creating a new type.
+      // Lambdas have already been processed inside their eval context.
+      return E;
+    }
     bool AlwaysRebuild() { return false; }
     bool ReplacingOriginal() { return true; }
     bool AllowSkippingCXXConstructExpr() {
@@ -19675,8 +19680,8 @@ void Sema::MarkDeclRefReferenced(DeclRefExpr *E, const Expr *Base) {
 
   if (auto *FD = dyn_cast<FunctionDecl>(E->getDecl()))
     if (!isUnevaluatedContext() && !isConstantEvaluated() &&
-        FD->isConsteval() && !RebuildingImmediateInvocation &&
-        !FD->isDependentContext())
+        !isImmediateFunctionContext() && FD->isConsteval() &&
+        !RebuildingImmediateInvocation && !FD->isDependentContext())
       ExprEvalContexts.back().ReferenceToConsteval.insert(E);
   MarkExprReferenced(*this, E->getLocation(), E->getDecl(), E, OdrUse,
                      RefsMinusAssignments);

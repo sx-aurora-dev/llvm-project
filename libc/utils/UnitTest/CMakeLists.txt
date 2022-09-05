@@ -5,7 +5,7 @@ add_library(
   LibcTest.h
 )
 target_include_directories(LibcUnitTest PUBLIC ${LIBC_SOURCE_DIR})
-add_dependencies(LibcUnitTest libc.src.__support.CPP.type_traits libc.src.__support.CPP.uint128)
+add_dependencies(LibcUnitTest libc.src.__support.CPP.type_traits libc.src.__support.uint128)
 target_link_libraries(LibcUnitTest PUBLIC libc_test_utils)
 
 add_library(
@@ -38,7 +38,8 @@ add_dependencies(
   LibcFPTestHelpers
   LibcUnitTest
   libc.utils.UnitTest.string_utils
-  libc.src.__support.FPUtil.fputil
+  libc.src.__support.FPUtil.fp_bits
+  libc.src.__support.FPUtil.fenv_impl
 )
 
 add_library(
@@ -64,7 +65,7 @@ target_link_libraries(LibcPrintfHelpers LibcUnitTest)
 add_dependencies(
   LibcPrintfHelpers
   LibcUnitTest
-  libc.src.__support.CPP.uint128
+  libc.src.__support.FPUtil.fp_bits
   libc.src.stdio.printf_core.core_structs
   libc.utils.UnitTest.string_utils
 )

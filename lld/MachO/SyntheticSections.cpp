@@ -659,11 +659,38 @@ void StubsSection::writeTo(uint8_t *buf) const {
 
 void StubsSection::finalize() { isFinal = true; }
 
-bool StubsSection::addEntry(Symbol *sym) {
+static void addBindingsForStub(Symbol *sym) {
+  if (auto *dysym = dyn_cast<DylibSymbol>(sym)) {
+    if (sym->isWeakDef()) {
+      in.binding->addEntry(dysym, in.lazyPointers->isec,
+                           sym->stubsIndex * target->wordSize);
+      in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                               sym->stubsIndex * target->wordSize);
+    } else {
+      in.lazyBinding->addEntry(dysym);
+    }
+  } else if (auto *defined = dyn_cast<Defined>(sym)) {
+    if (defined->isExternalWeakDef()) {
+      in.rebase->addEntry(in.lazyPointers->isec,
+                          sym->stubsIndex * target->wordSize);
+      in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                               sym->stubsIndex * target->wordSize);
+    } else if (defined->interposable) {
+      in.lazyBinding->addEntry(sym);
+    } else {
+      llvm_unreachable("invalid stub target");
+    }
+  } else {
+    llvm_unreachable("invalid stub target symbol type");
+  }
+}
+
+void StubsSection::addEntry(Symbol *sym) {
   bool inserted = entries.insert(sym);
-  if (inserted)
+  if (inserted) {
     sym->stubsIndex = entries.size() - 1;
-  return inserted;
+    addBindingsForStub(sym);
+  }
 }
 
 StubHelperSection::StubHelperSection()
@@ -688,7 +715,7 @@ void StubHelperSection::writeTo(uint8_t *buf) const {
   }
 }
 
-void StubHelperSection::setup() {
+void StubHelperSection::setUp() {
   Symbol *binder = symtab->addUndefined("dyld_stub_binder", /*file=*/nullptr,
                                         /*isWeakRef=*/false);
   if (auto *undefined = dyn_cast<Undefined>(binder))
@@ -742,7 +769,7 @@ void ObjCStubsSection::addEntry(Symbol *sym) {
   symbols.push_back(newSym);
 }
 
-void ObjCStubsSection::setup() {
+void ObjCStubsSection::setUp() {
   Symbol *objcMsgSend = symtab->addUndefined("_objc_msgSend", /*file=*/nullptr,
                                              /*isWeakRef=*/false);
   objcMsgSend->used = true;
@@ -1787,6 +1814,74 @@ void ObjCImageInfoSection::writeTo(uint8_t *buf) const {
   uint32_t flags = info.hasCategoryClassProperties ? 0x40 : 0x0;
   flags |= info.swiftVersion << 8;
   write32le(buf + 4, flags);
+}
+
+InitOffsetsSection::InitOffsetsSection()
+    : SyntheticSection(segment_names::text, section_names::initOffsets) {
+  flags = S_INIT_FUNC_OFFSETS;
+}
+
+uint64_t InitOffsetsSection::getSize() const {
+  size_t count = 0;
+  for (const ConcatInputSection *isec : sections)
+    count += isec->relocs.size();
+  return count * sizeof(uint32_t);
+}
+
+void InitOffsetsSection::writeTo(uint8_t *buf) const {
+  uint64_t textVA = 0;
+  for (const OutputSegment *oseg : outputSegments)
+    if (oseg->name == segment_names::text) {
+      textVA = oseg->addr;
+      break;
+    }
+
+  // FIXME: Add function specified by -init when that argument is implemented.
+  for (ConcatInputSection *isec : sections) {
+    for (const Reloc &rel : isec->relocs) {
+      const Symbol *referent = rel.referent.dyn_cast<Symbol *>();
+      assert(referent && "section relocation should have been rejected");
+      uint64_t offset = referent->getVA() - textVA;
+      // FIXME: Can we handle this gracefully?
+      if (offset > UINT32_MAX)
+        fatal(isec->getLocation(rel.offset) + ": offset to initializer " +
+              referent->getName() + " (" + utohexstr(offset) +
+              ") does not fit in 32 bits");
+
+      // Entries need to be added in the order they appear in the section, but
+      // relocations aren't guaranteed to be sorted.
+      size_t index = rel.offset >> target->p2WordSize;
+      write32le(&buf[index * sizeof(uint32_t)], offset);
+    }
+    buf += isec->relocs.size() * sizeof(uint32_t);
+  }
+}
+
+// The inputs are __mod_init_func sections, which contain pointers to
+// initializer functions, therefore all relocations should be of the UNSIGNED
+// type. InitOffsetsSection stores offsets, so if the initializer's address is
+// not known at link time, stub-indirection has to be used.
+void InitOffsetsSection::setUp() {
+  for (const ConcatInputSection *isec : sections) {
+    for (const Reloc &rel : isec->relocs) {
+      RelocAttrs attrs = target->getRelocAttrs(rel.type);
+      if (!attrs.hasAttr(RelocAttrBits::UNSIGNED))
+        error(isec->getLocation(rel.offset) +
+              ": unsupported relocation type: " + attrs.name);
+      if (rel.addend != 0)
+        error(isec->getLocation(rel.offset) +
+              ": relocation addend is not representable in __init_offsets");
+      if (rel.referent.is<InputSection *>())
+        error(isec->getLocation(rel.offset) +
+              ": unexpected section relocation");
+
+      Symbol *sym = rel.referent.dyn_cast<Symbol *>();
+      if (auto *undefined = dyn_cast<Undefined>(sym))
+        treatUndefinedSymbol(*undefined, isec, rel.offset);
+      if (needsBinding(sym))
+        in.stubs->addEntry(sym);
+    }
+  }
 }
 
 void macho::createSyntheticSymbols() {

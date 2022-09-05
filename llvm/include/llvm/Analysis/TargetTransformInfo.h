@@ -212,6 +212,8 @@ public:
   ///
   /// There are several different cost models that can be customized by the
   /// target. The normalization of each cost model may be target specific.
+  /// e.g. TCK_SizeAndLatency should be comparable to target thresholds such as
+  /// those derived from MCSchedModel::LoopMicroOpBufferSize etc.
   enum TargetCostKind {
     TCK_RecipThroughput, ///< Reciprocal throughput.
     TCK_Latency,         ///< The latency of instruction.
@@ -602,7 +604,7 @@ public:
                              unsigned AddrSpace = 0,
                              Instruction *I = nullptr) const;
 
-  /// Return true if LSR cost of C1 is lower than C1.
+  /// Return true if LSR cost of C1 is lower than C2.
   bool isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
                      const TargetTransformInfo::LSRCost &C2) const;
 
@@ -887,6 +889,7 @@ public:
     SK_Splice            ///< Concatenates elements from the first input vector
                          ///< with elements of the second input vector. Returning
                          ///< a vector of the same type as the input vectors.
+                         ///< Index indicates start offset in first input vector.
   };
 
   /// Additional information about an operand's possible values.
@@ -1769,7 +1772,7 @@ public:
   virtual InstructionCost
   getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                   unsigned AddressSpace, TTI::TargetCostKind CostKind,
-                  OperandValueKind OpdInfo, const Instruction *I) = 0;
+                  OperandValueInfo OpInfo, const Instruction *I) = 0;
   virtual InstructionCost getVPMemoryOpCost(unsigned Opcode, Type *Src,
                                             Align Alignment,
                                             unsigned AddressSpace,
@@ -2336,10 +2339,10 @@ public:
   InstructionCost getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                                   unsigned AddressSpace,
                                   TTI::TargetCostKind CostKind,
-                                  OperandValueKind OpdInfo,
+                                  OperandValueInfo OpInfo,
                                   const Instruction *I) override {
     return Impl.getMemoryOpCost(Opcode, Src, Alignment, AddressSpace, CostKind,
-                                OpdInfo, I);
+                                OpInfo, I);
   }
   InstructionCost getVPMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                                     unsigned AddressSpace,

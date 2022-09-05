@@ -751,12 +751,12 @@ WebAssemblyTargetLowering::getRegForInlineAsmConstraint(
   return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }
 
-bool WebAssemblyTargetLowering::isCheapToSpeculateCttz() const {
+bool WebAssemblyTargetLowering::isCheapToSpeculateCttz(Type *Ty) const {
   // Assume ctz is a relatively cheap operation.
   return true;
 }
 
-bool WebAssemblyTargetLowering::isCheapToSpeculateCtlz() const {
+bool WebAssemblyTargetLowering::isCheapToSpeculateCtlz(Type *Ty) const {
   // Assume clz is a relatively cheap operation.
   return true;
 }
@@ -1855,7 +1855,7 @@ SDValue WebAssemblyTargetLowering::LowerBR_JT(SDValue Op,
   const auto &MBBs = MJTI->getJumpTables()[JT->getIndex()].MBBs;
 
   // Add an operand for each case.
-  for (auto MBB : MBBs)
+  for (auto *MBB : MBBs)
     Ops.push_back(DAG.getBasicBlock(MBB));
 
   // Add the first MBB as a dummy default target for now. This will be replaced

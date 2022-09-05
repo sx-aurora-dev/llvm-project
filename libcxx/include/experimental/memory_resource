@@ -86,6 +86,8 @@ _LIBCPP_PUSH_MACROS
 
 _LIBCPP_BEGIN_NAMESPACE_LFTS_PMR
 
+#ifndef _LIBCPP_CXX03_LANG
+
 // Round __s up to next multiple of __a.
 inline _LIBCPP_INLINE_VISIBILITY
 size_t __aligned_allocation_size(size_t __s, size_t __a) _NOEXCEPT
@@ -379,7 +381,7 @@ public:
 
 // 8.7.3, memory.resource.adaptor.mem
 private:
-    virtual void * do_allocate(size_t __bytes, size_t)
+    void * do_allocate(size_t __bytes, size_t) override
     {
         if (__bytes > __max_size())
             __throw_bad_array_new_length();
@@ -387,7 +389,7 @@ private:
         return __alloc_.allocate(__s);
     }
 
-    virtual void do_deallocate(void * __p, size_t __bytes, size_t)
+    void do_deallocate(void * __p, size_t __bytes, size_t) override
     {
         _LIBCPP_ASSERT(__bytes <= __max_size(),
             "do_deallocate called for size which exceeds the maximum allocation size");
@@ -395,7 +397,7 @@ private:
         __alloc_.deallocate((_ValueType*)__p, __s);
     }
 
-    virtual bool do_is_equal(memory_resource const & __other) const _NOEXCEPT {
+    bool do_is_equal(memory_resource const & __other) const _NOEXCEPT override {
         __resource_adaptor_imp const * __p
           = dynamic_cast<__resource_adaptor_imp const *>(&__other);
         return __p  ? __alloc_ == __p->__alloc_ : false;
@@ -411,6 +413,8 @@ template <class _Alloc>
 using resource_adaptor = __resource_adaptor_imp<
     typename allocator_traits<_Alloc>::template rebind_alloc<char>
   >;
+
+#endif // _LIBCPP_CXX03_LANG
 
 _LIBCPP_END_NAMESPACE_LFTS_PMR
 

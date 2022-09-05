@@ -767,7 +767,7 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
     auto &CudaTC = ToolChains[CudaTriple->str() + "/" + HostTriple.str()];
     if (!CudaTC) {
       CudaTC = std::make_unique<toolchains::CudaToolChain>(
-          *this, *CudaTriple, *HostTC, C.getInputArgs(), OFK);
+          *this, *CudaTriple, *HostTC, C.getInputArgs());
     }
     C.addOffloadDeviceToolChain(CudaTC.get(), OFK);
   } else if (IsHIP) {
@@ -890,7 +890,7 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
           if (!DeviceTC) {
             if (TT.isNVPTX())
               DeviceTC = std::make_unique<toolchains::CudaToolChain>(
-                  *this, TT, *HostTC, C.getInputArgs(), Action::OFK_OpenMP);
+                  *this, TT, *HostTC, C.getInputArgs());
             else if (TT.isAMDGCN())
               DeviceTC = std::make_unique<toolchains::AMDGPUOpenMPToolChain>(
                   *this, TT, *HostTC, C.getInputArgs());
@@ -1007,9 +1007,7 @@ bool Driver::loadConfigFile() {
     std::vector<std::string> ConfigFiles =
         CLOptions->getAllArgValues(options::OPT_config);
     if (ConfigFiles.size() > 1) {
-      if (!llvm::all_of(ConfigFiles, [ConfigFiles](const std::string &s) {
-            return s == ConfigFiles[0];
-          })) {
+      if (!llvm::all_equal(ConfigFiles)) {
         Diag(diag::err_drv_duplicate_config);
         return true;
       }
@@ -2167,12 +2165,6 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
   if (C.getArgs().hasArg(options::OPT_print_effective_triple)) {
     const llvm::Triple Triple(TC.ComputeEffectiveClangTriple(C.getArgs()));
     llvm::outs() << Triple.getTriple() << "\n";
-    return false;
-  }
-
-  if (C.getArgs().hasArg(options::OPT_print_multiarch)) {
-    llvm::outs() << TC.getMultiarchTriple(*this, TC.getTriple(), SysRoot)
-                 << "\n";
     return false;
   }
 
@@ -3457,178 +3449,6 @@ class OffloadingActionBuilder final {
     void appendLinkDependences(OffloadAction::DeviceDependences &DA) override {}
   };
 
-  /// OpenMP action builder. The host bitcode is passed to the device frontend
-  /// and all the device linked images are passed to the host link phase.
-  class OpenMPActionBuilder final : public DeviceActionBuilder {
-    /// The OpenMP actions for the current input.
-    ActionList OpenMPDeviceActions;
-
-    /// The linker inputs obtained for each toolchain.
-    SmallVector<ActionList, 8> DeviceLinkerInputs;
-
-  public:
-    OpenMPActionBuilder(Compilation &C, DerivedArgList &Args,
-                        const Driver::InputList &Inputs)
-        : DeviceActionBuilder(C, Args, Inputs, Action::OFK_OpenMP) {}
-
-    ActionBuilderReturnCode
-    getDeviceDependences(OffloadAction::DeviceDependences &DA,
-                         phases::ID CurPhase, phases::ID FinalPhase,
-                         PhasesTy &Phases) override {
-      if (OpenMPDeviceActions.empty())
-        return ABRT_Inactive;
-
-      // We should always have an action for each input.
-      assert(OpenMPDeviceActions.size() == ToolChains.size() &&
-             "Number of OpenMP actions and toolchains do not match.");
-
-      // The host only depends on device action in the linking phase, when all
-      // the device images have to be embedded in the host image.
-      if (CurPhase == phases::Link) {
-        assert(ToolChains.size() == DeviceLinkerInputs.size() &&
-               "Toolchains and linker inputs sizes do not match.");
-        auto LI = DeviceLinkerInputs.begin();
-        for (auto *A : OpenMPDeviceActions) {
-          LI->push_back(A);
-          ++LI;
-        }
-
-        // We passed the device action as a host dependence, so we don't need to
-        // do anything else with them.
-        OpenMPDeviceActions.clear();
-        return ABRT_Success;
-      }
-
-      // By default, we produce an action for each device arch.
-      for (Action *&A : OpenMPDeviceActions)
-        A = C.getDriver().ConstructPhaseAction(C, Args, CurPhase, A);
-
-      return ABRT_Success;
-    }
-
-    ActionBuilderReturnCode addDeviceDepences(Action *HostAction) override {
-
-      // If this is an input action replicate it for each OpenMP toolchain.
-      if (auto *IA = dyn_cast<InputAction>(HostAction)) {
-        OpenMPDeviceActions.clear();
-        for (unsigned I = 0; I < ToolChains.size(); ++I)
-          OpenMPDeviceActions.push_back(
-              C.MakeAction<InputAction>(IA->getInputArg(), IA->getType()));
-        return ABRT_Success;
-      }
-
-      // If this is an unbundling action use it as is for each OpenMP toolchain.
-      if (auto *UA = dyn_cast<OffloadUnbundlingJobAction>(HostAction)) {
-        OpenMPDeviceActions.clear();
-        auto *IA = cast<InputAction>(UA->getInputs().back());
-        std::string FileName = IA->getInputArg().getAsString(Args);
-        // Check if the type of the file is the same as the action. Do not
-        // unbundle it if it is not. Do not unbundle .so files, for example,
-        // which are not object files.
-        if (IA->getType() == types::TY_Object &&
-            (!llvm::sys::path::has_extension(FileName) ||
-             types::lookupTypeForExtension(
-                 llvm::sys::path::extension(FileName).drop_front()) !=
-                 types::TY_Object))
-          return ABRT_Inactive;
-        for (unsigned I = 0; I < ToolChains.size(); ++I) {
-          OpenMPDeviceActions.push_back(UA);
-          UA->registerDependentActionInfo(
-              ToolChains[I], /*BoundArch=*/StringRef(), Action::OFK_OpenMP);
-        }
-        return ABRT_Success;
-      }
-
-      // When generating code for OpenMP we use the host compile phase result as
-      // a dependence to the device compile phase so that it can learn what
-      // declarations should be emitted. However, this is not the only use for
-      // the host action, so we prevent it from being collapsed.
-      if (isa<CompileJobAction>(HostAction)) {
-        HostAction->setCannotBeCollapsedWithNextDependentAction();
-        assert(ToolChains.size() == OpenMPDeviceActions.size() &&
-               "Toolchains and device action sizes do not match.");
-        OffloadAction::HostDependence HDep(
-            *HostAction, *C.getSingleOffloadToolChain<Action::OFK_Host>(),
-            /*BoundArch=*/nullptr, Action::OFK_OpenMP);
-        auto TC = ToolChains.begin();
-        for (Action *&A : OpenMPDeviceActions) {
-          assert(isa<CompileJobAction>(A));
-          OffloadAction::DeviceDependences DDep;
-          DDep.add(*A, **TC, /*BoundArch=*/nullptr, Action::OFK_OpenMP);
-          A = C.MakeAction<OffloadAction>(HDep, DDep);
-          ++TC;
-        }
-      }
-      return ABRT_Success;
-    }
-
-    void appendTopLevelActions(ActionList &AL) override {
-      if (OpenMPDeviceActions.empty())
-        return;
-
-      // We should always have an action for each input.
-      assert(OpenMPDeviceActions.size() == ToolChains.size() &&
-             "Number of OpenMP actions and toolchains do not match.");
-
-      // Append all device actions followed by the proper offload action.
-      auto TI = ToolChains.begin();
-      for (auto *A : OpenMPDeviceActions) {
-        OffloadAction::DeviceDependences Dep;
-        Dep.add(*A, **TI, /*BoundArch=*/nullptr, Action::OFK_OpenMP);
-        AL.push_back(C.MakeAction<OffloadAction>(Dep, A->getType()));
-        ++TI;
-      }
-      // We no longer need the action stored in this builder.
-      OpenMPDeviceActions.clear();
-    }
-
-    void appendLinkDeviceActions(ActionList &AL) override {
-      assert(ToolChains.size() == DeviceLinkerInputs.size() &&
-             "Toolchains and linker inputs sizes do not match.");
-
-      // Append a new link action for each device.
-      auto TC = ToolChains.begin();
-      for (auto &LI : DeviceLinkerInputs) {
-        auto *DeviceLinkAction =
-            C.MakeAction<LinkJobAction>(LI, types::TY_Image);
-        OffloadAction::DeviceDependences DeviceLinkDeps;
-        DeviceLinkDeps.add(*DeviceLinkAction, **TC, /*BoundArch=*/nullptr,
-		        Action::OFK_OpenMP);
-        AL.push_back(C.MakeAction<OffloadAction>(DeviceLinkDeps,
-            DeviceLinkAction->getType()));
-        ++TC;
-      }
-      DeviceLinkerInputs.clear();
-    }
-
-    Action* appendLinkHostActions(ActionList &AL) override {
-      // Create wrapper bitcode from the result of device link actions and compile
-      // it to an object which will be added to the host link command.
-      auto *BC = C.MakeAction<OffloadWrapperJobAction>(AL, types::TY_LLVM_BC);
-      auto *ASM = C.MakeAction<BackendJobAction>(BC, types::TY_PP_Asm);
-      return C.MakeAction<AssembleJobAction>(ASM, types::TY_Object);
-    }
-
-    void appendLinkDependences(OffloadAction::DeviceDependences &DA) override {}
-
-    bool initialize() override {
-      // Get the OpenMP toolchains. If we don't get any, the action builder will
-      // know there is nothing to do related to OpenMP offloading.
-      auto OpenMPTCRange = C.getOffloadToolChains<Action::OFK_OpenMP>();
-      for (auto TI = OpenMPTCRange.first, TE = OpenMPTCRange.second; TI != TE;
-           ++TI)
-        ToolChains.push_back(TI->second);
-
-      DeviceLinkerInputs.resize(ToolChains.size());
-      return false;
-    }
-
-    bool canUseBundlerUnbundler() const override {
-      // OpenMP should use bundled files whenever possible.
-      return true;
-    }
-  };
-
   ///
   /// TODO: Add the implementation for other specialized builders here.
   ///
@@ -3652,9 +3472,6 @@ public:
 
     // Create a specialized builder for HIP.
     SpecializedBuilders.push_back(new HIPActionBuilder(C, Args, Inputs));
-
-    // Create a specialized builder for OpenMP.
-    SpecializedBuilders.push_back(new OpenMPActionBuilder(C, Args, Inputs));
 
     //
     // TODO: Build other specialized builders here.
@@ -4061,11 +3878,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     Diag(clang::diag::err_drv_no_input_files);
     return;
   }
-
-  // Reject -Z* at the top level, these options should never have been exposed
-  // by gcc.
-  if (Arg *A = Args.getLastArg(options::OPT_Z_Joined))
-    Diag(clang::diag::err_drv_use_of_Z_option) << A->getAsString(Args);
 
   // Diagnose misuse of /Fo.
   if (Arg *A = Args.getLastArg(options::OPT__SLASH_Fo)) {
@@ -4714,6 +4526,102 @@ Action *Driver::ConstructPhaseAction(
   llvm_unreachable("invalid phase in ConstructPhaseAction");
 }
 
+// Infer data storing path of the options `-ftime-trace`, `-ftime-trace=<path>`
+void InferTimeTracePath(Compilation &C) {
+  bool HasTimeTrace =
+      C.getArgs().getLastArg(options::OPT_ftime_trace) != nullptr;
+  bool HasTimeTraceFile =
+      C.getArgs().getLastArg(options::OPT_ftime_trace_EQ) != nullptr;
+  // Whether `-ftime-trace` or `-ftime-trace=<path>` are specified
+  if (!HasTimeTrace && !HasTimeTraceFile)
+    return;
+
+  // If `-ftime-trace=<path>` is specified, TracePath is the <path>.
+  // Else if there is a linking job, TracePath is the parent path of .exe,
+  //         then the OutputFile's name may be appended to it.
+  // Else, TracePath is "",
+  //         then the full OutputFile's path may be appended to it.
+  SmallString<128> TracePath("");
+
+  if (HasTimeTraceFile) {
+    TracePath = SmallString<128>(
+        C.getArgs().getLastArg(options::OPT_ftime_trace_EQ)->getValue());
+  } else {
+    // Get linking executable file's parent path as TracePath's parent path,
+    // default is ".". Filename may be determined and added into TracePath then.
+    //
+    // e.g. executable file's path: /usr/local/a.out
+    //      its parent's path:      /usr/local
+    for (auto &J : C.getJobs()) {
+      if (J.getSource().getKind() == Action::LinkJobClass) {
+        assert(!J.getOutputFilenames().empty() &&
+               "linking output filename is empty");
+        auto OutputFilePath =
+            SmallString<128>(J.getOutputFilenames()[0].c_str());
+        if (llvm::sys::path::has_parent_path(OutputFilePath)) {
+          TracePath = llvm::sys::path::parent_path(OutputFilePath);
+        } else {
+          TracePath = SmallString<128>(".");
+        }
+        break;
+      }
+    }
+  }
+
+  // Add or replace the modified -ftime-trace=<path>` to all clang jobs
+  for (auto &J : C.getJobs()) {
+    if (J.getSource().getKind() == Action::AssembleJobClass ||
+        J.getSource().getKind() == Action::BackendJobClass ||
+        J.getSource().getKind() == Action::CompileJobClass) {
+      SmallString<128> TracePathReal = TracePath;
+      SmallString<128> OutputPath(J.getOutputFilenames()[0].c_str());
+      std::string arg = std::string("-ftime-trace=");
+      if (!HasTimeTraceFile) {
+        if (TracePathReal.empty()) {
+          // /xxx/yyy.o => /xxx/yyy.json
+          llvm::sys::path::replace_extension(OutputPath, "json");
+          arg += std::string(OutputPath.c_str());
+        } else {
+          // /xxx/yyy.o => /executable_file_parent_path/yyy.json
+          llvm::sys::path::append(TracePathReal,
+                                  llvm::sys::path::filename(OutputPath));
+          llvm::sys::path::replace_extension(TracePathReal, "json");
+          arg += std::string(TracePathReal.c_str());
+        }
+      } else {
+        // /full_file_path_specified or /path_specified/yyy.json
+        if (llvm::sys::fs::is_directory(TracePathReal))
+          llvm::sys::path::append(TracePathReal,
+                                  llvm::sys::path::filename(OutputPath));
+        llvm::sys::path::replace_extension(TracePathReal, "json");
+        arg += std::string(TracePathReal.c_str());
+      }
+
+      assert(arg.size() > strlen("-ftime-trace") &&
+             arg.find("-ftime-trace=") == 0 && arg[arg.size() - 1] != '=' &&
+             "invalid `-ftime-trace=<path>`");
+
+      const std::string::size_type size = arg.size();
+      char *buffer = new char[size + 1];
+      memcpy(buffer, arg.c_str(), size + 1);
+
+      // Replace `-ftime-trace` or `-ftime-trace=<path>` with the modified
+      // `-ftime-trace=<infered_path>`.
+      auto &JArgs = J.getArguments();
+      for (unsigned I = 0; I < JArgs.size(); ++I) {
+        if (StringRef(JArgs[I]).startswith("-ftime-trace=") ||
+            (StringRef(JArgs[I]).equals("-ftime-trace") && !HasTimeTraceFile)) {
+          ArgStringList NewArgs(JArgs.begin(), JArgs.begin() + I);
+          NewArgs.push_back(buffer);
+          NewArgs.append(JArgs.begin() + I + 1, JArgs.end());
+          J.replaceArguments(NewArgs);
+          break;
+        }
+      }
+    }
+  }
+}
+
 void Driver::BuildJobs(Compilation &C) const {
   llvm::PrettyStackTraceString CrashInfo("Building compilation jobs");
 
@@ -4732,10 +4640,14 @@ void Driver::BuildJobs(Compilation &C) const {
   // we are also generating .o files. So we allow more than one output file in
   // this case as well.
   //
+  // OffloadClass of type TY_Nothing: device-only output will place many outputs
+  // into a single offloading action. We should count all inputs to the action
+  // as outputs. Also ignore device-only outputs if we're compiling with
+  // -fsyntax-only.
   if (FinalOutput) {
     unsigned NumOutputs = 0;
     unsigned NumIfsOutputs = 0;
-    for (const Action *A : C.getActions())
+    for (const Action *A : C.getActions()) {
       if (A->getType() != types::TY_Nothing &&
           !(A->getKind() == Action::IfsMergeJobClass ||
             (A->getType() == clang::driver::types::TY_IFS_CPP &&
@@ -4744,6 +4656,11 @@ void Driver::BuildJobs(Compilation &C) const {
             (A->getKind() == Action::BindArchClass && A->getInputs().size() &&
              A->getInputs().front()->getKind() == Action::IfsMergeJobClass)))
         ++NumOutputs;
+      else if (A->getKind() == Action::OffloadClass &&
+               A->getType() == types::TY_Nothing &&
+               !C.getArgs().hasArg(options::OPT_fsyntax_only))
+        NumOutputs += A->size();
+    }
 
     if (NumOutputs > 1) {
       Diag(clang::diag::err_drv_output_argument_with_multiple_files);
@@ -4791,6 +4708,9 @@ void Driver::BuildJobs(Compilation &C) const {
                        /*LinkingOutput*/ LinkingOutput, CachedResults,
                        /*TargetDeviceOffloadKind*/ Action::OFK_None);
   }
+
+  // set data storing path of the options `-ftime-trace`, `-ftime-trace=<path>`
+  InferTimeTracePath(C);
 
   // If we have more than one job, then disable integrated-cc1 for now. Do this
   // also when we need to report process execution statistics.
@@ -5281,20 +5201,21 @@ InputInfoList Driver::BuildJobsForActionNoCache(
     //                      \
     //    Device Action 1  ---> OffloadAction -> Device Action 2
     //
-    // For a) and b), we just return the job generated for the dependence. For
+    // For a) and b), we just return the job generated for the dependences. For
     // c) and d) we override the current action with the host/device dependence
     // if the current toolchain is host/device and set the offload dependences
     // info with the jobs obtained from the device/host dependence(s).
 
-    // If there is a single device option, just generate the job for it.
-    if (OA->hasSingleDeviceDependence()) {
+    // If there is a single device option or has no host action, just generate
+    // the job for it.
+    if (OA->hasSingleDeviceDependence() || !OA->hasHostDependence()) {
       InputInfoList DevA;
       OA->doOnEachDeviceDependence([&](Action *DepA, const ToolChain *DepTC,
                                        const char *DepBoundArch) {
-        DevA =
-            BuildJobsForAction(C, DepA, DepTC, DepBoundArch, AtTopLevel,
-                               /*MultipleArchs*/ !!DepBoundArch, LinkingOutput,
-                               CachedResults, DepA->getOffloadingDeviceKind());
+        DevA.append(BuildJobsForAction(C, DepA, DepTC, DepBoundArch, AtTopLevel,
+                                       /*MultipleArchs*/ !!DepBoundArch,
+                                       LinkingOutput, CachedResults,
+                                       DepA->getOffloadingDeviceKind()));
       });
       return DevA;
     }
@@ -5513,14 +5434,6 @@ InputInfoList Driver::BuildJobsForActionNoCache(
         /*CreatePrefixForHost=*/isa<OffloadPackagerJobAction>(A) ||
             !(A->getOffloadingHostActiveKinds() == Action::OFK_None ||
               AtTopLevel));
-    if (isa<OffloadWrapperJobAction>(JA)) {
-      if (Arg *FinalOutput = C.getArgs().getLastArg(options::OPT_o))
-        BaseInput = FinalOutput->getValue();
-      else
-        BaseInput = getDefaultImageName();
-      BaseInput =
-          C.getArgs().MakeArgString(std::string(BaseInput) + "-wrapper");
-    }
     Result = InputInfo(A, GetNamedOutputPath(C, *JA, BaseInput, BoundArch,
                                              AtTopLevel, MultipleArchs,
                                              OffloadingPrefix),

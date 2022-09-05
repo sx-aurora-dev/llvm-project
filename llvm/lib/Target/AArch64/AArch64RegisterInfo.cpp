@@ -366,10 +366,6 @@ bool AArch64RegisterInfo::isAsmClobberable(const MachineFunction &MF,
   return !isReservedReg(MF, PhysReg);
 }
 
-bool AArch64RegisterInfo::isConstantPhysReg(MCRegister PhysReg) const {
-  return PhysReg == AArch64::WZR || PhysReg == AArch64::XZR;
-}
-
 const TargetRegisterClass *
 AArch64RegisterInfo::getPointerRegClass(const MachineFunction &MF,
                                       unsigned Kind) const {
@@ -428,8 +424,7 @@ bool AArch64RegisterInfo::isArgumentRegister(const MachineFunction &MF,
   bool IsVarArg = STI.isCallingConvWin64(MF.getFunction().getCallingConv());
 
   auto HasReg = [](ArrayRef<MCRegister> RegList, MCRegister Reg) {
-    return llvm::any_of(RegList,
-                        [Reg](const MCRegister R) { return R == Reg; });
+    return llvm::is_contained(RegList, Reg);
   };
 
   switch (CC) {

@@ -765,6 +765,40 @@ llvm.func @simdloop_simple_multiple_simdlen(%lb1 : i64, %ub1 : i64, %step1 : i64
 
 // -----
 
+// CHECK-LABEL: @simdloop_simple_multiple_safelen
+llvm.func @simdloop_simple_multiple_safelen(%lb1 : i64, %ub1 : i64, %step1 : i64, %lb2 : i64, %ub2 : i64, %step2 : i64, %arg0: !llvm.ptr<f32>, %arg1: !llvm.ptr<f32>) {
+  omp.simdloop safelen(2) for (%iv1, %iv2) : i64 = (%lb1, %lb2) to (%ub1, %ub2) step (%step1, %step2) {
+    %3 = llvm.mlir.constant(2.000000e+00 : f32) : f32
+    %4 = llvm.getelementptr %arg0[%iv1] : (!llvm.ptr<f32>, i64) -> !llvm.ptr<f32>
+    %5 = llvm.getelementptr %arg1[%iv2] : (!llvm.ptr<f32>, i64) -> !llvm.ptr<f32>
+    llvm.store %3, %4 : !llvm.ptr<f32>
+    llvm.store %3, %5 : !llvm.ptr<f32>
+    omp.yield
+  }
+  llvm.return
+}
+// CHECK: llvm.loop.vectorize.enable
+// CHECK-NEXT: llvm.loop.vectorize.width{{.*}}i64 2
+
+// -----
+
+// CHECK-LABEL: @simdloop_simple_multiple_simdlen_safelen
+llvm.func @simdloop_simple_multiple_simdlen_safelen(%lb1 : i64, %ub1 : i64, %step1 : i64, %lb2 : i64, %ub2 : i64, %step2 : i64, %arg0: !llvm.ptr<f32>, %arg1: !llvm.ptr<f32>) {
+  omp.simdloop simdlen(1) safelen(2) for (%iv1, %iv2) : i64 = (%lb1, %lb2) to (%ub1, %ub2) step (%step1, %step2) {
+    %3 = llvm.mlir.constant(2.000000e+00 : f32) : f32
+    %4 = llvm.getelementptr %arg0[%iv1] : (!llvm.ptr<f32>, i64) -> !llvm.ptr<f32>
+    %5 = llvm.getelementptr %arg1[%iv2] : (!llvm.ptr<f32>, i64) -> !llvm.ptr<f32>
+    llvm.store %3, %4 : !llvm.ptr<f32>
+    llvm.store %3, %5 : !llvm.ptr<f32>
+    omp.yield
+  }
+  llvm.return
+}
+// CHECK: llvm.loop.vectorize.enable
+// CHECK-NEXT: llvm.loop.vectorize.width{{.*}}i64 1
+
+// -----
+
 // CHECK-LABEL: @simdloop_if
 llvm.func @simdloop_if(%arg0: !llvm.ptr<i32> {fir.bindc_name = "n"}, %arg1: !llvm.ptr<i32> {fir.bindc_name = "threshold"}) {
   %0 = llvm.mlir.constant(1 : i64) : i64
@@ -2323,3 +2357,98 @@ module attributes {llvm.target_triple = "x86_64-unknown-linux-gnu"} {
 // CHECK:   call void @[[outlined_fn]](ptr %[[task_data]])
 // CHECK:   ret i32 0
 // CHECK: }
+
+// -----
+
+llvm.func @foo() -> ()
+
+llvm.func @omp_taskgroup(%x: i32, %y: i32, %zaddr: !llvm.ptr<i32>) {
+  omp.taskgroup {
+    llvm.call @foo() : () -> ()
+    omp.terminator
+  }
+  llvm.return
+}
+
+// CHECK-LABEL: define void @omp_taskgroup(
+// CHECK-SAME:                             i32 %[[x:.+]], i32 %[[y:.+]], ptr %[[zaddr:.+]]) 
+// CHECK:         br label %[[entry:[^,]+]]
+// CHECK:       [[entry]]:
+// CHECK:         %[[omp_global_thread_num:.+]] = call i32 @__kmpc_global_thread_num(ptr @{{.+}})
+// CHECK:         call void @__kmpc_taskgroup(ptr @{{.+}}, i32 %[[omp_global_thread_num]])
+// CHECK:         br label %[[omp_taskgroup_region:[^,]+]]
+// CHECK:       [[omp_taskgroup_region]]:
+// CHECK:         call void @foo()
+// CHECK:         br label %[[omp_region_cont:[^,]+]]
+// CHECK:       [[omp_region_cont]]:
+// CHECK:         br label %[[taskgroup_exit:[^,]+]]
+// CHECK:       [[taskgroup_exit]]:
+// CHECK:         call void @__kmpc_end_taskgroup(ptr @{{.+}}, i32 %[[omp_global_thread_num]])
+// CHECK:         ret void
+
+// -----
+
+llvm.func @foo() -> ()
+llvm.func @bar(i32, i32, !llvm.ptr<i32>) -> ()
+
+llvm.func @omp_taskgroup_task(%x: i32, %y: i32, %zaddr: !llvm.ptr<i32>) {
+  omp.taskgroup {
+    %c1 = llvm.mlir.constant(1) : i32
+    %ptr1 = llvm.alloca %c1 x i8 : (i32) -> !llvm.ptr<i8>
+    omp.task {
+      llvm.call @foo() : () -> ()
+      omp.terminator
+    }
+    omp.task {
+      llvm.call @bar(%x, %y, %zaddr) : (i32, i32, !llvm.ptr<i32>) -> ()
+      omp.terminator
+    }
+    llvm.br ^bb1
+  ^bb1:
+    llvm.call @foo() : () -> ()
+    omp.terminator
+  }
+  llvm.return
+}
+
+// CHECK-LABEL: define void @omp_taskgroup_task(
+// CHECK-SAME:                                  i32 %[[x:.+]], i32 %[[y:.+]], ptr %[[zaddr:.+]]) 
+// CHECK:         %[[structArg:.+]] = alloca { i32, i32, ptr }, align 8
+// CHECK:         br label %[[entry:[^,]+]]
+// CHECK:       [[entry]]:                                            ; preds = %3
+// CHECK:         %[[omp_global_thread_num:.+]] = call i32 @__kmpc_global_thread_num(ptr @{{.+}})
+// CHECK:         call void @__kmpc_taskgroup(ptr @{{.+}}, i32 %[[omp_global_thread_num]])
+// CHECK:         br label %[[omp_taskgroup_region:[^,]+]]
+// CHECK:       [[omp_taskgroup_region1:.+]]:
+// CHECK:         call void @foo()
+// CHECK:         br label %[[omp_region_cont:[^,]+]]
+// CHECK:       [[omp_taskgroup_region]]:
+// CHECK:         %{{.+}} = alloca i8, align 1
+// CHECK:         br label %[[codeRepl:[^,]+]]
+// CHECK:       [[codeRepl]]:
+// CHECK:         %[[omp_global_thread_num_t1:.+]] = call i32 @__kmpc_global_thread_num(ptr @{{.+}})
+// CHECK:         %[[t1_alloc:.+]] = call ptr @__kmpc_omp_task_alloc(ptr @{{.+}}, i32 %[[omp_global_thread_num_t1]], i32 1, i64 0, i64 0, ptr @omp_taskgroup_task..omp_par.wrapper)
+// CHECK:         %{{.+}} = call i32 @__kmpc_omp_task(ptr @{{.+}}, i32 %[[omp_global_thread_num_t1]], ptr %[[t1_alloc]])
+// CHECK:         br label %[[task_exit:[^,]+]]
+// CHECK:       [[task_exit]]:
+// CHECK:         br label %[[codeRepl9:[^,]+]]
+// CHECK:       [[codeRepl9]]:
+// CHECK:         %[[gep1:.+]] = getelementptr { i32, i32, ptr }, ptr %[[structArg]], i32 0, i32 0
+// CHECK:         store i32 %[[x]], ptr %[[gep1]], align 4
+// CHECK:         %[[gep2:.+]] = getelementptr { i32, i32, ptr }, ptr %[[structArg]], i32 0, i32 1
+// CHECK:         store i32 %[[y]], ptr %[[gep2]], align 4
+// CHECK:         %[[gep3:.+]] = getelementptr { i32, i32, ptr }, ptr %[[structArg]], i32 0, i32 2
+// CHECK:         store ptr %[[zaddr]], ptr %[[gep3]], align 8
+// CHECK:         %[[omp_global_thread_num_t2:.+]] = call i32 @__kmpc_global_thread_num(ptr @{{.+}})
+// CHECK:         %[[t2_alloc:.+]] = call ptr @__kmpc_omp_task_alloc(ptr @{{.+}}, i32 %[[omp_global_thread_num_t2]], i32 1, i64 16, i64 0, ptr @omp_taskgroup_task..omp_par.1.wrapper)
+// CHECK:         call void @llvm.memcpy.p0.p0.i64(ptr align 8 %[[t2_alloc]], ptr align 8 %[[structArg]], i64 16, i1 false)
+// CHECK:         %{{.+}} = call i32 @__kmpc_omp_task(ptr @{{.+}}, i32 %[[omp_global_thread_num_t2]], ptr %[[t2_alloc]])
+// CHECK:         br label %[[task_exit3:[^,]+]]
+// CHECK:       [[task_exit3]]:
+// CHECK:         br label %[[omp_taskgroup_region1]]
+// CHECK:       [[omp_region_cont]]:
+// CHECK:         br label %[[taskgroup_exit:[^,]+]]
+// CHECK:       [[taskgroup_exit]]:
+// CHECK:         call void @__kmpc_end_taskgroup(ptr @{{.+}}, i32 %[[omp_global_thread_num]])
+// CHECK:         ret void
+// CHECK:       }

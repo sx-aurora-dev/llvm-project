@@ -14,6 +14,7 @@
 #ifndef LLVM_ADT_BIT_H
 #define LLVM_ADT_BIT_H
 
+#include <cstdint>
 #include <cstring>
 #include <type_traits>
 
@@ -32,6 +33,11 @@ inline To bit_cast(const From &from) noexcept {
   To to;
   std::memcpy(&to, &from, sizeof(To));
   return to;
+}
+
+template <typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
+constexpr inline bool has_single_bit(T Value) noexcept {
+  return (Value != 0) && ((Value & (Value - 1)) == 0);
 }
 
 namespace detail {

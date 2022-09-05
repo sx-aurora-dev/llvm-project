@@ -61,11 +61,6 @@ using namespace clang;
 using namespace CodeGen;
 using namespace llvm;
 
-static
-int64_t clamp(int64_t Value, int64_t Low, int64_t High) {
-  return std::min(High, std::max(Low, Value));
-}
-
 static void initializeAlloca(CodeGenFunction &CGF, AllocaInst *AI, Value *Size,
                              Align AlignmentInBytes) {
   ConstantInt *Byte;
@@ -4653,14 +4648,6 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__fastfail:
     return RValue::get(EmitMSVCBuiltinExpr(MSVCIntrin::__fastfail, E));
 
-  case Builtin::BI__builtin_coro_size: {
-    auto & Context = getContext();
-    auto SizeTy = Context.getSizeType();
-    auto T = Builder.getIntNTy(Context.getTypeSize(SizeTy));
-    Function *F = CGM.getIntrinsic(Intrinsic::coro_size, T);
-    return RValue::get(Builder.CreateCall(F));
-  }
-
   case Builtin::BI__builtin_coro_id:
     return EmitCoroutineIntrinsic(E, Intrinsic::coro_id);
   case Builtin::BI__builtin_coro_promise:
@@ -4685,6 +4672,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     return EmitCoroutineIntrinsic(E, Intrinsic::coro_end);
   case Builtin::BI__builtin_coro_suspend:
     return EmitCoroutineIntrinsic(E, Intrinsic::coro_suspend);
+  case Builtin::BI__builtin_coro_size:
+    return EmitCoroutineIntrinsic(E, Intrinsic::coro_size);
 
   // OpenCL v2.0 s6.13.16.2, Built-in pipe read and write functions
   case Builtin::BIread_pipe:
@@ -16025,7 +16014,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     assert(ArgCI &&
            "Third arg to xxinsertw intrinsic must be constant integer");
     const int64_t MaxIndex = 12;
-    int64_t Index = clamp(ArgCI->getSExtValue(), 0, MaxIndex);
+    int64_t Index = std::clamp(ArgCI->getSExtValue(), (int64_t)0, MaxIndex);
 
     // The builtin semantics don't exactly match the xxinsertw instructions
     // semantics (which ppc_vsx_xxinsertw follows). The builtin extracts the
@@ -16067,7 +16056,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     assert(ArgCI &&
            "Second Arg to xxextractuw intrinsic must be a constant integer!");
     const int64_t MaxIndex = 12;
-    int64_t Index = clamp(ArgCI->getSExtValue(), 0, MaxIndex);
+    int64_t Index = std::clamp(ArgCI->getSExtValue(), (int64_t)0, MaxIndex);
 
     if (getTarget().isLittleEndian()) {
       // Reverse the index.

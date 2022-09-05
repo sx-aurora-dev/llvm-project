@@ -171,13 +171,14 @@ SVal ExprEngine::computeObjectUnderConstruction(
         if (const SubRegion *MR =
                 dyn_cast_or_null<SubRegion>(V.getAsRegion())) {
           if (NE->isArray()) {
-            // TODO: In fact, we need to call the constructor for every
-            // allocated element, not just the first one!
             CallOpts.IsArrayCtorOrDtor = true;
 
-            auto R = MRMgr.getElementRegion(NE->getType()->getPointeeType(),
-                                            svalBuilder.makeArrayIndex(Idx), MR,
-                                            SVB.getContext());
+            auto Ty = NE->getType()->getPointeeType();
+            while (const auto *AT = getContext().getAsArrayType(Ty))
+              Ty = AT->getElementType();
+
+            auto R = MRMgr.getElementRegion(Ty, svalBuilder.makeArrayIndex(Idx),
+                                            MR, SVB.getContext());
 
             return loc::MemRegionVal(R);
           }
@@ -605,6 +606,27 @@ void ExprEngine::handleConstructor(const Expr *E,
 
     unsigned Idx = 0;
     if (CE->getType()->isArrayType() || AILE) {
+
+      auto isZeroSizeArray = [&] {
+        uint64_t Size = 1;
+
+        if (const auto *CAT = dyn_cast<ConstantArrayType>(CE->getType()))
+          Size = getContext().getConstantArrayElementCount(CAT);
+        else if (AILE)
+          Size = getContext().getArrayInitLoopExprElementCount(AILE);
+
+        return Size == 0;
+      };
+
+      // No element construction will happen in a 0 size array.
+      if (isZeroSizeArray()) {
+        StmtNodeBuilder Bldr(Pred, destNodes, *currBldrCtx);
+        static SimpleProgramPointTag T{"ExprEngine",
+                                       "Skipping 0 size array construction"};
+        Bldr.generateNode(CE, Pred, State, &T);
+        return;
+      }
+
       Idx = getIndexOfElementToConstruct(State, CE, LCtx).value_or(0u);
       State = setIndexOfElementToConstruct(State, CE, LCtx, Idx + 1);
     }
@@ -1163,6 +1185,16 @@ void ExprEngine::VisitLambdaExpr(const LambdaExpr *LE, ExplodedNode *Pred,
       const Expr *InitExpr = *i;
 
       assert(InitExpr && "Capture missing initialization expression");
+
+      // Capturing a 0 length array is a no-op, so we ignore it to get a more
+      // accurate analysis. If it's not ignored, it would set the default
+      // binding of the lambda to 'Unknown', which can lead to falsely detecting
+      // 'Uninitialized' values as 'Unknown' and not reporting a warning.
+      const auto FTy = FieldForCapture->getType();
+      if (FTy->isConstantArrayType() &&
+          getContext().getConstantArrayElementCount(
+              getContext().getAsConstantArrayType(FTy)) == 0)
+        continue;
 
       // With C++17 copy elision the InitExpr can be anything, so instead of
       // pattern matching all cases, we simple check if the current field is

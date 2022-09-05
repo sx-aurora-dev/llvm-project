@@ -2123,6 +2123,11 @@ private:
   bool areAllUsersVectorized(Instruction *I,
                              ArrayRef<Value *> VectorizedVals) const;
 
+  /// Return information about the vector formed for the specified index
+  /// of a vector of (the same) instruction.
+  TargetTransformInfo::OperandValueInfo getOperandInfo(ArrayRef<Value *> VL,
+                                                       unsigned OpIdx);
+
   /// \returns the cost of the vectorizable entry.
   InstructionCost getEntryCost(const TreeEntry *E,
                                ArrayRef<Value *> VectorizedVals);
@@ -2198,10 +2203,10 @@ private:
   collectUserStores(const BoUpSLP::TreeEntry *TE) const;
 
   /// Helper for `findExternalStoreUsersReorderIndices()`. It checks if the
-  /// stores in \p StoresVec can for a vector instruction. If so it returns true
+  /// stores in \p StoresVec can form a vector instruction. If so it returns true
   /// and populates \p ReorderIndices with the shuffle indices of the the stores
   /// when compared to the sorted vector.
-  bool CanFormVector(const SmallVector<StoreInst *, 4> &StoresVec,
+  bool canFormVector(const SmallVector<StoreInst *, 4> &StoresVec,
                      OrdersType &ReorderIndices) const;
 
   /// Iterates through the users of \p TE, looking for scalar stores that can be
@@ -3321,7 +3326,7 @@ template <> struct DOTGraphTraits<BoUpSLP *> : public DefaultDOTGraphTraits {
     raw_string_ostream OS(Str);
     if (isSplat(Entry->Scalars))
       OS << "<splat> ";
-    for (auto V : Entry->Scalars) {
+    for (auto *V : Entry->Scalars) {
       OS << *V;
       if (llvm::any_of(R->ExternalUses, [&](const BoUpSLP::ExternalUser &EU) {
             return EU.Scalar == V;
@@ -4322,7 +4327,7 @@ BoUpSLP::collectUserStores(const BoUpSLP::TreeEntry *TE) const {
   return PtrToStoresMap;
 }
 
-bool BoUpSLP::CanFormVector(const SmallVector<StoreInst *, 4> &StoresVec,
+bool BoUpSLP::canFormVector(const SmallVector<StoreInst *, 4> &StoresVec,
                             OrdersType &ReorderIndices) const {
   // We check whether the stores in StoreVec can form a vector by sorting them
   // and checking whether they are consecutive.
@@ -4416,7 +4421,7 @@ BoUpSLP::findExternalStoreUsersReorderIndices(TreeEntry *TE) const {
 
     // If the stores are not consecutive then abandon this StoresVec.
     OrdersType ReorderIndices;
-    if (!CanFormVector(StoresVec, ReorderIndices))
+    if (!canFormVector(StoresVec, ReorderIndices))
       continue;
 
     // We now know that the scalars in StoresVec can form a vector instruction,
@@ -4696,10 +4701,12 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
   };
   SmallVector<unsigned> SortedIndices;
   BasicBlock *BB = nullptr;
+  bool IsScatterVectorizeUserTE =
+      UserTreeIdx.UserTE &&
+      UserTreeIdx.UserTE->State == TreeEntry::ScatterVectorize;
   bool AreAllSameInsts =
       (S.getOpcode() && allSameBlock(VL)) ||
-      (S.OpValue->getType()->isPointerTy() && UserTreeIdx.UserTE &&
-       UserTreeIdx.UserTE->State == TreeEntry::ScatterVectorize &&
+      (S.OpValue->getType()->isPointerTy() && IsScatterVectorizeUserTE &&
        VL.size() > 2 &&
        all_of(VL,
               [&BB](Value *V) {
@@ -4760,10 +4767,9 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
 
   // Check that none of the instructions in the bundle are already in the tree.
   for (Value *V : VL) {
-    auto *I = dyn_cast<Instruction>(V);
-    if (!I)
+    if (!IsScatterVectorizeUserTE && !isa<Instruction>(V))
       continue;
-    if (getTreeEntry(I)) {
+    if (getTreeEntry(V)) {
       LLVM_DEBUG(dbgs() << "SLP: The instruction (" << *V
                         << ") is already in tree.\n");
       if (TryToFindDuplicates(S))
@@ -5213,9 +5219,6 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
         }
       }
 
-      bool IsScatterUser =
-          UserTreeIdx.UserTE &&
-          UserTreeIdx.UserTE->State == TreeEntry::ScatterVectorize;
       // We don't combine GEPs with non-constant indexes.
       Type *Ty1 = VL0->getOperand(1)->getType();
       for (Value *V : VL) {
@@ -5223,9 +5226,9 @@ void BoUpSLP::buildTree_rec(ArrayRef<Value *> VL, unsigned Depth,
         if (!I)
           continue;
         auto *Op = I->getOperand(1);
-        if ((!IsScatterUser && !isa<ConstantInt>(Op)) ||
+        if ((!IsScatterVectorizeUserTE && !isa<ConstantInt>(Op)) ||
             (Op->getType() != Ty1 &&
-             ((IsScatterUser && !isa<ConstantInt>(Op)) ||
+             ((IsScatterVectorizeUserTE && !isa<ConstantInt>(Op)) ||
               Op->getType()->getScalarSizeInBits() >
                   DL->getIndexSizeInBits(
                       V->getType()->getPointerAddressSpace())))) {
@@ -5809,6 +5812,41 @@ static bool isAlternateInstruction(const Instruction *I,
   return I->getOpcode() == AltOp->getOpcode();
 }
 
+TTI::OperandValueInfo BoUpSLP::getOperandInfo(ArrayRef<Value *> VL,
+                                              unsigned OpIdx) {
+  assert(!VL.empty());
+  const auto *Op0 = cast<Instruction>(VL.front())->getOperand(OpIdx);
+
+  const bool IsConstant = all_of(VL, [&](Value *V) {
+    // TODO: We should allow undef elements here
+    auto *Op = cast<Instruction>(V)->getOperand(OpIdx);
+    return isConstant(Op) && !isa<UndefValue>(Op);
+  });
+  const bool IsUniform = all_of(VL, [&](Value *V) {
+    // TODO: We should allow undef elements here
+    return cast<Instruction>(V)->getOperand(OpIdx) == Op0;
+  });
+  const bool IsPowerOfTwo = all_of(VL, [&](Value *V) {
+    // TODO: We should allow undef elements here
+    auto *Op = cast<Instruction>(V)->getOperand(OpIdx);
+    if (auto *CI = dyn_cast<ConstantInt>(Op))
+      return CI->getValue().isPowerOf2();
+    return false;
+  });
+
+  TTI::OperandValueKind VK = TTI::OK_AnyValue;
+  if (IsConstant && IsUniform)
+    VK = TTI::OK_UniformConstantValue;
+  else if (IsConstant)
+    VK = TTI::OK_NonUniformConstantValue;
+  else if (IsUniform)
+    VK = TTI::OK_UniformValue;
+
+  const TTI::OperandValueProperties VP =
+    IsPowerOfTwo ? TTI::OP_PowerOf2 : TTI::OP_None;
+  return {VK, VP};
+}
+
 InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
                                       ArrayRef<Value *> VectorizedVals) {
   ArrayRef<Value*> VL = E->Scalars;
@@ -6372,47 +6410,17 @@ InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor: {
+      TTI::OperandValueInfo Op1Info = {TTI::OK_AnyValue, TTI::OP_None};
+
       // Certain instructions can be cheaper to vectorize if they have a
       // constant second vector operand.
-      TargetTransformInfo::OperandValueKind Op1VK =
-          TargetTransformInfo::OK_AnyValue;
-      TargetTransformInfo::OperandValueKind Op2VK =
-          TargetTransformInfo::OK_UniformConstantValue;
-      TargetTransformInfo::OperandValueProperties Op1VP =
-          TargetTransformInfo::OP_None;
-      TargetTransformInfo::OperandValueProperties Op2VP =
-          TargetTransformInfo::OP_PowerOf2;
-
-      // If all operands are exactly the same ConstantInt then set the
-      // operand kind to OK_UniformConstantValue.
-      // If instead not all operands are constants, then set the operand kind
-      // to OK_AnyValue. If all operands are constants but not the same,
-      // then set the operand kind to OK_NonUniformConstantValue.
-      ConstantInt *CInt0 = nullptr;
-      for (unsigned i = 0, e = VL.size(); i < e; ++i) {
-        const Instruction *I = cast<Instruction>(VL[i]);
-        unsigned OpIdx = isa<BinaryOperator>(I) ? 1 : 0;
-        ConstantInt *CInt = dyn_cast<ConstantInt>(I->getOperand(OpIdx));
-        if (!CInt) {
-          Op2VK = TargetTransformInfo::OK_AnyValue;
-          Op2VP = TargetTransformInfo::OP_None;
-          break;
-        }
-        if (Op2VP == TargetTransformInfo::OP_PowerOf2 &&
-            !CInt->getValue().isPowerOf2())
-          Op2VP = TargetTransformInfo::OP_None;
-        if (i == 0) {
-          CInt0 = CInt;
-          continue;
-        }
-        if (CInt0 != CInt)
-          Op2VK = TargetTransformInfo::OK_NonUniformConstantValue;
-      }
+      const unsigned OpIdx = isa<BinaryOperator>(VL0) ? 1 : 0;
+      auto Op2Info = getOperandInfo(VL, OpIdx);
 
       SmallVector<const Value *, 4> Operands(VL0->operand_values());
       InstructionCost ScalarEltCost =
           TTI->getArithmeticInstrCost(E->getOpcode(), ScalarTy, CostKind,
-                                      {Op1VK, Op1VP}, {Op2VK, Op2VP},
+                                      Op1Info, Op2Info,
                                       Operands, VL0);
       if (NeedToShuffleReuses) {
         CommonCost -= (EntryVF - VL.size()) * ScalarEltCost;
@@ -6426,7 +6434,7 @@ InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
       }
       InstructionCost VecCost =
           TTI->getArithmeticInstrCost(E->getOpcode(), VecTy, CostKind,
-                                      {Op1VK, Op1VP}, {Op2VK, Op2VP},
+                                      Op1Info, Op2Info,
                                       Operands, VL0);
       LLVM_DEBUG(dumpTreeCosts(E, CommonCost, VecCost, ScalarCost));
       return CommonCost + VecCost - ScalarCost;
@@ -6492,19 +6500,12 @@ InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
       auto *SI =
           cast<StoreInst>(IsReorder ? VL[E->ReorderIndices.front()] : VL0);
       Align Alignment = SI->getAlign();
-      TTI::OperandValueInfo OpInfo = TTI::getOperandInfo(SI->getOperand(0));
+      TTI::OperandValueInfo OpInfo = getOperandInfo(VL, 0);
       InstructionCost ScalarEltCost = TTI->getMemoryOpCost(
           Instruction::Store, ScalarTy, Alignment, 0, CostKind, OpInfo, VL0);
       InstructionCost ScalarStCost = VecTy->getNumElements() * ScalarEltCost;
       TTI::OperandValueKind OpVK = TTI::OK_AnyValue;
-      if (all_of(E->Scalars,
-                 [](Value *V) {
-                   return isConstant(cast<Instruction>(V)->getOperand(0));
-                 }) &&
-          any_of(E->Scalars, [](Value *V) {
-            Value *Op = cast<Instruction>(V)->getOperand(0);
-            return !isa<UndefValue>(Op) && !cast<Constant>(Op)->isZeroValue();
-          }))
+      if (OpInfo.isConstant())
         OpVK = TTI::OK_NonUniformConstantValue;
       InstructionCost VecStCost = TTI->getMemoryOpCost(
           Instruction::Store, VecTy, Alignment, 0, CostKind,
@@ -6870,8 +6871,9 @@ InstructionCost BoUpSLP::getSpillCost() const {
 }
 
 /// Check if two insertelement instructions are from the same buildvector.
-static bool areTwoInsertFromSameBuildVector(InsertElementInst *VU,
-                                            InsertElementInst *V) {
+static bool areTwoInsertFromSameBuildVector(
+    InsertElementInst *VU, InsertElementInst *V,
+    function_ref<Value *(InsertElementInst *)> GetBaseOperand) {
   // Instructions must be from the same basic blocks.
   if (VU->getParent() != V->getParent())
     return false;
@@ -6898,14 +6900,14 @@ static bool areTwoInsertFromSameBuildVector(InsertElementInst *VU,
           getInsertIndex(IE1).value_or(Idx2) == Idx2)
         IE1 = nullptr;
       else
-        IE1 = dyn_cast<InsertElementInst>(IE1->getOperand(0));
+        IE1 = dyn_cast_or_null<InsertElementInst>(GetBaseOperand(IE1));
     }
     if (IE2) {
       if ((IE2 != V && !IE2->hasOneUse()) ||
           getInsertIndex(IE2).value_or(Idx1) == Idx1)
         IE2 = nullptr;
       else
-        IE2 = dyn_cast<InsertElementInst>(IE2->getOperand(0));
+        IE2 = dyn_cast_or_null<InsertElementInst>(GetBaseOperand(IE2));
     }
   } while (IE1 || IE2);
   return false;
@@ -7109,12 +7111,18 @@ InstructionCost BoUpSLP::getTreeCost(ArrayRef<Value *> VectorizedVals) {
         Optional<unsigned> InsertIdx = getInsertIndex(VU);
         if (InsertIdx) {
           const TreeEntry *ScalarTE = getTreeEntry(EU.Scalar);
-          auto *It =
-              find_if(FirstUsers,
-                      [VU](const std::pair<Value *, const TreeEntry *> &Pair) {
-                        return areTwoInsertFromSameBuildVector(
-                            VU, cast<InsertElementInst>(Pair.first));
-                      });
+          auto *It = find_if(
+              FirstUsers,
+              [this, VU](const std::pair<Value *, const TreeEntry *> &Pair) {
+                return areTwoInsertFromSameBuildVector(
+                    VU, cast<InsertElementInst>(Pair.first),
+                    [this](InsertElementInst *II) -> Value * {
+                      Value *Op0 = II->getOperand(0);
+                      if (getTreeEntry(II) && !getTreeEntry(Op0))
+                        return nullptr;
+                      return Op0;
+                    });
+              });
           int VecId = -1;
           if (It == FirstUsers.end()) {
             (void)ShuffleMasks.emplace_back();
@@ -8582,7 +8590,9 @@ BoUpSLP::vectorizeTree(ExtraValueToDebugLocsMap &ExternallyUsedValues) {
                 find_if(ShuffledInserts, [VU](const ShuffledInsertData &Data) {
                   // Checks if 2 insertelements are from the same buildvector.
                   InsertElementInst *VecInsert = Data.InsertElements.front();
-                  return areTwoInsertFromSameBuildVector(VU, VecInsert);
+                  return areTwoInsertFromSameBuildVector(
+                      VU, VecInsert,
+                      [](InsertElementInst *II) { return II->getOperand(0); });
                 });
             unsigned Idx = *InsertIdx;
             if (It == ShuffledInserts.end()) {
@@ -10049,7 +10059,7 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
   DT->updateDFSNumbers();
 
   // Scan the blocks in the function in post order.
-  for (auto BB : post_order(&F.getEntryBlock())) {
+  for (auto *BB : post_order(&F.getEntryBlock())) {
     // Start new block - clear the list of reduction roots.
     R.clearReductionData();
     collectSeedInstructions(BB);
@@ -10545,8 +10555,8 @@ class HorizontalReduction {
   // select x, y, false
   // select x, true, y
   static bool isBoolLogicOp(Instruction *I) {
-    return match(I, m_LogicalAnd(m_Value(), m_Value())) ||
-           match(I, m_LogicalOr(m_Value(), m_Value()));
+    return isa<SelectInst>(I) &&
+           (match(I, m_LogicalAnd()) || match(I, m_LogicalOr()));
   }
 
   /// Checks if instruction is associative and can be vectorized.
@@ -10772,7 +10782,7 @@ class HorizontalReduction {
   /// Checks if the instruction is in basic block \p BB.
   /// For a cmp+sel min/max reduction check that both ops are in \p BB.
   static bool hasSameParent(Instruction *I, BasicBlock *BB) {
-    if (isCmpSelMinMax(I) || (isBoolLogicOp(I) && isa<SelectInst>(I))) {
+    if (isCmpSelMinMax(I) || isBoolLogicOp(I)) {
       auto *Sel = cast<SelectInst>(I);
       auto *Cmp = dyn_cast<Instruction>(Sel->getCondition());
       return Sel->getParent() == BB && Cmp && Cmp->getParent() == BB;
@@ -11294,7 +11304,7 @@ public:
         // To prevent poison from leaking across what used to be sequential,
         // safe, scalar boolean logic operations, the reduction operand must be
         // frozen.
-        if (isa<SelectInst>(RdxRootInst) && isBoolLogicOp(RdxRootInst))
+        if (isBoolLogicOp(RdxRootInst))
           VectorizedRoot = Builder.CreateFreeze(VectorizedRoot);
 
         Value *ReducedSubTree =
@@ -11320,14 +11330,47 @@ public:
       }
     }
     if (VectorizedTree) {
+      // Reorder operands of bool logical op in the natural order to avoid
+      // possible problem with poison propagation. If not possible to reorder
+      // (both operands are originally RHS), emit an extra freeze instruction
+      // for the LHS operand.
+      //I.e., if we have original code like this:
+      // RedOp1 = select i1 ?, i1 LHS, i1 false
+      // RedOp2 = select i1 RHS, i1 ?, i1 false
+
+      // Then, we swap LHS/RHS to create a new op that matches the poison
+      // semantics of the original code.
+
+      // If we have original code like this and both values could be poison:
+      // RedOp1 = select i1 ?, i1 LHS, i1 false
+      // RedOp2 = select i1 ?, i1 RHS, i1 false
+
+      // Then, we must freeze LHS in the new op.
+      auto &&FixBoolLogicalOps =
+          [&Builder, VectorizedTree](Value *&LHS, Value *&RHS,
+                                     Instruction *RedOp1, Instruction *RedOp2) {
+            if (!isBoolLogicOp(RedOp1))
+              return;
+            if (LHS == VectorizedTree || getRdxOperand(RedOp1, 0) == LHS ||
+                isGuaranteedNotToBePoison(LHS))
+              return;
+            if (!isBoolLogicOp(RedOp2))
+              return;
+            if (RHS == VectorizedTree || getRdxOperand(RedOp2, 0) == RHS ||
+                isGuaranteedNotToBePoison(RHS)) {
+              std::swap(LHS, RHS);
+              return;
+            }
+            LHS = Builder.CreateFreeze(LHS);
+          };
       // Finish the reduction.
       // Need to add extra arguments and not vectorized possible reduction
       // values.
       // Try to avoid dependencies between the scalar remainders after
       // reductions.
       auto &&FinalGen =
-          [this, &Builder,
-           &TrackedVals](ArrayRef<std::pair<Instruction *, Value *>> InstVals) {
+          [this, &Builder, &TrackedVals, &FixBoolLogicalOps](
+              ArrayRef<std::pair<Instruction *, Value *>> InstVals) {
             unsigned Sz = InstVals.size();
             SmallVector<std::pair<Instruction *, Value *>> ExtraReds(Sz / 2 +
                                                                      Sz % 2);
@@ -11344,6 +11387,11 @@ public:
               auto It2 = TrackedVals.find(RdxVal2);
               if (It2 != TrackedVals.end())
                 StableRdxVal2 = It2->second;
+              // To prevent poison from leaking across what used to be
+              // sequential, safe, scalar boolean logic operations, the
+              // reduction operand must be frozen.
+              FixBoolLogicalOps(StableRdxVal1, StableRdxVal2, InstVals[I].first,
+                                RedOp);
               Value *ExtraRed = createOp(Builder, RdxKind, StableRdxVal1,
                                          StableRdxVal2, "op.rdx", ReductionOps);
               ExtraReds[I / 2] = std::make_pair(InstVals[I].first, ExtraRed);
@@ -11353,6 +11401,8 @@ public:
             return ExtraReds;
           };
       SmallVector<std::pair<Instruction *, Value *>> ExtraReductions;
+      ExtraReductions.emplace_back(cast<Instruction>(ReductionRoot),
+                                   VectorizedTree);
       SmallPtrSet<Value *, 8> Visited;
       for (ArrayRef<Value *> Candidates : ReducedVals) {
         for (Value *RdxVal : Candidates) {
@@ -11372,22 +11422,12 @@ public:
       }
       // Iterate through all not-vectorized reduction values/extra arguments.
       while (ExtraReductions.size() > 1) {
+        VectorizedTree = ExtraReductions.front().second;
         SmallVector<std::pair<Instruction *, Value *>> NewReds =
             FinalGen(ExtraReductions);
         ExtraReductions.swap(NewReds);
       }
-      // Final reduction.
-      if (ExtraReductions.size() == 1) {
-        Instruction *RedOp = ExtraReductions.back().first;
-        Builder.SetCurrentDebugLocation(RedOp->getDebugLoc());
-        Value *RdxVal = ExtraReductions.back().second;
-        Value *StableRdxVal = RdxVal;
-        auto It = TrackedVals.find(RdxVal);
-        if (It != TrackedVals.end())
-          StableRdxVal = It->second;
-        VectorizedTree = createOp(Builder, RdxKind, VectorizedTree,
-                                  StableRdxVal, "op.rdx", ReductionOps);
-      }
+      VectorizedTree = ExtraReductions.front().second;
 
       ReductionRoot->replaceAllUsesWith(VectorizedTree);
 
@@ -11681,27 +11721,18 @@ static bool matchRdxBop(Instruction *I, Value *&V0, Value *&V1) {
   return false;
 }
 
-/// Attempt to reduce a horizontal reduction.
-/// If it is legal to match a horizontal reduction feeding the phi node \a P
-/// with reduction operators \a Root (or one of its operands) in a basic block
-/// \a BB, then check if it can be done. If horizontal reduction is not found
-/// and root instruction is a binary operation, vectorization of the operands is
-/// attempted.
-/// \returns true if a horizontal reduction was matched and reduced or operands
-/// of one of the binary instruction were vectorized.
-/// \returns false if a horizontal reduction was not matched (or not possible)
-/// or no vectorization of any binary operation feeding \a Root instruction was
-/// performed.
-static bool tryToVectorizeHorReductionOrInstOperands(
-    PHINode *P, Instruction *Root, BasicBlock *BB, BoUpSLP &R,
-    TargetTransformInfo *TTI, ScalarEvolution &SE, const DataLayout &DL,
-    const TargetLibraryInfo &TLI,
-    const function_ref<bool(Instruction *, BoUpSLP &)> Vectorize) {
+bool SLPVectorizerPass::vectorizeHorReduction(
+    PHINode *P, Value *V, BasicBlock *BB, BoUpSLP &R, TargetTransformInfo *TTI,
+    SmallVectorImpl<WeakTrackingVH> &PostponedInsts) {
   if (!ShouldVectorizeHor)
     return false;
 
+  auto *Root = dyn_cast_or_null<Instruction>(V);
   if (!Root)
     return false;
+
+  if (!isa<BinaryOperator>(Root))
+    P = nullptr;
 
   if (Root->getParent() != BB || isa<PHINode>(Root))
     return false;
@@ -11714,24 +11745,21 @@ static bool tryToVectorizeHorReductionOrInstOperands(
   // horizontal reduction.
   // Interrupt the process if the Root instruction itself was vectorized or all
   // sub-trees not higher that RecursionMaxDepth were analyzed/vectorized.
-  // Skip the analysis of CmpInsts. Compiler implements postanalysis of the
-  // CmpInsts so we can skip extra attempts in
-  // tryToVectorizeHorReductionOrInstOperands and save compile time.
+  // If a horizintal reduction was not matched or vectorized we collect
+  // instructions for possible later attempts for vectorization.
   std::queue<std::pair<Instruction *, unsigned>> Stack;
   Stack.emplace(Root, 0);
   SmallPtrSet<Value *, 8> VisitedInstrs;
-  SmallVector<WeakTrackingVH> PostponedInsts;
   bool Res = false;
-  auto &&TryToReduce = [TTI, &SE, &DL, &P, &R, &TLI](Instruction *Inst,
-                                                     Value *&B0,
-                                                     Value *&B1) -> Value * {
+  auto &&TryToReduce = [this, TTI, &P, &R](Instruction *Inst, Value *&B0,
+                                           Value *&B1) -> Value * {
     if (R.isAnalyzedReductionRoot(Inst))
       return nullptr;
     bool IsBinop = matchRdxBop(Inst, B0, B1);
     bool IsSelect = match(Inst, m_Select(m_Value(), m_Value(), m_Value()));
     if (IsBinop || IsSelect) {
       HorizontalReduction HorRdx;
-      if (HorRdx.matchAssociativeReduction(P, Inst, SE, DL, TLI))
+      if (HorRdx.matchAssociativeReduction(P, Inst, *SE, *DL, *TLI))
         return HorRdx.tryToReduce(R, TTI);
     }
     return nullptr;
@@ -11773,9 +11801,8 @@ static bool tryToVectorizeHorReductionOrInstOperands(
       // Set P to nullptr to avoid re-analysis of phi node in
       // matchAssociativeReduction function unless this is the root node.
       P = nullptr;
-      // Do not try to vectorize CmpInst operands, this is done separately.
-      // Final attempt for binop args vectorization should happen after the loop
-      // to try to find reductions.
+      // Do not collect CmpInst or InsertElementInst/InsertValueInst as their
+      // analysis is done separately.
       if (!isa<CmpInst, InsertElementInst, InsertValueInst>(Inst))
         PostponedInsts.push_back(Inst);
     }
@@ -11793,29 +11820,25 @@ static bool tryToVectorizeHorReductionOrInstOperands(
                 !R.isDeleted(I) && I->getParent() == BB)
               Stack.emplace(I, Level);
   }
-  // Try to vectorized binops where reductions were not found.
-  for (Value *V : PostponedInsts)
-    if (auto *Inst = dyn_cast<Instruction>(V))
-      if (!R.isDeleted(Inst))
-        Res |= Vectorize(Inst, R);
   return Res;
 }
 
 bool SLPVectorizerPass::vectorizeRootInstruction(PHINode *P, Value *V,
                                                  BasicBlock *BB, BoUpSLP &R,
                                                  TargetTransformInfo *TTI) {
-  auto *I = dyn_cast_or_null<Instruction>(V);
-  if (!I)
-    return false;
+  SmallVector<WeakTrackingVH> PostponedInsts;
+  bool Res = vectorizeHorReduction(P, V, BB, R, TTI, PostponedInsts);
+  Res |= tryToVectorize(PostponedInsts, R);
+  return Res;
+}
 
-  if (!isa<BinaryOperator>(I))
-    P = nullptr;
-  // Try to match and vectorize a horizontal reduction.
-  auto &&ExtraVectorization = [this](Instruction *I, BoUpSLP &R) -> bool {
-    return tryToVectorize(I, R);
-  };
-  return tryToVectorizeHorReductionOrInstOperands(P, I, BB, R, TTI, *SE, *DL,
-                                                  *TLI, ExtraVectorization);
+bool SLPVectorizerPass::tryToVectorize(ArrayRef<WeakTrackingVH> Insts,
+                                       BoUpSLP &R) {
+  bool Res = false;
+  for (Value *V : Insts)
+    if (auto *Inst = dyn_cast<Instruction>(V); Inst && !R.isDeleted(Inst))
+      Res |= tryToVectorize(Inst, R);
+  return Res;
 }
 
 bool SLPVectorizerPass::vectorizeInsertValueInst(InsertValueInst *IVI,
@@ -11980,20 +12003,30 @@ bool SLPVectorizerPass::vectorizeSimpleInstructions(InstSetVector &Instructions,
                                                     bool AtTerminator) {
   bool OpsChanged = false;
   SmallVector<Instruction *, 4> PostponedCmps;
+  SmallVector<WeakTrackingVH> PostponedInsts;
+  // pass1 - try to vectorize reductions only
   for (auto *I : reverse(Instructions)) {
     if (R.isDeleted(I))
+      continue;
+    if (isa<CmpInst>(I)) {
+      PostponedCmps.push_back(I);
+      continue;
+    }
+    OpsChanged |= vectorizeHorReduction(nullptr, I, BB, R, TTI, PostponedInsts);
+  }
+  // pass2 - try to match and vectorize a buildvector sequence.
+  for (auto *I : reverse(Instructions)) {
+    if (R.isDeleted(I) || isa<CmpInst>(I))
       continue;
     if (auto *LastInsertValue = dyn_cast<InsertValueInst>(I)) {
       OpsChanged |= vectorizeInsertValueInst(LastInsertValue, BB, R);
     } else if (auto *LastInsertElem = dyn_cast<InsertElementInst>(I)) {
       OpsChanged |= vectorizeInsertElementInst(LastInsertElem, BB, R);
-    } else if (isa<CmpInst>(I)) {
-      PostponedCmps.push_back(I);
-      continue;
     }
-    // Try to find reductions in buildvector sequnces.
-    OpsChanged |= vectorizeRootInstruction(nullptr, I, BB, R, TTI);
   }
+  // Now try to vectorize postponed instructions.
+  OpsChanged |= tryToVectorize(PostponedInsts, R);
+
   if (AtTerminator) {
     // Try to find reductions first.
     for (Instruction *I : PostponedCmps) {

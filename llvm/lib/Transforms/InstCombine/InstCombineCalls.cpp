@@ -3102,6 +3102,31 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
             Call, Builder.CreateBitOrPointerCast(ReturnedArg, CallTy));
     }
 
+  // Drop unnecessary kcfi operand bundles from calls that were converted
+  // into direct calls.
+  auto Bundle = Call.getOperandBundle(LLVMContext::OB_kcfi);
+  if (Bundle && !Call.isIndirectCall()) {
+    DEBUG_WITH_TYPE(DEBUG_TYPE "-kcfi", {
+      if (CalleeF) {
+        ConstantInt *FunctionType = nullptr;
+        ConstantInt *ExpectedType = cast<ConstantInt>(Bundle->Inputs[0]);
+
+        if (MDNode *MD = CalleeF->getMetadata(LLVMContext::MD_kcfi_type))
+          FunctionType = mdconst::extract<ConstantInt>(MD->getOperand(0));
+
+        if (FunctionType &&
+            FunctionType->getZExtValue() != ExpectedType->getZExtValue())
+          dbgs() << Call.getModule()->getName() << ":"
+                 << Call.getDebugLoc().getLine()
+                 << ": warning: kcfi: " << Call.getCaller()->getName()
+                 << ": call to " << CalleeF->getName()
+                 << " using a mismatching function pointer type\n";
+      }
+    });
+
+    return CallBase::removeOperandBundle(&Call, LLVMContext::OB_kcfi);
+  }
+
   if (isRemovableAlloc(&Call, &TLI))
     return visitAllocSite(Call);
 
@@ -3172,8 +3197,7 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
     // We can reduce the size of gc live bundle.
     DenseMap<Value *, unsigned> Val2Idx;
     std::vector<Value *> NewLiveGc;
-    for (unsigned I = 0, E = Bundle->Inputs.size(); I < E; ++I) {
-      Value *V = Bundle->Inputs[I];
+    for (Value *V : Bundle->Inputs) {
       if (Val2Idx.count(V))
         continue;
       if (LiveGcValues.count(V)) {
@@ -3471,18 +3495,9 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
       NV = NC = CastInst::CreateBitOrPointerCast(NC, OldRetTy);
       NC->setDebugLoc(Caller->getDebugLoc());
 
-      // If this is an invoke/callbr instruction, we should insert it after the
-      // first non-phi instruction in the normal successor block.
-      if (InvokeInst *II = dyn_cast<InvokeInst>(Caller)) {
-        BasicBlock::iterator I = II->getNormalDest()->getFirstInsertionPt();
-        InsertNewInstBefore(NC, *I);
-      } else if (CallBrInst *CBI = dyn_cast<CallBrInst>(Caller)) {
-        BasicBlock::iterator I = CBI->getDefaultDest()->getFirstInsertionPt();
-        InsertNewInstBefore(NC, *I);
-      } else {
-        // Otherwise, it's a call, just insert cast right after the call.
-        InsertNewInstBefore(NC, *Caller);
-      }
+      Instruction *InsertPt = NewCall->getInsertionPointAfterDef();
+      assert(InsertPt && "No place to insert cast");
+      InsertNewInstBefore(NC, *InsertPt);
       Worklist.pushUsersToWorkList(*Caller);
     } else {
       NV = PoisonValue::get(Caller->getType());

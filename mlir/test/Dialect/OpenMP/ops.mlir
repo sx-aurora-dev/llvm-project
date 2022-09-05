@@ -366,6 +366,15 @@ func.func @omp_simdloop_pretty_simdlen(%lb : index, %ub : index, %step : index) 
   return
 }
 
+// CHECK-LABEL: omp_simdloop_pretty_safelen
+func.func @omp_simdloop_pretty_safelen(%lb : index, %ub : index, %step : index) -> () {
+  // CHECK: omp.simdloop safelen(2) for (%{{.*}}) : index = (%{{.*}}) to (%{{.*}}) step (%{{.*}})
+  omp.simdloop safelen(2) for (%iv): index = (%lb) to (%ub) step (%step) {
+    omp.yield
+  }
+  return
+}
+
 // CHECK-LABEL: omp_simdloop_pretty_multiple
 func.func @omp_simdloop_pretty_multiple(%lb1 : index, %ub1 : index, %step1 : index, %lb2 : index, %ub2 : index, %step2 : index) -> () {
   // CHECK: omp.simdloop for (%{{.*}}, %{{.*}}) : index = (%{{.*}}, %{{.*}}) to (%{{.*}}, %{{.*}}) step (%{{.*}}, %{{.*}})
@@ -1545,6 +1554,30 @@ func.func @omp_taskgroup_no_tasks() -> () {
 func.func @omp_taskgroup_multiple_tasks() -> () {
   // CHECK: omp.taskgroup
   omp.taskgroup {
+    // CHECK: omp.task
+    omp.task {
+      "test.foo"() : () -> ()
+      // CHECK: omp.terminator
+      omp.terminator
+    }
+    // CHECK: omp.task
+    omp.task {
+      "test.foo"() : () -> ()
+      // CHECK: omp.terminator
+      omp.terminator
+    }
+    // CHECK: omp.terminator
+    omp.terminator
+  }
+  return
+}
+
+// CHECK-LABEL: @omp_taskgroup_clauses
+func.func @omp_taskgroup_clauses() -> () {
+  %testmemref = "test.memref"() : () -> (memref<i32>)
+  %testf32 = "test.f32"() : () -> (!llvm.ptr<f32>)
+  // CHECK: omp.taskgroup task_reduction(@add_f32 -> %{{.+}}: !llvm.ptr<f32>) allocate(%{{.+}}: memref<i32> -> %{{.+}}: memref<i32>)
+  omp.taskgroup allocate(%testmemref : memref<i32> -> %testmemref : memref<i32>) task_reduction(@add_f32 -> %testf32 : !llvm.ptr<f32>) {
     // CHECK: omp.task
     omp.task {
       "test.foo"() : () -> ()

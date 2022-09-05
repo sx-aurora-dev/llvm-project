@@ -7183,7 +7183,8 @@ SDValue DAGCombiner::visitOR(SDNode *N) {
   return SDValue();
 }
 
-static SDValue stripConstantMask(SelectionDAG &DAG, SDValue Op, SDValue &Mask) {
+static SDValue stripConstantMask(const SelectionDAG &DAG, SDValue Op,
+                                 SDValue &Mask) {
   if (Op.getOpcode() == ISD::AND &&
       DAG.isConstantIntBuildVectorOrConstantInt(Op.getOperand(1))) {
     Mask = Op.getOperand(1);
@@ -7193,7 +7194,7 @@ static SDValue stripConstantMask(SelectionDAG &DAG, SDValue Op, SDValue &Mask) {
 }
 
 /// Match "(X shl/srl V1) & V2" where V2 may not be present.
-static bool matchRotateHalf(SelectionDAG &DAG, SDValue Op, SDValue &Shift,
+static bool matchRotateHalf(const SelectionDAG &DAG, SDValue Op, SDValue &Shift,
                             SDValue &Mask) {
   Op = stripConstantMask(DAG, Op, Mask);
   if (Op.getOpcode() == ISD::SRL || Op.getOpcode() == ISD::SHL) {
@@ -7231,9 +7232,8 @@ static SDValue extractShiftForRotate(SelectionDAG &DAG, SDValue OppShift,
                                      SDValue ExtractFrom, SDValue &Mask,
                                      const SDLoc &DL) {
   assert(OppShift && ExtractFrom && "Empty SDValue");
-  assert(
-      (OppShift.getOpcode() == ISD::SHL || OppShift.getOpcode() == ISD::SRL) &&
-      "Existing shift must be valid as a rotate half");
+  if (OppShift.getOpcode() != ISD::SHL && OppShift.getOpcode() != ISD::SRL)
+    return SDValue();
 
   ExtractFrom = stripConstantMask(DAG, ExtractFrom, Mask);
 
@@ -7641,6 +7641,10 @@ SDValue DAGCombiner::MatchRotate(SDValue LHS, SDValue RHS, const SDLoc &DL) {
     std::swap(LHSShift, RHSShift);
     std::swap(LHSMask, RHSMask);
   }
+
+  // Something has gone wrong - we've lost the shl/srl pair - bail.
+  if (LHSShift.getOpcode() != ISD::SHL || RHSShift.getOpcode() != ISD::SRL)
+    return SDValue();
 
   unsigned EltSizeInBits = VT.getScalarSizeInBits();
   SDValue LHSShiftArg = LHSShift.getOperand(0);
@@ -13947,11 +13951,12 @@ SDValue DAGCombiner::visitFREEZE(SDNode *N) {
   // guaranteed-non-poison operands then push the freeze through to the one
   // operand that is not guaranteed non-poison.
   if (!DAG.canCreateUndefOrPoison(N0, /*PoisonOnly*/ false,
-                                  /*ConsiderFlags*/ true) &&
+                                  /*ConsiderFlags*/ false) &&
       N0->getNumValues() == 1 && N0->hasOneUse()) {
     SDValue MaybePoisonOperand;
     for (SDValue Op : N0->ops()) {
-      if (DAG.isGuaranteedNotToBeUndefOrPoison(Op, /*PoisonOnly*/ false))
+      if (DAG.isGuaranteedNotToBeUndefOrPoison(Op, /*PoisonOnly*/ false,
+                                               /*Depth*/ 1))
         continue;
       if ((!MaybePoisonOperand && N0->isOnlyUserOf(Op.getNode())) ||
           MaybePoisonOperand == Op) {
@@ -13964,7 +13969,6 @@ SDValue DAGCombiner::visitFREEZE(SDNode *N) {
     }
     if (MaybePoisonOperand) {
       // Recreate the node with the frozen maybe-poison operand.
-      // TODO: Disable ConsiderFlags and just strip poison generating flags?
       // TODO: Drop the isOnlyUserOf constraint and replace all users of
       // MaybePoisonOperand with FrozenMaybePoisonOperand
       // to match pushFreezeToPreventPoisonFromPropagating behavior.
@@ -13973,7 +13977,11 @@ SDValue DAGCombiner::visitFREEZE(SDNode *N) {
       for (SDValue &Op : Ops)
         if (Op == MaybePoisonOperand)
           Op = FrozenMaybePoisonOperand;
-      return DAG.getNode(N0.getOpcode(), SDLoc(N0), N0->getVTList(), Ops);
+      // TODO: Just strip poison generating flags?
+      SDValue R = DAG.getNode(N0.getOpcode(), SDLoc(N0), N0->getVTList(), Ops);
+      assert(DAG.isGuaranteedNotToBeUndefOrPoison(R, /*PoisonOnly*/ false) &&
+             "Can't create node that may be undef/poison!");
+      return R;
     }
   }
 
@@ -15853,12 +15861,12 @@ SDValue DAGCombiner::visitFP_TO_UINT(SDNode *N) {
 SDValue DAGCombiner::visitFP_ROUND(SDNode *N) {
   SDValue N0 = N->getOperand(0);
   SDValue N1 = N->getOperand(1);
-  ConstantFPSDNode *N0CFP = dyn_cast<ConstantFPSDNode>(N0);
   EVT VT = N->getValueType(0);
 
   // fold (fp_round c1fp) -> c1fp
-  if (N0CFP)
-    return DAG.getNode(ISD::FP_ROUND, SDLoc(N), VT, N0, N1);
+  if (SDValue C =
+          DAG.FoldConstantArithmetic(ISD::FP_ROUND, SDLoc(N), VT, {N0, N1}))
+    return C;
 
   // fold (fp_round (fp_extend x)) -> x
   if (N0.getOpcode() == ISD::FP_EXTEND && VT == N0.getOperand(0).getValueType())
@@ -23713,7 +23721,7 @@ SDValue DAGCombiner::SimplifyVBinOp(SDNode *N, const SDLoc &DL) {
     // demanded elements analysis. It is further limited to not change a splat
     // of an inserted scalar because that may be optimized better by
     // load-folding or other target-specific behaviors.
-    if (isConstOrConstSplat(RHS) && Shuf0 && is_splat(Shuf0->getMask()) &&
+    if (isConstOrConstSplat(RHS) && Shuf0 && all_equal(Shuf0->getMask()) &&
         Shuf0->hasOneUse() && Shuf0->getOperand(1).isUndef() &&
         Shuf0->getOperand(0).getOpcode() != ISD::INSERT_VECTOR_ELT) {
       // binop (splat X), (splat C) --> splat (binop X, C)
@@ -23722,7 +23730,7 @@ SDValue DAGCombiner::SimplifyVBinOp(SDNode *N, const SDLoc &DL) {
       return DAG.getVectorShuffle(VT, DL, NewBinOp, DAG.getUNDEF(VT),
                                   Shuf0->getMask());
     }
-    if (isConstOrConstSplat(LHS) && Shuf1 && is_splat(Shuf1->getMask()) &&
+    if (isConstOrConstSplat(LHS) && Shuf1 && all_equal(Shuf1->getMask()) &&
         Shuf1->hasOneUse() && Shuf1->getOperand(1).isUndef() &&
         Shuf1->getOperand(0).getOpcode() != ISD::INSERT_VECTOR_ELT) {
       // binop (splat C), (splat X) --> splat (binop C, X)

@@ -77,6 +77,29 @@ struct IncrementLoopInfo {
 
   bool isStructured() const { return !headerBlock; }
 
+  /// \return true if for this do loop its do-variable's value
+  /// is represented as the block argument of the do loop's
+  /// region. In this case the data type of the block argument
+  /// matches the original data type of the do-variable as written
+  /// in user code, and the value is adjusted using the step value
+  /// on each iteration of the do loop.
+  ///
+  /// When do-variable's data type is an integer type shorter
+  /// than IndexType, processing the do-variable separately
+  /// from the do loop's iteration index allows getting rid
+  /// of type casts, which can make backend optimizations easier.
+  /// In particular, computing the do variable value from
+  /// the iteration index may introduce chains like trunc->arith->sext,
+  /// which may be optimized into sequences of shift operations
+  /// in InstCombine, which then prevents vectorizer from recognizing
+  /// unit-strided accesses.
+  ///
+  /// We could have disabled the extra iteration variable usage
+  /// for cases when its data type is not shorter than IndexType,
+  /// but this requires having proper DataLayout set up for the enclosing
+  /// module. This is currently blocked by llvm-project#57230 issue.
+  bool doVarIsALoopArg() const { return isStructured() && !isUnordered; }
+
   mlir::Type getLoopVariableType() const {
     assert(loopVariable && "must be set");
     return fir::unwrapRefType(loopVariable.getType());
@@ -166,7 +189,7 @@ private:
   llvm::SmallSetVector<Fortran::semantics::SymbolRef, 64> seen;
 };
 
-using IncrementLoopNestInfo = llvm::SmallVector<IncrementLoopInfo>;
+using IncrementLoopNestInfo = llvm::SmallVector<IncrementLoopInfo, 8>;
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1227,13 +1250,27 @@ private:
 
       // Structured loop - generate fir.do_loop.
       if (info.isStructured()) {
+        mlir::Value doVarInit = nullptr;
+        if (info.doVarIsALoopArg())
+          doVarInit = builder->createConvert(loc, info.getLoopVariableType(),
+                                             lowerValue);
+
         info.doLoop = builder->create<fir::DoLoopOp>(
             loc, lowerValue, upperValue, info.stepValue, info.isUnordered,
-            /*finalCountValue=*/!info.isUnordered);
+            /*finalCountValue=*/!info.isUnordered,
+            doVarInit ? mlir::ValueRange{doVarInit} : mlir::ValueRange{});
         builder->setInsertionPointToStart(info.doLoop.getBody());
-        // Update the loop variable value, as it may have non-index references.
-        mlir::Value value = builder->createConvert(
-            loc, info.getLoopVariableType(), info.doLoop.getInductionVar());
+        mlir::Value value;
+        if (!doVarInit) {
+          // Update the loop variable value, as it may have non-index
+          // references.
+          value = builder->createConvert(loc, info.getLoopVariableType(),
+                                         info.doLoop.getInductionVar());
+        } else {
+          // The loop variable value is the region's argument rather
+          // than the DoLoop's index value.
+          value = info.doLoop.getRegionIterArgs()[0];
+        }
         builder->create<fir::StoreOp>(loc, value, info.loopVariable);
         if (info.maskExpr) {
           Fortran::lower::StatementContext stmtCtx;
@@ -1324,16 +1361,37 @@ private:
         // End fir.do_loop.
         if (!info.isUnordered) {
           builder->setInsertionPointToEnd(info.doLoop.getBody());
-          mlir::Value result = builder->create<mlir::arith::AddIOp>(
-              loc, info.doLoop.getInductionVar(), info.doLoop.getStep());
-          builder->create<fir::ResultOp>(loc, result);
+          llvm::SmallVector<mlir::Value, 2> results;
+          results.push_back(builder->create<mlir::arith::AddIOp>(
+              loc, info.doLoop.getInductionVar(), info.doLoop.getStep()));
+          if (info.doVarIsALoopArg()) {
+            // If we use an extra iteration variable of the same data
+            // type as the original do-variable, we have to increment
+            // it by the step value. Note that the step has 'index'
+            // type, so we need to cast it, first.
+            mlir::Value stepCast = builder->createConvert(
+                loc, info.getLoopVariableType(), info.doLoop.getStep());
+            mlir::Value doVarValue =
+                builder->create<fir::LoadOp>(loc, info.loopVariable);
+            results.push_back(builder->create<mlir::arith::AddIOp>(
+                loc, doVarValue, stepCast));
+          }
+          builder->create<fir::ResultOp>(loc, results);
         }
         builder->setInsertionPointAfter(info.doLoop);
         if (info.isUnordered)
           continue;
         // The loop control variable may be used after loop execution.
-        mlir::Value lcv = builder->createConvert(
-            loc, info.getLoopVariableType(), info.doLoop.getResult(0));
+        mlir::Value lcv = nullptr;
+        if (info.doVarIsALoopArg()) {
+          // Final do-variable value is the second result of the DoLoop.
+          assert(info.doLoop.getResults().size() == 2 &&
+                 "invalid do-variable handling");
+          lcv = info.doLoop.getResult(1);
+        } else {
+          lcv = builder->createConvert(loc, info.getLoopVariableType(),
+                                       info.doLoop.getResult(0));
+        }
         builder->create<fir::StoreOp>(loc, lcv, info.loopVariable);
         continue;
       }
@@ -2627,6 +2685,27 @@ private:
     }
   }
 
+  void mapCPtrArgByValue(const Fortran::semantics::Symbol &sym,
+                         mlir::Value val) {
+    mlir::Type symTy = Fortran::lower::translateSymbolToFIRType(*this, sym);
+    assert(symTy.isa<fir::RecordType>());
+    auto resTy = symTy.dyn_cast<fir::RecordType>();
+    assert(resTy.getTypeList().size() == 1);
+    auto fieldName = resTy.getTypeList()[0].first;
+    auto fieldTy = resTy.getTypeList()[0].second;
+    mlir::Location loc = toLocation();
+    mlir::Value res = builder->create<fir::AllocaOp>(loc, symTy);
+    auto fieldIndexType = fir::FieldType::get(symTy.getContext());
+    mlir::Value field = builder->create<fir::FieldIndexOp>(
+        loc, fieldIndexType, fieldName, resTy,
+        /*typeParams=*/mlir::ValueRange{});
+    mlir::Value resAddr = builder->create<fir::CoordinateOp>(
+        loc, builder->getRefType(fieldTy), res, field);
+    mlir::Value argAddrVal = builder->createConvert(loc, fieldTy, val);
+    builder->create<fir::StoreOp>(loc, argAddrVal, resAddr);
+    addSymbol(sym, res);
+  }
+
   /// Map mlir function block arguments to the corresponding Fortran dummy
   /// variables. When the result is passed as a hidden argument, the Fortran
   /// result is also mapped. The symbol map is used to hold this mapping.
@@ -2645,6 +2724,16 @@ private:
         addSymbol(arg.entity->get(), box);
       } else {
         if (arg.entity.has_value()) {
+          if (arg.passBy == PassBy::Value) {
+            mlir::Type argTy = arg.firArgument.getType();
+            if (argTy.isa<fir::RecordType>())
+              TODO(toLocation(), "derived type argument passed by value");
+            if (Fortran::semantics::IsBuiltinCPtr(arg.entity->get()) &&
+                Fortran::lower::isCPtrArgByValueType(argTy)) {
+              mapCPtrArgByValue(arg.entity->get(), arg.firArgument);
+              return;
+            }
+          }
           addSymbol(arg.entity->get(), arg.firArgument);
         } else {
           assert(funit.parentHasHostAssoc());

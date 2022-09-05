@@ -849,6 +849,7 @@ static Instruction *foldNoWrapAdd(BinaryOperator &Add,
 
 Instruction *InstCombinerImpl::foldAddWithConstant(BinaryOperator &Add) {
   Value *Op0 = Add.getOperand(0), *Op1 = Add.getOperand(1);
+  Type *Ty = Add.getType();
   Constant *Op1C;
   if (!match(Op1, m_ImmConstant(Op1C)))
     return nullptr;
@@ -883,7 +884,14 @@ Instruction *InstCombinerImpl::foldAddWithConstant(BinaryOperator &Add) {
   if (match(Op0, m_Not(m_Value(X))))
     return BinaryOperator::CreateSub(InstCombiner::SubOne(Op1C), X);
 
+  // (iN X s>> (N - 1)) + 1 --> zext (X > -1)
   const APInt *C;
+  unsigned BitWidth = Ty->getScalarSizeInBits();
+  if (match(Op0, m_OneUse(m_AShr(m_Value(X),
+                                 m_SpecificIntAllowUndef(BitWidth - 1)))) &&
+      match(Op1, m_One()))
+    return new ZExtInst(Builder.CreateIsNotNeg(X, "isnotneg"), Ty);
+
   if (!match(Op1, m_APInt(C)))
     return nullptr;
 
@@ -911,7 +919,6 @@ Instruction *InstCombinerImpl::foldAddWithConstant(BinaryOperator &Add) {
 
   // Is this add the last step in a convoluted sext?
   // add(zext(xor i16 X, -32768), -32768) --> sext X
-  Type *Ty = Add.getType();
   if (match(Op0, m_ZExt(m_Xor(m_Value(X), m_APInt(C2)))) &&
       C2->isMinSignedValue() && C2->sext(Ty->getScalarSizeInBits()) == *C)
     return CastInst::Create(Instruction::SExt, X, Ty);
@@ -1413,6 +1420,31 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     replaceOperand(I, 0, A);
     replaceOperand(I, 1, B);
     return &I;
+  }
+
+  // Canonicalize ((A & -A) - 1) --> ((A - 1) & ~A)
+  // Forms all commutable operations, and simplifies ctpop -> cttz folds.
+  if (match(&I,
+            m_Add(m_OneUse(m_c_And(m_Value(A), m_OneUse(m_Neg(m_Deferred(A))))),
+                  m_AllOnes()))) {
+    Constant *AllOnes = ConstantInt::getAllOnesValue(RHS->getType());
+    Value *Dec = Builder.CreateAdd(A, AllOnes);
+    Value *Not = Builder.CreateXor(A, AllOnes);
+    return BinaryOperator::CreateAnd(Dec, Not);
+  }
+
+  // Disguised reassociation/factorization:
+  // ~(A * C1) + A
+  // ((A * -C1) - 1) + A
+  // ((A * -C1) + A) - 1
+  // (A * (1 - C1)) - 1
+  if (match(&I,
+            m_c_Add(m_OneUse(m_Not(m_OneUse(m_Mul(m_Value(A), m_APInt(C1))))),
+                    m_Deferred(A)))) {
+    Type *Ty = I.getType();
+    Constant *NewMulC = ConstantInt::get(Ty, 1 - *C1);
+    Value *NewMul = Builder.CreateMul(A, NewMulC);
+    return BinaryOperator::CreateAdd(NewMul, ConstantInt::getAllOnesValue(Ty));
   }
 
   // TODO(jingyue): Consider willNotOverflowSignedAdd and

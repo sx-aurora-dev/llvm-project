@@ -7,6 +7,12 @@ add_header_library(
 )
 
 add_header_library(
+  builtin_wrappers
+  HDRS
+    builtin_wrappers.h
+)
+
+add_header_library(
   common
   HDRS
     architectures.h
@@ -55,14 +61,15 @@ add_header_library(
   HDRS
     str_to_float.h
   DEPENDS
-    .str_to_integer
     .ctype_utils
     .high_precision_decimal
+    .str_to_integer
+    .uint128
     libc.include.errno
-    libc.src.errno.errno
     libc.src.__support.CPP.limits
-    libc.src.__support.CPP.uint128
-    libc.src.__support.FPUtil.fputil
+    libc.src.__support.FPUtil.fp_bits
+    libc.src.__support.builtin_wrappers
+    libc.src.errno.errno
 )
 
 add_header_library(
@@ -83,6 +90,22 @@ add_header_library(
     fixedvector.h
   DEPENDS
     libc.src.__support.CPP.array
+)
+
+add_header_library(
+  uint
+  HDRS
+    UInt.h
+  DEPENDS
+    libc.src.__support.CPP.array
+)
+
+add_header_library(
+  uint128
+  HDRS
+    UInt128.h
+  DEPENDS
+    .uint
 )
 
 add_subdirectory(FPUtil)

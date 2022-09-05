@@ -9,6 +9,7 @@
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "../Encoding.h"
 #include "IRNumbering.h"
+#include "mlir/Bytecode/BytecodeImplementation.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/CachedHashString.h"
@@ -84,6 +85,14 @@ public:
     emitMultiByteVarInt(value);
   }
 
+  /// Emit a signed variable length integer. Signed varints are encoded using
+  /// a varint with zigzag encoding, meaning that we use the low bit of the
+  /// value to indicate the sign of the value. This allows for more efficient
+  /// encoding of negative values by limiting the number of active bits
+  void emitSignedVarInt(uint64_t value) {
+    emitVarInt((value << 1) ^ (uint64_t)((int64_t)value >> 63));
+  }
+
   /// Emit a variable length integer whose low bit is used to encode the
   /// provided flag, i.e. encoded as: (value << 1) | (flag ? 1 : 0).
   void emitVarIntWithFlag(uint64_t value, bool flag) {
@@ -153,9 +162,9 @@ private:
 /// A simple raw_ostream wrapper around a EncodingEmitter. This removes the need
 /// to go through an intermediate buffer when interacting with code that wants a
 /// raw_ostream.
-class raw_emitter_ostream : public raw_ostream {
+class RawEmitterOstream : public raw_ostream {
 public:
-  explicit raw_emitter_ostream(EncodingEmitter &emitter) : emitter(emitter) {
+  explicit RawEmitterOstream(EncodingEmitter &emitter) : emitter(emitter) {
     SetUnbuffered();
   }
 
@@ -197,6 +206,41 @@ void EncodingEmitter::emitMultiByteVarInt(uint64_t value) {
 }
 
 //===----------------------------------------------------------------------===//
+// StringSectionBuilder
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This class is used to simplify the process of emitting the string section.
+class StringSectionBuilder {
+public:
+  /// Add the given string to the string section, and return the index of the
+  /// string within the section.
+  size_t insert(StringRef str) {
+    auto it = strings.insert({llvm::CachedHashStringRef(str), strings.size()});
+    return it.first->second;
+  }
+
+  /// Write the current set of strings to the given emitter.
+  void write(EncodingEmitter &emitter) {
+    emitter.emitVarInt(strings.size());
+
+    // Emit the sizes in reverse order, so that we don't need to backpatch an
+    // offset to the string data or have a separate section.
+    for (const auto &it : llvm::reverse(strings))
+      emitter.emitVarInt(it.first.size() + 1);
+    // Emit the string data itself.
+    for (const auto &it : strings)
+      emitter.emitNulTerminatedString(it.first.val());
+  }
+
+private:
+  /// A set of strings referenced within the bytecode. The value of the map is
+  /// unused.
+  llvm::MapVector<llvm::CachedHashStringRef, size_t> strings;
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Bytecode Writer
 //===----------------------------------------------------------------------===//
 
@@ -232,19 +276,14 @@ private:
 
   void writeStringSection(EncodingEmitter &emitter);
 
-  /// Get the number for the given shared string, that is contained within the
-  /// string section.
-  size_t getSharedStringNumber(StringRef str);
-
   //===--------------------------------------------------------------------===//
   // Fields
 
+  /// The builder used for the string section.
+  StringSectionBuilder stringSection;
+
   /// The IR numbering state generated for the root operation.
   IRNumberingState numberingState;
-
-  /// A set of strings referenced within the bytecode. The value of the map is
-  /// unused.
-  llvm::MapVector<llvm::CachedHashStringRef, size_t> strings;
 };
 } // namespace
 
@@ -314,11 +353,11 @@ void BytecodeWriter::writeDialectSection(EncodingEmitter &emitter) {
   auto dialects = numberingState.getDialects();
   dialectEmitter.emitVarInt(llvm::size(dialects));
   for (DialectNumbering &dialect : dialects)
-    dialectEmitter.emitVarInt(getSharedStringNumber(dialect.name));
+    dialectEmitter.emitVarInt(stringSection.insert(dialect.name));
 
   // Emit the referenced operation names grouped by dialect.
   auto emitOpName = [&](OpNameNumbering &name) {
-    dialectEmitter.emitVarInt(getSharedStringNumber(name.name.stripDialect()));
+    dialectEmitter.emitVarInt(stringSection.insert(name.name.stripDialect()));
   };
   writeDialectGrouping(dialectEmitter, numberingState.getOpNames(), emitOpName);
 
@@ -327,6 +366,73 @@ void BytecodeWriter::writeDialectSection(EncodingEmitter &emitter) {
 
 //===----------------------------------------------------------------------===//
 // Attributes and Types
+
+namespace {
+class DialectWriter : public DialectBytecodeWriter {
+public:
+  DialectWriter(EncodingEmitter &emitter, IRNumberingState &numberingState,
+                StringSectionBuilder &stringSection)
+      : emitter(emitter), numberingState(numberingState),
+        stringSection(stringSection) {}
+
+  //===--------------------------------------------------------------------===//
+  // IR
+  //===--------------------------------------------------------------------===//
+
+  void writeAttribute(Attribute attr) override {
+    emitter.emitVarInt(numberingState.getNumber(attr));
+  }
+  void writeType(Type type) override {
+    emitter.emitVarInt(numberingState.getNumber(type));
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Primitives
+  //===--------------------------------------------------------------------===//
+
+  void writeVarInt(uint64_t value) override { emitter.emitVarInt(value); }
+
+  void writeSignedVarInt(int64_t value) override {
+    emitter.emitSignedVarInt(value);
+  }
+
+  void writeAPIntWithKnownWidth(const APInt &value) override {
+    size_t bitWidth = value.getBitWidth();
+
+    // If the value is a single byte, just emit it directly without going
+    // through a varint.
+    if (bitWidth <= 8)
+      return emitter.emitByte(value.getLimitedValue());
+
+    // If the value fits within a single varint, emit it directly.
+    if (bitWidth <= 64)
+      return emitter.emitSignedVarInt(value.getLimitedValue());
+
+    // Otherwise, we need to encode a variable number of active words. We use
+    // active words instead of the number of total words under the observation
+    // that smaller values will be more common.
+    unsigned numActiveWords = value.getActiveWords();
+    emitter.emitVarInt(numActiveWords);
+
+    const uint64_t *rawValueData = value.getRawData();
+    for (unsigned i = 0; i < numActiveWords; ++i)
+      emitter.emitSignedVarInt(rawValueData[i]);
+  }
+
+  void writeAPFloatWithKnownSemantics(const APFloat &value) override {
+    writeAPIntWithKnownWidth(value.bitcastToAPInt());
+  }
+
+  void writeOwnedString(StringRef str) override {
+    emitter.emitVarInt(stringSection.insert(str));
+  }
+
+private:
+  EncodingEmitter &emitter;
+  IRNumberingState &numberingState;
+  StringSectionBuilder &stringSection;
+};
+} // namespace
 
 void BytecodeWriter::writeAttrTypeSection(EncodingEmitter &emitter) {
   EncodingEmitter attrTypeEmitter;
@@ -337,13 +443,34 @@ void BytecodeWriter::writeAttrTypeSection(EncodingEmitter &emitter) {
   // A functor used to emit an attribute or type entry.
   uint64_t prevOffset = 0;
   auto emitAttrOrType = [&](auto &entry) {
-    // TODO: Allow dialects to provide more optimal implementations of attribute
-    // and type encodings.
-    bool hasCustomEncoding = false;
+    auto entryValue = entry.getValue();
 
-    // Emit the entry using the textual format.
-    raw_emitter_ostream(attrTypeEmitter) << entry.getValue();
-    attrTypeEmitter.emitByte(0);
+    // First, try to emit this entry using the dialect bytecode interface.
+    bool hasCustomEncoding = false;
+    if (const BytecodeDialectInterface *interface = entry.dialect->interface) {
+      // The writer used when emitting using a custom bytecode encoding.
+      DialectWriter dialectWriter(attrTypeEmitter, numberingState,
+                                  stringSection);
+
+      if constexpr (std::is_same_v<std::decay_t<decltype(entryValue)>, Type>) {
+        // TODO: We don't currently support custom encoded mutable types.
+        hasCustomEncoding =
+            !entryValue.template hasTrait<TypeTrait::IsMutable>() &&
+            succeeded(interface->writeType(entryValue, dialectWriter));
+      } else {
+        // TODO: We don't currently support custom encoded mutable attributes.
+        hasCustomEncoding =
+            !entryValue.template hasTrait<AttributeTrait::IsMutable>() &&
+            succeeded(interface->writeAttribute(entryValue, dialectWriter));
+      }
+    }
+
+    // If the entry was not emitted using the dialect interface, emit it using
+    // the textual format.
+    if (!hasCustomEncoding) {
+      RawEmitterOstream(attrTypeEmitter) << entryValue;
+      attrTypeEmitter.emitByte(0);
+    }
 
     // Record the offset of this entry.
     uint64_t curOffset = attrTypeEmitter.size();
@@ -491,22 +618,8 @@ void BytecodeWriter::writeIRSection(EncodingEmitter &emitter, Operation *op) {
 
 void BytecodeWriter::writeStringSection(EncodingEmitter &emitter) {
   EncodingEmitter stringEmitter;
-  stringEmitter.emitVarInt(strings.size());
-
-  // Emit the sizes in reverse order, so that we don't need to backpatch an
-  // offset to the string data or have a separate section.
-  for (const auto &it : llvm::reverse(strings))
-    stringEmitter.emitVarInt(it.first.size() + 1);
-  // Emit the string data itself.
-  for (const auto &it : strings)
-    stringEmitter.emitNulTerminatedString(it.first.val());
-
+  stringSection.write(stringEmitter);
   emitter.emitSection(bytecode::Section::kString, std::move(stringEmitter));
-}
-
-size_t BytecodeWriter::getSharedStringNumber(StringRef str) {
-  auto it = strings.insert({llvm::CachedHashStringRef(str), strings.size()});
-  return it.first->second;
 }
 
 //===----------------------------------------------------------------------===//

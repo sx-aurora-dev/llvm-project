@@ -423,12 +423,10 @@ public:
     if (extremum_) {
       std::memcpy(p, extremum_, byteSize);
     } else {
-      // empty array
-      if constexpr (KIND == 1) { // ASCII
-        *p = IS_MAXVAL ? 0 : 127; // 127 required by standard
-      } else {
-        std::memset(p, IS_MAXVAL ? 0 : 255, byteSize);
-      }
+      // Empty array; fill with character 0 for MAXVAL.
+      // For MINVAL, fill with 127 if ASCII as required
+      // by the standard, otherwise set all of the bits.
+      std::memset(p, IS_MAXVAL ? 0 : KIND == 1 ? 127 : 255, byteSize);
     }
   }
   bool Accumulate(const Type *x) {
@@ -631,8 +629,8 @@ public:
     8
 #endif
   };
-  using AccumType = CppTypeFor<TypeCategory::Real,
-      std::max(std::min(largestLDKind, KIND), 8)>;
+  using AccumType =
+      CppTypeFor<TypeCategory::Real, std::clamp(KIND, 8, largestLDKind)>;
   explicit Norm2Accumulator(const Descriptor &array) : array_{array} {}
   void Reinitialize() { max_ = sum_ = 0; }
   template <typename A> void GetResult(A *p, int /*zeroBasedDim*/ = -1) const {

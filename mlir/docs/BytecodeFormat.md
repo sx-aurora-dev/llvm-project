@@ -65,6 +65,22 @@ x1000000: 49 value bits, the encoding uses 7 bytes
 00000000: 64 value bits, the encoding uses 9 bytes
 ```
 
+##### Signed Variable-Width Integers
+
+Signed variable width integer values are encoded in a similar fashion to
+[varints](#variable-width-integers), but employ
+[zigzag encoding](https://en.wikipedia.org/wiki/Variable-length_quantity#Zigzag_encoding).
+This encoding uses the low bit of the value to indicate the sign, which allows
+for more efficiently encoding negative numbers. If a negative value were encoded
+using a normal [varint](#variable-width-integers), it would be treated as an
+extremely large unsigned value. Using zigzag encoding allows for a smaller
+number of active bits in the value, leading to a smaller encoding. Below is the
+basic computation for generating a zigzag encoding:
+
+```
+(value << 1) ^ (value >> 63)
+```
+
 #### Strings
 
 Strings are blobs of characters with an associated length.
@@ -207,7 +223,26 @@ reference to the parent dialect instead.
 
 ##### Dialect Defined Encoding
 
-TODO: This is not yet supported.
+In addition to the assembly format fallback, dialects may also provide a custom
+encoding for their attributes and types. Custom encodings are very beneficial in
+that they are significantly smaller and faster to read and write.
+
+Dialects can opt-in to providing custom encodings by implementing the
+`BytecodeDialectInterface`. This interface provides hooks, namely
+`readAttribute`/`readType` and `writeAttribute`/`writeType`, that will be used
+by the bytecode reader and writer. These hooks are provided a reader and writer
+implementation that can be used to encode various constructs in the underlying
+bytecode format. A unique feature of this interface is that dialects may choose
+to only encode a subset of their attributes and types in a custom bytecode
+format, which can simplify adding new or experimental components that aren't
+fully baked.
+
+When implementing the bytecode interface, dialects are responsible for all
+aspects of the encoding. This includes the indicator for which kind of attribute
+or type is being encoded; the bytecode reader will only know that it has
+encountered an attribute or type of a given dialect, it doesn't encode any
+further information. As such, a common encoding idiom is to use a leading
+`varint` code to indicate how the attribute or type was encoded.
 
 ### IR Section
 
