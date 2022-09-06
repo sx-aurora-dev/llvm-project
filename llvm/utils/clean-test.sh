@@ -33,6 +33,7 @@ for i in "$@"; do
         -e '/^!llvm.*/d' \
         -e '/^!0 =/d' \
         -e '/^!1 =/d' \
+        -e '/^!2 =/d' \
         -e '/^![0-9][0-9]* = !{i32/d' \
         -e '/^; ModuleID/d' \
         -e '/^source_filename = /d' \

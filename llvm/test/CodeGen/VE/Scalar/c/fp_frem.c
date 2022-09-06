@@ -1,5 +1,4 @@
 #include "types.h"
-#include <math.h>
 
 /// Test ‘frem’ Instruction
 ///
@@ -29,29 +28,27 @@
 ///
 /// Note:
 ///   We test only float/double/fp128.
-///   We have no way to generated frem from C source code, so convert fdiv
-///   to frem by using sed program.
 
-#define FP_REM_VAR(TY) \
+#define FP_REM_VAR(TY, NAME) \
 TY frem_ ## TY ## _var(TY a, TY b) { \
-  return a / b; \
+  return __builtin_ ## NAME(a, b); \
 }
-FP_REM_VAR(float)
-FP_REM_VAR(double)
-FP_REM_VAR(quad)
+FP_REM_VAR(float, fmodf)
+FP_REM_VAR(double, fmod)
+FP_REM_VAR(quad, fmodl)
 
-#define FP_REM_ZERO(TY) \
+#define FP_REM_ZERO(TY, NAME) \
 TY frem_ ## TY ## _zero(TY a) { \
-  return  0.0 / a; \
+  return __builtin_ ## NAME(0.0, a); \
 }
-FP_REM_ZERO(float)
-FP_REM_ZERO(double)
-FP_REM_ZERO(quad)
+FP_REM_ZERO(float, fmodf)
+FP_REM_ZERO(double, fmod)
+FP_REM_ZERO(quad, fmodl)
 
-#define FP_REM_CONST(TY) \
+#define FP_REM_CONST(TY, NAME) \
 TY frem_ ## TY ## _cont(TY a) { \
-  return  -2.0 / a; \
+  return __builtin_ ## NAME(-2.0, a); \
 }
-FP_REM_CONST(float)
-FP_REM_CONST(double)
-FP_REM_CONST(quad)
+FP_REM_CONST(float, fmodf)
+FP_REM_CONST(double, fmod)
+FP_REM_CONST(quad, fmodl)

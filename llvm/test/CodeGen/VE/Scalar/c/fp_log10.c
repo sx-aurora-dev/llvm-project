@@ -1,70 +1,25 @@
-#include <math.h>
-typedef _Bool int1_t;
-typedef char int8_t;
-typedef unsigned char uint8_t;
-typedef short int16_t;
-typedef unsigned short uint16_t;
-typedef int int32_t;
-typedef unsigned int uint32_t;
-typedef long int64_t;
-typedef unsigned long uint64_t;
-typedef __int128 int128_t;
-typedef unsigned __int128 uint128_t;
-typedef long double quad;
-typedef _Complex float fcomp;
-typedef _Complex double dcomp;
-typedef _Complex long double qcomp;
+#include "types.h"
 
-#define FP_LOG10F_VAR(TY) \
-TY func_fp_log10f_var_ ## TY(TY a) { \
-  return log10f(a); \
-}
-FP_LOG10F_VAR(float)
-
-#define FP_LOG10_VAR(TY) \
+#define FP_LOG10_VAR(TY, NAME) \
 TY func_fp_log10_var_ ## TY(TY a) { \
-  return log10(a); \
+  return __builtin_ ## NAME(a); \
 }
-FP_LOG10_VAR(double)
+FP_LOG10_VAR(float, log10f)
+FP_LOG10_VAR(double, log10)
+FP_LOG10_VAR(quad, log10l)
 
-#define FP_LOG10L_VAR(TY) \
-TY func_fp_log10l_var_ ## TY(TY a) { \
-  return log10l(a); \
+#define FP_LOG10_ZERO(TY, NAME) \
+TY func_fp_log10_zero_ ## TY() { \
+  return __builtin_ ## NAME((TY)0.0); \
 }
-FP_LOG10L_VAR(quad)
+FP_LOG10_ZERO(float, log10f)
+FP_LOG10_ZERO(double, log10)
+FP_LOG10_ZERO(quad, log10l)
 
-#define FP_LOG10F_ZERO(TY) \
-TY func_fp_log10f_zero_ ## TY() { \
-  return  log10f((TY)0.0) ; \
-}
-FP_LOG10F_ZERO(float)
-
-#define FP_LOG10_ZERO(TY) \
-TY func_fp_LOG10_zero_ ## TY() { \
-  return  log10((TY)0.0) ; \
-}
-FP_LOG10_ZERO(double)
-
-#define FP_LOG10L_ZERO(TY) \
-TY func_fp_log10l_zero_ ## TY() { \
-  return  log10l((TY)0.0) ; \
-}
-FP_LOG10L_ZERO(quad)
-
-#define FP_LOG10F_CONST(TY) \
-TY func_fp_log10f_const_ ## TY() { \
-  return log10f((TY)-2.0); \
-}
-FP_LOG10F_CONST(float)
-
-#define FP_LOG10_CONST(TY) \
+#define FP_LOG10_CONST(TY, NAME) \
 TY func_fp_log10_const_ ## TY() { \
-  return log10((TY)-2.0); \
+  return __builtin_ ## NAME((TY)-2.0); \
 }
-FP_LOG10_CONST(double)
-
-#define FP_LOG10L_CONST(TY) \
-TY func_fp_log10l_const_ ## TY() { \
-  return log10l((TY)-2.0); \
-}
-FP_LOG10L_CONST(quad)
+FP_LOG10_CONST(float, log10f)
+FP_LOG10_CONST(double, log10)
+FP_LOG10_CONST(quad, log10l)
