@@ -91,6 +91,10 @@ Bug Fixes
   `Issue 57431 <https://github.com/llvm/llvm-project/issues/57431>`_
 - Fix a crash where we attempt to define a deleted destructor. This fixes
   `Issue 57516 <https://github.com/llvm/llvm-project/issues/57516>`_
+- Fix ``__builtin_assume_aligned`` crash when the 1st arg is array type. This fixes
+  `Issue 57169 <https://github.com/llvm/llvm-project/issues/57169>`_
+- Clang configuration files are now read through the virtual file system
+  rather than the physical one, if these are different.
 
 
 Improvements to Clang's diagnostics
@@ -132,9 +136,24 @@ Improvements to Clang's diagnostics
 - no_sanitize("...") on a global variable for known but not relevant sanitizers
   is now just a warning. It now says that this will be ignored instead of
   incorrectly saying no_sanitize only applies to functions and methods.
+- No longer mention ``reinterpet_cast`` in the invalid constant expression
+  diagnostic note when in C mode.
+- Clang will now give a more suitale diagnostic for declaration of block
+  scope identifiers that have external/internal linkage that has an initializer.
+  Fixes `Issue 57478: <https://github.com/llvm/llvm-project/issues/57478>`_.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
+- It's now possible to set the crash diagnostics directory through
+  the environment variable ``CLANG_CRASH_DIAGNOSTICS_DIR``.
+  The ``-fcrash-diagnostics-dir`` flag takes precedence.
+- When using header modules, inclusion of a private header and violations of
+  the `use-declaration rules
+  <https://clang.llvm.org/docs/Modules.html#use-declaration>`_ are now
+  diagnosed even when the includer is a textual header. This change can be
+  temporarily reversed with ``-Xclang
+  -fno-modules-validate-textual-header-includes``, but this flag will be
+  removed in a future Clang release.
 
 New Compiler Flags
 ------------------
@@ -164,8 +183,22 @@ Attribute Changes in Clang
 - Introduced a new function attribute ``__attribute__((nouwtable))`` to suppress
   LLVM IR ``uwtable`` function attribute.
 
+- Updated the value returned by ``__has_c_attribute(nodiscard)`` to ``202003L``
+  based on the final date specified by the C2x committee draft. We already
+  supported the ability to specify a message in the attribute, so there were no
+  changes to the attribute behavior.
+
+- Updated the value returned by ``__has_c_attribute(fallthrough)`` to ``201910L``
+  based on the final date specified by the C2x committee draft. We previously
+  used ``201904L`` (the date the proposal was seen by the committee) by mistake.
+  There were no other changes to the attribute behavior.
+
 Windows Support
 ---------------
+- For the MinGW driver, added the options ``-mguard=none``, ``-mguard=cf`` and
+  ``-mguard=cf-nochecks`` (equivalent to ``/guard:cf-``, ``/guard:cf`` and
+  ``/guard:cf,nochecks`` in clang-cl) for enabling Control Flow Guard checks
+  and generation of address-taken function table.
 
 AIX Support
 -----------
@@ -182,12 +215,19 @@ C Language Changes in Clang
 
 C2x Feature Support
 -------------------
+- Implemented `WG14 N2662 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2662.pdf>`_,
+  so the [[maybe_unused]] attribute may be applied to a label to silence an
+  ``-Wunused-label`` warning.
 
 C++ Language Changes in Clang
 -----------------------------
 
 - Implemented DR692, DR1395 and DR1432. Use the ``-fclang-abi-compat=15`` option
   to get the old partial ordering behavior regarding packs.
+- Clang's default C++/ObjC++ standard is now ``gnu++17`` instead of ``gnu++14``.
+  This means Clang will by default accept code using features from C++17 and
+  conforming GNU extensions. Projects incompatible with C++17 can add
+  ``-std=gnu++14`` to their build settings to restore the previous behaviour.
 
 C++20 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
@@ -212,7 +252,7 @@ C++20 Feature Support
   `GH55216 <https://github.com/llvm/llvm-project/issues/55216>`_.
 - Correctly set expression evaluation context as 'immediate function context' in
   consteval functions.
-  This fixes `GH51182 <https://github.com/llvm/llvm-project/issues/51182>`
+  This fixes `GH51182 <https://github.com/llvm/llvm-project/issues/51182>`_.
 
 - Fixes an assert crash caused by looking up missing vtable information on ``consteval``
   virtual functions. Fixes `GH55065 <https://github.com/llvm/llvm-project/issues/55065>`_.
@@ -267,6 +307,10 @@ DWARF Support in Clang
 
 Arm and AArch64 Support in Clang
 --------------------------------
+
+- `-march` values for targeting armv2, armv2A, armv3 and armv3M have been removed.
+  Their presence gave the impression that Clang can correctly generate code for
+  them, which it cannot.
 
 Floating Point Support in Clang
 -------------------------------

@@ -431,6 +431,9 @@ public:
   /// Return true if a G_SELECT instruction \p MI has an undef comparison.
   bool matchUndefSelectCmp(MachineInstr &MI);
 
+  /// Return true if a G_{EXTRACT,INSERT}_VECTOR_ELT has an out of range index.
+  bool matchInsertExtractVecEltOutOfBounds(MachineInstr &MI);
+
   /// Return true if a G_SELECT instruction \p MI has a constant comparison. If
   /// true, \p OpIdx will store the operand index of the known selected value.
   bool matchConstantSelectCmp(MachineInstr &MI, unsigned &OpIdx);
@@ -680,6 +683,11 @@ public:
   /// Match:
   /// (G_*ADDO x, 0) -> x + no carry out
   bool matchAddOBy0(MachineInstr &MI, BuildFnTy &MatchInfo);
+
+  /// Match:
+  /// (G_*ADDE x, y, 0) -> (G_*ADDO x, y)
+  /// (G_*SUBE x, y, 0) -> (G_*SUBO x, y)
+  bool matchAddEToAddO(MachineInstr &MI, BuildFnTy &MatchInfo);
 
   /// Transform (fadd x, fneg(y)) -> (fsub x, y)
   ///           (fadd fneg(x), y) -> (fsub y, x)

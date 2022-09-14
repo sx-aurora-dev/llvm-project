@@ -264,6 +264,13 @@ def propagate_undef_shuffle_mask: GICombineRule<
          [{ return Helper.matchUndefShuffleVectorMask(*${root}); }]),
   (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
 
+  // Replace an insert/extract element of an out of bounds index with undef.
+  def insert_extract_vec_elt_out_of_bounds : GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_INSERT_VECTOR_ELT, G_EXTRACT_VECTOR_ELT):$root,
+         [{ return Helper.matchInsertExtractVecEltOutOfBounds(*${root}); }]),
+  (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
+
 // Fold (cond ? x : x) -> x
 def select_same_val: GICombineRule<
   (defs root:$root),
@@ -805,6 +812,16 @@ def addo_by_0: GICombineRule<
          [{ return Helper.matchAddOBy0(*${root}, ${matchinfo}); }]),
   (apply [{ Helper.applyBuildFn(*${root}, ${matchinfo}); }])>;
 
+// Transform (uadde x, y, 0) -> (uaddo x, y)
+//           (sadde x, y, 0) -> (saddo x, y)
+//           (usube x, y, 0) -> (usubo x, y)
+//           (ssube x, y, 0) -> (ssubo x, y)
+def adde_to_addo: GICombineRule<
+  (defs root:$root, build_fn_matchinfo:$matchinfo),
+  (match (wip_match_opcode G_UADDE, G_SADDE, G_USUBE, G_SSUBE):$root,
+         [{ return Helper.matchAddEToAddO(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyBuildFnNoErase(*${root}, ${matchinfo}); }])>;
+
 def mulh_to_lshr : GICombineRule<
   (defs root:$root),
   (match (wip_match_opcode G_UMULH):$root,
@@ -921,7 +938,8 @@ def undef_combines : GICombineGroup<[undef_to_fp_zero, undef_to_int_zero,
                                      propagate_undef_all_ops,
                                      propagate_undef_shuffle_mask,
                                      erase_undef_store,
-                                     unmerge_undef]>;
+                                     unmerge_undef,
+                                     insert_extract_vec_elt_out_of_bounds]>;
 
 def identity_combines : GICombineGroup<[select_same_val, right_identity_zero,
                                         binop_same_val, binop_left_to_zero,
@@ -932,7 +950,8 @@ def identity_combines : GICombineGroup<[select_same_val, right_identity_zero,
 
 def const_combines : GICombineGroup<[constant_fp_op, const_ptradd_to_i2p,
                                      overlapping_and, mulo_by_2, mulo_by_0,
-                                     addo_by_0, combine_minmax_nan]>;
+                                     addo_by_0, adde_to_addo,
+                                     combine_minmax_nan]>;
 
 def known_bits_simplifications : GICombineGroup<[
   redundant_and, redundant_sext_inreg, redundant_or, urem_pow2_to_mask,

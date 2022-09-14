@@ -59,6 +59,7 @@
     __cpp_lib_constexpr_functional                 201907L [C++20]
     __cpp_lib_constexpr_iterator                   201811L [C++20]
     __cpp_lib_constexpr_memory                     201811L [C++20]
+                                                   202202L [C++2b]
     __cpp_lib_constexpr_numeric                    201911L [C++20]
     __cpp_lib_constexpr_string                     201907L [C++20]
     __cpp_lib_constexpr_string_view                201811L [C++20]
@@ -2847,16 +2848,16 @@
 #   endif
 # endif
 
-# if !defined(_LIBCPP_AVAILABILITY_DISABLE_FTM___cpp_lib_format) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT)
+# if !defined(_LIBCPP_VERSION)
 #   ifndef __cpp_lib_format
 #     error "__cpp_lib_format should be defined in c++20"
 #   endif
 #   if __cpp_lib_format != 202106L
 #     error "__cpp_lib_format should have the value 202106L in c++20"
 #   endif
-# else
+# else // _LIBCPP_VERSION
 #   ifdef __cpp_lib_format
-#     error "__cpp_lib_format should not be defined when the requirement '!defined(_LIBCPP_AVAILABILITY_DISABLE_FTM___cpp_lib_format) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT)' is not met!"
+#     error "__cpp_lib_format should not be defined because it is unimplemented in libc++!"
 #   endif
 # endif
 
@@ -3950,8 +3951,8 @@
 # ifndef __cpp_lib_constexpr_memory
 #   error "__cpp_lib_constexpr_memory should be defined in c++2b"
 # endif
-# if __cpp_lib_constexpr_memory != 201811L
-#   error "__cpp_lib_constexpr_memory should have the value 201811L in c++2b"
+# if __cpp_lib_constexpr_memory != 202202L
+#   error "__cpp_lib_constexpr_memory should have the value 202202L in c++2b"
 # endif
 
 # ifndef __cpp_lib_constexpr_numeric
@@ -4089,16 +4090,16 @@
 #   endif
 # endif
 
-# if !defined(_LIBCPP_AVAILABILITY_DISABLE_FTM___cpp_lib_format) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT)
+# if !defined(_LIBCPP_VERSION)
 #   ifndef __cpp_lib_format
 #     error "__cpp_lib_format should be defined in c++2b"
 #   endif
 #   if __cpp_lib_format != 202106L
 #     error "__cpp_lib_format should have the value 202106L in c++2b"
 #   endif
-# else
+# else // _LIBCPP_VERSION
 #   ifdef __cpp_lib_format
-#     error "__cpp_lib_format should not be defined when the requirement '!defined(_LIBCPP_AVAILABILITY_DISABLE_FTM___cpp_lib_format) && !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT)' is not met!"
+#     error "__cpp_lib_format should not be defined because it is unimplemented in libc++!"
 #   endif
 # endif
 

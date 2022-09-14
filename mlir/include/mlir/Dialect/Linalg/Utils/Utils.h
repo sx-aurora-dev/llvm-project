@@ -45,6 +45,12 @@ bool isElementwise(LinalgOp op);
 /// `[0, permutation.size())`.
 bool isPermutation(ArrayRef<int64_t> permutation);
 
+/// Check if `attr` has "parallel" iterator type semantics.
+bool isParallelIterator(Attribute attr);
+
+/// Check if `attr` has "reduction" iterator type semantics.
+bool isReductionIterator(Attribute attr);
+
 /// Helper function that creates a memref::DimOp or tensor::DimOp depending on
 /// the type of `source`.
 Value createOrFoldDimOp(OpBuilder &b, Location loc, Value source, int64_t dim);
@@ -186,13 +192,6 @@ SmallVector<Type> getTensorOutputTypes(LinalgOp op, ValueRange operands);
 SmallVector<Value> insertSlicesBack(OpBuilder &builder, Location loc,
                                     LinalgOp op, ValueRange operands,
                                     ValueRange results);
-
-/// Turns an OpFoldResult into a value, creating an index-typed constant if
-/// necessary.
-Value materializeOpFoldResult(ImplicitLocOpBuilder &builder,
-                              OpFoldResult opFoldResult);
-Value materializeOpFoldResult(OpBuilder &b, Location loc,
-                              OpFoldResult opFoldResult);
 
 /// A struct containg offsets-sizes-strides arguments of the tiled shape.
 struct SliceParameters {

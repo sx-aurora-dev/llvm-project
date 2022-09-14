@@ -26,11 +26,6 @@ namespace bufferization {
 struct OneShotBufferizationOptions;
 } // namespace bufferization
 
-#define GEN_PASS_DECL_SPARSIFICATIONPASS
-#define GEN_PASS_DECL_SPARSETENSORCONVERSIONPASS
-#define GEN_PASS_DECL_SPARSETENSORCODEGEN
-#include "mlir/Dialect/SparseTensor/Transforms/Passes.h.inc"
-
 //===----------------------------------------------------------------------===//
 // The Sparsification pass.
 //===----------------------------------------------------------------------===//
@@ -49,9 +44,6 @@ enum class SparseParallelizationStrategy {
   // TODO: support reduction parallelization too?
 };
 
-/// Converts command-line parallelization flag to the strategy enum.
-SparseParallelizationStrategy sparseParallelizationStrategy(int32_t flag);
-
 /// Defines a vectorization strategy. Any inner loop is a candidate (full SIMD
 /// for parallel loops and horizontal SIMD for reduction loops). A loop is
 /// actually vectorized if (1) allowed by the strategy, and (2) the emitted
@@ -62,25 +54,31 @@ enum class SparseVectorizationStrategy {
   kAnyStorageInnerLoop
 };
 
-/// Converts command-line vectorization flag to the strategy enum.
-SparseVectorizationStrategy sparseVectorizationStrategy(int32_t flag);
+#define GEN_PASS_DECL_SPARSIFICATIONPASS
+#define GEN_PASS_DECL_SPARSETENSORCONVERSIONPASS
+#define GEN_PASS_DECL_SPARSETENSORCODEGEN
+#include "mlir/Dialect/SparseTensor/Transforms/Passes.h.inc"
 
 /// Options for the Sparsification pass.
 struct SparsificationOptions {
   SparsificationOptions(SparseParallelizationStrategy p,
                         SparseVectorizationStrategy v, unsigned vl, bool e,
-                        bool vla)
+                        bool vla, bool rt)
       : parallelizationStrategy(p), vectorizationStrategy(v), vectorLength(vl),
-        enableSIMDIndex32(e), enableVLAVectorization(vla) {}
+        enableSIMDIndex32(e), enableVLAVectorization(vla),
+        enableRuntimeLibrary(rt) {}
   SparsificationOptions()
       : SparsificationOptions(SparseParallelizationStrategy::kNone,
-                              SparseVectorizationStrategy::kNone, 1u, false,
-                              false) {}
+                              SparseVectorizationStrategy::kNone, 1u,
+                              /*enable SIMD Index32=*/false,
+                              /*enable VLA Vectorization=*/false,
+                              /*enable runtime library=*/true) {}
   SparseParallelizationStrategy parallelizationStrategy;
   SparseVectorizationStrategy vectorizationStrategy;
   unsigned vectorLength;
   bool enableSIMDIndex32;
   bool enableVLAVectorization;
+  bool enableRuntimeLibrary;
 };
 
 /// Sets up sparsification rewriting rules with the given options.
@@ -162,26 +160,10 @@ void populateSparseTensorCodegenPatterns(TypeConverter &typeConverter,
 std::unique_ptr<Pass> createSparseTensorCodegenPass();
 
 //===----------------------------------------------------------------------===//
-// The SparseTensorStorageExpansion pass.
-//===----------------------------------------------------------------------===//
-
-/// Sparse tensor storage type converter from compound to expanded form.
-class SparseTensorStorageTupleExpander : public TypeConverter {
-public:
-  SparseTensorStorageTupleExpander();
-};
-
-/// Sets up sparse tensor storage expansion rules.
-void populateSparseTensorStorageExpansionPatterns(TypeConverter &typeConverter,
-                                                  RewritePatternSet &patterns);
-
-std::unique_ptr<Pass> createSparseTensorStorageExpansionPass();
-
-//===----------------------------------------------------------------------===//
 // Other rewriting rules and passes.
 //===----------------------------------------------------------------------===//
 
-void populateSparseTensorRewriting(RewritePatternSet &patterns);
+void populateSparseTensorRewriting(RewritePatternSet &patterns, bool enableRT);
 
 std::unique_ptr<Pass> createDenseBufferizationPass(
     const bufferization::OneShotBufferizationOptions &options);

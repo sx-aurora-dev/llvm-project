@@ -62,17 +62,44 @@ def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
     "sparse_tensor::SparseTensorDialect",
     "vector::VectorDialect",
   ];
+  // TODO(57514): These enum options are duplicated in Passes.h.
   let options = [
-    Option<"parallelization", "parallelization-strategy", "int32_t", "0",
-           "Set the parallelization strategy">,
-    Option<"vectorization", "vectorization-strategy", "int32_t", "0",
-           "Set the vectorization strategy">,
+    Option<"parallelization", "parallelization-strategy", "mlir::SparseParallelizationStrategy",
+           "mlir::SparseParallelizationStrategy::kNone",
+           "Set the parallelization strategy", [{llvm::cl::values(
+             clEnumValN(mlir::SparseParallelizationStrategy::kNone, "none",
+                        "Turn off sparse parallelization."),
+             clEnumValN(mlir::SparseParallelizationStrategy::kDenseOuterLoop,
+                        "dense-outer-loop",
+                        "Enable dense outer loop sparse parallelization."),
+             clEnumValN(mlir::SparseParallelizationStrategy::kAnyStorageOuterLoop,
+                        "any-storage-outer-loop",
+                        "Enable sparse parallelization regardless of storage for the outer loop."),
+             clEnumValN(mlir::SparseParallelizationStrategy::kDenseAnyLoop,
+                        "dense-any-loop",
+                        "Enable dense parallelization for any loop."),
+             clEnumValN(mlir::SparseParallelizationStrategy::kAnyStorageAnyLoop,
+                        "any-storage-any-loop",
+                        "Enable sparse parallelization for any storage and loop."))}]>,
+    Option<"vectorization", "vectorization-strategy", "mlir::SparseVectorizationStrategy",
+           "mlir::SparseVectorizationStrategy::kNone",
+           "Set the vectorization strategy", [{llvm::cl::values(
+             clEnumValN(mlir::SparseVectorizationStrategy::kNone, "none",
+                        "Turn off sparse vectorization."),
+             clEnumValN(mlir::SparseVectorizationStrategy::kDenseInnerLoop,
+                        "dense-inner-loop",
+                        "Enable vectorization for dense inner loops."),
+             clEnumValN(mlir::SparseVectorizationStrategy::kAnyStorageInnerLoop,
+                        "any-storage-inner-loop",
+                        "Enable sparse vectorization for inner loops with any storage."))}]>,
     Option<"vectorLength", "vl", "int32_t", "1",
            "Set the vector length">,
     Option<"enableSIMDIndex32", "enable-simd-index32", "bool", "false",
            "Enable i32 indexing into vectors (for efficiency)">,
     Option<"enableVLAVectorization", "enable-vla-vectorization", "bool",
-           "false", "Enable vector length agnostic vectorization">
+           "false", "Enable vector length agnostic vectorization">,
+    Option<"enableRuntimeLibrary", "enable-runtime-library", "bool",
+           "true", "Enable runtime library for manipulating sparse tensors">
   ];
 }
 
@@ -144,45 +171,11 @@ def SparseTensorCodegen : Pass<"sparse-tensor-codegen", "ModuleOp"> {
   let dependentDialects = [
     "arith::ArithmeticDialect",
     "bufferization::BufferizationDialect",
+    "linalg::LinalgDialect",
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",
   ];
 }
-
-def SparseTensorStorageExpansion : Pass<"sparse-tensor-storage-expansion", "ModuleOp"> {
-  let summary = "Expand compounded sparse tensor storage into individual SSA values";
-  let description = [{
-    A pass that expands sparse tensor storage (aggregated by tuple) into
-    individual SSA values. It also lowers sparse tensor storage operations,
-    e.g., sparse_tensor.storage_get and sparse_tensor.storage_set.
-
-    Example of the conversion:
-
-    ```mlir
-    Before:
-      func.func @sparse_storage_set(%arg0: tuple<memref<?xf64>,
-                                                 memref<?xf64>,
-                                                 f64>)
-                                        -> tuple<memref<?xf64>,
-                                                 memref<?xf64>,
-                                                 f64> {
-        return %arg0 : tuple<memref<?xf64>, memref<?xf64>, f64>
-      }
-    After:
-      func.func @sparse_storage_set(%arg0: memref<?xf64>,
-                                    %arg1: memref<?xf64>,
-                                    %arg2: f64)
-                                    -> (memref<?xf64>, memref<?xf64>, f64) {
-        return %arg0, %arg1, %arg2 : memref<?xf64>, memref<?xf64>, f64
-      }
-    ```
-  }];
-  let constructor = "mlir::createSparseTensorStorageExpansionPass()";
-  let dependentDialects = [
-    "sparse_tensor::SparseTensorDialect",
-  ];
-}
-
 
 #endif // MLIR_DIALECT_SPARSETENSOR_TRANSFORMS_PASSES

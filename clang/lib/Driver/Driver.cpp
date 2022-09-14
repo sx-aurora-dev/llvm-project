@@ -927,7 +927,8 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
 /// by Dirs.
 ///
 static bool searchForFile(SmallVectorImpl<char> &FilePath,
-                          ArrayRef<StringRef> Dirs, StringRef FileName) {
+                          ArrayRef<StringRef> Dirs, StringRef FileName,
+                          llvm::vfs::FileSystem &FS) {
   SmallString<128> WPath;
   for (const StringRef &Dir : Dirs) {
     if (Dir.empty())
@@ -935,7 +936,8 @@ static bool searchForFile(SmallVectorImpl<char> &FilePath,
     WPath.clear();
     llvm::sys::path::append(WPath, Dir, FileName);
     llvm::sys::path::native(WPath);
-    if (llvm::sys::fs::is_regular_file(WPath)) {
+    auto Status = FS.status(WPath);
+    if (Status && Status->getType() == llvm::sys::fs::file_type::regular_file) {
       FilePath = std::move(WPath);
       return true;
     }
@@ -946,7 +948,7 @@ static bool searchForFile(SmallVectorImpl<char> &FilePath,
 bool Driver::readConfigFile(StringRef FileName) {
   // Try reading the given file.
   SmallVector<const char *, 32> NewCfgArgs;
-  if (!llvm::cl::readConfigFile(FileName, Saver, NewCfgArgs)) {
+  if (!llvm::cl::readConfigFile(FileName, Saver, NewCfgArgs, getVFS())) {
     Diag(diag::err_drv_cannot_read_config_file) << FileName;
     return true;
   }
@@ -986,7 +988,7 @@ bool Driver::loadConfigFile() {
       SmallString<128> CfgDir;
       CfgDir.append(
           CLOptions->getLastArgValue(options::OPT_config_system_dir_EQ));
-      if (CfgDir.empty() || llvm::sys::fs::make_absolute(CfgDir))
+      if (CfgDir.empty() || getVFS().makeAbsolute(CfgDir))
         SystemConfigDir.clear();
       else
         SystemConfigDir = static_cast<std::string>(CfgDir);
@@ -995,7 +997,7 @@ bool Driver::loadConfigFile() {
       SmallString<128> CfgDir;
       CfgDir.append(
           CLOptions->getLastArgValue(options::OPT_config_user_dir_EQ));
-      if (CfgDir.empty() || llvm::sys::fs::make_absolute(CfgDir))
+      if (CfgDir.empty() || getVFS().makeAbsolute(CfgDir))
         UserConfigDir.clear();
       else
         UserConfigDir = static_cast<std::string>(CfgDir);
@@ -1020,13 +1022,16 @@ bool Driver::loadConfigFile() {
       // If argument contains directory separator, treat it as a path to
       // configuration file.
       if (llvm::sys::path::has_parent_path(CfgFileName)) {
-        SmallString<128> CfgFilePath;
-        if (llvm::sys::path::is_relative(CfgFileName))
-          llvm::sys::fs::current_path(CfgFilePath);
-        llvm::sys::path::append(CfgFilePath, CfgFileName);
-        if (!llvm::sys::fs::is_regular_file(CfgFilePath)) {
-          Diag(diag::err_drv_config_file_not_exist) << CfgFilePath;
-          return true;
+        SmallString<128> CfgFilePath(CfgFileName);
+        if (llvm::sys::path::is_relative(CfgFilePath)) {
+          if (getVFS().makeAbsolute(CfgFilePath))
+            return true;
+          auto Status = getVFS().status(CfgFilePath);
+          if (!Status ||
+              Status->getType() != llvm::sys::fs::file_type::regular_file) {
+            Diag(diag::err_drv_config_file_not_exist) << CfgFilePath;
+            return true;
+          }
         }
         return readConfigFile(CfgFilePath);
       }
@@ -1085,17 +1090,19 @@ bool Driver::loadConfigFile() {
   // Try to find config file. First try file with corrected architecture.
   llvm::SmallString<128> CfgFilePath;
   if (!FixedConfigFile.empty()) {
-    if (searchForFile(CfgFilePath, CfgFileSearchDirs, FixedConfigFile))
+    if (searchForFile(CfgFilePath, CfgFileSearchDirs, FixedConfigFile,
+                      getVFS()))
       return readConfigFile(CfgFilePath);
     // If 'x86_64-clang.cfg' was not found, try 'x86_64.cfg'.
     FixedConfigFile.resize(FixedArchPrefixLen);
     FixedConfigFile.append(".cfg");
-    if (searchForFile(CfgFilePath, CfgFileSearchDirs, FixedConfigFile))
+    if (searchForFile(CfgFilePath, CfgFileSearchDirs, FixedConfigFile,
+                      getVFS()))
       return readConfigFile(CfgFilePath);
   }
 
   // Then try original file name.
-  if (searchForFile(CfgFilePath, CfgFileSearchDirs, CfgFileName))
+  if (searchForFile(CfgFilePath, CfgFileSearchDirs, CfgFileName, getVFS()))
     return readConfigFile(CfgFilePath);
 
   // Finally try removing driver mode part: 'x86_64-clang.cfg' -> 'x86_64.cfg'.
@@ -1103,7 +1110,7 @@ bool Driver::loadConfigFile() {
       !ClangNameParts.TargetPrefix.empty()) {
     CfgFileName.assign(ClangNameParts.TargetPrefix);
     CfgFileName.append(".cfg");
-    if (searchForFile(CfgFilePath, CfgFileSearchDirs, CfgFileName))
+    if (searchForFile(CfgFilePath, CfgFileSearchDirs, CfgFileName, getVFS()))
       return readConfigFile(CfgFilePath);
   }
 
@@ -3731,7 +3738,7 @@ public:
                                      /*BoundArch=*/nullptr);
       // Propagate active offloading kinds for each input to the link action.
       // Each input may have different active offloading kind.
-      for (auto A : HostAction->inputs()) {
+      for (auto *A : HostAction->inputs()) {
         auto ArgLoc = HostActionToInputArgMap.find(A);
         if (ArgLoc == HostActionToInputArgMap.end())
           continue;
@@ -3918,9 +3925,7 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
   OffloadingActionBuilder OffloadBuilder(C, Args, Inputs);
 
   bool UseNewOffloadingDriver =
-      (C.isOffloadingHostKind(Action::OFK_OpenMP) &&
-       Args.hasFlag(options::OPT_fopenmp_new_driver,
-                    options::OPT_no_offload_new_driver, true)) ||
+      C.isOffloadingHostKind(Action::OFK_OpenMP) ||
       Args.hasFlag(options::OPT_offload_new_driver,
                    options::OPT_no_offload_new_driver, false);
 
@@ -4327,10 +4332,14 @@ Action *Driver::BuildOffloadingActions(Compilation &C,
 
       auto TCAndArch = TCAndArchs.begin();
       for (Action *&A : DeviceActions) {
+        if (A->getType() == types::TY_Nothing)
+          continue;
+
         A = ConstructPhaseAction(C, Args, Phase, A, Kind);
 
         if (isa<CompileJobAction>(A) && isa<CompileJobAction>(HostAction) &&
-            Kind == Action::OFK_OpenMP) {
+            Kind == Action::OFK_OpenMP &&
+            HostAction->getType() != types::TY_Nothing) {
           // OpenMP offloading has a dependency on the host compile action to
           // identify which declarations need to be emitted. This shouldn't be
           // collapsed with any other actions so we can use it in the device.
@@ -4398,11 +4407,15 @@ Action *Driver::BuildOffloadingActions(Compilation &C,
              nullptr, Action::OFK_None);
   }
 
+  // If we are unable to embed a single device output into the host, we need to
+  // add each device output as a host dependency to ensure they are still built.
+  bool SingleDeviceOutput = !llvm::any_of(OffloadActions, [](Action *A) {
+    return A->getType() == types::TY_Nothing;
+  }) && isa<CompileJobAction>(HostAction);
   OffloadAction::HostDependence HDep(
       *HostAction, *C.getSingleOffloadToolChain<Action::OFK_Host>(),
-      /*BoundArch=*/nullptr, isa<CompileJobAction>(HostAction) ? DDep : DDeps);
-  return C.MakeAction<OffloadAction>(
-      HDep, isa<CompileJobAction>(HostAction) ? DDep : DDeps);
+      /*BoundArch=*/nullptr, SingleDeviceOutput ? DDep : DDeps);
+  return C.MakeAction<OffloadAction>(HDep, SingleDeviceOutput ? DDep : DDeps);
 }
 
 Action *Driver::ConstructPhaseAction(
@@ -4526,102 +4539,6 @@ Action *Driver::ConstructPhaseAction(
   llvm_unreachable("invalid phase in ConstructPhaseAction");
 }
 
-// Infer data storing path of the options `-ftime-trace`, `-ftime-trace=<path>`
-void InferTimeTracePath(Compilation &C) {
-  bool HasTimeTrace =
-      C.getArgs().getLastArg(options::OPT_ftime_trace) != nullptr;
-  bool HasTimeTraceFile =
-      C.getArgs().getLastArg(options::OPT_ftime_trace_EQ) != nullptr;
-  // Whether `-ftime-trace` or `-ftime-trace=<path>` are specified
-  if (!HasTimeTrace && !HasTimeTraceFile)
-    return;
-
-  // If `-ftime-trace=<path>` is specified, TracePath is the <path>.
-  // Else if there is a linking job, TracePath is the parent path of .exe,
-  //         then the OutputFile's name may be appended to it.
-  // Else, TracePath is "",
-  //         then the full OutputFile's path may be appended to it.
-  SmallString<128> TracePath("");
-
-  if (HasTimeTraceFile) {
-    TracePath = SmallString<128>(
-        C.getArgs().getLastArg(options::OPT_ftime_trace_EQ)->getValue());
-  } else {
-    // Get linking executable file's parent path as TracePath's parent path,
-    // default is ".". Filename may be determined and added into TracePath then.
-    //
-    // e.g. executable file's path: /usr/local/a.out
-    //      its parent's path:      /usr/local
-    for (auto &J : C.getJobs()) {
-      if (J.getSource().getKind() == Action::LinkJobClass) {
-        assert(!J.getOutputFilenames().empty() &&
-               "linking output filename is empty");
-        auto OutputFilePath =
-            SmallString<128>(J.getOutputFilenames()[0].c_str());
-        if (llvm::sys::path::has_parent_path(OutputFilePath)) {
-          TracePath = llvm::sys::path::parent_path(OutputFilePath);
-        } else {
-          TracePath = SmallString<128>(".");
-        }
-        break;
-      }
-    }
-  }
-
-  // Add or replace the modified -ftime-trace=<path>` to all clang jobs
-  for (auto &J : C.getJobs()) {
-    if (J.getSource().getKind() == Action::AssembleJobClass ||
-        J.getSource().getKind() == Action::BackendJobClass ||
-        J.getSource().getKind() == Action::CompileJobClass) {
-      SmallString<128> TracePathReal = TracePath;
-      SmallString<128> OutputPath(J.getOutputFilenames()[0].c_str());
-      std::string arg = std::string("-ftime-trace=");
-      if (!HasTimeTraceFile) {
-        if (TracePathReal.empty()) {
-          // /xxx/yyy.o => /xxx/yyy.json
-          llvm::sys::path::replace_extension(OutputPath, "json");
-          arg += std::string(OutputPath.c_str());
-        } else {
-          // /xxx/yyy.o => /executable_file_parent_path/yyy.json
-          llvm::sys::path::append(TracePathReal,
-                                  llvm::sys::path::filename(OutputPath));
-          llvm::sys::path::replace_extension(TracePathReal, "json");
-          arg += std::string(TracePathReal.c_str());
-        }
-      } else {
-        // /full_file_path_specified or /path_specified/yyy.json
-        if (llvm::sys::fs::is_directory(TracePathReal))
-          llvm::sys::path::append(TracePathReal,
-                                  llvm::sys::path::filename(OutputPath));
-        llvm::sys::path::replace_extension(TracePathReal, "json");
-        arg += std::string(TracePathReal.c_str());
-      }
-
-      assert(arg.size() > strlen("-ftime-trace") &&
-             arg.find("-ftime-trace=") == 0 && arg[arg.size() - 1] != '=' &&
-             "invalid `-ftime-trace=<path>`");
-
-      const std::string::size_type size = arg.size();
-      char *buffer = new char[size + 1];
-      memcpy(buffer, arg.c_str(), size + 1);
-
-      // Replace `-ftime-trace` or `-ftime-trace=<path>` with the modified
-      // `-ftime-trace=<infered_path>`.
-      auto &JArgs = J.getArguments();
-      for (unsigned I = 0; I < JArgs.size(); ++I) {
-        if (StringRef(JArgs[I]).startswith("-ftime-trace=") ||
-            (StringRef(JArgs[I]).equals("-ftime-trace") && !HasTimeTraceFile)) {
-          ArgStringList NewArgs(JArgs.begin(), JArgs.begin() + I);
-          NewArgs.push_back(buffer);
-          NewArgs.append(JArgs.begin() + I + 1, JArgs.end());
-          J.replaceArguments(NewArgs);
-          break;
-        }
-      }
-    }
-  }
-}
-
 void Driver::BuildJobs(Compilation &C) const {
   llvm::PrettyStackTraceString CrashInfo("Building compilation jobs");
 
@@ -4708,9 +4625,6 @@ void Driver::BuildJobs(Compilation &C) const {
                        /*LinkingOutput*/ LinkingOutput, CachedResults,
                        /*TargetDeviceOffloadKind*/ Action::OFK_None);
   }
-
-  // set data storing path of the options `-ftime-trace`, `-ftime-trace=<path>`
-  InferTimeTracePath(C);
 
   // If we have more than one job, then disable integrated-cc1 for now. Do this
   // also when we need to report process execution statistics.
@@ -5528,15 +5442,18 @@ const char *Driver::CreateTempFile(Compilation &C, StringRef Prefix,
                                    StringRef BoundArch) const {
   SmallString<128> TmpName;
   Arg *A = C.getArgs().getLastArg(options::OPT_fcrash_diagnostics_dir);
-  if (CCGenDiagnostics && A) {
-    SmallString<128> CrashDirectory(A->getValue());
-    if (!getVFS().exists(CrashDirectory))
-      llvm::sys::fs::create_directories(CrashDirectory);
-    llvm::sys::path::append(CrashDirectory, Prefix);
+  Optional<std::string> CrashDirectory =
+      CCGenDiagnostics && A
+          ? std::string(A->getValue())
+          : llvm::sys::Process::GetEnv("CLANG_CRASH_DIAGNOSTICS_DIR");
+  if (CrashDirectory) {
+    if (!getVFS().exists(*CrashDirectory))
+      llvm::sys::fs::create_directories(*CrashDirectory);
+    SmallString<128> Path(*CrashDirectory);
+    llvm::sys::path::append(Path, Prefix);
     const char *Middle = !Suffix.empty() ? "-%%%%%%." : "-%%%%%%";
-    std::error_code EC = llvm::sys::fs::createUniqueFile(
-        CrashDirectory + Middle + Suffix, TmpName);
-    if (EC) {
+    if (std::error_code EC =
+            llvm::sys::fs::createUniqueFile(Path + Middle + Suffix, TmpName)) {
       Diag(clang::diag::err_unable_to_make_temp) << EC.message();
       return "";
     }
