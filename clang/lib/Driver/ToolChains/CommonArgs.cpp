@@ -285,7 +285,7 @@ void tools::addLinkerCompressDebugSectionsOption(
   // argument.
   if (const Arg *A = Args.getLastArg(options::OPT_gz_EQ)) {
     StringRef V = A->getValue();
-    if (V == "none" || V == "zlib")
+    if (V == "none" || V == "zlib" || V == "zstd")
       CmdArgs.push_back(Args.MakeArgString("--compress-debug-sections=" + V));
     else
       TC.getDriver().Diag(diag::err_drv_unsupported_option_argument)
@@ -506,6 +506,19 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
             Suffix,
         Plugin);
     CmdArgs.push_back(Args.MakeArgString(Plugin));
+  } else {
+    // NOTE:
+    // - it is not possible to use lld for PS4
+    // - addLTOOptions() is not used for PS5
+    // Hence no need to handle SCE (like in Clang.cpp::renderDebugOptions()).
+    //
+    // But note, this solution is far from perfect, better to encode it into IR
+    // metadata, but this may not be worth it, since it looks like aranges is
+    // on the way out.
+    if (Args.hasArg(options::OPT_gdwarf_aranges)) {
+      CmdArgs.push_back(Args.MakeArgString("-mllvm"));
+      CmdArgs.push_back(Args.MakeArgString("-generate-arange-section"));
+    }
   }
 
   // Try to pass driver level flags relevant to LTO code generation down to
@@ -2161,7 +2174,7 @@ void tools::addHIPRuntimeLibArgs(const ToolChain &TC,
     TC.AddHIPRuntimeLibArgs(Args, CmdArgs);
   } else {
     // Claim "no HIP libraries" arguments if any
-    for (auto Arg : Args.filtered(options::OPT_no_hip_rt)) {
+    for (auto *Arg : Args.filtered(options::OPT_no_hip_rt)) {
       Arg->claim();
     }
   }

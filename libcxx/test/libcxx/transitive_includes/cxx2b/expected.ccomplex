@@ -7,7 +7,6 @@ cmath
 compare
 complex
 concepts
-cstdarg
 cstddef
 cstdint
 cstdio
@@ -23,7 +22,6 @@ iosfwd
 istream
 limits
 locale
-memory
 mutex
 new
 ostream

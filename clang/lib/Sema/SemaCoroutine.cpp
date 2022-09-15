@@ -1043,7 +1043,8 @@ static bool findDeleteForPromise(Sema &S, SourceLocation Loc, QualType PromiseTy
   // The deallocation function's name is looked up by searching for it in the
   // scope of the promise type. If nothing is found, a search is performed in
   // the global scope.
-  if (S.FindDeallocationFunction(Loc, PointeeRD, DeleteName, OperatorDelete))
+  if (S.FindDeallocationFunction(Loc, PointeeRD, DeleteName, OperatorDelete,
+                                 /*Diagnose*/ true, /*WantSize*/ true))
     return false;
 
   // [dcl.fct.def.coroutine]p12
@@ -1326,7 +1327,7 @@ bool CoroutineStmtBuilder::makeNewAndDeleteExpr() {
   bool PassAlignment = false;
   SmallVector<Expr *, 1> PlacementArgs;
 
-  bool PromiseContainsNew = [this, &PromiseType]() -> bool {
+  const bool PromiseContainsNew = [this, &PromiseType]() -> bool {
     DeclarationName NewName =
         S.getASTContext().DeclarationNames.getCXXOperatorName(OO_New);
     LookupResult R(S, NewName, Loc, Sema::LookupOrdinaryName);
@@ -1337,22 +1338,22 @@ bool CoroutineStmtBuilder::makeNewAndDeleteExpr() {
     return !R.empty() && !R.isAmbiguous();
   }();
 
-  auto LookupAllocationFunction = [&]() {
+  auto LookupAllocationFunction = [&](Sema::AllocationFunctionScope NewScope =
+                                          Sema::AFS_Both) {
     // [dcl.fct.def.coroutine]p9
     //   The allocation function's name is looked up by searching for it in the
     // scope of the promise type.
     // - If any declarations are found, ...
     // - If no declarations are found in the scope of the promise type, a search
     // is performed in the global scope.
-    Sema::AllocationFunctionScope NewScope =
-        PromiseContainsNew ? Sema::AFS_Class : Sema::AFS_Global;
+    if (NewScope == Sema::AFS_Both)
+      NewScope = PromiseContainsNew ? Sema::AFS_Class : Sema::AFS_Global;
+
     FunctionDecl *UnusedResult = nullptr;
-    S.FindAllocationFunctions(Loc, SourceRange(),
-                              NewScope,
+    S.FindAllocationFunctions(Loc, SourceRange(), NewScope,
                               /*DeleteScope*/ Sema::AFS_Both, PromiseType,
                               /*isArray*/ false, PassAlignment, PlacementArgs,
-                              OperatorNew, UnusedResult,
-                              /*Diagnose*/ false);
+                              OperatorNew, UnusedResult, /*Diagnose*/ false);
   };
 
   // We don't expect to call to global operator new with (size, p0, …, pn).
@@ -1383,16 +1384,14 @@ bool CoroutineStmtBuilder::makeNewAndDeleteExpr() {
       return false;
     PlacementArgs = {StdNoThrow};
     OperatorNew = nullptr;
-    FunctionDecl *UnusedResult = nullptr;
-    S.FindAllocationFunctions(Loc, SourceRange(), /*NewScope*/ Sema::AFS_Both,
-                              /*DeleteScope*/ Sema::AFS_Both, PromiseType,
-                              /*isArray*/ false, PassAlignment, PlacementArgs,
-                              OperatorNew, UnusedResult);
+    LookupAllocationFunction(Sema::AFS_Global);
   }
 
   if (!OperatorNew) {
     if (PromiseContainsNew)
       S.Diag(Loc, diag::err_coroutine_unusable_new) << PromiseType << &FD;
+    else if (RequiresNoThrowAlloc)
+      S.Diag(Loc, diag::err_coroutine_unfound_nothrow_new) << &FD;
 
     return false;
   }
@@ -1700,7 +1699,7 @@ bool Sema::buildCoroutineParameterMoves(SourceLocation Loc) {
     // [dcl.fct.def.coroutine]p13
     //   The initialization and destruction of each parameter copy occurs in the
     //   context of the called coroutine.
-    auto D = buildVarDecl(*this, Loc, PD->getType(), PD->getIdentifier());
+    auto *D = buildVarDecl(*this, Loc, PD->getType(), PD->getIdentifier());
     AddInitializerToDecl(D, CExpr, /*DirectInit=*/true);
 
     // Convert decl to a statement.
@@ -1730,7 +1729,8 @@ ClassTemplateDecl *Sema::lookupCoroutineTraits(SourceLocation KwLoc,
     // discovered.
     // TODO: Become stricter when <experimental/coroutine> is removed.
 
-    auto const &TraitIdent = PP.getIdentifierTable().get("coroutine_traits");
+    IdentifierInfo const &TraitIdent =
+        PP.getIdentifierTable().get("coroutine_traits");
 
     NamespaceDecl *StdSpace = getStdNamespace();
     LookupResult ResStd(*this, &TraitIdent, FuncLoc, LookupOrdinaryName);
@@ -1748,7 +1748,7 @@ ClassTemplateDecl *Sema::lookupCoroutineTraits(SourceLocation KwLoc,
     }
 
     // Prefer ::std to std::experimental.
-    auto &Result = InStd ? ResStd : ResExp;
+    LookupResult &Result = InStd ? ResStd : ResExp;
     CoroTraitsNamespaceCache = InStd ? StdSpace : ExpSpace;
 
     // coroutine_traits is required to be a class template.
@@ -1765,7 +1765,7 @@ ClassTemplateDecl *Sema::lookupCoroutineTraits(SourceLocation KwLoc,
       Diag(KwLoc, diag::warn_deprecated_coroutine_namespace)
           << "coroutine_traits";
       ResExp.suppressDiagnostics();
-      auto *Found = *ResExp.begin();
+      NamedDecl *Found = *ResExp.begin();
       Diag(Found->getLocation(), diag::note_entity_declared_at) << Found;
 
       if (InStd &&

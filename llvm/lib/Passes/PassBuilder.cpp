@@ -140,6 +140,7 @@
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
 #include "llvm/Transforms/Instrumentation/PGOInstrumentation.h"
 #include "llvm/Transforms/Instrumentation/PoisonChecking.h"
+#include "llvm/Transforms/Instrumentation/SanitizerBinaryMetadata.h"
 #include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/Transforms/ObjCARC.h"
@@ -374,7 +375,7 @@ AnalysisKey NoOpLoopAnalysis::Key;
 /// We currently only use this for --print-before/after.
 bool shouldPopulateClassToPassNames() {
   return PrintPipelinePasses || !printBeforePasses().empty() ||
-         !printAfterPasses().empty();
+         !printAfterPasses().empty() || !isFilterPassesEmpty();
 }
 
 // A pass for testing -print-on-crash.
@@ -1191,12 +1192,12 @@ Error PassBuilder::parseModulePass(ModulePassManager &MPM,
   if (Name == "require<" NAME ">") {                                           \
     MPM.addPass(                                                               \
         RequireAnalysisPass<                                                   \
-            std::remove_reference<decltype(CREATE_PASS)>::type, Module>());    \
+            std::remove_reference_t<decltype(CREATE_PASS)>, Module>());        \
     return Error::success();                                                   \
   }                                                                            \
   if (Name == "invalidate<" NAME ">") {                                        \
     MPM.addPass(InvalidateAnalysisPass<                                        \
-                std::remove_reference<decltype(CREATE_PASS)>::type>());        \
+                std::remove_reference_t<decltype(CREATE_PASS)>>());            \
     return Error::success();                                                   \
   }
 #define CGSCC_PASS(NAME, CREATE_PASS)                                          \
@@ -1325,14 +1326,14 @@ Error PassBuilder::parseCGSCCPass(CGSCCPassManager &CGPM,
 #define CGSCC_ANALYSIS(NAME, CREATE_PASS)                                      \
   if (Name == "require<" NAME ">") {                                           \
     CGPM.addPass(RequireAnalysisPass<                                          \
-                 std::remove_reference<decltype(CREATE_PASS)>::type,           \
+                 std::remove_reference_t<decltype(CREATE_PASS)>,               \
                  LazyCallGraph::SCC, CGSCCAnalysisManager, LazyCallGraph &,    \
                  CGSCCUpdateResult &>());                                      \
     return Error::success();                                                   \
   }                                                                            \
   if (Name == "invalidate<" NAME ">") {                                        \
     CGPM.addPass(InvalidateAnalysisPass<                                       \
-                 std::remove_reference<decltype(CREATE_PASS)>::type>());       \
+                 std::remove_reference_t<decltype(CREATE_PASS)>>());           \
     return Error::success();                                                   \
   }
 #define FUNCTION_PASS(NAME, CREATE_PASS)                                       \
@@ -1447,12 +1448,12 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
   if (Name == "require<" NAME ">") {                                           \
     FPM.addPass(                                                               \
         RequireAnalysisPass<                                                   \
-            std::remove_reference<decltype(CREATE_PASS)>::type, Function>());  \
+            std::remove_reference_t<decltype(CREATE_PASS)>, Function>());      \
     return Error::success();                                                   \
   }                                                                            \
   if (Name == "invalidate<" NAME ">") {                                        \
     FPM.addPass(InvalidateAnalysisPass<                                        \
-                std::remove_reference<decltype(CREATE_PASS)>::type>());        \
+                std::remove_reference_t<decltype(CREATE_PASS)>>());            \
     return Error::success();                                                   \
   }
 // FIXME: UseMemorySSA is set to false. Maybe we could do things like:
@@ -1543,14 +1544,14 @@ Error PassBuilder::parseLoopPass(LoopPassManager &LPM,
 #define LOOP_ANALYSIS(NAME, CREATE_PASS)                                       \
   if (Name == "require<" NAME ">") {                                           \
     LPM.addPass(RequireAnalysisPass<                                           \
-                std::remove_reference<decltype(CREATE_PASS)>::type, Loop,      \
+                std::remove_reference_t<decltype(CREATE_PASS)>, Loop,          \
                 LoopAnalysisManager, LoopStandardAnalysisResults &,            \
                 LPMUpdater &>());                                              \
     return Error::success();                                                   \
   }                                                                            \
   if (Name == "invalidate<" NAME ">") {                                        \
     LPM.addPass(InvalidateAnalysisPass<                                        \
-                std::remove_reference<decltype(CREATE_PASS)>::type>());        \
+                std::remove_reference_t<decltype(CREATE_PASS)>>());            \
     return Error::success();                                                   \
   }
 #include "PassRegistry.def"
@@ -1566,13 +1567,13 @@ bool PassBuilder::parseAAPassName(AAManager &AA, StringRef Name) {
 #define MODULE_ALIAS_ANALYSIS(NAME, CREATE_PASS)                               \
   if (Name == NAME) {                                                          \
     AA.registerModuleAnalysis<                                                 \
-        std::remove_reference<decltype(CREATE_PASS)>::type>();                 \
+        std::remove_reference_t<decltype(CREATE_PASS)>>();                     \
     return true;                                                               \
   }
 #define FUNCTION_ALIAS_ANALYSIS(NAME, CREATE_PASS)                             \
   if (Name == NAME) {                                                          \
     AA.registerFunctionAnalysis<                                               \
-        std::remove_reference<decltype(CREATE_PASS)>::type>();                 \
+        std::remove_reference_t<decltype(CREATE_PASS)>>();                     \
     return true;                                                               \
   }
 #include "PassRegistry.def"

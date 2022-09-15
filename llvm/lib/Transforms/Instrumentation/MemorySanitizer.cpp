@@ -145,6 +145,7 @@
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallString.h"
@@ -152,6 +153,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Argument.h"
@@ -350,6 +352,12 @@ static cl::opt<uint64_t> ClShadowBase("msan-shadow-base",
 static cl::opt<uint64_t> ClOriginBase("msan-origin-base",
                                       cl::desc("Define custom MSan OriginBase"),
                                       cl::Hidden, cl::init(0));
+
+static cl::opt<int>
+    ClDisambiguateWarning("msan-disambiguate-warning-threshold",
+                          cl::desc("Define threshold for number of checks per "
+                                   "debug location to force origin update."),
+                          cl::Hidden, cl::init(3));
 
 const char kMsanModuleCtorName[] = "msan.module_ctor";
 const char kMsanInitName[] = "__msan_init";
@@ -669,20 +677,32 @@ MemorySanitizerOptions::MemorySanitizerOptions(int TO, bool R, bool K,
       Recover(getOptOrDefault(ClKeepGoing, Kernel || R)),
       EagerChecks(getOptOrDefault(ClEagerChecks, EagerChecks)) {}
 
-PreservedAnalyses MemorySanitizerPass::run(Function &F,
-                                           FunctionAnalysisManager &FAM) {
-  MemorySanitizer Msan(*F.getParent(), Options);
-  if (Msan.sanitizeFunction(F, FAM.getResult<TargetLibraryAnalysis>(F)))
-    return PreservedAnalyses::none();
-  return PreservedAnalyses::all();
-}
+PreservedAnalyses MemorySanitizerPass::run(Module &M,
+                                           ModuleAnalysisManager &AM) {
+  bool Modified = false;
+  if (!Options.Kernel) {
+    insertModuleCtor(M);
+    Modified = true;
+  }
 
-PreservedAnalyses ModuleMemorySanitizerPass::run(Module &M,
-                                                 ModuleAnalysisManager &AM) {
-  if (Options.Kernel)
+  auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+  for (Function &F : M) {
+    if (F.empty())
+      continue;
+    MemorySanitizer Msan(*F.getParent(), Options);
+    Modified |=
+        Msan.sanitizeFunction(F, FAM.getResult<TargetLibraryAnalysis>(F));
+  }
+
+  if (!Modified)
     return PreservedAnalyses::all();
-  insertModuleCtor(M);
-  return PreservedAnalyses::none();
+
+  PreservedAnalyses PA = PreservedAnalyses::none();
+  // GlobalsAA is considered stateless and does not get invalidated unless
+  // explicitly invalidated; PreservedAnalyses::none() is not enough. Sanitizers
+  // make changes that require GlobalsAA to be invalidated.
+  PA.abandon<GlobalsAA>();
+  return PA;
 }
 
 void MemorySanitizerPass::printPipeline(
@@ -1092,6 +1112,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
         : Shadow(S), Origin(O), OrigIns(I) {}
   };
   SmallVector<ShadowOriginAndInsertPoint, 16> InstrumentationList;
+  DenseMap<const DILocation *, int> LazyWarningDebugLocationCount;
   bool InstrumentLifetimeStart = ClHandleLifetimeIntrinsics;
   SmallSetVector<AllocaInst *, 16> AllocaSet;
   SmallVector<std::pair<IntrinsicInst *, AllocaInst *>, 16> LifetimeStartList;
@@ -1132,6 +1153,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
            (&I == FnPrologueEnd || I.comesBefore(FnPrologueEnd));
   }
 
+  // Creates a new origin and records the stack trace. In general we can call
+  // this function for any origin manipulation we like. However it will cost
+  // runtime resources. So use this wisely only if it can provide additional
+  // information helpful to a user.
   Value *updateOrigin(Value *V, IRBuilder<> &IRB) {
     if (MS.TrackOrigins <= 1)
       return V;
@@ -1248,11 +1273,42 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
   }
 
+  // Returns true if Debug Location curresponds to multiple warnings.
+  bool shouldDisambiguateWarningLocation(const DebugLoc &DebugLoc) {
+    if (MS.TrackOrigins < 2)
+      return false;
+
+    if (LazyWarningDebugLocationCount.empty())
+      for (const auto &I : InstrumentationList)
+        ++LazyWarningDebugLocationCount[I.OrigIns->getDebugLoc()];
+
+    return LazyWarningDebugLocationCount[DebugLoc] >= ClDisambiguateWarning;
+  }
+
   /// Helper function to insert a warning at IRB's current insert point.
   void insertWarningFn(IRBuilder<> &IRB, Value *Origin) {
     if (!Origin)
       Origin = (Value *)IRB.getInt32(0);
     assert(Origin->getType()->isIntegerTy());
+
+    if (shouldDisambiguateWarningLocation(IRB.getCurrentDebugLocation())) {
+      // Try to create additional origin with debug info of the last origin
+      // instruction. It may provide additional information to the user.
+      if (Instruction *OI = dyn_cast_or_null<Instruction>(Origin)) {
+        assert(MS.TrackOrigins);
+        auto NewDebugLoc = OI->getDebugLoc();
+        // Origin update with missing or the same debug location provides no
+        // additional value.
+        if (NewDebugLoc && NewDebugLoc != IRB.getCurrentDebugLocation()) {
+          // Insert update just before the check, so we call runtime only just
+          // before the report.
+          IRBuilder<> IRBOrigin(&*IRB.GetInsertPoint());
+          IRBOrigin.SetCurrentDebugLocation(NewDebugLoc);
+          Origin = updateOrigin(Origin, IRBOrigin);
+        }
+      }
+    }
+
     if (MS.CompileKernel || MS.TrackOrigins)
       IRB.CreateCall(MS.WarningFn, Origin)->setCannotMerge();
     else
@@ -2073,15 +2129,19 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   void visitInsertElementInst(InsertElementInst &I) {
     insertShadowCheck(I.getOperand(2), &I);
     IRBuilder<> IRB(&I);
-    setShadow(&I, IRB.CreateInsertElement(getShadow(&I, 0), getShadow(&I, 1),
-                                          I.getOperand(2), "_msprop"));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    setShadow(&I, IRB.CreateInsertElement(Shadow0, Shadow1, I.getOperand(2),
+                                          "_msprop"));
     setOriginForNaryOp(I);
   }
 
   void visitShuffleVectorInst(ShuffleVectorInst &I) {
     IRBuilder<> IRB(&I);
-    setShadow(&I, IRB.CreateShuffleVector(getShadow(&I, 0), getShadow(&I, 1),
-                                          I.getShuffleMask(), "_msprop"));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    setShadow(&I, IRB.CreateShuffleVector(Shadow0, Shadow1, I.getShuffleMask(),
+                                          "_msprop"));
     setOriginForNaryOp(I);
   }
 
@@ -2439,9 +2499,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     // Si = !(C & ~Sc) && Sc
     Value *Zero = Constant::getNullValue(Sc->getType());
     Value *MinusOne = Constant::getAllOnesValue(Sc->getType());
-    Value *Si = IRB.CreateAnd(
-        IRB.CreateICmpNE(Sc, Zero),
-        IRB.CreateICmpEQ(IRB.CreateAnd(IRB.CreateXor(Sc, MinusOne), C), Zero));
+    Value *LHS = IRB.CreateICmpNE(Sc, Zero);
+    Value *RHS =
+        IRB.CreateICmpEQ(IRB.CreateAnd(IRB.CreateXor(Sc, MinusOne), C), Zero);
+    Value *Si = IRB.CreateAnd(LHS, RHS);
     Si->setName("_msprop_icmp");
     setShadow(&I, Si);
     setOriginForNaryOp(I);
@@ -3044,7 +3105,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
         ResTy->getScalarSizeInBits() - SignificantBitsPerResultElement;
 
     IRBuilder<> IRB(&I);
-    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    Value *S = IRB.CreateOr(Shadow0, Shadow1);
     S = IRB.CreateBitCast(S, ResTy);
     S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
                        ResTy);
@@ -3060,7 +3123,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     bool isX86_MMX = I.getOperand(0)->getType()->isX86_MMXTy();
     Type *ResTy = isX86_MMX ? getMMXVectorTy(EltSizeInBits * 2) : I.getType();
     IRBuilder<> IRB(&I);
-    Value *S = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    Value *S = IRB.CreateOr(Shadow0, Shadow1);
     S = IRB.CreateBitCast(S, ResTy);
     S = IRB.CreateSExt(IRB.CreateICmpNE(S, Constant::getNullValue(ResTy)),
                        ResTy);
@@ -3075,7 +3140,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   void handleVectorComparePackedIntrinsic(IntrinsicInst &I) {
     IRBuilder<> IRB(&I);
     Type *ResTy = getShadowTy(&I);
-    Value *S0 = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    Value *S0 = IRB.CreateOr(Shadow0, Shadow1);
     Value *S = IRB.CreateSExt(
         IRB.CreateICmpNE(S0, Constant::getNullValue(ResTy)), ResTy);
     setShadow(&I, S);
@@ -3087,7 +3154,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   // element of a vector, and comi* which return the result as i32.
   void handleVectorCompareScalarIntrinsic(IntrinsicInst &I) {
     IRBuilder<> IRB(&I);
-    Value *S0 = IRB.CreateOr(getShadow(&I, 0), getShadow(&I, 1));
+    auto *Shadow0 = getShadow(&I, 0);
+    auto *Shadow1 = getShadow(&I, 1);
+    Value *S0 = IRB.CreateOr(Shadow0, Shadow1);
     Value *S = LowerElementShadowExtend(IRB, S0, getShadowTy(&I));
     setShadow(&I, S);
     setOriginForNaryOp(I);
@@ -3172,6 +3241,20 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     insertShadowCheck(Shadow, Origin, &I);
   }
 
+  void handleMaskedExpandLoad(IntrinsicInst &I) {
+    // PassThru can be undef, so default visitInstruction is too strict.
+    // TODO: Provide real implementation.
+    setShadow(&I, getCleanShadow(&I));
+    setOrigin(&I, getCleanOrigin());
+  }
+
+  void handleMaskedGather(IntrinsicInst &I) {
+    // PassThru can be undef, so default visitInstruction is too strict.
+    // TODO: Provide real implementation.
+    setShadow(&I, getCleanShadow(&I));
+    setOrigin(&I, getCleanOrigin());
+  }
+
   void handleMaskedStore(IntrinsicInst &I) {
     IRBuilder<> IRB(&I);
     Value *V = I.getArgOperand(0);
@@ -3203,7 +3286,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
   }
 
-  bool handleMaskedLoad(IntrinsicInst &I) {
+  void handleMaskedLoad(IntrinsicInst &I) {
     IRBuilder<> IRB(&I);
     Value *Addr = I.getArgOperand(0);
     const Align Alignment(
@@ -3243,16 +3326,17 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
           Acc = IRB.CreateOr(Acc, More);
         }
 
-        Value *Origin = IRB.CreateSelect(
-            IRB.CreateICmpNE(Acc, Constant::getNullValue(Acc->getType())),
-            getOrigin(PassThru), IRB.CreateLoad(MS.OriginTy, OriginPtr));
+        Value *NotNull =
+            IRB.CreateICmpNE(Acc, Constant::getNullValue(Acc->getType()));
+        Value *PtrOrigin = IRB.CreateLoad(MS.OriginTy, OriginPtr);
+        Value *Origin =
+            IRB.CreateSelect(NotNull, getOrigin(PassThru), PtrOrigin);
 
         setOrigin(&I, Origin);
       } else {
         setOrigin(&I, getCleanOrigin());
       }
     }
-    return true;
   }
 
   // Instrument BMI / BMI2 intrinsics.
@@ -3372,6 +3456,12 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       break;
     case Intrinsic::bswap:
       handleBswap(I);
+      break;
+    case Intrinsic::masked_expandload:
+      handleMaskedExpandLoad(I);
+      break;
+    case Intrinsic::masked_gather:
+      handleMaskedGather(I);
       break;
     case Intrinsic::masked_store:
       handleMaskedStore(I);

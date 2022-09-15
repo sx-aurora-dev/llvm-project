@@ -576,8 +576,7 @@ Value *FAddCombine::simplifyFAdd(AddendVect& Addends, unsigned InstrQuota) {
     }
   }
 
-  assert((NextTmpIdx <= array_lengthof(TmpResult) + 1) &&
-         "out-of-bound access");
+  assert((NextTmpIdx <= std::size(TmpResult) + 1) && "out-of-bound access");
 
   Value *Result;
   if (!SimpVect.empty())
@@ -1378,31 +1377,6 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
   if (haveNoCommonBitsSet(LHS, RHS, DL, &AC, &I, &DT))
     return BinaryOperator::CreateOr(LHS, RHS);
 
-  // add (select X 0 (sub n A)) A  -->  select X A n
-  {
-    SelectInst *SI = dyn_cast<SelectInst>(LHS);
-    Value *A = RHS;
-    if (!SI) {
-      SI = dyn_cast<SelectInst>(RHS);
-      A = LHS;
-    }
-    if (SI && SI->hasOneUse()) {
-      Value *TV = SI->getTrueValue();
-      Value *FV = SI->getFalseValue();
-      Value *N;
-
-      // Can we fold the add into the argument of the select?
-      // We check both true and false select arguments for a matching subtract.
-      if (match(FV, m_Zero()) && match(TV, m_Sub(m_Value(N), m_Specific(A))))
-        // Fold the add into the true select value.
-        return SelectInst::Create(SI->getCondition(), N, A);
-
-      if (match(TV, m_Zero()) && match(FV, m_Sub(m_Value(N), m_Specific(A))))
-        // Fold the add into the false select value.
-        return SelectInst::Create(SI->getCondition(), A, N);
-    }
-  }
-
   if (Instruction *Ext = narrowMathIfNoOverflow(I))
     return Ext;
 
@@ -1420,6 +1394,18 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     replaceOperand(I, 0, A);
     replaceOperand(I, 1, B);
     return &I;
+  }
+
+  // (add A (or A, -A)) --> (and (add A, -1) A)
+  // (add A (or -A, A)) --> (and (add A, -1) A)
+  // (add (or A, -A) A) --> (and (add A, -1) A)
+  // (add (or -A, A) A) --> (and (add A, -1) A)
+  if (match(&I, m_c_BinOp(m_Value(A), m_OneUse(m_c_Or(m_Neg(m_Deferred(A)),
+                                                      m_Deferred(A)))))) {
+    Value *Add =
+        Builder.CreateAdd(A, Constant::getAllOnesValue(A->getType()), "",
+                          I.hasNoSignedWrap(), I.hasNoSignedWrap());
+    return BinaryOperator::CreateAnd(Add, A);
   }
 
   // Canonicalize ((A & -A) - 1) --> ((A - 1) & ~A)

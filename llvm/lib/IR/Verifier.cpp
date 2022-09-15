@@ -665,7 +665,14 @@ void Verifier::visitGlobalValue(const GlobalValue &GV) {
   if (GV.isDeclarationForLinker())
     Check(!GV.hasComdat(), "Declaration may not be in a Comdat!", &GV);
 
+  if (GV.hasDLLExportStorageClass()) {
+    Check(!GV.hasHiddenVisibility(),
+          "dllexport GlobalValue must have default or protected visibility",
+          &GV);
+  }
   if (GV.hasDLLImportStorageClass()) {
+    Check(GV.hasDefaultVisibility(),
+          "dllimport GlobalValue must have default visibility", &GV);
     Check(!GV.isDSOLocal(), "GlobalValue with DLLImport Storage is dso_local!",
           &GV);
 
@@ -2051,6 +2058,25 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
 
     Check(!Attrs.hasFnAttr(Attribute::MinSize),
           "Attributes 'minsize and optnone' are incompatible!", V);
+  }
+
+  if (Attrs.hasFnAttr("aarch64_pstate_sm_enabled")) {
+    Check(!Attrs.hasFnAttr("aarch64_pstate_sm_compatible"),
+           "Attributes 'aarch64_pstate_sm_enabled and "
+           "aarch64_pstate_sm_compatible' are incompatible!",
+           V);
+  }
+
+  if (Attrs.hasFnAttr("aarch64_pstate_za_new")) {
+    Check(!Attrs.hasFnAttr("aarch64_pstate_za_preserved"),
+           "Attributes 'aarch64_pstate_za_new and aarch64_pstate_za_preserved' "
+           "are incompatible!",
+           V);
+
+    Check(!Attrs.hasFnAttr("aarch64_pstate_za_shared"),
+           "Attributes 'aarch64_pstate_za_new and aarch64_pstate_za_shared' "
+           "are incompatible!",
+           V);
   }
 
   if (Attrs.hasFnAttr(Attribute::JumpTable)) {

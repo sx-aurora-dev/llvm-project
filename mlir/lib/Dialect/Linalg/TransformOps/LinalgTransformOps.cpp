@@ -76,10 +76,18 @@ DiagnosedSilenceableFailure
 transform::DecomposeOp::applyToOne(linalg::LinalgOp target,
                                    SmallVectorImpl<Operation *> &results,
                                    transform::TransformState &state) {
-  FailureOr<LinalgOp> windowed =
-      tryApply<DownscaleSizeOneWindowed2DConvolution>(target);
-  if (succeeded(windowed)) {
-    results.push_back(*windowed);
+  FailureOr<LinalgOp> windowedNhwc =
+      tryApply<DownscaleSizeOneWindowed2DConvolution<linalg::Conv2DNhwcHwcfOp,
+                                                     Conv1DNwcWcfOp>>(target);
+  if (succeeded(windowedNhwc)) {
+    results.push_back(*windowedNhwc);
+    return DiagnosedSilenceableFailure(success());
+  }
+  FailureOr<LinalgOp> windowedNchw =
+      tryApply<DownscaleSizeOneWindowed2DConvolution<linalg::Conv2DNchwFchwOp,
+                                                     Conv1DNcwFcwOp>>(target);
+  if (succeeded(windowedNchw)) {
+    results.push_back(*windowedNchw);
     return DiagnosedSilenceableFailure(success());
   }
   FailureOr<LinalgOp> depthwise =
@@ -450,7 +458,7 @@ transform::MatchOp::apply(transform::TransformResults &results,
   SmallVector<Operation *> res;
   auto matchFun = [&](Operation *op) {
     if (getOps().has_value() && !strs.contains(op->getName().getStringRef()))
-      return WalkResult::advance();
+      return;
 
     // Interfaces cannot be matched by name, just by ID.
     // So we specifically encode the interfaces we care about for this op.
@@ -458,10 +466,10 @@ transform::MatchOp::apply(transform::TransformResults &results,
       auto iface = getInterface().value();
       if (iface == transform::MatchInterfaceEnum::LinalgOp &&
           !isa<linalg::LinalgOp>(op))
-        return WalkResult::advance();
+        return;
       if (iface == transform::MatchInterfaceEnum::TilingInterface &&
           isa<TilingInterface>(op))
-        return WalkResult::advance();
+        return;
     }
 
     // Check if all specified attributes match.
@@ -472,15 +480,21 @@ transform::MatchOp::apply(transform::TransformResults &results,
             attr.getName() == getOpsAttrName())
           continue;
         if (!op->hasAttr(attr.getName()))
-          return WalkResult::advance();
+          return;
         if (op->getAttr(attr.getName()) != attr.getValue())
-          return WalkResult::advance();
+          return;
       }
+    }
+
+    if (getFilterResultType().has_value()) {
+      Type t = getFilterResultType().value();
+      if (op->getNumResults() != 1 || op->getResultTypes().front() != t)
+        return;
     }
 
     // All constraints are satisfied.
     res.push_back(op);
-    return WalkResult::advance();
+    return;
   };
 
   payloadOps.front()->walk(matchFun);

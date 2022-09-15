@@ -8,7 +8,6 @@ climits
 cmath
 compare
 concepts
-cstdarg
 cstddef
 cstdint
 cstdio
@@ -23,7 +22,6 @@ ios
 iosfwd
 limits
 locale
-memory
 mutex
 new
 optional

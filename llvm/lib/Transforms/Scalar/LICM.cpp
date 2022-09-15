@@ -1197,13 +1197,13 @@ bool llvm::canSinkOrHoistInst(Instruction &I, AAResults *AA, DominatorTree *DT,
 
     // Handle simple cases by querying alias analysis.
     FunctionModRefBehavior Behavior = AA->getModRefBehavior(CI);
-    if (Behavior == FMRB_DoesNotAccessMemory)
+    if (Behavior.doesNotAccessMemory())
       return true;
-    if (AAResults::onlyReadsMemory(Behavior)) {
+    if (Behavior.onlyReadsMemory()) {
       // A readonly argmemonly function only reads from memory pointed to by
       // it's arguments with arbitrary offsets.  If we can prove there are no
       // writes to this memory in the loop, we can hoist or sink.
-      if (AAResults::onlyAccessesArgPointees(Behavior)) {
+      if (Behavior.onlyAccessesArgPointees()) {
         // TODO: expand to writeable arguments
         for (Value *Op : CI->args())
           if (Op->getType()->isPointerTy() &&
@@ -1890,6 +1890,29 @@ bool isNotVisibleOnUnwindInLoop(const Value *Object, const Loop *L,
          isNotCapturedBeforeOrInLoop(Object, L, DT);
 }
 
+bool isWritableObject(const Value *Object) {
+  // TODO: Alloca might not be writable after its lifetime ends.
+  // See https://github.com/llvm/llvm-project/issues/51838.
+  if (isa<AllocaInst>(Object))
+    return true;
+
+  // TODO: Also handle sret.
+  if (auto *A = dyn_cast<Argument>(Object))
+    return A->hasByValAttr();
+
+  // TODO: Noalias has nothing to do with writability, this should check for
+  // an allocator function.
+  return isNoAliasCall(Object);
+}
+
+bool isThreadLocalObject(const Value *Object, const Loop *L,
+                         DominatorTree *DT) {
+  // The object must be function-local to start with, and then not captured
+  // before/in the loop.
+  return isIdentifiedFunctionLocal(Object) &&
+         isNotCapturedBeforeOrInLoop(Object, L, DT);
+}
+
 } // namespace
 
 /// Try to promote memory values to scalars by sinking stores out of the
@@ -2070,7 +2093,7 @@ bool llvm::promoteLoopAccessesToScalars(
               Store->getAlign(), MDL, Preheader->getTerminator(), DT, TLI);
         }
       } else
-        return false; // Not a load or store.
+        continue; // Not a load or store.
 
       if (!AccessTy)
         AccessTy = getLoadStoreType(UI);
@@ -2109,14 +2132,12 @@ bool llvm::promoteLoopAccessesToScalars(
   }
 
   // We know we can hoist the load, but don't have a guaranteed store.
-  // Check whether the location is thread-local. If it is, then we can insert
-  // stores along paths which originally didn't have them without violating the
-  // memory model.
+  // Check whether the location is writable and thread-local. If it is, then we
+  // can insert stores along paths which originally didn't have them without
+  // violating the memory model.
   if (StoreSafety == StoreSafetyUnknown) {
     Value *Object = getUnderlyingObject(SomePtr);
-    if ((isNoAliasCall(Object) || isa<AllocaInst>(Object) ||
-         (isa<Argument>(Object) && cast<Argument>(Object)->hasByValAttr())) &&
-        isNotCapturedBeforeOrInLoop(Object, CurLoop, DT))
+    if (isWritableObject(Object) && isThreadLocalObject(Object, CurLoop, DT))
       StoreSafety = StoreSafe;
   }
 
@@ -2233,12 +2254,13 @@ collectPromotionCandidates(MemorySSA *MSSA, AliasAnalysis *AA, Loop *L) {
     return {}; // Nothing to promote...
 
   // Discard any sets for which there is an aliasing non-promotable access.
+  BatchAAResults BatchAA(*AA);
   foreachMemoryAccess(MSSA, L, [&](Instruction *I) {
     if (AttemptingPromotion.contains(I))
       return;
 
     llvm::erase_if(Sets, [&](const AliasSet *AS) {
-      return AS->aliasesUnknownInst(I, *AA);
+      return AS->aliasesUnknownInst(I, BatchAA);
     });
   });
 
