@@ -12,7 +12,7 @@ PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 IOP_TARGETS = shl.ll shr.ll brcond.ll br_cc.ll select.ll select_cc.ll setcc.ll
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll fp_fneg.ll fp_fdiv.ll \
               fp_frem.ll
-FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
+FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fma.ll fsin.ll fsqrt.ll
 ATOMIC_TARGETS = atomic_fence.ll atomic_load.ll atomic_store.ll \
                  atomic_cmp_swap.ll atomic_swap.ll
 STACKFRAME_TARGETS = stackframe_call.ll stackframe_nocall.ll
