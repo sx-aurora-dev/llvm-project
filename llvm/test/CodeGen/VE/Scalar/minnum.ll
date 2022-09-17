@@ -1,5 +1,45 @@
 ; RUN: llc < %s -mtriple=ve | FileCheck %s
 
+;;; Test ‘llvm.minnum.*’ intrinsic
+;;;
+;;; Syntax:
+;;;   This is an overloaded intrinsic. You can use llvm.minnum on any
+;;;   floating-point or vector of floating-point type. Not all targets
+;;;   support all types however.
+;;;
+;;; declare float     @llvm.minnum.f32(float %Val0, float %Val1)
+;;; declare double    @llvm.minnum.f64(double %Val0, double %Val1)
+;;; declare x86_fp80  @llvm.minnum.f80(x86_fp80 %Val0, x86_fp80 %Val1)
+;;; declare fp128     @llvm.minnum.f128(fp128 %Val0, fp128 %Val1)
+;;; declare ppc_fp128 @llvm.minnum.ppcf128(ppc_fp128 %Val0, ppc_fp128 %Val1)
+;;;
+;;; Overview:
+;;;   The ‘llvm.minnum.*’ intrinsics return the minimum of the two arguments.
+;;;
+;;; Arguments:
+;;;   The arguments and return value are floating-point numbers of the same
+;;;   type.
+;;;
+;;; Semantics:
+;;;   Follows the IEEE-754 semantics for minNum, except for handling of
+;;;   signaling NaNs. This match’s the behavior of libm’s fmin.
+;;;
+;;;   If either operand is a NaN, returns the other non-NaN operand.
+;;;   Returns NaN only if both operands are NaN. The returned NaN is
+;;;   always quiet. If the operands compare equal, returns a value
+;;;   that compares equal to both operands. This means that
+;;;   fmin(+/-0.0, +/-0.0) could return either -0.0 or 0.0.
+;;;
+;;;   Unlike the IEEE-754 2008 behavior, this does not distinguish between
+;;;   signaling and quiet NaN inputs. If a target’s implementation follows
+;;;   the standard and returns a quiet NaN if either input is a signaling
+;;;   NaN, the intrinsic lowering is responsible for quieting the inputs
+;;;   to correctly return the non-NaN input (e.g. by using the equivalent
+;;;   of llvm.canonicalize).
+;;;
+;;; Note:
+;;;   We test only float/double/fp128.
+
 ; Function Attrs: mustprogress nofree nosync nounwind readnone willreturn
 define float @func_fp_fmin_var_float(float noundef %0, float noundef %1) {
 ; CHECK-LABEL: func_fp_fmin_var_float:
