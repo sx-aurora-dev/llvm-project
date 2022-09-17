@@ -10,7 +10,7 @@ define fastcc <256 x i32> @urem_vv_v256i32(<256 x i32> %x, <256 x i32> %y) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vdivu.w %v2, %v0, %v1
-; CHECK-NEXT:    vmuls.w.sx %v1, %v2, %v1
+; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v2
 ; CHECK-NEXT:    vsubs.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %z = urem <256 x i32> %x, %y
@@ -24,7 +24,7 @@ define fastcc <256 x i32> @urem_sv_v256i32(i32 %x, <256 x i32> %y) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vdivu.w %v1, %s0, %v0
-; CHECK-NEXT:    vmuls.w.sx %v0, %v1, %v0
+; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    vsubs.w.sx %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %xins = insertelement <256 x i32> undef, i32 %x, i32 0
@@ -60,7 +60,7 @@ define fastcc <256 x i64> @urem_vv_v256i64(<256 x i64> %x, <256 x i64> %y) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vdivu.l %v2, %v0, %v1
-; CHECK-NEXT:    vmuls.l %v1, %v2, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v2
 ; CHECK-NEXT:    vsubs.l %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %z = urem <256 x i64> %x, %y
@@ -74,7 +74,7 @@ define fastcc <256 x i64> @urem_sv_v256i64(i64 %x, <256 x i64> %y) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vdivu.l %v1, %s0, %v0
-; CHECK-NEXT:    vmuls.l %v0, %v1, %v0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
 ; CHECK-NEXT:    vsubs.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %xins = insertelement <256 x i64> undef, i64 %x, i32 0
@@ -109,7 +109,7 @@ define fastcc <128 x i64> @urem_vv_v128i64(<128 x i64> %x, <128 x i64> %y) {
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vdivu.l %v2, %v0, %v1
-; CHECK-NEXT:    vmuls.l %v1, %v2, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v2
 ; CHECK-NEXT:    vsubs.l %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %z = urem <128 x i64> %x, %y
@@ -129,7 +129,7 @@ define fastcc <256 x i16> @urem_vv_v256i16(<256 x i16> %x, <256 x i16> %y) {
 ; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    vdivu.w %v2, %v0, %v1
-; CHECK-NEXT:    vmuls.w.sx %v1, %v2, %v1
+; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v2
 ; CHECK-NEXT:    vsubs.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %z = urem <256 x i16> %x, %y
@@ -155,7 +155,7 @@ define fastcc <128 x i16> @urem_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    vdivu.w %v2, %v0, %v1
-; CHECK-NEXT:    vmuls.w.sx %v1, %v2, %v1
+; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v2
 ; CHECK-NEXT:    vsubs.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %z = urem <128 x i16> %x, %y
