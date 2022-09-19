@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vpu,+packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+vpu | FileCheck %s
 
 ;;; Test vector compare and select maximum intrinsic instructions
 ;;;

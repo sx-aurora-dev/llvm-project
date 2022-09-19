@@ -1507,7 +1507,7 @@ SDValue VECustomDAG::getIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
   // Based on lib/CodeGen/SelectionDAG/TargetLowering.cpp ::expandREM code.
   // X % Y -> X-X/Y*Y
   SDValue Divide = getIDIV(IsSigned, ResVT, Dividend, Divisor, Mask, AVL);
-  SDValue Mul = getNode(VEISD::VVP_MUL, ResVT, {Divide, Divisor, Mask, AVL});
+  SDValue Mul = getNode(VEISD::VVP_MUL, ResVT, {Divisor, Divide, Mask, AVL});
   return getNode(VEISD::VVP_SUB, ResVT, {Dividend, Mul, Mask, AVL});
 }
 
