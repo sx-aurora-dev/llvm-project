@@ -1854,10 +1854,8 @@ def : Pat<(sext_inreg I64:$src, i16),
           (SRALri (SLLri $src, 48), 48)>;
 
 // Cast to i32
-def : Pat<(i32 (trunc KnownZExt:$src)),
-          (l2i $src)>;
-def : Pat<(i32 (trunc i64:$src)),
-          (l2i (ANDrm $src, !add(32, 64)))>;
+def : Pat<(i32 (trunc KnownZExt:$src)), (l2i $src)>;
+def : Pat<(i32 (trunc i64:$src)), (l2i (zero_f32 $src))>;
 def : Pat<(i32 (fp_to_sint f32:$src)), (CVTWSSXr RD_RZ, $src)>;
 def : Pat<(i32 (fp_to_sint f64:$src)), (CVTWDSXr RD_RZ, $src)>;
 def : Pat<(i32 (fp_to_sint f128:$src)), (CVTWDSXr RD_RZ, (CVTDQr $src))>;
@@ -1866,6 +1864,7 @@ def : Pat<(i32 (fp_to_sint f128:$src)), (CVTWDSXr RD_RZ, (CVTDQr $src))>;
 def : Pat<(sext_inreg i64:$src, i32), (i2l (ADDSWSXrm (l2i $src), 0))>;
 def : Pat<(i64 (sext i32:$src)), (i2l (ADDSWSXrm $src, 0))>;
 def : Pat<(i64 (zext i32:$src)), (i2l (ADDSWZXrm $src, 0))>;
+def : Pat<(i64 (anyext i32:$sy)), (i2l $sy)>;
 def : Pat<(i64 (fp_to_sint f32:$src)), (CVTLDr RD_RZ, (CVTDSr $src))>;
 def : Pat<(i64 (fp_to_sint f64:$src)), (CVTLDr RD_RZ, $src)>;
 def : Pat<(i64 (fp_to_sint f128:$src)), (CVTLDr RD_RZ, (CVTDQr $src))>;
@@ -1876,8 +1875,6 @@ def : Pat<(f32 (sint_to_fp i64:$src)), (CVTSDr (CVTDLr i64:$src))>;
 // Cast to f128
 def : Pat<(f128 (sint_to_fp i32:$src)), (CVTQDr (CVTDWr $src))>;
 def : Pat<(f128 (sint_to_fp i64:$src)), (CVTQDr (CVTDLr $src))>;
-
-def : Pat<(i64 (anyext i32:$sy)), (i2l $sy)>;
 
 // extload, sextload and zextload stuff
 multiclass EXT64m<SDPatternOperator from,

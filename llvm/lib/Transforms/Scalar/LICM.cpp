@@ -510,7 +510,7 @@ bool LoopInvariantCodeMotion::runOnLoop(
     MSSA->verifyMemorySSA();
 
   if (Changed && SE)
-    SE->forgetLoopDispositions(L);
+    SE->forgetLoopDispositions();
   return Changed;
 }
 
@@ -1736,7 +1736,8 @@ static bool isSafeToExecuteUnconditionally(
     const Loop *CurLoop, const LoopSafetyInfo *SafetyInfo,
     OptimizationRemarkEmitter *ORE, const Instruction *CtxI,
     bool AllowSpeculation) {
-  if (AllowSpeculation && isSafeToSpeculativelyExecute(&Inst, CtxI, DT, TLI))
+  if (AllowSpeculation &&
+      isSafeToSpeculativelyExecute(&Inst, CtxI, nullptr, DT, TLI))
     return true;
 
   bool GuaranteedToExecute =
@@ -2090,7 +2091,9 @@ bool llvm::promoteLoopAccessesToScalars(
         if (!DereferenceableInPH) {
           DereferenceableInPH = isDereferenceableAndAlignedPointer(
               Store->getPointerOperand(), Store->getValueOperand()->getType(),
-              Store->getAlign(), MDL, Preheader->getTerminator(), DT, TLI);
+              Store->getAlign(), MDL, Preheader->getTerminator(),
+              nullptr, // FIXME
+              DT, TLI);
         }
       } else
         continue; // Not a load or store.

@@ -275,6 +275,7 @@ void VETargetLowering::initSPUActions() {
     setOperationAction(ISD::FABS, VT, Expand);
     setOperationAction(ISD::FCOPYSIGN, VT, Expand);
     setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FMA, VT, Expand);
     setOperationAction(ISD::FSIN, VT, Expand);
     setOperationAction(ISD::FSQRT, VT, Expand);
 
@@ -305,6 +306,11 @@ void VETargetLowering::initSPUActions() {
     setOperationAction(ISD::FMINIMUM, VT, Expand);
     setOperationAction(ISD::FMAXIMUM, VT, Expand);
     setOperationAction(ISD::FSINCOS, VT, Expand);
+  }
+
+  // VE has single and double FMINNUM and FMAXNUM
+  for (MVT VT : {MVT::f32, MVT::f64}) {
+    setOperationAction({ISD::FMAXNUM, ISD::FMINNUM}, VT, Legal);
   }
 
   /// } Floating-point math functions

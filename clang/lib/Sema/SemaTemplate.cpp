@@ -1531,11 +1531,11 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
 
   CheckValidDeclSpecifiers();
 
-  if (TInfo->getType()->isUndeducedType()) {
-    Diag(D.getIdentifierLoc(),
-         diag::warn_cxx14_compat_template_nontype_parm_auto_type)
-      << QualType(TInfo->getType()->getContainedAutoType(), 0);
-  }
+  if (const auto *T = TInfo->getType()->getContainedDeducedType())
+    if (isa<AutoType>(T))
+      Diag(D.getIdentifierLoc(),
+           diag::warn_cxx14_compat_template_nontype_parm_auto_type)
+          << QualType(TInfo->getType()->getContainedAutoType(), 0);
 
   assert(S->isTemplateParamScope() &&
          "Non-type template parameter not in template parameter scope!");
@@ -2445,6 +2445,8 @@ private:
                                       TInfo->getType(), TInfo, LocEnd, Ctor);
     Guide->setImplicit();
     Guide->setParams(Params);
+    if (Ctor && Ctor->getTrailingRequiresClause())
+      Guide->setTrailingRequiresClause(Ctor->getTrailingRequiresClause());
 
     for (auto *Param : Params)
       Param->setDeclContext(Guide);
@@ -6949,7 +6951,10 @@ ExprResult Sema::CheckTemplateArgument(NonTypeTemplateParmDecl *Param,
                          // along with the other associated constraints after
                          // checking the template argument list.
                          /*IgnoreConstraints=*/true);
-      if (Result != TDK_Success && Result != TDK_AlreadyDiagnosed) {
+      if (Result == TDK_AlreadyDiagnosed) {
+        if (ParamType.isNull())
+          return ExprError();
+      } else if (Result != TDK_Success) {
         Diag(Arg->getExprLoc(),
              diag::err_non_type_template_parm_type_deduction_failure)
             << Param->getDeclName() << Param->getType() << Arg->getType()
