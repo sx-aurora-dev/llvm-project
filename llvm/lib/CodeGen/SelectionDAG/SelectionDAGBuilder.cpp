@@ -1062,8 +1062,10 @@ RegsForValue::getRegsAndSizes() const {
 }
 
 void SelectionDAGBuilder::init(GCFunctionInfo *gfi, AliasAnalysis *aa,
+                               AssumptionCache *ac,
                                const TargetLibraryInfo *li) {
   AA = aa;
+  AC = ac;
   GFI = gfi;
   LibInfo = li;
   Context = DAG.getContext();
@@ -4189,7 +4191,7 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
   }
 
   if (isDereferenceableAndAlignedPointer(SV, Ty, Alignment, DAG.getDataLayout(),
-                                         &I, nullptr, LibInfo))
+                                         &I, AC, nullptr, LibInfo))
     MMOFlags |= MachineMemOperand::MODereferenceable;
 
   SDLoc dl = getCurSDLoc();
