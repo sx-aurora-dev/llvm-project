@@ -1334,6 +1334,8 @@ let cx = 1 in defm SUBSWZX : RRNCm<"subs.w.zx", 0x5A, I32, i32>;
 // Section 8.4.6 - SBX (Subtract)
 defm SUBSL : RRNCm<"subs.l", 0x5B, I64, i64, sub>;
 
+} // isReMaterializable, isAsCheapAsAMove
+
 // Section 8.4.7 - MPY (Multiply)
 defm MULUL : RRm<"mulu.l", 0x49, I64, i64>;
 let cx = 1 in defm MULUW : RRm<"mulu.w", 0x49, I32, i32>;
@@ -1382,7 +1384,6 @@ let cx = 1, cw = 1 in defm MINSWZX : RRm<"mins.w.zx", 0x78, I32, i32>;
 // Section 8.4.18 - CMX (Compare and Select Maximum/Minimum)
 defm MAXSL : RRm<"maxs.l", 0x68, I64, i64, smax>;
 let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
-}
 
 } // isReMaterializable, isAsCheapAsAMove
 
@@ -2248,45 +2249,6 @@ defm : SETCCIm<i64, CMOVLrm, CMPSLir, CMPSLrr, CMPULir, CMPULrr>;
 defm : SETCCFm<f32, CMOVSrm, FCMPSir, FCMPSrr>;
 defm : SETCCFm<f64, CMOVDrm, FCMPDir, FCMPDrr>;
 defm : SETCCF128m<f128, CMOVDrm, FCMPQir, FCMPQrr>;
-
-// Special SELECTCC patterns.
-//   Use min/max for better performance.
-//   There is combineMinNumMaxNum() in llvm, but in order to use it we need
-//   -enable-no-nans-fp-math --enable-no-signed-zeros-fp-math flags, so
-//   treating ogt/oge/olt/ole optimization here.
-def : Pat<(f64 (CMOV (CMPF f64:$t, f64:$f), f64:$t, f64:$f, (i32 CC_G))),
-          (FMAXDrr $t, $f)>;
-def : Pat<(f64 (CMOV (CMPF f64:$t, f64:$f), f64:$t, f64:$f, (i32 CC_GE))),
-          (FMAXDrr $t, $f)>;
-def : Pat<(f64 (CMOV (CMPF f64:$t, f64:$f), f64:$t, f64:$f, (i32 CC_L))),
-          (FMINDrr $t, $f)>;
-def : Pat<(f64 (CMOV (CMPF f64:$t, f64:$f), f64:$t, f64:$f, (i32 CC_LE))),
-          (FMINDrr $t, $f)>;
-def : Pat<(f32 (CMOV (CMPF f32:$t, f32:$f), f32:$t, f32:$f, (i32 CC_G))),
-          (FMAXSrr $t, $f)>;
-def : Pat<(f32 (CMOV (CMPF f32:$t, f32:$f), f32:$t, f32:$f, (i32 CC_GE))),
-          (FMAXSrr $t, $f)>;
-def : Pat<(f32 (CMOV (CMPF f32:$t, f32:$f), f32:$t, f32:$f, (i32 CC_L))),
-          (FMINSrr $t, $f)>;
-def : Pat<(f32 (CMOV (CMPF f32:$t, f32:$f), f32:$t, f32:$f, (i32 CC_LE))),
-          (FMINSrr $t, $f)>;
-
-def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGT)),
-          (FMAXDrr $LHS, $RHS)>;
-def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGE)),
-          (FMAXDrr $LHS, $RHS)>;
-def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGT)),
-          (FMAXSrr $LHS, $RHS)>;
-def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGE)),
-          (FMAXSrr $LHS, $RHS)>;
-def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLT)),
-          (FMINDrr $LHS, $RHS)>;
-def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLE)),
-          (FMINDrr $LHS, $RHS)>;
-def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLT)),
-          (FMINSrr $LHS, $RHS)>;
-def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLE)),
-          (FMINSrr $LHS, $RHS)>;
 
 // Helper classes to construct selectcc patterns to optimize it.
 //

@@ -184,12 +184,12 @@ define signext i32 @test_atomic_fetch_max_4() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    ldl.sx %s0, (, %s1)
-; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
+; CHECK-NEXT:  .LBB6_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s2, 0, %s0
 ; CHECK-NEXT:    maxs.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    cas.w %s0, (%s1), %s2
-; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brne.w %s0, %s2, .LBB6_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
@@ -208,12 +208,12 @@ define signext i32 @test_atomic_fetch_min_4() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    ldl.sx %s0, (, %s1)
-; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
+; CHECK-NEXT:  .LBB7_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s2, 0, %s0
 ; CHECK-NEXT:    mins.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    cas.w %s0, (%s1), %s2
-; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    brne.w %s0, %s2, .LBB7_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3

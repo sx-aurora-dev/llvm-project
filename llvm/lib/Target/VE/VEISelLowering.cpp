@@ -276,36 +276,9 @@ void VETargetLowering::initSPUActions() {
     setOperationAction(ISD::FCOPYSIGN, VT, Expand);
     setOperationAction(ISD::FCOS, VT, Expand);
     setOperationAction(ISD::FMA, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
     setOperationAction(ISD::FSIN, VT, Expand);
     setOperationAction(ISD::FSQRT, VT, Expand);
-
-    // VE has no sclar FMA instruction
-    setOperationAction(ISD::FMA, VT, Expand);
-    setOperationAction(ISD::FMAD, VT, Expand);
-    setOperationAction(ISD::FABS, VT, Expand);
-    setOperationAction(ISD::FPOWI, VT, Expand);
-    setOperationAction(ISD::FPOW, VT, Expand);
-    setOperationAction(ISD::FLOG, VT, Expand);
-    setOperationAction(ISD::FLOG2, VT, Expand);
-    setOperationAction(ISD::FLOG10, VT, Expand);
-    setOperationAction(ISD::FEXP, VT, Expand);
-    setOperationAction(ISD::FEXP2, VT, Expand);
-    setOperationAction(ISD::FCEIL, VT, Expand);
-    setOperationAction(ISD::FTRUNC, VT, Expand);
-    setOperationAction(ISD::FRINT, VT, Expand);
-    setOperationAction(ISD::FNEARBYINT, VT, Expand);
-    setOperationAction(ISD::FROUND, VT, Expand);
-    setOperationAction(ISD::FFLOOR, VT, Expand);
-    if (VT == MVT::f128) {
-      setOperationAction(ISD::FMINNUM, VT, Expand);
-      setOperationAction(ISD::FMAXNUM, VT, Expand);
-    } else {
-      setOperationAction(ISD::FMINNUM, VT, Legal);
-      setOperationAction(ISD::FMAXNUM, VT, Legal);
-    }
-    setOperationAction(ISD::FMINIMUM, VT, Expand);
-    setOperationAction(ISD::FMAXIMUM, VT, Expand);
-    setOperationAction(ISD::FSINCOS, VT, Expand);
   }
 
   // VE has single and double FMINNUM and FMAXNUM
