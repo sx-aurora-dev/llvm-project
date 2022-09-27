@@ -13,7 +13,7 @@ IOP_TARGETS = shl.ll shr.ll brcond.ll br_cc.ll select.ll select_cc.ll setcc.ll
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll fp_fneg.ll fp_fdiv.ll \
               fp_frem.ll
 FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fma.ll fsin.ll fsqrt.ll \
-	minnum.ll maxnum.ll
+	minnum.ll maxnum.ll pow.ll
 ATOMIC_TARGETS = atomic_fence.ll atomic_load.ll atomic_store.ll \
                  atomic_cmp_swap.ll atomic_swap.ll
 STACKFRAME_TARGETS = stackframe_call.ll stackframe_nocall.ll
@@ -27,7 +27,7 @@ TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
           fp_log.ll fp_log10.ll fp_log2.ll           \
           fp_lrint.ll fp_lround.ll fp_nearbyint.ll   \
-          fp_pow.ll fp_rint.ll fp_round.ll fp_roundeven.ll \
+          fp_rint.ll fp_round.ll fp_roundeven.ll \
           fp_trunc.ll                     \
           selectcc_int1.ll  \
           selectcc_int8.ll   selectcc_uint8.ll   \
