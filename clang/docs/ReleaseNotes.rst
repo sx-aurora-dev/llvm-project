@@ -212,6 +212,11 @@ Improvements to Clang's diagnostics
   of FAM-like arrays.
 - Clang now correctly diagnoses a warning when defercencing a void pointer in C mode.
   This fixes `Issue 53631 <https://github.com/llvm/llvm-project/issues/53631>`_
+- Clang will now diagnose an overload set where a candidate has a constraint that
+  refers to an expression with a previous error as nothing viable, so that it
+  doesn't generate strange cascading errors, particularly in cases where a
+  subsuming constraint fails, which would result in a less-specific overload to
+  be selected.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -399,6 +404,8 @@ Arm and AArch64 Support in Clang
 - ``-march`` values for targeting armv2, armv2A, armv3 and armv3M have been removed.
   Their presence gave the impression that Clang can correctly generate code for
   them, which it cannot.
+- Add driver and tuning support for Neoverse V2 via the flag ``-mcpu=neoverse-v2``.
+  Native detection is also supported via ``-mcpu=native``.
 
 Floating Point Support in Clang
 -------------------------------
