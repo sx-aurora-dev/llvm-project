@@ -196,20 +196,20 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReduction(
           b.getAffineDimExpr(dim < insertSplitDimension ? dim : dim + 1));
     }
   }
-  Value initOrAllocTensor;
+  Value emptyOrAllocTensor;
   if (useAlloc) {
-    initOrAllocTensor = b.create<bufferization::AllocTensorOp>(
+    emptyOrAllocTensor = b.create<bufferization::AllocTensorOp>(
         loc,
         RankedTensorType::get(newOutputShape,
                               op.getRegionOutputArgs()[0].getType()),
         ValueRange{});
   } else {
-    initOrAllocTensor = b.create<linalg::InitTensorOp>(
+    emptyOrAllocTensor = b.create<tensor::EmptyOp>(
         loc, newOutputShape, op.getRegionOutputArgs()[0].getType());
   }
   Value constantOp = b.create<arith::ConstantOp>(loc, identity);
   Value identityTensor =
-      b.create<linalg::FillOp>(op->getLoc(), constantOp, initOrAllocTensor)
+      b.create<linalg::FillOp>(op->getLoc(), constantOp, emptyOrAllocTensor)
           .getResult(0);
 
   newMaps.push_back(AffineMap::get(oldOutputMap.getNumDims() + 1, 0, outputExpr,
@@ -225,7 +225,7 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReduction(
   // Create the new op matching the original op with an extra parallel
   // dimension.
   GenericOp genericOp = b.create<GenericOp>(
-      loc, TypeRange({initOrAllocTensor.getType()}), newInputs,
+      loc, TypeRange({emptyOrAllocTensor.getType()}), newInputs,
       ValueRange({identityTensor}), newMaps, newIteratorTypes);
   b.inlineRegionBefore(op->getRegion(0), genericOp.getRegion(),
                        genericOp.getRegion().begin());
@@ -259,9 +259,10 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReduction(
       });
   b.replaceOp(op, reduction.getResults());
 
-  return SplitReductionResult{
-      initOrAllocTensor.getDefiningOp(), identityTensor.getDefiningOp<FillOp>(),
-      cast<LinalgOp>(genericOp.getOperation()), reduction};
+  return SplitReductionResult{emptyOrAllocTensor.getDefiningOp(),
+                              identityTensor.getDefiningOp<FillOp>(),
+                              cast<LinalgOp>(genericOp.getOperation()),
+                              reduction};
 }
 
 /// Rewrite f(i, j, k, ...) into f(i, j, k * ratio + kk, ...)
@@ -357,29 +358,29 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReductionByScaling(
   // TODO: generalize when multi-reduction support is available.
   SmallVector<Value> newOutputs;
   newOutputs.reserve(op.getNumOutputs());
-  SmallVector<Operation *> initOrAllocTensorOps;
+  SmallVector<Operation *> emptyOrAllocTensorOps;
   SmallVector<linalg::FillOp> fillOps;
   fillOps.reserve(op.getNumOutputs());
-  for (auto it : llvm::zip(op.outputs(), neutralElements)) {
+  for (auto it : llvm::zip(op.getOutputs(), neutralElements)) {
     Value rankedTensor = std::get<0>(it);
     auto t = rankedTensor.getType().cast<RankedTensorType>();
     RankedTensorType newT = RankedTensorType::Builder(t).insertDim(
         reductionDimSize / splitFactor, insertSplitDimension);
     SmallVector<Value> dims =
         tensor::createDynamicDimValues(b, loc, rankedTensor);
-    Value initOrAllocTensor;
+    Value emptyOrAllocTensor;
     if (useAlloc) {
-      initOrAllocTensor =
+      emptyOrAllocTensor =
           b.create<bufferization::AllocTensorOp>(loc, newT, dims);
     } else {
-      initOrAllocTensor = b.create<linalg::InitTensorOp>(
-          loc, dims, newT.getShape(), t.getElementType());
+      emptyOrAllocTensor = b.create<tensor::EmptyOp>(loc, newT.getShape(),
+                                                     t.getElementType(), dims);
     }
     Value constantOp = b.create<arith::ConstantOp>(loc, std::get<1>(it));
     fillOps.push_back(
-        b.create<linalg::FillOp>(op->getLoc(), constantOp, initOrAllocTensor));
+        b.create<linalg::FillOp>(op->getLoc(), constantOp, emptyOrAllocTensor));
     newOutputs.push_back(fillOps.back().getResult(0));
-    initOrAllocTensorOps.push_back(initOrAllocTensor.getDefiningOp());
+    emptyOrAllocTensorOps.push_back(emptyOrAllocTensor.getDefiningOp());
   }
 
   // Step 2. Reindex / expand indexing maps.
@@ -403,10 +404,10 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReductionByScaling(
 
   // Step 3. Handle operands.
   // Compute the new input tensors.
-  auto newInputs = llvm::to_vector<4>(op.inputs());
+  auto newInputs = llvm::to_vector<4>(op.getInputs());
   // Add a single shape-only tensor to carry the dimensions without resorting to
   // more complex inversions.
-  newInputs.push_back(b.create<linalg::InitTensorOp>(
+  newInputs.push_back(b.create<tensor::EmptyOp>(
       loc, ArrayRef<int64_t>{reductionDimSize / splitFactor, splitFactor},
       b.getIntegerType(1)));
   // Output tensors are already good to go.
@@ -433,7 +434,7 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReductionByScaling(
   // multi-reduction support is available.
   SmallVector<LinalgOp> results;
   for (auto it :
-       llvm::zip(genericOp->getResults(), op.outputs(), combinerOps)) {
+       llvm::zip(genericOp->getResults(), op.getOutputs(), combinerOps)) {
     Value reindexedOutput = std::get<0>(it);
     Value originalOutput = std::get<1>(it);
     auto originalOutputType = originalOutput.getType().cast<RankedTensorType>();
@@ -469,7 +470,7 @@ FailureOr<SplitReductionResult> mlir::linalg::splitReductionByScaling(
   // TODO: extend when multi-reduction support is available.
   assert(fillOps.size() == results.size() && results.size() == 1);
   b.replaceOp(op, results.front()->getResults());
-  return SplitReductionResult{initOrAllocTensorOps.front(), fillOps.front(),
+  return SplitReductionResult{emptyOrAllocTensorOps.front(), fillOps.front(),
                               cast<LinalgOp>(genericOp.getOperation()),
                               results.front()};
 }

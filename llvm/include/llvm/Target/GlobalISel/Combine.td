@@ -231,7 +231,7 @@ def undef_to_negative_one: GICombineRule<
 
 def binop_left_undef_to_zero: GICombineRule<
   (defs root:$root),
-  (match (wip_match_opcode G_SHL):$root,
+  (match (wip_match_opcode G_SHL, G_UDIV, G_UREM):$root,
          [{ return Helper.matchOperandIsUndef(*${root}, 1); }]),
   (apply [{ Helper.replaceInstWithConstant(*${root}, 0); }])>;
 
@@ -240,6 +240,12 @@ def binop_right_undef_to_undef: GICombineRule<
   (match (wip_match_opcode G_SHL, G_ASHR, G_LSHR):$root,
          [{ return Helper.matchOperandIsUndef(*${root}, 2); }]),
   (apply [{ Helper.replaceInstWithUndef(*${root}); }])>;
+
+def unary_undef_to_zero: GICombineRule<
+  (defs root:$root),
+  (match (wip_match_opcode G_ABS):$root,
+         [{ return Helper.matchOperandIsUndef(*${root}, 1); }]),
+  (apply [{ Helper.replaceInstWithConstant(*${root}, 0); }])>;
 
 // Instructions where if any source operand is undef, the instruction can be
 // replaced with undef.
@@ -944,6 +950,17 @@ def trunc_buildvector_fold : GICombineRule<
       [{ return Helper.matchTruncBuildVectorFold(*${op}, ${matchinfo}); }]),
   (apply [{ Helper.replaceSingleDefInstWithReg(*${op}, ${matchinfo}); }])>;
 
+// Transform:
+//   (x + y) - y -> x
+//   (x + y) - x -> y
+//   x - (y + x) -> 0 - y
+//   x - (x + z) -> 0 - z
+def sub_add_reg: GICombineRule <
+  (defs root:$root, build_fn_matchinfo:$matchinfo),
+  (match (wip_match_opcode G_SUB):$root,
+         [{ return Helper.matchSubAddSameReg(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyBuildFn(*${root}, ${matchinfo}); }])>;
+
 def select_to_minmax: GICombineRule<
   (defs root:$root, build_fn_matchinfo:$info),
   (match (wip_match_opcode G_SELECT):$root,
@@ -955,6 +972,7 @@ def undef_combines : GICombineGroup<[undef_to_fp_zero, undef_to_int_zero,
                                      undef_to_negative_one,
                                      binop_left_undef_to_zero,
                                      binop_right_undef_to_undef,
+                                     unary_undef_to_zero,
                                      propagate_undef_any_op,
                                      propagate_undef_all_ops,
                                      propagate_undef_shuffle_mask,
@@ -1012,7 +1030,8 @@ def all_combines : GICombineGroup<[trivial_combines, insert_vec_elt_combines,
     truncstore_merge, div_rem_to_divrem, funnel_shift_combines,
     form_bitfield_extract, constant_fold, fabs_fneg_fold,
     intdiv_combines, mulh_combines, redundant_neg_operands,
-    and_or_disjoint_mask, fma_combines, fold_binop_into_select]>;
+    and_or_disjoint_mask, fma_combines, fold_binop_into_select,
+    sub_add_reg, select_to_minmax]>;
 
 // A combine group used to for prelegalizer combiners at -O0. The combines in
 // this group have been selected based on experiments to balance code size and

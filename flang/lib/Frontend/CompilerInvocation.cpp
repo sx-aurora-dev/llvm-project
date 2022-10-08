@@ -125,6 +125,9 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
                    clang::driver::options::OPT_fno_debug_pass_manager, false))
     opts.DebugPassManager = 1;
 
+  for (auto *a : args.filtered(clang::driver::options::OPT_fpass_plugin_EQ))
+    opts.LLVMPassPlugins.push_back(a->getValue());
+
   // -mrelocation-model option.
   if (const llvm::opt::Arg *A =
           args.getLastArg(clang::driver::options::OPT_mrelocation_model)) {
@@ -826,6 +829,14 @@ void CompilerInvocation::setSemanticsOpts(
       .set_warnOnNonstandardUsage(getEnableConformanceChecks())
       .set_warningsAreErrors(getWarnAsErr())
       .set_moduleFileSuffix(getModuleFileSuffix());
+
+  llvm::Triple targetTriple{llvm::Triple(this->targetOpts.triple)};
+  // FIXME: Handle real(3) ?
+  if (targetTriple.getArch() != llvm::Triple::ArchType::x86 &&
+      targetTriple.getArch() != llvm::Triple::ArchType::x86_64) {
+    semanticsContext->targetCharacteristics().DisableType(
+        Fortran::common::TypeCategory::Real, /*kind=*/10);
+  }
 }
 
 /// Set \p loweringOptions controlling lowering behavior based

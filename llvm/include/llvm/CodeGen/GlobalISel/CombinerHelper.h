@@ -113,12 +113,14 @@ protected:
   GISelChangeObserver &Observer;
   GISelKnownBits *KB;
   MachineDominatorTree *MDT;
+  bool IsPreLegalize;
   const LegalizerInfo *LI;
   const RegisterBankInfo *RBI;
   const TargetRegisterInfo *TRI;
 
 public:
   CombinerHelper(GISelChangeObserver &Observer, MachineIRBuilder &B,
+                 bool IsPreLegalize,
                  GISelKnownBits *KB = nullptr,
                  MachineDominatorTree *MDT = nullptr,
                  const LegalizerInfo *LI = nullptr);
@@ -753,6 +755,13 @@ public:
 
   bool matchBuildVectorIdentityFold(MachineInstr &MI, Register &MatchInfo);
   bool matchTruncBuildVectorFold(MachineInstr &MI, Register &MatchInfo);
+
+  /// Transform:
+  ///   (x + y) - y -> x
+  ///   (x + y) - x -> y
+  ///   x - (y + x) -> 0 - y
+  ///   x - (x + z) -> 0 - z
+  bool matchSubAddSameReg(MachineInstr &MI, BuildFnTy &MatchInfo);
 
   /// \returns true if it is possible to simplify a select instruction \p MI
   /// to a min/max instruction of some sort.

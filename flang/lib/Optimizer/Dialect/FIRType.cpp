@@ -209,7 +209,7 @@ mlir::Type dyn_cast_ptrOrBoxEleTy(mlir::Type t) {
   return llvm::TypeSwitch<mlir::Type, mlir::Type>(t)
       .Case<fir::ReferenceType, fir::PointerType, fir::HeapType,
             fir::LLVMPointerType>([](auto p) { return p.getEleTy(); })
-      .Case<fir::BoxType>([](auto p) {
+      .Case<fir::BaseBoxType>([](auto p) {
         auto eleTy = p.getEleTy();
         if (auto ty = fir::dyn_cast_ptrEleTy(eleTy))
           return ty;
@@ -249,7 +249,7 @@ bool hasDynamicSize(mlir::Type t) {
 bool isPointerType(mlir::Type ty) {
   if (auto refTy = fir::dyn_cast_ptrEleTy(ty))
     ty = refTy;
-  if (auto boxTy = ty.dyn_cast<fir::BoxType>())
+  if (auto boxTy = ty.dyn_cast<fir::BaseBoxType>())
     return boxTy.getEleTy().isa<fir::PointerType>();
   return false;
 }
@@ -257,7 +257,7 @@ bool isPointerType(mlir::Type ty) {
 bool isAllocatableType(mlir::Type ty) {
   if (auto refTy = fir::dyn_cast_ptrEleTy(ty))
     ty = refTy;
-  if (auto boxTy = ty.dyn_cast<fir::BoxType>())
+  if (auto boxTy = ty.dyn_cast<fir::BaseBoxType>())
     return boxTy.getEleTy().isa<fir::HeapType>();
   return false;
 }
@@ -265,8 +265,8 @@ bool isAllocatableType(mlir::Type ty) {
 bool isUnlimitedPolymorphicType(mlir::Type ty) {
   if (auto refTy = fir::dyn_cast_ptrEleTy(ty))
     ty = refTy;
-  if (auto boxTy = ty.dyn_cast<fir::BoxType>())
-    return boxTy.getEleTy().isa<mlir::NoneType>();
+  if (auto clTy = ty.dyn_cast<fir::ClassType>())
+    return clTy.getEleTy().isa<mlir::NoneType>();
   return false;
 }
 
@@ -438,6 +438,19 @@ void fir::CharacterType::print(mlir::AsmPrinter &printer) const {
       printer << len;
   }
   printer << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// ClassType
+//===----------------------------------------------------------------------===//
+
+mlir::LogicalResult
+fir::ClassType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                       mlir::Type eleTy) {
+  if (eleTy.isa<fir::RecordType, fir::SequenceType, fir::HeapType,
+                fir::PointerType, mlir::NoneType>())
+    return mlir::success();
+  return emitError() << "invalid element type\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -925,15 +938,25 @@ mlir::Type fir::fromRealTypeID(mlir::MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// BaseBoxType
+//===----------------------------------------------------------------------===//
+
+mlir::Type BaseBoxType::getEleTy() const {
+  return llvm::TypeSwitch<fir::BaseBoxType, mlir::Type>(*this)
+      .Case<fir::BoxType, fir::ClassType>(
+          [](auto type) { return type.getEleTy(); });
+}
+
+//===----------------------------------------------------------------------===//
 // FIROpsDialect
 //===----------------------------------------------------------------------===//
 
 void FIROpsDialect::registerTypes() {
-  addTypes<BoxType, BoxCharType, BoxProcType, CharacterType, fir::ComplexType,
-           FieldType, HeapType, fir::IntegerType, LenType, LogicalType,
-           LLVMPointerType, PointerType, RealType, RecordType, ReferenceType,
-           SequenceType, ShapeType, ShapeShiftType, ShiftType, SliceType,
-           TypeDescType, fir::VectorType>();
+  addTypes<BoxType, BoxCharType, BoxProcType, CharacterType, ClassType,
+           fir::ComplexType, FieldType, HeapType, fir::IntegerType, LenType,
+           LogicalType, LLVMPointerType, PointerType, RealType, RecordType,
+           ReferenceType, SequenceType, ShapeType, ShapeShiftType, ShiftType,
+           SliceType, TypeDescType, fir::VectorType>();
   fir::ReferenceType::attachInterface<PointerLikeModel<fir::ReferenceType>>(
       *getContext());
 

@@ -680,7 +680,7 @@ static SmallVector<Value> ofrToIndexValues(OpBuilder &builder, Location loc,
   return result;
 }
 
-/// Rewrite a tensor::PadOp into a sequence of InitTensorOp, FillOp and
+/// Rewrite a tensor::PadOp into a sequence of EmptyOp, FillOp and
 /// InsertSliceOp. For now, only constant padding values are supported.
 /// If there is enough static type information, TransferReadOps and
 /// TransferWriteOps may be generated instead of InsertSliceOps.
@@ -1334,9 +1334,9 @@ struct Conv1DGenerator : public StructuredGenerator<LinalgOp> {
     // Determine whether `linalgOp` can be generated with this generator
     if (linalgOp.getNumInputs() != 2 || linalgOp.getNumOutputs() != 1)
       return;
-    lhsShaped = linalgOp.inputs()[0];
-    rhsShaped = linalgOp.inputs()[1];
-    resShaped = linalgOp.outputs()[0];
+    lhsShaped = linalgOp.getInputs()[0];
+    rhsShaped = linalgOp.getInputs()[1];
+    resShaped = linalgOp.getOutputs()[0];
     lhsShapedType = lhsShaped.getType().dyn_cast<ShapedType>();
     rhsShapedType = rhsShaped.getType().dyn_cast<ShapedType>();
     resShapedType = resShaped.getType().dyn_cast<ShapedType>();
