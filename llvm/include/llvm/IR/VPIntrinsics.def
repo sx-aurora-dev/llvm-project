@@ -289,6 +289,9 @@ END_REGISTER_VP(vp_maxnum, VP_FMAXNUM)
 
 // llvm.vp.ceil(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
 END_REGISTER_VP(vp_ceil, VP_FCEIL)
 
 ///// } Floating-Point Arithmetic
@@ -359,13 +362,6 @@ HELPER_REGISTER_INT_CAST_VP(inttoptr, VP_INTTOPTR, IntToPtr)
 ///// } Type Casts
 
 ///// Rounding {
-
-// llvm.vp.ceil(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
-END_REGISTER_VP(vp_ceil, VP_FCEIL)
 
 // llvm.vp.floor(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
