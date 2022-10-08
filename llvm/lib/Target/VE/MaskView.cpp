@@ -1,9 +1,9 @@
 #include "MaskView.h"
 #include "VECustomDAG.h"
+#include <cmath>
+#include <set>
 
 #define DEBUG_TYPE "ve-maskview"
-
-#include <set>
 
 namespace llvm {
 
