@@ -86,6 +86,7 @@ charconv type_traits
 chrono array
 chrono bit
 chrono charconv
+chrono cmath
 chrono compare
 chrono concepts
 chrono cstddef
@@ -478,6 +479,7 @@ memory iosfwd
 memory limits
 memory new
 memory stdexcept
+memory tuple
 memory type_traits
 memory typeinfo
 memory version

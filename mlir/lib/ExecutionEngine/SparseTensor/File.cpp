@@ -24,7 +24,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/ExecutionEngine/SparseTensor/File.h"
-#include "llvm/Support/ErrorHandling.h"
 
 #include <cctype>
 #include <cstring>
@@ -109,7 +108,8 @@ bool SparseTensorFile::canReadAs(PrimaryType valTy) const {
     // integer and floating primary-types.
     return isRealPrimaryType(valTy);
   }
-  llvm_unreachable("unknown ValueKind");
+  MLIR_SPARSETENSOR_FATAL("Unknown ValueKind: %d\n",
+                          static_cast<uint8_t>(valueKind_));
 }
 
 /// Helper to convert C-style strings (i.e., '\0' terminated) to lower case.
