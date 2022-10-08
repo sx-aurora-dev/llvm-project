@@ -356,6 +356,10 @@ C++20 Feature Support
   the time of checking, which should now allow the libstdc++ ranges implementation
   to work for at least trivial examples.  This fixes
   `Issue 44178 <https://github.com/llvm/llvm-project/issues/44178>`_.
+- Clang implements DR2621, correcting a defect in ``using enum`` handling.  The
+  name is found via ordinary lookup so typedefs are found.
+- Implemented `P0634r3 <https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0634r3.html>`_,
+  which removes the requirement for the ``typename`` keyword in certain contexts.
 
 C++2b Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
@@ -445,10 +449,15 @@ Static Analyzer
   ``scanbuild`` was also updated accordingly.
   Passing these flags will result in a hard error.
 
-.. _release-notes-ubsan:
+.. _release-notes-sanitizers:
 
-Undefined Behavior Sanitizer (UBSan)
-------------------------------------
+Sanitizers
+----------
+- ``-fsanitize-memory-param-retval`` is turned on by default. With
+  ``-fsanitize=memory``, passing uninitialized variables to functions and
+  returning uninitialized variables from functions is more aggressively
+  reported. ``-fno-sanitize-memory-param-retval`` restores the previous
+  behavior.
 
 Core Analysis Improvements
 ==========================

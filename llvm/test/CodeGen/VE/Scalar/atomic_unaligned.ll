@@ -616,14 +616,14 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-LABEL: test_atomic_compare_exchange_1:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    and %s2, %s1, (56)0
-; CHECK-NEXT:    lea %s1, c@lo
-; CHECK-NEXT:    and %s3, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s3, c@hi(, %s3)
-; CHECK-NEXT:    and %s4, 3, %s3
+; CHECK-NEXT:    lea %s2, c@lo
+; CHECK-NEXT:    and %s3, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s4, c@hi(, %s3)
+; CHECK-NEXT:    and %s3, -4, %s4
+; CHECK-NEXT:    and %s1, %s1, (56)0
+; CHECK-NEXT:    and %s4, 3, %s4
 ; CHECK-NEXT:    sla.w.sx %s4, %s4, 3
-; CHECK-NEXT:    sla.w.sx %s2, %s2, %s4
-; CHECK-NEXT:    and %s3, -4, %s3
+; CHECK-NEXT:    sla.w.sx %s1, %s1, %s4
 ; CHECK-NEXT:    ldl.sx %s5, (, %s3)
 ; CHECK-NEXT:    and %s0, %s0, (56)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, %s4
@@ -633,13 +633,13 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %partword.cmpxchg.loop
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s5, 0, %s7
-; CHECK-NEXT:    or %s4, %s5, %s2
+; CHECK-NEXT:    or %s4, %s5, %s1
 ; CHECK-NEXT:    or %s6, %s5, %s0
 ; CHECK-NEXT:    cas.w %s4, (%s3), %s6
 ; CHECK-NEXT:    breq.w %s4, %s6, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2: # %partword.cmpxchg.failure
 ; CHECK-NEXT:    # in Loop: Header=BB32_1 Depth=1
-; CHECK-NEXT:    and %s7, %s1, (32)0
+; CHECK-NEXT:    and %s7, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s7, c@hi(, %s7)
 ; CHECK-NEXT:    and %s7, 3, %s7
 ; CHECK-NEXT:    sla.w.sx %s7, %s7, 3
@@ -665,14 +665,14 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-LABEL: test_atomic_compare_exchange_2:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    and %s2, %s1, (48)0
-; CHECK-NEXT:    lea %s1, s@lo
-; CHECK-NEXT:    and %s3, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s3, s@hi(, %s3)
-; CHECK-NEXT:    and %s4, 3, %s3
+; CHECK-NEXT:    lea %s2, s@lo
+; CHECK-NEXT:    and %s3, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s4, s@hi(, %s3)
+; CHECK-NEXT:    and %s3, -4, %s4
+; CHECK-NEXT:    and %s1, %s1, (48)0
+; CHECK-NEXT:    and %s4, 3, %s4
 ; CHECK-NEXT:    sla.w.sx %s4, %s4, 3
-; CHECK-NEXT:    sla.w.sx %s2, %s2, %s4
-; CHECK-NEXT:    and %s3, -4, %s3
+; CHECK-NEXT:    sla.w.sx %s1, %s1, %s4
 ; CHECK-NEXT:    ldl.sx %s5, (, %s3)
 ; CHECK-NEXT:    and %s0, %s0, (48)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, %s4
@@ -682,13 +682,13 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %partword.cmpxchg.loop
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s5, 0, %s7
-; CHECK-NEXT:    or %s4, %s5, %s2
+; CHECK-NEXT:    or %s4, %s5, %s1
 ; CHECK-NEXT:    or %s6, %s5, %s0
 ; CHECK-NEXT:    cas.w %s4, (%s3), %s6
 ; CHECK-NEXT:    breq.w %s4, %s6, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2: # %partword.cmpxchg.failure
 ; CHECK-NEXT:    # in Loop: Header=BB33_1 Depth=1
-; CHECK-NEXT:    and %s7, %s1, (32)0
+; CHECK-NEXT:    and %s7, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s7, s@hi(, %s7)
 ; CHECK-NEXT:    and %s7, 3, %s7
 ; CHECK-NEXT:    sla.w.sx %s7, %s7, 3
