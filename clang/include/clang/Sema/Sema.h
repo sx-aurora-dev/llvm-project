@@ -2523,7 +2523,7 @@ public:
   // Returns the underlying type of a decltype with the given expression.
   QualType getDecltypeForExpr(Expr *E);
 
-  QualType BuildTypeofExprType(Expr *E);
+  QualType BuildTypeofExprType(Expr *E, TypeOfKind Kind);
   /// If AsUnevaluated is false, E is treated as though it were an evaluated
   /// context, such as when building a type for decltype(auto).
   QualType BuildDecltypeType(Expr *E, bool AsUnevaluated = true);
@@ -7013,13 +7013,12 @@ public:
                                          LambdaCaptureDefault CaptureDefault);
 
   /// Start the definition of a lambda expression.
-  CXXMethodDecl *startLambdaDefinition(CXXRecordDecl *Class,
-                                       SourceRange IntroducerRange,
-                                       TypeSourceInfo *MethodType,
-                                       SourceLocation EndLoc,
-                                       ArrayRef<ParmVarDecl *> Params,
-                                       ConstexprSpecKind ConstexprKind,
-                                       Expr *TrailingRequiresClause);
+  CXXMethodDecl *
+  startLambdaDefinition(CXXRecordDecl *Class, SourceRange IntroducerRange,
+                        TypeSourceInfo *MethodType, SourceLocation EndLoc,
+                        ArrayRef<ParmVarDecl *> Params,
+                        ConstexprSpecKind ConstexprKind, StorageClass SC,
+                        Expr *TrailingRequiresClause);
 
   /// Number lambda for linkage purposes if necessary.
   void handleLambdaNumbering(

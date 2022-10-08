@@ -6530,7 +6530,8 @@ def err_sizeof_alignof_function_type : Error<
 def err_openmp_default_simd_align_expr : Error<
   "invalid application of '__builtin_omp_required_simd_align' to an expression, only type is allowed">;
 def err_sizeof_alignof_typeof_bitfield : Error<
-  "invalid application of '%select{sizeof|alignof|typeof}0' to bit-field">;
+  "invalid application of '%select{sizeof|alignof|typeof|typeof_unqual}0' to "
+  "bit-field">;
 def err_alignof_member_of_incomplete_type : Error<
   "invalid application of 'alignof' to a field of a class still being defined">;
 def err_vecstep_non_scalar_vector_type : Error<
@@ -9086,6 +9087,11 @@ def err_operator_overload_needs_class_or_enum : Error<
   "or enumeration type">;
 
 def err_operator_overload_variadic : Error<"overloaded %0 cannot be variadic">;
+def ext_operator_overload_static : ExtWarn<
+  "declaring overloaded %0 as 'static' is a C++2b extension">,
+  InGroup<CXXPre2bCompat>, DefaultIgnore;
+def err_call_operator_overload_static : ExtWarn<
+  "declaring overloaded %0 as 'static' is a C++2b extension">, InGroup<CXX2b>;
 def err_operator_overload_static : Error<
   "overloaded %0 cannot be a static member function">;
 def err_operator_overload_default_arg : Error<

@@ -10,7 +10,7 @@
 
 #include "mlir/AsmParser/AsmParser.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -1001,8 +1001,9 @@ transform::SplitReductionOp::applyToOne(linalg::LinalgOp target,
                                         SmallVectorImpl<Operation *> &results,
                                         transform::TransformState &state) {
   ControlSplitReductionFn splitFn = [&](LinalgOp) {
-    return std::pair<int64_t, unsigned>(getSplitFactor(),
-                                        getInsertSplitDimension());
+    return linalg::SplitReductionOptions{int64_t(getSplitFactor()),
+                                         unsigned(getInsertSplitDimension()),
+                                         /*innerParallel=*/false};
   };
   SimpleRewriter rewriter(getContext());
   rewriter.setInsertionPoint(target);
@@ -1324,17 +1325,20 @@ static LogicalResult alterGpuLaunch(SimpleRewriter &rewriter,
   };
 
   if (gridDimX.has_value())
-    gpuLaunch.gridSizeXMutable().assign(createConstValue(gridDimX.value()));
+    gpuLaunch.getGridSizeXMutable().assign(createConstValue(gridDimX.value()));
   if (gridDimY.has_value())
-    gpuLaunch.gridSizeYMutable().assign(createConstValue(gridDimY.value()));
+    gpuLaunch.getGridSizeYMutable().assign(createConstValue(gridDimY.value()));
   if (gridDimZ.has_value())
-    gpuLaunch.gridSizeZMutable().assign(createConstValue(gridDimZ.value()));
+    gpuLaunch.getGridSizeZMutable().assign(createConstValue(gridDimZ.value()));
   if (blockDimX.has_value())
-    gpuLaunch.blockSizeXMutable().assign(createConstValue(blockDimX.value()));
+    gpuLaunch.getBlockSizeXMutable().assign(
+        createConstValue(blockDimX.value()));
   if (blockDimY.has_value())
-    gpuLaunch.blockSizeYMutable().assign(createConstValue(blockDimY.value()));
+    gpuLaunch.getBlockSizeYMutable().assign(
+        createConstValue(blockDimY.value()));
   if (blockDimZ.has_value())
-    gpuLaunch.blockSizeZMutable().assign(createConstValue(blockDimZ.value()));
+    gpuLaunch.getBlockSizeZMutable().assign(
+        createConstValue(blockDimZ.value()));
   return success();
 }
 
@@ -1479,7 +1483,7 @@ createGpuLaunch(RewriterBase &rewriter, Location loc,
       blockDimZ.has_value() ? createConstant(blockDimZ.value()) : one;
   auto launchOp = rewriter.create<gpu::LaunchOp>(
       loc, gridSizeX, gridSizeY, gridSizeZ, blockSizeX, blockSizeY, blockSizeZ);
-  rewriter.setInsertionPointToEnd(&launchOp.body().front());
+  rewriter.setInsertionPointToEnd(&launchOp.getBody().front());
   rewriter.create<gpu::TerminatorOp>(loc);
   return launchOp;
 }
@@ -1529,7 +1533,7 @@ transform::MapNestedForeachThreadToGpuBlocks::applyToOne(
     if (failed(maybeGpuLaunch))
       return DiagnosedSilenceableFailure(reportUnknownTransformError(target));
     gpuLaunch = *maybeGpuLaunch;
-    rewriter.setInsertionPointToStart(&gpuLaunch.body().front());
+    rewriter.setInsertionPointToStart(&gpuLaunch.getBody().front());
     Operation *newForeachThreadOp = rewriter.clone(*topLevelForeachThreadOp);
     rewriter.eraseOp(topLevelForeachThreadOp);
     topLevelForeachThreadOp =
@@ -1773,7 +1777,7 @@ public:
     declareDependentDialect<pdl::PDLDialect>();
     declareDependentDialect<LinalgDialect>();
     declareGeneratedDialect<AffineDialect>();
-    declareGeneratedDialect<arith::ArithmeticDialect>();
+    declareGeneratedDialect<arith::ArithDialect>();
     declareGeneratedDialect<scf::SCFDialect>();
     declareGeneratedDialect<vector::VectorDialect>();
     declareGeneratedDialect<gpu::GPUDialect>();

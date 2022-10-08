@@ -28,7 +28,7 @@
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/SparseTensor/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/ExecutionEngine/SparseTensorUtils.h"
+#include "mlir/ExecutionEngine/SparseTensor/Enums.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -106,13 +106,11 @@ static func::CallOp replaceOpWithFuncCall(RewriterBase &rewriter, Operation *op,
 /// Generates dimension size call.
 static Value genDimSizeCall(OpBuilder &builder, Location loc,
                             SparseTensorEncodingAttr &enc, Value src,
-                            int64_t idx) {
-  // Permute the index according to an optional dimension ordering.
-  if (AffineMap p = enc.getDimOrdering())
-    idx = p.getPermutedPosition(idx);
+                            uint64_t idx) {
   // Generate the call.
   StringRef name = "sparseDimSize";
-  SmallVector<Value, 2> params{src, constantIndex(builder, loc, idx)};
+  SmallVector<Value, 2> params{
+      src, constantIndex(builder, loc, toStoredDim(enc, idx))};
   Type iTp = builder.getIndexType();
   return createFuncCall(builder, loc, name, iTp, params, EmitCInterface::Off)
       .getResult(0);
@@ -266,13 +264,8 @@ static void newParams(OpBuilder &builder, SmallVector<Value, 8> &params,
   // default, or otherwise the "reverse" permutation of a given ordering, so
   // that indices can be mapped quickly to the right position.
   SmallVector<Value, 4> rev(sz);
-  if (AffineMap p = enc.getDimOrdering()) {
-    for (unsigned i = 0; i < sz; i++)
-      rev[p.getDimPosition(i)] = constantIndex(builder, loc, i);
-  } else {
-    for (unsigned i = 0; i < sz; i++)
-      rev[i] = constantIndex(builder, loc, i);
-  }
+  for (unsigned i = 0; i < sz; i++)
+    rev[toOrigDim(enc, i)] = constantIndex(builder, loc, i);
   params.push_back(genBuffer(builder, loc, rev));
   // Secondary and primary types encoding.
   Type elemTp = stp.getElementType();
@@ -482,44 +475,21 @@ static void translateIndices(Location loc, ConversionPatternRewriter &rewriter,
                              ArrayRef<Value> srcShape) {
   unsigned dstRank = dstTp.getRank();
   unsigned srcRank = srcTp.getRank();
-  unsigned start = 0;
-  unsigned i = 0;
-  bool isExpand = srcRank > dstRank;
-  ArrayRef<Value> shape = isExpand ? srcShape : dstShape;
-  // Iterate over reassociation map.
-  for (const auto &map : llvm::enumerate(reassociation)) {
-    // Prepare strides information in dimension slice.
-    Value linear = constantIndex(rewriter, loc, 1);
-    for (unsigned j = start, end = start + map.value().size(); j < end; j++) {
-      linear = rewriter.create<arith::MulIOp>(loc, linear, shape[j]);
-    }
-    // Start collapse.
-    Value idx = constantIndex(rewriter, loc, i++);
-    Value val;
-    if (!isExpand)
-      val = rewriter.create<memref::LoadOp>(loc, srcIdx, idx);
-    // Iterate over dimension slice.
-    for (unsigned j = start, end = start + map.value().size(); j < end; j++) {
-      linear = rewriter.create<arith::DivUIOp>(loc, linear, shape[j]);
-      Value jdx = constantIndex(rewriter, loc, j);
-      if (isExpand) {
-        Value old = rewriter.create<memref::LoadOp>(loc, srcIdx, jdx);
-        Value mul = rewriter.create<arith::MulIOp>(loc, old, linear);
-        val = val ? rewriter.create<arith::AddIOp>(loc, val, mul) : mul;
-      } else {
-        Value old = val;
-        val = rewriter.create<arith::DivUIOp>(loc, val, linear);
-        rewriter.create<memref::StoreOp>(loc, val, dstIdx, jdx);
-        val = rewriter.create<arith::RemUIOp>(loc, old, linear);
-      }
-    }
-    // Finalize expansion.
-    if (isExpand)
-      rewriter.create<memref::StoreOp>(loc, val, dstIdx, idx);
-    start += map.value().size();
+
+  SmallVector<Value, 4> srcIndices;
+  for (unsigned i = 0; i < srcRank; i++) {
+    Value idx = rewriter.create<memref::LoadOp>(
+        loc, srcIdx, constantIndex(rewriter, loc, i));
+    srcIndices.push_back(idx);
   }
-  // Sanity.
-  assert((isExpand && i == dstRank) || (!isExpand && i == srcRank));
+
+  SmallVector<Value, 4> dstIndices;
+  translateIndicesArray(rewriter, loc, reassociation, srcIndices, srcShape,
+                        dstShape, dstIndices);
+
+  for (unsigned i = 0; i < dstRank; i++)
+    rewriter.create<memref::StoreOp>(loc, dstIndices[i], dstIdx,
+                                     constantIndex(rewriter, loc, i));
 }
 
 /// Helper method to compute the shape of destination tensor of a reshape
@@ -1230,7 +1200,8 @@ public:
   matchAndRewrite(ExpandOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op->getLoc();
-    ShapedType srcType = op.getTensor().getType().cast<ShapedType>();
+    RankedTensorType srcType =
+        op.getTensor().getType().cast<RankedTensorType>();
     Type eltType = srcType.getElementType();
     Type boolType = rewriter.getIntegerType(1);
     Type idxType = rewriter.getIndexType();
@@ -1239,9 +1210,7 @@ public:
     // Determine the size for access expansion (always the innermost stored
     // dimension size, translated back to original dimension).
     auto enc = getSparseTensorEncoding(srcType);
-    unsigned innerDim = srcType.getRank() - 1;
-    if (AffineMap p = enc.getDimOrdering())
-      innerDim = p.getDimPosition(innerDim);
+    unsigned innerDim = toOrigDim(srcType, srcType.getRank() - 1);
     auto sz = sizeFromPtrAtDim(rewriter, loc, enc, srcType, adaptor.getTensor(),
                                innerDim);
     // Allocate temporary buffers for values, filled-switch, and indices.
