@@ -1581,14 +1581,6 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
                                    [ LLVMMatchType<0>,
                                      LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                      llvm_i32_ty]>;
-  def int_vp_floor : DefaultAttrsIntrinsic<[ llvm_anyfloat_ty ],
-                               [ LLVMMatchType<0>,
-                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                 llvm_i32_ty]>;
-  def int_vp_round : DefaultAttrsIntrinsic<[ llvm_anyfloat_ty ],
-                               [ LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty]>;
 
   // VP two argument constrained intrinsics.
   def int_vp_powi : DefaultAttrsIntrinsic<[ llvm_anyfloat_ty ],
@@ -1628,7 +1620,6 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
                                LLVMMatchType<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty]>;
-
   def int_vp_fneg : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                              [ LLVMMatchType<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,

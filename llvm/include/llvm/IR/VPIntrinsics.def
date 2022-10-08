@@ -296,10 +296,16 @@ END_REGISTER_VP(vp_ceil, VP_FCEIL)
 
 // llvm.vp.floor(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
 END_REGISTER_VP(vp_floor, VP_FFLOOR)
 
 // llvm.vp.round(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_round, 1, 2, VP_FROUND, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
 END_REGISTER_VP(vp_round, VP_FROUND)
 
 // llvm.vp.roundeven(x,mask,vlen)
@@ -374,20 +380,6 @@ HELPER_REGISTER_INT_CAST_VP(inttoptr, VP_INTTOPTR, IntToPtr)
 ///// } Type Casts
 
 ///// Rounding {
-
-// llvm.vp.floor(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
-END_REGISTER_VP(vp_floor, VP_FFLOOR)
-
-// llvm.vp.round(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_round, 1, 2, VP_FROUND, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
-END_REGISTER_VP(vp_round, VP_FROUND)
 
 // llvm.vp.rint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
