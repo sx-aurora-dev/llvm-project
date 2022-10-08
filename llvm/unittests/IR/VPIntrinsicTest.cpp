@@ -87,7 +87,8 @@ protected:
 
     const char *BinaryIntOpcodes[] = {"add",  "sub",  "mul", "sdiv", "srem",
                                       "udiv", "urem", "and", "xor",  "or",
-                                      "ashr", "lshr", "shl"};
+                                      "ashr", "lshr", "shl", "smin", "smax",
+                                      "umin", "umax"};
     for (const char *BinaryIntOpcode : BinaryIntOpcodes)
       Str << " declare <8 x i32> @llvm.vp." << BinaryIntOpcode
           << ".v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) ";
