@@ -2062,9 +2062,9 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmpu.w %s3, 2, %s0
+; CHECK-NEXT:    cmpu.w %s3, %s0, (63)0
 ; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    cmov.w.gt %s0, (63)0, %s3
+; CHECK-NEXT:    cmov.w.le %s0, (63)0, %s3
 ; CHECK-NEXT:    cas.w %s0, (%s1), %s2
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
@@ -2087,9 +2087,9 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmpu.w %s3, 1, %s0
+; CHECK-NEXT:    cmpu.w %s3, 2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    cmov.w.lt %s0, (63)0, %s3
+; CHECK-NEXT:    cmov.w.le %s0, (63)0, %s3
 ; CHECK-NEXT:    cas.w %s0, (%s1), %s2
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end

@@ -22,7 +22,7 @@ define zeroext i1 @select_cc_i1_i1(i1 zeroext %0, i1 zeroext %1, i1 zeroext %2, 
 define zeroext i1 @select_cc_i8_i1(i8 signext %0, i8 signext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_i8_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -35,7 +35,7 @@ define zeroext i1 @select_cc_i8_i1(i8 signext %0, i8 signext %1, i1 zeroext %2, 
 define zeroext i1 @select_cc_u8_i1(i8 zeroext %0, i8 zeroext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_u8_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -48,7 +48,7 @@ define zeroext i1 @select_cc_u8_i1(i8 zeroext %0, i8 zeroext %1, i1 zeroext %2, 
 define zeroext i1 @select_cc_i16_i1(i16 signext %0, i16 signext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_i16_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -61,7 +61,7 @@ define zeroext i1 @select_cc_i16_i1(i16 signext %0, i16 signext %1, i1 zeroext %
 define zeroext i1 @select_cc_u16_i1(i16 zeroext %0, i16 zeroext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_u16_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -74,7 +74,7 @@ define zeroext i1 @select_cc_u16_i1(i16 zeroext %0, i16 zeroext %1, i1 zeroext %
 define zeroext i1 @select_cc_i32_i1(i32 signext %0, i32 signext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_i32_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -87,7 +87,7 @@ define zeroext i1 @select_cc_i32_i1(i32 signext %0, i32 signext %1, i1 zeroext %
 define zeroext i1 @select_cc_u32_i1(i32 zeroext %0, i32 zeroext %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_u32_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -100,7 +100,7 @@ define zeroext i1 @select_cc_u32_i1(i32 zeroext %0, i32 zeroext %1, i1 zeroext %
 define zeroext i1 @select_cc_i64_i1(i64 %0, i64 %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_i64_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -113,7 +113,7 @@ define zeroext i1 @select_cc_i64_i1(i64 %0, i64 %1, i1 zeroext %2, i1 zeroext %3
 define zeroext i1 @select_cc_u64_i1(i64 %0, i64 %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: select_cc_u64_i1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -208,7 +208,7 @@ define signext i8 @select_cc_i1_i8(i1 zeroext %0, i1 zeroext %1, i8 signext %2, 
 define signext i8 @select_cc_i8_i8(i8 signext %0, i8 signext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_i8_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -221,7 +221,7 @@ define signext i8 @select_cc_i8_i8(i8 signext %0, i8 signext %1, i8 signext %2, 
 define signext i8 @select_cc_u8_i8(i8 zeroext %0, i8 zeroext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_u8_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -234,7 +234,7 @@ define signext i8 @select_cc_u8_i8(i8 zeroext %0, i8 zeroext %1, i8 signext %2, 
 define signext i8 @select_cc_i16_i8(i16 signext %0, i16 signext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_i16_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -247,7 +247,7 @@ define signext i8 @select_cc_i16_i8(i16 signext %0, i16 signext %1, i8 signext %
 define signext i8 @select_cc_u16_i8(i16 zeroext %0, i16 zeroext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_u16_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -260,7 +260,7 @@ define signext i8 @select_cc_u16_i8(i16 zeroext %0, i16 zeroext %1, i8 signext %
 define signext i8 @select_cc_i32_i8(i32 signext %0, i32 signext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_i32_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -273,7 +273,7 @@ define signext i8 @select_cc_i32_i8(i32 signext %0, i32 signext %1, i8 signext %
 define signext i8 @select_cc_u32_i8(i32 zeroext %0, i32 zeroext %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_u32_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -286,7 +286,7 @@ define signext i8 @select_cc_u32_i8(i32 zeroext %0, i32 zeroext %1, i8 signext %
 define signext i8 @select_cc_i64_i8(i64 %0, i64 %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_i64_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -299,7 +299,7 @@ define signext i8 @select_cc_i64_i8(i64 %0, i64 %1, i8 signext %2, i8 signext %3
 define signext i8 @select_cc_u64_i8(i64 %0, i64 %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: select_cc_u64_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -394,7 +394,7 @@ define zeroext i8 @select_cc_i1_u8(i1 zeroext %0, i1 zeroext %1, i8 zeroext %2, 
 define zeroext i8 @select_cc_i8_u8(i8 signext %0, i8 signext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_i8_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -407,7 +407,7 @@ define zeroext i8 @select_cc_i8_u8(i8 signext %0, i8 signext %1, i8 zeroext %2, 
 define zeroext i8 @select_cc_u8_u8(i8 zeroext %0, i8 zeroext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_u8_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -420,7 +420,7 @@ define zeroext i8 @select_cc_u8_u8(i8 zeroext %0, i8 zeroext %1, i8 zeroext %2, 
 define zeroext i8 @select_cc_i16_u8(i16 signext %0, i16 signext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_i16_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -433,7 +433,7 @@ define zeroext i8 @select_cc_i16_u8(i16 signext %0, i16 signext %1, i8 zeroext %
 define zeroext i8 @select_cc_u16_u8(i16 zeroext %0, i16 zeroext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_u16_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -446,7 +446,7 @@ define zeroext i8 @select_cc_u16_u8(i16 zeroext %0, i16 zeroext %1, i8 zeroext %
 define zeroext i8 @select_cc_i32_u8(i32 signext %0, i32 signext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_i32_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -459,7 +459,7 @@ define zeroext i8 @select_cc_i32_u8(i32 signext %0, i32 signext %1, i8 zeroext %
 define zeroext i8 @select_cc_u32_u8(i32 zeroext %0, i32 zeroext %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_u32_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -472,7 +472,7 @@ define zeroext i8 @select_cc_u32_u8(i32 zeroext %0, i32 zeroext %1, i8 zeroext %
 define zeroext i8 @select_cc_i64_u8(i64 %0, i64 %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_i64_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -485,7 +485,7 @@ define zeroext i8 @select_cc_i64_u8(i64 %0, i64 %1, i8 zeroext %2, i8 zeroext %3
 define zeroext i8 @select_cc_u64_u8(i64 %0, i64 %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: select_cc_u64_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -580,7 +580,7 @@ define signext i16 @select_cc_i1_i16(i1 zeroext %0, i1 zeroext %1, i16 signext %
 define signext i16 @select_cc_i8_i16(i8 signext %0, i8 signext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_i8_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -593,7 +593,7 @@ define signext i16 @select_cc_i8_i16(i8 signext %0, i8 signext %1, i16 signext %
 define signext i16 @select_cc_u8_i16(i8 zeroext %0, i8 zeroext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_u8_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -606,7 +606,7 @@ define signext i16 @select_cc_u8_i16(i8 zeroext %0, i8 zeroext %1, i16 signext %
 define signext i16 @select_cc_i16_i16(i16 signext %0, i16 signext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_i16_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -619,7 +619,7 @@ define signext i16 @select_cc_i16_i16(i16 signext %0, i16 signext %1, i16 signex
 define signext i16 @select_cc_u16_i16(i16 zeroext %0, i16 zeroext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_u16_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -632,7 +632,7 @@ define signext i16 @select_cc_u16_i16(i16 zeroext %0, i16 zeroext %1, i16 signex
 define signext i16 @select_cc_i32_i16(i32 signext %0, i32 signext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_i32_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -645,7 +645,7 @@ define signext i16 @select_cc_i32_i16(i32 signext %0, i32 signext %1, i16 signex
 define signext i16 @select_cc_u32_i16(i32 zeroext %0, i32 zeroext %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_u32_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -658,7 +658,7 @@ define signext i16 @select_cc_u32_i16(i32 zeroext %0, i32 zeroext %1, i16 signex
 define signext i16 @select_cc_i64_i16(i64 %0, i64 %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_i64_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -671,7 +671,7 @@ define signext i16 @select_cc_i64_i16(i64 %0, i64 %1, i16 signext %2, i16 signex
 define signext i16 @select_cc_u64_i16(i64 %0, i64 %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: select_cc_u64_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -766,7 +766,7 @@ define zeroext i16 @select_cc_i1_u16(i1 zeroext %0, i1 zeroext %1, i16 zeroext %
 define zeroext i16 @select_cc_i8_u16(i8 signext %0, i8 signext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_i8_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -779,7 +779,7 @@ define zeroext i16 @select_cc_i8_u16(i8 signext %0, i8 signext %1, i16 zeroext %
 define zeroext i16 @select_cc_u8_u16(i8 zeroext %0, i8 zeroext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_u8_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -792,7 +792,7 @@ define zeroext i16 @select_cc_u8_u16(i8 zeroext %0, i8 zeroext %1, i16 zeroext %
 define zeroext i16 @select_cc_i16_u16(i16 signext %0, i16 signext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_i16_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -805,7 +805,7 @@ define zeroext i16 @select_cc_i16_u16(i16 signext %0, i16 signext %1, i16 zeroex
 define zeroext i16 @select_cc_u16_u16(i16 zeroext %0, i16 zeroext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_u16_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -818,7 +818,7 @@ define zeroext i16 @select_cc_u16_u16(i16 zeroext %0, i16 zeroext %1, i16 zeroex
 define zeroext i16 @select_cc_i32_u16(i32 signext %0, i32 signext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_i32_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -831,7 +831,7 @@ define zeroext i16 @select_cc_i32_u16(i32 signext %0, i32 signext %1, i16 zeroex
 define zeroext i16 @select_cc_u32_u16(i32 zeroext %0, i32 zeroext %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_u32_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -844,7 +844,7 @@ define zeroext i16 @select_cc_u32_u16(i32 zeroext %0, i32 zeroext %1, i16 zeroex
 define zeroext i16 @select_cc_i64_u16(i64 %0, i64 %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_i64_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -857,7 +857,7 @@ define zeroext i16 @select_cc_i64_u16(i64 %0, i64 %1, i16 zeroext %2, i16 zeroex
 define zeroext i16 @select_cc_u64_u16(i64 %0, i64 %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: select_cc_u64_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -952,7 +952,7 @@ define signext i32 @select_cc_i1_i32(i1 zeroext %0, i1 zeroext %1, i32 signext %
 define signext i32 @select_cc_i8_i32(i8 signext %0, i8 signext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_i8_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -965,7 +965,7 @@ define signext i32 @select_cc_i8_i32(i8 signext %0, i8 signext %1, i32 signext %
 define signext i32 @select_cc_u8_i32(i8 zeroext %0, i8 zeroext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_u8_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -978,7 +978,7 @@ define signext i32 @select_cc_u8_i32(i8 zeroext %0, i8 zeroext %1, i32 signext %
 define signext i32 @select_cc_i16_i32(i16 signext %0, i16 signext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_i16_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -991,7 +991,7 @@ define signext i32 @select_cc_i16_i32(i16 signext %0, i16 signext %1, i32 signex
 define signext i32 @select_cc_u16_i32(i16 zeroext %0, i16 zeroext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_u16_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1004,7 +1004,7 @@ define signext i32 @select_cc_u16_i32(i16 zeroext %0, i16 zeroext %1, i32 signex
 define signext i32 @select_cc_i32_i32(i32 signext %0, i32 signext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_i32_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1017,7 +1017,7 @@ define signext i32 @select_cc_i32_i32(i32 signext %0, i32 signext %1, i32 signex
 define signext i32 @select_cc_u32_i32(i32 zeroext %0, i32 zeroext %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_u32_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1030,7 +1030,7 @@ define signext i32 @select_cc_u32_i32(i32 zeroext %0, i32 zeroext %1, i32 signex
 define signext i32 @select_cc_i64_i32(i64 %0, i64 %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_i64_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1043,7 +1043,7 @@ define signext i32 @select_cc_i64_i32(i64 %0, i64 %1, i32 signext %2, i32 signex
 define signext i32 @select_cc_u64_i32(i64 %0, i64 %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: select_cc_u64_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1138,7 +1138,7 @@ define zeroext i32 @select_cc_i1_u32(i1 zeroext %0, i1 zeroext %1, i32 zeroext %
 define zeroext i32 @select_cc_i8_u32(i8 signext %0, i8 signext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_i8_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1151,7 +1151,7 @@ define zeroext i32 @select_cc_i8_u32(i8 signext %0, i8 signext %1, i32 zeroext %
 define zeroext i32 @select_cc_u8_u32(i8 zeroext %0, i8 zeroext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_u8_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1164,7 +1164,7 @@ define zeroext i32 @select_cc_u8_u32(i8 zeroext %0, i8 zeroext %1, i32 zeroext %
 define zeroext i32 @select_cc_i16_u32(i16 signext %0, i16 signext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_i16_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1177,7 +1177,7 @@ define zeroext i32 @select_cc_i16_u32(i16 signext %0, i16 signext %1, i32 zeroex
 define zeroext i32 @select_cc_u16_u32(i16 zeroext %0, i16 zeroext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_u16_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1190,7 +1190,7 @@ define zeroext i32 @select_cc_u16_u32(i16 zeroext %0, i16 zeroext %1, i32 zeroex
 define zeroext i32 @select_cc_i32_u32(i32 signext %0, i32 signext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_i32_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1203,7 +1203,7 @@ define zeroext i32 @select_cc_i32_u32(i32 signext %0, i32 signext %1, i32 zeroex
 define zeroext i32 @select_cc_u32_u32(i32 zeroext %0, i32 zeroext %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_u32_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1216,7 +1216,7 @@ define zeroext i32 @select_cc_u32_u32(i32 zeroext %0, i32 zeroext %1, i32 zeroex
 define zeroext i32 @select_cc_i64_u32(i64 %0, i64 %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_i64_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1229,7 +1229,7 @@ define zeroext i32 @select_cc_i64_u32(i64 %0, i64 %1, i32 zeroext %2, i32 zeroex
 define zeroext i32 @select_cc_u64_u32(i64 %0, i64 %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: select_cc_u64_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1324,7 +1324,7 @@ define i64 @select_cc_i1_i64(i1 zeroext %0, i1 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i8_i64(i8 signext %0, i8 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i8_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1337,7 +1337,7 @@ define i64 @select_cc_i8_i64(i8 signext %0, i8 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u8_i64(i8 zeroext %0, i8 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u8_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1350,7 +1350,7 @@ define i64 @select_cc_u8_i64(i8 zeroext %0, i8 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i16_i64(i16 signext %0, i16 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i16_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1363,7 +1363,7 @@ define i64 @select_cc_i16_i64(i16 signext %0, i16 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u16_i64(i16 zeroext %0, i16 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u16_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1376,7 +1376,7 @@ define i64 @select_cc_u16_i64(i16 zeroext %0, i16 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i32_i64(i32 signext %0, i32 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i32_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1389,7 +1389,7 @@ define i64 @select_cc_i32_i64(i32 signext %0, i32 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u32_i64(i32 zeroext %0, i32 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u32_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1402,7 +1402,7 @@ define i64 @select_cc_u32_i64(i32 zeroext %0, i32 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i64_i64(i64 %0, i64 %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i64_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1415,7 +1415,7 @@ define i64 @select_cc_i64_i64(i64 %0, i64 %1, i64 %2, i64 %3) {
 define i64 @select_cc_u64_i64(i64 %0, i64 %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u64_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1510,7 +1510,7 @@ define i64 @select_cc_i1_u64(i1 zeroext %0, i1 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i8_u64(i8 signext %0, i8 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i8_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1523,7 +1523,7 @@ define i64 @select_cc_i8_u64(i8 signext %0, i8 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u8_u64(i8 zeroext %0, i8 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u8_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1536,7 +1536,7 @@ define i64 @select_cc_u8_u64(i8 zeroext %0, i8 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i16_u64(i16 signext %0, i16 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i16_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1549,7 +1549,7 @@ define i64 @select_cc_i16_u64(i16 signext %0, i16 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u16_u64(i16 zeroext %0, i16 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u16_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1562,7 +1562,7 @@ define i64 @select_cc_u16_u64(i16 zeroext %0, i16 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i32_u64(i32 signext %0, i32 signext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i32_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1575,7 +1575,7 @@ define i64 @select_cc_i32_u64(i32 signext %0, i32 signext %1, i64 %2, i64 %3) {
 define i64 @select_cc_u32_u64(i32 zeroext %0, i32 zeroext %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u32_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1588,7 +1588,7 @@ define i64 @select_cc_u32_u64(i32 zeroext %0, i32 zeroext %1, i64 %2, i64 %3) {
 define i64 @select_cc_i64_u64(i64 %0, i64 %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_i64_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1601,7 +1601,7 @@ define i64 @select_cc_i64_u64(i64 %0, i64 %1, i64 %2, i64 %3) {
 define i64 @select_cc_u64_u64(i64 %0, i64 %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: select_cc_u64_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1698,7 +1698,7 @@ define i128 @select_cc_i1_i128(i1 zeroext %0, i1 zeroext %1, i128 %2, i128 %3) {
 define i128 @select_cc_i8_i128(i8 signext %0, i8 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i8_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1713,7 +1713,7 @@ define i128 @select_cc_i8_i128(i8 signext %0, i8 signext %1, i128 %2, i128 %3) {
 define i128 @select_cc_u8_i128(i8 zeroext %0, i8 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u8_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1728,7 +1728,7 @@ define i128 @select_cc_u8_i128(i8 zeroext %0, i8 zeroext %1, i128 %2, i128 %3) {
 define i128 @select_cc_i16_i128(i16 signext %0, i16 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i16_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1743,7 +1743,7 @@ define i128 @select_cc_i16_i128(i16 signext %0, i16 signext %1, i128 %2, i128 %3
 define i128 @select_cc_u16_i128(i16 zeroext %0, i16 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u16_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1758,7 +1758,7 @@ define i128 @select_cc_u16_i128(i16 zeroext %0, i16 zeroext %1, i128 %2, i128 %3
 define i128 @select_cc_i32_i128(i32 signext %0, i32 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i32_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1773,7 +1773,7 @@ define i128 @select_cc_i32_i128(i32 signext %0, i32 signext %1, i128 %2, i128 %3
 define i128 @select_cc_u32_i128(i32 zeroext %0, i32 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u32_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1788,7 +1788,7 @@ define i128 @select_cc_u32_i128(i32 zeroext %0, i32 zeroext %1, i128 %2, i128 %3
 define i128 @select_cc_i64_i128(i64 %0, i64 %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i64_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1803,7 +1803,7 @@ define i128 @select_cc_i64_i128(i64 %0, i64 %1, i128 %2, i128 %3) {
 define i128 @select_cc_u64_i128(i64 %0, i64 %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u64_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1912,7 +1912,7 @@ define i128 @select_cc_i1_u128(i1 zeroext %0, i1 zeroext %1, i128 %2, i128 %3) {
 define i128 @select_cc_i8_u128(i8 signext %0, i8 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i8_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1927,7 +1927,7 @@ define i128 @select_cc_i8_u128(i8 signext %0, i8 signext %1, i128 %2, i128 %3) {
 define i128 @select_cc_u8_u128(i8 zeroext %0, i8 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u8_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1942,7 +1942,7 @@ define i128 @select_cc_u8_u128(i8 zeroext %0, i8 zeroext %1, i128 %2, i128 %3) {
 define i128 @select_cc_i16_u128(i16 signext %0, i16 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i16_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1957,7 +1957,7 @@ define i128 @select_cc_i16_u128(i16 signext %0, i16 signext %1, i128 %2, i128 %3
 define i128 @select_cc_u16_u128(i16 zeroext %0, i16 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u16_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1972,7 +1972,7 @@ define i128 @select_cc_u16_u128(i16 zeroext %0, i16 zeroext %1, i128 %2, i128 %3
 define i128 @select_cc_i32_u128(i32 signext %0, i32 signext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i32_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1987,7 +1987,7 @@ define i128 @select_cc_i32_u128(i32 signext %0, i32 signext %1, i128 %2, i128 %3
 define i128 @select_cc_u32_u128(i32 zeroext %0, i32 zeroext %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u32_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2002,7 +2002,7 @@ define i128 @select_cc_u32_u128(i32 zeroext %0, i32 zeroext %1, i128 %2, i128 %3
 define i128 @select_cc_i64_u128(i64 %0, i64 %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_i64_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2017,7 +2017,7 @@ define i128 @select_cc_i64_u128(i64 %0, i64 %1, i128 %2, i128 %3) {
 define i128 @select_cc_u64_u128(i64 %0, i64 %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: select_cc_u64_u128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2124,7 +2124,7 @@ define float @select_cc_i1_float(i1 zeroext %0, i1 zeroext %1, float %2, float %
 define float @select_cc_i8_float(i8 signext %0, i8 signext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_i8_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2137,7 +2137,7 @@ define float @select_cc_i8_float(i8 signext %0, i8 signext %1, float %2, float %
 define float @select_cc_u8_float(i8 zeroext %0, i8 zeroext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_u8_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2150,7 +2150,7 @@ define float @select_cc_u8_float(i8 zeroext %0, i8 zeroext %1, float %2, float %
 define float @select_cc_i16_float(i16 signext %0, i16 signext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_i16_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2163,7 +2163,7 @@ define float @select_cc_i16_float(i16 signext %0, i16 signext %1, float %2, floa
 define float @select_cc_u16_float(i16 zeroext %0, i16 zeroext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_u16_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2176,7 +2176,7 @@ define float @select_cc_u16_float(i16 zeroext %0, i16 zeroext %1, float %2, floa
 define float @select_cc_i32_float(i32 signext %0, i32 signext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_i32_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2189,7 +2189,7 @@ define float @select_cc_i32_float(i32 signext %0, i32 signext %1, float %2, floa
 define float @select_cc_u32_float(i32 zeroext %0, i32 zeroext %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_u32_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2202,7 +2202,7 @@ define float @select_cc_u32_float(i32 zeroext %0, i32 zeroext %1, float %2, floa
 define float @select_cc_i64_float(i64 %0, i64 %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_i64_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2215,7 +2215,7 @@ define float @select_cc_i64_float(i64 %0, i64 %1, float %2, float %3) {
 define float @select_cc_u64_float(i64 %0, i64 %1, float %2, float %3) {
 ; CHECK-LABEL: select_cc_u64_float:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2310,7 +2310,7 @@ define double @select_cc_i1_double(i1 zeroext %0, i1 zeroext %1, double %2, doub
 define double @select_cc_i8_double(i8 signext %0, i8 signext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_i8_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2323,7 +2323,7 @@ define double @select_cc_i8_double(i8 signext %0, i8 signext %1, double %2, doub
 define double @select_cc_u8_double(i8 zeroext %0, i8 zeroext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_u8_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2336,7 +2336,7 @@ define double @select_cc_u8_double(i8 zeroext %0, i8 zeroext %1, double %2, doub
 define double @select_cc_i16_double(i16 signext %0, i16 signext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_i16_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2349,7 +2349,7 @@ define double @select_cc_i16_double(i16 signext %0, i16 signext %1, double %2, d
 define double @select_cc_u16_double(i16 zeroext %0, i16 zeroext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_u16_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2362,7 +2362,7 @@ define double @select_cc_u16_double(i16 zeroext %0, i16 zeroext %1, double %2, d
 define double @select_cc_i32_double(i32 signext %0, i32 signext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_i32_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2375,7 +2375,7 @@ define double @select_cc_i32_double(i32 signext %0, i32 signext %1, double %2, d
 define double @select_cc_u32_double(i32 zeroext %0, i32 zeroext %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_u32_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2388,7 +2388,7 @@ define double @select_cc_u32_double(i32 zeroext %0, i32 zeroext %1, double %2, d
 define double @select_cc_i64_double(i64 %0, i64 %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_i64_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2401,7 +2401,7 @@ define double @select_cc_i64_double(i64 %0, i64 %1, double %2, double %3) {
 define double @select_cc_u64_double(i64 %0, i64 %1, double %2, double %3) {
 ; CHECK-LABEL: select_cc_u64_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -2498,7 +2498,7 @@ define fp128 @select_cc_i1_quad(i1 zeroext %0, i1 zeroext %1, fp128 %2, fp128 %3
 define fp128 @select_cc_i8_quad(i8 signext %0, i8 signext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_i8_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2513,7 +2513,7 @@ define fp128 @select_cc_i8_quad(i8 signext %0, i8 signext %1, fp128 %2, fp128 %3
 define fp128 @select_cc_u8_quad(i8 zeroext %0, i8 zeroext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_u8_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2528,7 +2528,7 @@ define fp128 @select_cc_u8_quad(i8 zeroext %0, i8 zeroext %1, fp128 %2, fp128 %3
 define fp128 @select_cc_i16_quad(i16 signext %0, i16 signext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_i16_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2543,7 +2543,7 @@ define fp128 @select_cc_i16_quad(i16 signext %0, i16 signext %1, fp128 %2, fp128
 define fp128 @select_cc_u16_quad(i16 zeroext %0, i16 zeroext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_u16_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2558,7 +2558,7 @@ define fp128 @select_cc_u16_quad(i16 zeroext %0, i16 zeroext %1, fp128 %2, fp128
 define fp128 @select_cc_i32_quad(i32 signext %0, i32 signext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_i32_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2573,7 +2573,7 @@ define fp128 @select_cc_i32_quad(i32 signext %0, i32 signext %1, fp128 %2, fp128
 define fp128 @select_cc_u32_quad(i32 zeroext %0, i32 zeroext %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_u32_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2588,7 +2588,7 @@ define fp128 @select_cc_u32_quad(i32 zeroext %0, i32 zeroext %1, fp128 %2, fp128
 define fp128 @select_cc_i64_quad(i64 %0, i64 %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_i64_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -2603,7 +2603,7 @@ define fp128 @select_cc_i64_quad(i64 %0, i64 %1, fp128 %2, fp128 %3) {
 define fp128 @select_cc_u64_quad(i64 %0, i64 %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: select_cc_u64_quad:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4

@@ -2,7 +2,7 @@
 
 define signext i8 @func1(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: func1:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -36,7 +36,7 @@ declare signext i32 @ret(i32)
 
 define signext i32 @func2(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: func2:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -66,7 +66,7 @@ join:
 
 define signext i32 @func3(i32 %a, i32 %b) {
 ; CHECK-LABEL: func3:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -96,7 +96,7 @@ join:
 
 define signext i32 @func4(i64 %a, i64 %b) {
 ; CHECK-LABEL: func4:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brle.l %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -126,7 +126,7 @@ join:
 
 define signext i32 @func5(i8 zeroext %a, i8 zeroext %b) {
 ; CHECK-LABEL: func5:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    brle.w 0, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -157,7 +157,7 @@ join:
 
 define signext i32 @func6(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: func6:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    brle.w 0, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -188,7 +188,7 @@ join:
 
 define signext i32 @func7(i32 %a, i32 %b) {
 ; CHECK-LABEL: func7:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    brle.w 0, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -219,7 +219,7 @@ join:
 
 define signext i32 @func8(float %a, float %b) {
 ; CHECK-LABEL: func8:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brlenan.s %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -249,7 +249,7 @@ join:
 
 define signext i32 @func9(double %a, double %b) {
 ; CHECK-LABEL: func9:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    brlenan.d %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -279,7 +279,7 @@ join:
 
 define signext i32 @func10(double %a, double %b) {
 ; CHECK-LABEL: func10:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       .LBB{{[0-9]+}}_5: # %entry
 ; CHECK-NEXT:    lea.sl %s1, 1075052544
 ; CHECK-NEXT:    brlenan.d %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -342,7 +342,7 @@ define signext i32 @func11(fp128, fp128) {
 define signext i32 @func12(i128, i128) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmps.l %s4, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s4, %s1, %s3
 ; CHECK-NEXT:    cmps.l %s1, %s3, %s1
 ; CHECK-NEXT:    xor %s1, -1, %s1
 ; CHECK-NEXT:    srl %s1, %s1, 63
@@ -380,7 +380,7 @@ define signext i32 @func12(i128, i128) {
 define signext i32 @func13(i128, i128) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmps.l %s4, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s4, %s1, %s3
 ; CHECK-NEXT:    cmpu.l %s1, %s3, %s1
 ; CHECK-NEXT:    xor %s1, -1, %s1
 ; CHECK-NEXT:    srl %s1, %s1, 63

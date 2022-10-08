@@ -4,7 +4,7 @@
 define signext i32 @brind(i32 signext %0) {
 ; CHECK-LABEL: brind:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s1, 1, %s0
+; CHECK-NEXT:    cmpu.w %s1, %s0, (63)0
 ; CHECK-NEXT:    lea %s2, .Ltmp0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, .Ltmp0@hi(, %s2)

@@ -3063,11 +3063,13 @@ static bool isSimm7(SDValue V) {
       return isInt<7>(C->getSExtValue());
   } else if (VT.isFloatingPoint()) {
     if (ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(V)) {
-      const APInt &Imm = C->getValueAPF().bitcastToAPInt();
-      uint64_t Val = Imm.getSExtValue();
-      if (Imm.getBitWidth() == 32)
-        Val <<= 32; // Immediate value of float place at higher bits on VE.
-      return isInt<7>(Val);
+      if (VT == MVT::f32 || VT == MVT::f64) {
+        const APInt &Imm = C->getValueAPF().bitcastToAPInt();
+        uint64_t Val = Imm.getSExtValue();
+        if (Imm.getBitWidth() == 32)
+          Val <<= 32; // Immediate value of float place at higher bits on VE.
+        return isInt<7>(Val);
+      }
     }
   }
   return false;
@@ -3125,13 +3127,18 @@ static EVT decideCompType(EVT SrcVT) {
   return SrcVT;
 }
 
-static bool safeWithoutComp(EVT SrcVT, bool Signed) {
+static bool safeWithoutComp(EVT SrcVT, bool Signed, bool WithCMov) {
   if (SrcVT.isFloatingPoint()) {
     // For the case of floating point setcc, only unordered comparison
     // or general comparison with -enable-no-nans-fp-math option reach
     // here, so it is safe even if values are NaN.  Only f128 doesn't
     // safe since VE uses f64 result of f128 comparison.
     return SrcVT != MVT::f128;
+  }
+  if (WithCMov) {
+    // For the case of integer setcc with cmov, all signed comparison with 0
+    // are safe.
+    return Signed ? true : false;
   }
   // For the case of integer setcc, only signed 64 bits comparison is safe.
   // For unsigned, "CMPU 0x80000000, 0" has to be greater than 0, but it becomes
@@ -3141,20 +3148,25 @@ static bool safeWithoutComp(EVT SrcVT, bool Signed) {
 }
 
 static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
-                                  bool Commutable, bool Signed, const SDLoc &DL,
-                                  SelectionDAG &DAG) {
-  if (Commutable) {
+                                  bool Commutable, bool Signed, bool WithCMov,
+                                  const SDLoc &DL, SelectionDAG &DAG) {
+  if (Commutable && VT != MVT::f128) {
     // VE comparison can holds simm7 at lhs and mimm at rhs.  Swap operands
     // if it matches.
-    if (!isSimm7(LHS) && !isMImm(RHS) && (isSimm7(RHS) || isMImm(LHS)))
+    if (isMImm(RHS)) {
+      // VE's comparison can handle MImm in RHS, so nothing to do.
+    } else if (isSimm7(RHS)) {
+      // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
+      // update condition code.
       std::swap(LHS, RHS);
+    }
     assert(!(isNullConstant(LHS) || isNullFPConstant(LHS)) && "lhs is 0!");
   }
 
   // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate an instruction for comparison.
   EVT CompVT = decideCompType(VT);
-  if (CompVT == VT && safeWithoutComp(VT, Signed) &&
+  if (CompVT == VT && (Commutable || safeWithoutComp(VT, Signed, WithCMov)) &&
       (isNullConstant(RHS) || isNullFPConstant(RHS))) {
     return LHS;
   }
@@ -3184,7 +3196,7 @@ SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
   // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
   SDValue CompNode =
-      generateComparison(SrcVT, Op0, Op1, false, Signed, DL, DAG);
+      generateComparison(SrcVT, Op0, Op1, false, Signed, false, DL, DAG);
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3315,7 +3327,8 @@ SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
   // Compare values.  If Op1 is 0 and it is safe to calculate without
   // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
-  SDValue CompNode = generateComparison(SrcVT, Op0, Op1, true, true, DL, DAG);
+  SDValue CompNode =
+      generateComparison(SrcVT, Op0, Op1, true, true, false, DL, DAG);
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3420,7 +3433,7 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
     SDLoc DL(N);
     EVT CompVT = decideCompType(SrcVT);
     SDValue CompNode = generateComparison(
-        SrcVT, N->getOperand(0), N->getOperand(1), true, true, DL, DAG);
+        SrcVT, N->getOperand(0), N->getOperand(1), true, true, false, DL, DAG);
     SDValue SetCC = DAG.getNode(ISD::SETCC, DL, MVT::i32, CompNode,
                                 DAG.getConstant(0, DL, CompVT),
                                 DAG.getCondCode(ISD::SETUGT));
@@ -3492,6 +3505,7 @@ SDValue VETargetLowering::combineExtBoolTrunc(SDNode *N,
   return SDValue();
 }
 
+static bool isI32InsnAllUses(const SDNode *User, const SDNode *N);
 static bool isI32Insn(const SDNode *User, const SDNode *N) {
   switch (User->getOpcode()) {
   default:
@@ -3527,6 +3541,17 @@ static bool isI32Insn(const SDNode *User, const SDNode *N) {
     if (User->getOperand(2).getNode() != N &&
         User->getOperand(3).getNode() != N)
       return true;
+    return isI32InsnAllUses(User, N);
+  case VEISD::CMOV:
+    // CMOV in (cmov (trunc ...), true, false, int-comparison) is safe.
+    // However, trunc in true or false clauses is not safe.
+    if (User->getOperand(1).getNode() != N &&
+        User->getOperand(2).getNode() != N &&
+        isa<ConstantSDNode>(User->getOperand(3))) {
+      VECC::CondCode VECCVal = static_cast<VECC::CondCode>(
+          cast<ConstantSDNode>(User->getOperand(3))->getZExtValue());
+      return isIntVECondCode(VECCVal);
+    }
     [[fallthrough]];
   case ISD::AND:
   case ISD::OR:
@@ -3535,33 +3560,39 @@ static bool isI32Insn(const SDNode *User, const SDNode *N) {
   case ISD::CopyToReg:
     // Check all use of selections, bit operations, and copies.  If all of them
     // are safe, optimize truncate to extract_subreg.
-    for (const SDNode *U : User->uses()) {
-      switch (U->getOpcode()) {
-      default:
-        // If the use is an instruction which treats the source operand as i32,
-        // it is safe to avoid truncate here.
-        if (isI32Insn(U, N))
-          continue;
-        break;
-      case ISD::ANY_EXTEND:
-      case ISD::SIGN_EXTEND:
-      case ISD::ZERO_EXTEND: {
-        // Special optimizations to the combination of ext and trunc.
-        // (ext ... (select ... (trunc ...))) is safe to avoid truncate here
-        // since this truncate instruction clears higher 32 bits which is filled
-        // by one of ext instructions later.
-        assert(N->getValueType(0) == MVT::i32 &&
-               "find truncate to not i32 integer");
-        if (User->getOpcode() == ISD::SELECT_CC ||
-            User->getOpcode() == ISD::SELECT)
-          continue;
-        break;
-      }
-      }
-      return false;
-    }
-    return true;
+    return isI32InsnAllUses(User, N);
   }
+}
+
+static bool isI32InsnAllUses(const SDNode *User, const SDNode *N) {
+  // Check all use of User node.  If all of them are safe, optimize
+  // truncate to extract_subreg.
+  for (const SDNode *U : User->uses()) {
+    switch (U->getOpcode()) {
+    default:
+      // If the use is an instruction which treats the source operand as i32,
+      // it is safe to avoid truncate here.
+      if (isI32Insn(U, N))
+        continue;
+      break;
+    case ISD::ANY_EXTEND:
+    case ISD::SIGN_EXTEND:
+    case ISD::ZERO_EXTEND: {
+      // Special optimizations to the combination of ext and trunc.
+      // (ext ... (select ... (trunc ...))) is safe to avoid truncate here
+      // since this truncate instruction clears higher 32 bits which is filled
+      // by one of ext instructions later.
+      assert(N->getValueType(0) == MVT::i32 &&
+             "find truncate to not i32 integer");
+      if (User->getOpcode() == ISD::SELECT_CC ||
+          User->getOpcode() == ISD::SELECT || User->getOpcode() == VEISD::CMOV)
+        continue;
+      break;
+    }
+    }
+    return false;
+  }
+  return true;
 }
 
 // Optimize TRUNCATE in DAG combining.  Optimizing it in CUSTOM lower is
@@ -3683,28 +3714,62 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   SDValue RHS = N->getOperand(1);
   SDValue True = N->getOperand(2);
   SDValue False = N->getOperand(3);
-  bool Modify = false;
 
+  // We handle only scalar SELECT_CC.
   EVT VT = N->getValueType(0);
   if (VT.isVector())
     return SDValue();
 
+  // We handle only i32/i64/f32/f64/f128 comparisons.
+  EVT LHSVT = LHS.getValueType();
+  assert(LHSVT == RHS.getValueType());
+  switch (LHSVT.getSimpleVT().SimpleTy) {
+  case MVT::i32:
+  case MVT::i64:
+  case MVT::f32:
+  case MVT::f64:
+  case MVT::f128:
+    break;
+  default:
+    // Return SDValue to let llvm handle other types.
+    return SDValue();
+  }
+
+  if (isMImm(RHS)) {
+    // VE's comparison can handle MImm in RHS, so nothing to do.
+  } else if (isSimm7(RHS)) {
+    // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
+    // update condition code.
+    std::swap(LHS, RHS);
+    CC = getSetCCSwappedOperands(CC);
+  }
   if (isMImm(True)) {
-    // Doesn't swap True and False values.
+    // VE's condition move can handle MImm in True clause, so nothing to do.
   } else if (isMImm(False)) {
-    // Swap True and False values.  Inverse CC also.
+    // VE's condition move can handle MImm in True clause, so swap True and
+    // False clauses if False has MImm value.  And, update condition code.
     std::swap(True, False);
-    CC = getSetCCInverse(CC, LHS.getValueType());
-    Modify = true;
+    CC = getSetCCInverse(CC, LHSVT);
   }
 
-  if (Modify) {
-    SDLoc DL(N);
-    SelectionDAG &DAG = DCI.DAG;
-    return DAG.getSelectCC(SDLoc(N), LHS, RHS, True, False, CC);
-  }
+  SDLoc DL(N);
+  SelectionDAG &DAG = DCI.DAG;
 
-  return SDValue();
+  bool Commutable = isIntEqualitySetCC(CC);
+  bool Signed = isSignedIntSetCC(CC);
+  bool WithCMov = true;
+  SDValue CompNode = generateComparison(LHSVT, LHS, RHS, Commutable, Signed,
+                                        WithCMov, DL, DAG);
+
+  VECC::CondCode VECCVal;
+  if (LHSVT.isFloatingPoint()) {
+    VECCVal = fpCondCode2Fcc(CC);
+  } else {
+    VECCVal = intCondCode2Icc(CC);
+  }
+  SDValue Ops[] = {CompNode, True, False,
+                   DAG.getConstant(VECCVal, DL, MVT::i32)};
+  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
 }
 
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,

@@ -530,14 +530,14 @@ def SDTCmovOp : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
                                      SDTCisVT<4, i32>]>;
 def EQV : SDNode<"VEISD::EQV", SDTIntBinOp>;
 def XOR : SDNode<"VEISD::XOR", SDTIntBinOp>;
-def CMPI : SDNode<"VEISD::CMPI", SDTIntBinOp>;
-def CMPU : SDNode<"VEISD::CMPU", SDTIntBinOp>;
-def CMPF : SDNode<"VEISD::CMPF", SDTFPBinOp>;
+def cmpi : SDNode<"VEISD::CMPI", SDTIntBinOp>;
+def cmpu : SDNode<"VEISD::CMPU", SDTIntBinOp>;
+def cmpf : SDNode<"VEISD::CMPF", SDTFPBinOp>;
 def SDTFPCmpQOp : SDTypeProfile<1, 2, [
   SDTCisSameAs<1, 2>, SDTCisFP<0>, SDTCisFP<2>
 ]>;
 def CMPQ : SDNode<"VEISD::CMPQ", SDTFPCmpQOp>;
-def CMOV : SDNode<"VEISD::CMOV", SDTCmovOp>;
+def cmov : SDNode<"VEISD::CMOV", SDTCmovOp>;
 
 def VEeh_sjlj_setjmp: SDNode<"VEISD::EH_SJLJ_SETJMP",
                              SDTypeProfile<1, 1, [SDTCisInt<0>,
@@ -1364,15 +1364,15 @@ defm DIVSL : RRNCm<"divs.l", 0x7F, I64, i64, sdiv>;
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 
 // Section 8.4.14 - CMP (Compare)
-defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, CMPU>;
-let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, CMPU>;
+defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, cmpu>;
+let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, cmpu>;
 
 // Section 8.4.15 - CPS (Compare Single)
 defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32>;
-let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32, CMPI>;
+let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32, cmpi>;
 
 // Section 8.4.16 - CPX (Compare)
-defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64, CMPI>;
+defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64, cmpi>;
 
 // Section 8.4.17 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: sx/zx, cw: max/min
@@ -1451,13 +1451,13 @@ def : Pat<(i32 (bswap (i32 mimm:$src))),
 // Section 8.5.11 - CMOV (Conditional Move)
 let isReMaterializable = 1 in {
 let cw = 0, cw2 = 0 in
-defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
+defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, cmov>;
 let cw = 1, cw2 = 0 in
-defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32, CMOV>;
+defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32, cmov>;
 let cw = 0, cw2 = 1 in
-defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, CMOV, simm7fp>;
+defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, cmov, simm7fp>;
 let cw = 1, cw2 = 1 in
-defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, CMOV, simm7fp>;
+defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, cmov, simm7fp>;
 }
 def : MnemonicAlias<"cmov.l", "cmov.l.at">;
 def : MnemonicAlias<"cmov.w", "cmov.w.at">;
@@ -1534,9 +1534,9 @@ let cx = 1 in
 defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv, simm7fp, mimmfp32>;
 
 // Section 8.7.5 - FCP (Floating Compare)
-defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64, CMPF>;
+defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64, cmpf>;
 let cx = 1 in
-defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF, simm7fp, mimmfp32>;
+defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, cmpf, simm7fp, mimmfp32>;
 
 // Section 8.7.6 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: double/float, cw: max/min
@@ -2332,230 +2332,19 @@ class cmov128rr<Instruction INSN> :
                      (EXTRACT_SUBREG $t, sub_even),
                      (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
-// Generic SELECTCC pattern matches
-//
-//   CMP  %tmp, %l, %r       ; compare %l and %r
-//   or   %res, %f, (0)1     ; initialize by %f
-//   CMOV %res, %t, %tmp     ; set %t if %tmp is true
-
-multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
-                      RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
-                      Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, zero, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmovrr<cmovrr> (icond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, zero, (oty mOp:$t), oty:$f, CCSIOp:$cond)),
-            (cmovrm<cmovrm, MOP> (icond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmovrr<cmovrr> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
-                           CCSIOp:$cond)),
-            (cmovrm<cmovrm, MOP> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
-                           CCSIOp:$cond)),
-            (cmovirrr<CMPIir, cmovrr, LO7> (icond2ccSwap $cond), $r, $l, $t,
-                                           $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
-                           CCSIOp:$cond)),
-            (cmovirrm<CMPIir, cmovrm, LO7, MOP> (icond2ccSwap $cond), $r, $l,
-                                                $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCUIOp:$cond)),
-            (cmovrr<cmovrr> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
-                           CCUIOp:$cond)),
-            (cmovrm<cmovrm, MOP> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
-                           CCUIOp:$cond)),
-            (cmovirrr<CMPUir, cmovrr, LO7> (icond2ccSwap $cond), $r, $l, $t,
-                                           $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
-                           CCUIOp:$cond)),
-            (cmovirrm<CMPUir, cmovrm, LO7, MOP> (icond2ccSwap $cond), $r, $l,
-                                                $t, $f)>;
-}
-multiclass SEL64CMPFm<ValueType oty, ValueType cty, string Insn,
-                      RR CMPir, RR CMPrr,
-                      Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, fpzero, oty:$t, oty:$f, cond:$cond)),
-            (cmovrr<cmovrr> (fcond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, fpzero, (oty mOp:$t), oty:$f, cond:$cond)),
-            (cmovrm<cmovrm, MOP> (fcond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmovrr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7fp:$r), oty:$t, oty:$f,
-                           cond:$cond)),
-            (cmovirrr<CMPir, cmovrr, LO7FP> (fcond2ccSwap $cond), $r, $l, $t,
-                                            $f)>;
-}
-multiclass SEL64CMPF128m<ValueType oty, ValueType cty, string Insn,
-                         RR CMPir, RR CMPrr,
-                         Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmovrr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7fp:$r), oty:$t, oty:$f,
-                           cond:$cond)),
-            (cmovirrr<CMPir, cmovrr, LO7FP>
-                (fcond2ccSwap $cond), $r, $l, $t, $f)>;
-}
-defm : SEL64CMPIm<i64, i32, "CMOVW", CMPSWSXir, CMPSWSXrr, CMPUWir, CMPUWrr>;
-defm : SEL64CMPIm<i64, i64, "CMOVL", CMPSLir, CMPSLrr, CMPULir, CMPULrr>;
-defm : SEL64CMPFm<i64, f32, "CMOVS", FCMPSir, FCMPSrr>;
-defm : SEL64CMPFm<i64, f64, "CMOVD", FCMPDir, FCMPDrr>;
-defm : SEL64CMPF128m<i64, f128, "CMOVD", FCMPQir, FCMPQrr>;
-defm : SEL64CMPIm<f64, i32, "CMOVW", CMPSWSXir, CMPSWSXrr, CMPUWir, CMPUWrr,
-                    mimmfp, MIMMFP>;
-defm : SEL64CMPIm<f64, i64, "CMOVL", CMPSLir, CMPSLrr, CMPULir, CMPULrr,
-                    mimmfp, MIMMFP>;
-defm : SEL64CMPFm<f64, f32, "CMOVS", FCMPSir, FCMPSrr, mimmfp, MIMMFP>;
-defm : SEL64CMPFm<f64, f64, "CMOVD", FCMPDir, FCMPDrr, mimmfp, MIMMFP>;
-defm : SEL64CMPF128m<f64, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp, MIMMFP>;
-
-multiclass SEL32CMPIm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                      string Insn, RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
-                      Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, zero, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmov32rr<cmovrr, sub_oty> (icond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, zero, (oty mOp:$t), oty:$f, CCSIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty, MOP> (icond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmov32rr<cmovrr, sub_oty>
-                (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
-                           CCSIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty, MOP>
-                (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
-                           CCSIOp:$cond)),
-            (cmov32irrr<CMPIir, cmovrr, sub_oty, LO7>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
-                           CCSIOp:$cond)),
-            (cmov32irrm<CMPIir, cmovrm, sub_oty, LO7, MOP>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCUIOp:$cond)),
-            (cmov32rr<cmovrr, sub_oty>
-                (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
-                           CCUIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty, MOP>
-                (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
-                           CCUIOp:$cond)),
-            (cmov32irrr<CMPUir, cmovrr, sub_oty, LO7>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
-                           CCUIOp:$cond)),
-            (cmov32irrm<CMPUir, cmovrm, sub_oty, LO7, MOP>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-}
-multiclass SEL32CMPFm<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                      string Insn, RR CMPir, RR CMPrr,
-                      Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, fpzero, oty:$t, oty:$f, cond:$cond)),
-            (cmov32rr<cmovrr, sub_oty> (fcond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmov32rr<cmovrr, sub_oty>
-                (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7fp:$r), oty:$t, oty:$f,
-                           cond:$cond)),
-            (cmov32irrr<CMPir, cmovrr, sub_oty, LO7FP>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-}
-multiclass SEL32CMPF128m<ValueType oty, SubRegIndex sub_oty, ValueType cty,
-                         string Insn, RR CMPir, RR CMPrr,
-                         Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-  defvar cmovrm = !cast<Instruction>(Insn#"rm");
-
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmov32rr<cmovrr, sub_oty>
-                (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, (cty simm7fp:$r), oty:$t, oty:$f,
-                           cond:$cond)),
-            (cmov32irrr<CMPir, cmovrr, sub_oty, LO7FP>
-                (icond2ccSwap $cond), $r, $l, $t, $f)>;
-}
-defm : SEL32CMPIm<i32, sub_i32, i32, "CMOVW", CMPSWSXir, CMPSWSXrr, CMPUWir,
-                  CMPUWrr>;
-defm : SEL32CMPIm<i32, sub_i32, i64, "CMOVL", CMPSLir, CMPSLrr, CMPULir,
-                  CMPULrr>;
-defm : SEL32CMPFm<i32, sub_i32, f32, "CMOVS", FCMPSir, FCMPSrr>;
-defm : SEL32CMPFm<i32, sub_i32, f64, "CMOVD", FCMPDir, FCMPDrr>;
-defm : SEL32CMPF128m<i32, sub_i32, f128, "CMOVD", FCMPQir, FCMPQrr>;
-defm : SEL32CMPIm<f32, sub_f32, i32, "CMOVW", CMPSWSXir, CMPSWSXrr, CMPUWir,
-                  CMPUWrr, mimmfp, MIMMFP>;
-defm : SEL32CMPIm<f32, sub_f32, i64, "CMOVL", CMPSLir, CMPSLrr, CMPULir,
-                  CMPULrr, mimmfp, MIMMFP>;
-defm : SEL32CMPFm<f32, sub_f32, f32, "CMOVS", FCMPSir, FCMPSrr, mimmfp, MIMMFP>;
-defm : SEL32CMPFm<f32, sub_f32, f64, "CMOVD", FCMPDir, FCMPDrr, mimmfp, MIMMFP>;
-defm : SEL32CMPF128m<f32, sub_f32, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp,
-                     MIMMFP>;
-
-multiclass SEL128CMPIm<ValueType oty, ValueType cty,
-                       string Insn, RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr,
-                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-
-  def : Pat<(oty (selectcc cty:$l, zero, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmov128rr<cmovrr> (icond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCSIOp:$cond)),
-            (cmov128rr<cmovrr> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCUIOp:$cond)),
-            (cmov128rr<cmovrr> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
-}
-multiclass SEL128CMPFm<ValueType oty, ValueType cty,
-                       string Insn, RR CMPir, RR CMPrr,
-                       Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-
-  def : Pat<(oty (selectcc cty:$l, fpzero, oty:$t, oty:$f, cond:$cond)),
-            (cmov128rr<cmovrr> (fcond2cc $cond), $l, $t, $f)>;
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmov128rr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-}
-multiclass SEL128CMPF128m<ValueType oty, ValueType cty,
-                          string Insn, RR CMPir, RR CMPrr,
-                          Operand mOp = mimm, SDNodeXForm MOP = MIMM> {
-  defvar cmovrr = !cast<Instruction>(Insn#"rr");
-
-  def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, cond:$cond)),
-            (cmov128rr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
-}
-defm : SEL128CMPIm<f128, i32, "CMOVW", CMPSWSXir, CMPSWSXrr, CMPUWir, CMPUWrr,
-                   mimmfp, MIMMFP>;
-defm : SEL128CMPIm<f128, i64, "CMOVL", CMPSLir, CMPSLrr, CMPULir, CMPULrr,
-                   mimmfp, MIMMFP>;
-defm : SEL128CMPFm<f128, f32, "CMOVS", FCMPSir, FCMPSrr, mimmfp, MIMMFP>;
-defm : SEL128CMPFm<f128, f64, "CMOVD", FCMPDir, FCMPDrr, mimmfp, MIMMFP>;
-defm : SEL128CMPF128m<f128, f128, "CMOVD", FCMPQir, FCMPQrr, mimmfp, MIMMFP>;
-
 // Generic CMOV pattern matches
 //   CMOV accepts i64 $t, $f, and result.  So, we extend it to support
 //   i32/f32/f64/f128 $t, $f, and result.
 
 // CMOV for i32
 multiclass CMOVI32m<ValueType TY, string Insn> {
-  def : Pat<(i32 (CMOV TY:$cmp, i32:$t, i32:$f, (i32 CCOp:$cond))),
+  def : Pat<(i32 (cmov TY:$cmp, i32:$t, i32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rr") (CCOP $cond), $cmp,
                            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
                            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
                 sub_i32)>;
-  def : Pat<(i32 (CMOV TY:$cmp, (i32 mimm:$t), i32:$f, (i32 CCOp:$cond))),
+  def : Pat<(i32 (cmov TY:$cmp, (i32 mimm:$t), i32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rm") (CCOP $cond), $cmp,
                            (MIMM $t),
@@ -2569,14 +2358,14 @@ defm : CMOVI32m<f32, "CMOVS">;
 
 // CMOV for f32
 multiclass CMOVF32m<ValueType TY, string Insn> {
-  def : Pat<(f32 (CMOV TY:$cmp, f32:$t, f32:$f, (i32 CCOp:$cond))),
+  def : Pat<(f32 (cmov TY:$cmp, f32:$t, f32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rr")
                     (CCOP $cond), $cmp,
                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32),
                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
                 sub_f32)>;
-  def : Pat<(f32 (CMOV TY:$cmp, (f32 mimmfp:$t), f32:$f, (i32 CCOp:$cond))),
+  def : Pat<(f32 (cmov TY:$cmp, (f32 mimmfp:$t), f32:$f, (i32 CCOp:$cond))),
             (EXTRACT_SUBREG
                 (!cast<Instruction>(Insn#"rm")
                     (CCOP $cond), $cmp, (MIMMFP $t),
@@ -2590,9 +2379,9 @@ defm : CMOVF32m<f32, "CMOVS">;
 
 // CMOV for f64
 multiclass CMOVF64m<ValueType TY, string Insn> {
-  def : Pat<(f64 (CMOV TY:$cmp, f64:$t, f64:$f, (i32 CCOp:$cond))),
+  def : Pat<(f64 (cmov TY:$cmp, f64:$t, f64:$f, (i32 CCOp:$cond))),
             (!cast<Instruction>(Insn#"rr") (CCOP $cond), $cmp, $t, $f)>;
-  def : Pat<(f64 (CMOV TY:$cmp, (f64 mimmfp:$t), f64:$f, (i32 CCOp:$cond))),
+  def : Pat<(f64 (cmov TY:$cmp, (f64 mimmfp:$t), f64:$f, (i32 CCOp:$cond))),
             (!cast<Instruction>(Insn#"rm") (CCOP $cond), $cmp, (MIMMFP $t),
                                            $f)>;
 }
@@ -2603,7 +2392,7 @@ defm : CMOVF64m<f32, "CMOVS">;
 
 // CMOV for f128
 multiclass CMOVF128m<ValueType TY, string Insn> {
-  def : Pat<(f128 (CMOV TY:$cmp, f128:$t, f128:$f, (i32 CCOp:$cond))),
+  def : Pat<(f128 (cmov TY:$cmp, f128:$t, f128:$f, (i32 CCOp:$cond))),
             (INSERT_SUBREG
               (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
                 (!cast<Instruction>(Insn#"rr") (CCOP $cond), $cmp,
