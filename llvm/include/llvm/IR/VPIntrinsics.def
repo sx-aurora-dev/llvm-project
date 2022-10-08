@@ -286,6 +286,11 @@ VP_PROPERTY_BINARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_maxnum)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(maxnum)
 END_REGISTER_VP(vp_maxnum, VP_FMAXNUM)
+
+// llvm.vp.ceil(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
+END_REGISTER_VP(vp_ceil, VP_FCEIL)
+
 ///// } Floating-Point Arithmetic
 
 ///// Type Casts {
