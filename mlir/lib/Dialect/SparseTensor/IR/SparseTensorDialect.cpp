@@ -453,6 +453,20 @@ LogicalResult ConcatenateOp::verify() {
   return success();
 }
 
+LogicalResult InsertOp::verify() {
+  RankedTensorType ttp = getTensor().getType().cast<RankedTensorType>();
+  if (ttp.getRank() != static_cast<int64_t>(getIndices().size()))
+    return emitOpError("incorrect number of indices");
+  return success();
+}
+
+LogicalResult CompressOp::verify() {
+  RankedTensorType ttp = getTensor().getType().cast<RankedTensorType>();
+  if (ttp.getRank() != 1 + static_cast<int64_t>(getIndices().size()))
+    return emitOpError("incorrect number of indices");
+  return success();
+}
+
 LogicalResult ForeachOp::verify() {
   auto t = getTensor().getType().cast<RankedTensorType>();
   auto args = getBody()->getArguments();
@@ -471,7 +485,6 @@ LogicalResult ForeachOp::verify() {
     emitError(llvm::formatv("Unmatched element type between input tensor and "
                             "block argument, expected:{0}, got: {1}",
                             elemTp, valueTp));
-
   return success();
 }
 
@@ -517,7 +530,7 @@ LogicalResult SortOp::verify() {
                         bool checkEleType = true) -> LogicalResult {
     for (Value opnd : operands) {
       MemRefType mtp = opnd.getType().cast<MemRefType>();
-      uint64_t dim = mtp.getShape()[0];
+      int64_t dim = mtp.getShape()[0];
       // We can't check the size of dynamic dimension at compile-time, but all
       // xs and ys should have a dimension not less than n at runtime.
       if (n && dim != ShapedType::kDynamicSize && dim < n.value())
