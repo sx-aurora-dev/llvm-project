@@ -508,9 +508,6 @@ namespace llvm {
     bool isExtended512BitVector() const LLVM_READONLY;
     bool isExtended1024BitVector() const LLVM_READONLY;
     bool isExtended2048BitVector() const LLVM_READONLY;
-    bool isExtended4096BitVector() const LLVM_READONLY;
-    bool isExtended8192BitVector() const LLVM_READONLY;
-    bool isExtended16384BitVector() const LLVM_READONLY;
     bool isExtendedFixedLengthVector() const LLVM_READONLY;
     bool isExtendedScalableVector() const LLVM_READONLY;
     EVT getExtendedVectorElementType() const;
