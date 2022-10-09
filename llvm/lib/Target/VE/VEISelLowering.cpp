@@ -1304,6 +1304,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::TRUNCATE);
 
   setTargetDAGCombine(ISD::SETCC);
+  setTargetDAGCombine(ISD::SELECT);
   setTargetDAGCombine(ISD::SELECT_CC);
 
   // Set function alignment to 16 bytes
@@ -3772,6 +3773,55 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
 }
 
+SDValue VETargetLowering::combineSelect(SDNode *N,
+                                        DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SELECT &&
+         "Should be called with a SELECT node");
+  ISD::CondCode CC = ISD::CondCode::SETNE;
+  SDValue Cond = N->getOperand(0);
+  SDValue True = N->getOperand(1);
+  SDValue False = N->getOperand(2);
+
+  // We handle only scalar SELECT.
+  EVT VT = N->getValueType(0);
+  if (VT.isVector())
+    return SDValue();
+
+  // We handle only i32 condition.
+  EVT VT0 = Cond.getValueType();
+  if (VT0 != MVT::i32)
+    return SDValue();
+
+  if (DCI.isBeforeLegalizeOps())
+    return SDValue();
+
+  // (select (setcc ...), true, false) may be optimized later, so
+  // don't combine them here.
+  if (Cond->getOpcode() == ISD::SETCC)
+    return SDValue();
+
+  if (isMImm(True)) {
+    // VE's condition move can handle MImm in True clause, so nothing to do.
+  } else if (isMImm(False)) {
+    // VE's condition move can handle MImm in True clause, so swap True and
+    // False clauses if False has MImm value.  And, update condition code.
+    std::swap(True, False);
+    CC = getSetCCInverse(CC, VT0);
+  }
+
+  SDLoc DL(N);
+  SelectionDAG &DAG = DCI.DAG;
+  VECC::CondCode VECCVal;
+  if (VT0.isFloatingPoint()) {
+    VECCVal = fpCondCode2Fcc(CC);
+  } else {
+    VECCVal = intCondCode2Icc(CC);
+  }
+  SDValue Ops[] = {Cond, True, False,
+                   DAG.getConstant(VECCVal, DL, MVT::i32)};
+  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
+}
+
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
@@ -3799,6 +3849,8 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
     return combineSetCC(N, DCI);
   case ISD::SELECT_CC:
     return combineSelectCC(N, DCI);
+  case ISD::SELECT:
+    return combineSelect(N, DCI);
   case ISD::TRUNCATE:
     return combineTRUNCATE(N, DCI);
   }

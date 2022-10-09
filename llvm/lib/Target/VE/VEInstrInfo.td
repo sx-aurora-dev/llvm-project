@@ -2250,88 +2250,6 @@ defm : SETCCFm<f32, CMOVSrm, FCMPSir, FCMPSrr>;
 defm : SETCCFm<f64, CMOVDrm, FCMPDir, FCMPDrr>;
 defm : SETCCF128m<f128, CMOVDrm, FCMPQir, FCMPQrr>;
 
-// Helper classes to construct selectcc patterns to optimize it.
-//
-//   Hiding INSERT_SUBREG/EXTRACT_SUBREG patterns.
-//
-// A pattern like
-//   (selectcc $l, $r, $t, $f, $cond)
-// is generally lowered to following instructions.
-//   CMP  $cmp, $l, $r
-//   LEA  $res, $f
-//   CMOV $res, $t, $cmp
-//
-// It's simple without any optimizations, but we want to optimize it like
-// below if it is possible.
-//
-// 1. immediate values
-//   CMPir  $cmp, $l, $r   ; $l can hold -64 to 63
-//   LEA    $res, $f
-//   CMOVrm $res, $t, $cmp ; $t can hold (0)0-(63)0 or (0)1-(63)1
-//
-// 2. immediate values with swap in CMP
-//   CMPir  $cmp, $r, $l          ; $r can hold -64 to 63
-//   LEA    $res, $f
-//   CMOVrm $res, $t, (swap $cmp) ; $t can hold (0)0-(63)0 or (0)1-(63)1
-//
-// We already swapped $t and $f in combineSelectCC, so no need to support it
-// here.
-
-class cmovrr<Instruction INSN> :
-    OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
-               (INSN $cond, $comp, $t, $f)>;
-class cmovrm<Instruction INSN, SDNodeXForm MOP = MIMM> :
-    OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
-               (INSN $cond, $comp, (MOP $t), $f)>;
-class cmovirrr<RR CMPIR, Instruction INSN,
-               SDNodeXForm IOP = LO7> :
-    OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
-               (INSN $cond, (CMPIR (IOP $l), $r), $t, $f)>;
-class cmovirrm<RR CMPIR, Instruction INSN,
-               SDNodeXForm IOP = LO7, SDNodeXForm MOP = MIMM> :
-    OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
-               (INSN $cond, (CMPIR (IOP $l), $r), (MOP $t), $f)>;
-class cmov32rr<Instruction INSN, SubRegIndex sub_oty> :
-    OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
-               (EXTRACT_SUBREG
-                   (INSN $cond, $comp,
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_oty),
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
-                   sub_oty)>;
-class cmov32rm<Instruction INSN, SubRegIndex sub_oty, SDNodeXForm MOP = MIMM> :
-    OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
-               (EXTRACT_SUBREG
-                   (INSN $cond, $comp,
-                         (MOP $t),
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
-                   sub_oty)>;
-class cmov32irrr<RR CMPIR, Instruction INSN, SubRegIndex sub_oty,
-                 SDNodeXForm IOP = LO7> :
-    OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
-               (EXTRACT_SUBREG
-                   (INSN $cond, (CMPIR (IOP $l), $r),
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_oty),
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
-                   sub_oty)>;
-class cmov32irrm<RR CMPIR, Instruction INSN, SubRegIndex sub_oty,
-                 SDNodeXForm IOP = LO7, SDNodeXForm MOP = MIMM> :
-    OutPatFrag<(ops node:$cond, node:$l, node:$r, node:$t, node:$f),
-               (EXTRACT_SUBREG
-                   (INSN $cond, (CMPIR (IOP $l), $r),
-                         (MOP $t),
-                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_oty)),
-                   sub_oty)>;
-class cmov128rr<Instruction INSN> :
-    OutPatFrag<(ops node:$cond, node:$comp, node:$t, node:$f),
-               (INSERT_SUBREG
-                 (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
-                   (INSN $cond, $comp,
-                       (EXTRACT_SUBREG $t, sub_odd),
-                       (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
-                 (INSN $cond, $comp,
-                     (EXTRACT_SUBREG $t, sub_even),
-                     (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
-
 // Generic CMOV pattern matches
 //   CMOV accepts i64 $t, $f, and result.  So, we extend it to support
 //   i32/f32/f64/f128 $t, $f, and result.
@@ -2406,42 +2324,6 @@ defm : CMOVF128m<i64, "CMOVL">;
 defm : CMOVF128m<i32, "CMOVW">;
 defm : CMOVF128m<f64, "CMOVD">;
 defm : CMOVF128m<f32, "CMOVS">;
-
-// Generic SELECT pattern matches
-// Use cmov.w for all cases since %pred holds i32.
-//
-//   CMOV.w.ne %res, %tval, %tmp  ; set tval if %tmp is true
-
-def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
-          (cmov32rr<CMOVWrr, sub_i32> CC_INE, $pred, $t, $f)>;
-def : Pat<(i32 (select i32:$pred, (i32 mimm:$t), i32:$f)),
-          (cmov32rm<CMOVWrm, sub_i32> CC_INE, $pred, $t, $f)>;
-def : Pat<(i32 (select i32:$pred, i32:$t, (i32 mimm:$f))),
-          (cmov32rm<CMOVWrm, sub_i32> CC_IEQ, $pred, $f, $t)>;
-
-def : Pat<(i64 (select i32:$pred, i64:$t, i64:$f)),
-          (cmovrr<CMOVWrr> CC_INE, $pred, $t, $f)>;
-def : Pat<(i64 (select i32:$pred, (i64 mimm:$t), i64:$f)),
-          (cmovrm<CMOVWrm, MIMM> CC_INE, $pred, $t, $f)>;
-def : Pat<(i64 (select i32:$pred, i64:$t, (i64 mimm:$f))),
-          (cmovrm<CMOVWrm, MIMM> CC_IEQ, $pred, $f, $t)>;
-
-def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
-          (cmov32rr<CMOVWrr, sub_f32> CC_INE, $pred, $t, $f)>;
-def : Pat<(f32 (select i32:$pred, (f32 mimmfp:$t), f32:$f)),
-          (cmov32rm<CMOVWrm, sub_f32, MIMMFP> CC_INE, $pred, $t, $f)>;
-def : Pat<(f32 (select i32:$pred, f32:$t, (f32 mimmfp:$f))),
-          (cmov32rm<CMOVWrm, sub_f32, MIMMFP> CC_IEQ, $pred, $f, $t)>;
-
-def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
-          (cmovrr<CMOVWrr> CC_INE, $pred, $t, $f)>;
-def : Pat<(f64 (select i32:$pred, (f64 mimmfp:$t), f64:$f)),
-          (cmovrm<CMOVWrm, MIMMFP> CC_INE, $pred, $t, $f)>;
-def : Pat<(f64 (select i32:$pred, f64:$t, (f64 mimmfp:$f))),
-          (cmovrm<CMOVWrm, MIMMFP> CC_IEQ, $pred, $f, $t)>;
-
-def : Pat<(f128 (select i32:$pred, f128:$t, f128:$f)),
-          (cmov128rr<CMOVWrr> CC_INE, $pred, $t, $f)>;
 
 // bitconvert
 def : Pat<(f64 (bitconvert i64:$src)), (COPY_TO_REGCLASS $src, I64)>;
