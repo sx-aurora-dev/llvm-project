@@ -70,8 +70,6 @@ code bases.
   results do not change before/after setting
   ``-Werror=incompatible-function-pointer-types`` to avoid incompatibility with
   Clang 16.
-- Clang now disallows types whose sizes aren't a multiple of their alignments to
-  be used as the element type of arrays.
 
   .. code-block:: c
 
@@ -80,6 +78,44 @@ code bases.
       void (*fp)(int *) = func; // Previously a warning, now a downgradable error.
     }
 
+- Clang now disallows types whose sizes aren't a multiple of their alignments
+  to be used as the element type of arrays.
+
+  .. code-block:: c
+
+  typedef char int8_a16 __attribute__((aligned(16)));
+  int8_a16 array[4]; // Now diagnosed as the element size not being a multiple of the array alignment.
+
+- When compiling for Windows in MSVC compatibility mode (for example by using
+  clang-cl), the compiler will now propagate dllimport/export declspecs in
+  explicit specializations of class template member functions (`Issue 54717
+  <https://github.com/llvm/llvm-project/issues/54717>`_):
+
+  .. code-block:: c++
+
+    template <typename> struct __declspec(dllexport) S {
+      void f();
+    };
+    template<> void S<int>::f() {}  // clang-cl will now dllexport this.
+
+  This matches what MSVC does, so it improves compatibility, but it can also
+  cause errors for code which clang-cl would previously accept, for example:
+
+  .. code-block:: c++
+
+    template <typename> struct __declspec(dllexport) S {
+      void f();
+    };
+    template<> void S<int>::f() = delete;  // Error: cannot delete dllexport function.
+
+  .. code-block:: c++
+
+    template <typename> struct __declspec(dllimport) S {
+      void f();
+    };
+    template<> void S<int>::f() {};  // Error: cannot define dllimport function.
+
+  These errors also match MSVC's behavior.
 
 What's New in Clang |release|?
 ==============================
@@ -93,6 +129,9 @@ Major New Features
 
 Bug Fixes
 ---------
+- Correct ``_Static_assert`` to accept the same set of extended integer
+  constant expressions as is accpted in other contexts that accept them.
+  This fixes `Issue 57687 <https://github.com/llvm/llvm-project/issues/57687>`_.
 - Fixes an accepts-invalid bug in C when using a ``_Noreturn`` function
   specifier on something other than a function declaration. This fixes
   `Issue 56800 <https://github.com/llvm/llvm-project/issues/56800>`_.
@@ -163,7 +202,10 @@ Bug Fixes
 - The template arguments of a variable template being accessed as a
   member will now be represented in the AST.
 - Fix incorrect handling of inline builtins with asm labels.
-
+- Finished implementing C++ DR2565, which results in a requirement becoming
+  not satisfied in the event of an instantiation failures in a requires expression's
+  parameter list. We previously handled this correctly in a constraint evaluation
+  context, but not in a requires clause evaluated as a boolean.
 
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -217,6 +259,12 @@ Improvements to Clang's diagnostics
   doesn't generate strange cascading errors, particularly in cases where a
   subsuming constraint fails, which would result in a less-specific overload to
   be selected.
+- Add a fix-it hint for the ``-Wdefaulted-function-deleted`` warning to
+  explicitly delete the function.
+- Fixed an accidental duplicate diagnostic involving the declaration of a
+  function definition without a prototype which is preceded by a static
+  declaration of the function with a prototype. Fixes
+  `Issue 58181 <https://github.com/llvm/llvm-project/issues/58181>`_.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -233,6 +281,21 @@ Non-comprehensive list of changes in this release
 - Unicode support has been updated to support Unicode 15.0.
   New unicode codepoints are supported as appropriate in diagnostics,
   C and C++ identifiers, and escape sequences.
+- Clang now supports loading multiple configuration files. The files from
+  default configuration paths are loaded first, unless ``--no-default-config``
+  option is used. All files explicitly specified using ``--config=`` option
+  are loaded afterwards.
+- When loading default configuration files, clang now unconditionally uses
+  the real target triple (respecting options such as ``--target=`` and ``-m32``)
+  rather than the executable prefix. The respective configuration files are
+  also loaded when clang is called via an executable without a prefix (e.g.
+  plain ``clang``).
+- Default configuration paths were partially changed. Clang now attempts to load
+  ``<triple>-<driver>.cfg`` first, and falls back to loading both
+  ``<driver>.cfg`` and ``<triple>.cfg`` if the former is not found. `Triple`
+  is the target triple and `driver` first tries the canonical name
+  for the driver (respecting ``--driver-mode=``), and then the name found
+  in the executable.
 
 New Compiler Flags
 ------------------
@@ -248,12 +311,20 @@ New Compiler Flags
   `::operator new(size_­t, std::aligned_val_t, nothrow_­t)` if there is
   `get_­return_­object_­on_­allocation_­failure`. We feel this is more consistent
   with the intention.
+- Added ``--no-default-config`` to disable automatically loading configuration
+  files using default paths.
 
 Deprecated Compiler Flags
 -------------------------
+- ``-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang``
+  has been deprecated. The flag will be removed in Clang 18.
+  ``-ftrivial-auto-var-init=zero`` is now available unconditionally, to be
+  compatible with GCC.
 
 Modified Compiler Flags
 -----------------------
+- Clang now permits specifying ``--config=`` multiple times, to load multiple
+  configuration files.
 
 Removed Compiler Flags
 -------------------------
@@ -311,11 +382,29 @@ C2x Feature Support
   ``-Wunused-label`` warning.
 - Implemented `WG14 N2508 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2508.pdf>`_,
   so labels can placed everywhere inside a compound statement.
+- Implemented `WG14 N2927 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2927.htm>`_,
+  the Not-so-magic ``typeof`` operator. Also implemented
+  `WG14 N2930 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2930.pdf>`_,
+  renaming ``remove_quals``, so the ``typeof_unqual`` operator is also
+  supported. Both of these operators are supported only in C2x mode. The
+  ``typeof`` operator specifies the type of the given parenthesized expression
+  operand or type name, including all qualifiers. The ``typeof_unqual``
+  operator is similar to ``typeof`` except that all qualifiers are removed,
+  including atomic type qualification and type attributes which behave like a
+  qualifier, such as an address space attribute.
+
+  .. code-block:: c
+
+    __attribute__((address_space(1))) const _Atomic int Val;
+    typeof(Val) OtherVal; // type is '__attribute__((address_space(1))) const _Atomic int'
+    typeof_unqual(Val) OtherValUnqual; // type is 'int'
 
 C++ Language Changes in Clang
 -----------------------------
 - Implemented DR692, DR1395 and DR1432. Use the ``-fclang-abi-compat=15`` option
-  to get the old partial ordering behavior regarding packs.
+  to get the old partial ordering behavior regarding packs. Note that the fix for
+  DR1432 is speculative that there is no wording or even resolution for this issue.
+  A speculative fix for DR1432 is needed because it fixes regressions caused by DR692.
 - Clang's default C++/ObjC++ standard is now ``gnu++17`` instead of ``gnu++14``.
   This means Clang will by default accept code using features from C++17 and
   conforming GNU extensions. Projects incompatible with C++17 can add
@@ -324,7 +413,7 @@ C++ Language Changes in Clang
 C++20 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
 - Support capturing structured bindings in lambdas
-  (`P1091R3 <https://wg21.link/p1091r3>`_ and `P1381R1 <https://wg21.link/P1381R1>`).
+  (`P1091R3 <https://wg21.link/p1091r3>`_ and `P1381R1 <https://wg21.link/P1381R1>`_).
   This fixes issues `Issue 52720 <https://github.com/llvm/llvm-project/issues/52720>`_,
   `Issue 54300 <https://github.com/llvm/llvm-project/issues/54300>`_,
   `Issue 54301 <https://github.com/llvm/llvm-project/issues/54301>`_,
@@ -356,11 +445,17 @@ C++20 Feature Support
   the time of checking, which should now allow the libstdc++ ranges implementation
   to work for at least trivial examples.  This fixes
   `Issue 44178 <https://github.com/llvm/llvm-project/issues/44178>`_.
+- Clang implements DR2621, correcting a defect in ``using enum`` handling.  The
+  name is found via ordinary lookup so typedefs are found.
+- Implemented `P0634r3 <https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0634r3.html>`_,
+  which removes the requirement for the ``typename`` keyword in certain contexts.
+- Implemented The Equality Operator You Are Looking For (`P2468 <http://wg21.link/p2468r2>`_).
 
 C++2b Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
 
 - Support label at end of compound statement (`P2324 <https://wg21.link/p2324r2>`_).
+- Implemented `P1169R4: static operator() <https://wg21.link/P1169R4>`_.
 
 CUDA/HIP Language Changes in Clang
 ----------------------------------
@@ -384,7 +479,8 @@ OpenMP Support in Clang
 CUDA Support in Clang
 ---------------------
 
-- ...
+- Clang now supports CUDA SDK up to 11.8
+- Added support for targeting sm_{87,89,90} GPUs.
 
 RISC-V Support in Clang
 -----------------------
@@ -401,6 +497,14 @@ DWARF Support in Clang
 
 Arm and AArch64 Support in Clang
 --------------------------------
+
+- The target(..) function attributes for AArch64 now accept:
+
+  * ``"arch=<arch>"`` strings, that specify the architecture for a function as per the ``-march`` option.
+  * ``"cpu=<cpu>"`` strings, that specify the cpu for a function as per the ``-mcpu`` option.
+  * ``"tune=<cpu>"`` strings, that specify the tune cpu for a function as per ``-mtune``.
+  * ``"+<feature>"``, ``"+no<feature>"`` enables/disables the specific feature, for compatibility with GCC target attributes.
+  * ``"<feature>"``, ``"no-<feature>"`` enabled/disables the specific feature, for backward compatibility with previous releases.
 - ``-march`` values for targeting armv2, armv2A, armv3 and armv3M have been removed.
   Their presence gave the impression that Clang can correctly generate code for
   them, which it cannot.
@@ -445,10 +549,15 @@ Static Analyzer
   ``scanbuild`` was also updated accordingly.
   Passing these flags will result in a hard error.
 
-.. _release-notes-ubsan:
+.. _release-notes-sanitizers:
 
-Undefined Behavior Sanitizer (UBSan)
-------------------------------------
+Sanitizers
+----------
+- ``-fsanitize-memory-param-retval`` is turned on by default. With
+  ``-fsanitize=memory``, passing uninitialized variables to functions and
+  returning uninitialized variables from functions is more aggressively
+  reported. ``-fno-sanitize-memory-param-retval`` restores the previous
+  behavior.
 
 Core Analysis Improvements
 ==========================

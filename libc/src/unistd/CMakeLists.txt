@@ -52,6 +52,27 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
+  fork
+  ALIAS
+  DEPENDS
+    .${LIBC_TARGET_OS}.fork
+)
+
+add_entrypoint_object(
+  execv
+  ALIAS
+  DEPENDS
+    .${LIBC_TARGET_OS}.execv
+)
+
+add_entrypoint_object(
+  execve
+  ALIAS
+  DEPENDS
+    .${LIBC_TARGET_OS}.execve
+)
+
+add_entrypoint_object(
   fsync
   ALIAS
   DEPENDS
@@ -171,6 +192,13 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
+  __llvm_libc_syscall
+  ALIAS
+  DEPENDS
+    .${LIBC_TARGET_OS}.__llvm_libc_syscall
+)
+
+add_entrypoint_object(
   truncate
   ALIAS
   DEPENDS
@@ -196,4 +224,12 @@ add_entrypoint_object(
   ALIAS
   DEPENDS
     .${LIBC_TARGET_OS}.write
+)
+
+add_entrypoint_object(
+  environ
+  SRCS
+    environ.cpp
+  HDRS
+    environ.h
 )

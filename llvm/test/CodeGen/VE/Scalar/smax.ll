@@ -73,9 +73,10 @@ define i128 @func_smax_var_i128(i128 noundef %0, i128 noundef %1) {
 ; CHECK-NEXT:    cmps.l %s5, %s1, %s3
 ; CHECK-NEXT:    or %s4, 0, %s2
 ; CHECK-NEXT:    cmov.l.gt %s4, %s0, %s5
-; CHECK-NEXT:    cmpu.l %s6, %s0, %s2
-; CHECK-NEXT:    cmov.l.gt %s2, %s0, %s6
-; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s5
+; CHECK-NEXT:    cmpu.l %s5, %s0, %s2
+; CHECK-NEXT:    cmov.l.gt %s2, %s0, %s5
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s3
+; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    maxs.l %s1, %s1, %s3
 ; CHECK-NEXT:    or %s0, 0, %s4
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -130,9 +131,8 @@ define i64 @func_smax_fore_zero_i64(i64 noundef %0) {
 define i128 @func_smax_fore_zero_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smax_fore_zero_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s3, 1, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmov.l.gt %s2, (0)1, %s3
+; CHECK-NEXT:    cmov.l.le %s2, (0)1, %s1
 ; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
 ; CHECK-NEXT:    maxs.l %s1, 0, %s1
 ; CHECK-NEXT:    or %s0, 0, %s2
@@ -188,9 +188,8 @@ define i64 @func_smax_back_zero_i64(i64 noundef %0) {
 define i128 @func_smax_back_zero_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smax_back_zero_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s3, 1, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmov.l.gt %s2, (0)1, %s3
+; CHECK-NEXT:    cmov.l.le %s2, (0)1, %s1
 ; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
 ; CHECK-NEXT:    maxs.l %s1, 0, %s1
 ; CHECK-NEXT:    or %s0, 0, %s2
@@ -246,12 +245,10 @@ define i64 @func_smax_fore_const_i64(i64 noundef %0) {
 define i128 @func_smax_fore_const_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smax_fore_const_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s3, 1, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmov.l.gt %s2, (56)0, %s3
-; CHECK-NEXT:    lea %s3, 256
-; CHECK-NEXT:    cmpu.l %s3, %s0, %s3
-; CHECK-NEXT:    cmov.l.lt %s0, (56)0, %s3
+; CHECK-NEXT:    cmov.l.le %s2, (56)0, %s1
+; CHECK-NEXT:    cmpu.l %s3, %s0, (56)0
+; CHECK-NEXT:    cmov.l.le %s0, (56)0, %s3
 ; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
 ; CHECK-NEXT:    maxs.l %s1, 0, %s1
 ; CHECK-NEXT:    or %s0, 0, %s2
@@ -307,12 +304,10 @@ define i64 @func_smax_back_const_i64(i64 noundef %0) {
 define i128 @func_smax_back_const_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smax_back_const_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s3, 1, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmov.l.gt %s2, (56)0, %s3
-; CHECK-NEXT:    lea %s3, 256
-; CHECK-NEXT:    cmpu.l %s3, %s0, %s3
-; CHECK-NEXT:    cmov.l.lt %s0, (56)0, %s3
+; CHECK-NEXT:    cmov.l.le %s2, (56)0, %s1
+; CHECK-NEXT:    cmpu.l %s3, %s0, (56)0
+; CHECK-NEXT:    cmov.l.le %s0, (56)0, %s3
 ; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
 ; CHECK-NEXT:    maxs.l %s1, 0, %s1
 ; CHECK-NEXT:    or %s0, 0, %s2

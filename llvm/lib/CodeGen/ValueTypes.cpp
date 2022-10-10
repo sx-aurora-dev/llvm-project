@@ -109,18 +109,6 @@ bool EVT::isExtended2048BitVector() const {
   return isExtendedVector() && getExtendedSizeInBits() == 2048;
 }
 
-bool EVT::isExtended4096BitVector() const {
-  return isExtendedVector() && getExtendedSizeInBits() == 4096;
-}
-
-bool EVT::isExtended8192BitVector() const {
-  return isExtendedVector() && getExtendedSizeInBits() == 8192;
-}
-
-bool EVT::isExtended16384BitVector() const {
-  return isExtendedVector() && getExtendedSizeInBits() == 16384;
-}
-
 bool EVT::isExtendedFixedLengthVector() const {
   return isExtendedVector() && isa<FixedVectorType>(LLVMTy);
 }

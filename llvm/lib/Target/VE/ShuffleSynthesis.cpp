@@ -1,5 +1,5 @@
 #include "ShuffleSynthesis.h"
-
+#include <cmath>
 #include <unordered_map>
 
 namespace llvm {

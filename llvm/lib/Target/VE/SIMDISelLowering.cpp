@@ -35,6 +35,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include <cmath>
+
 using namespace llvm;
 
 #define DEBUG_TYPE "ve-isel"

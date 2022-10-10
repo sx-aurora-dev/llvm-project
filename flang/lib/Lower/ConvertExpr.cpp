@@ -1625,6 +1625,9 @@ public:
     mlir::IndexType idxTy = builder.getIndexType();
     Fortran::evaluate::ConstantSubscript size =
         Fortran::evaluate::GetSize(con.shape());
+    if (size > std::numeric_limits<std::uint32_t>::max())
+      // llvm::SmallVector has limited size
+      TODO(getLoc(), "Creation of very large array constants");
     fir::SequenceType::Shape shape(con.shape().begin(), con.shape().end());
     mlir::Type eleTy;
     if constexpr (TC == Fortran::common::TypeCategory::Character)
@@ -2390,10 +2393,10 @@ public:
                                   llvm::ArrayRef<mlir::Value> extents,
                                   llvm::ArrayRef<mlir::Value> lengths) {
     mlir::Type type = base.getType();
-    if (type.isa<fir::BoxType>())
+    if (type.isa<fir::BaseBoxType>())
       return fir::BoxValue(base, /*lbounds=*/{}, lengths, extents);
     type = fir::unwrapRefType(type);
-    if (type.isa<fir::BoxType>())
+    if (type.isa<fir::BaseBoxType>())
       return fir::MutableBoxValue(base, lengths, /*mutableProperties*/ {});
     if (auto seqTy = type.dyn_cast<fir::SequenceType>()) {
       if (seqTy.getDimension() != extents.size())

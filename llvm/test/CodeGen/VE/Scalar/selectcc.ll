@@ -39,7 +39,7 @@ define i64 @selectcci64(i64, i64, i64, i64) {
 define signext i32 @selectcci32(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectcci32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -51,7 +51,7 @@ define signext i32 @selectcci32(i32 signext, i32 signext, i32 signext, i32 signe
 define signext i32 @selectcci32_2(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectcci32_2:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    cmov.w.gt %s1, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s3
@@ -66,7 +66,7 @@ define signext i32 @selectcci32_2(i32 signext, i32 signext, i32 signext, i32 sig
 define zeroext i1 @selectcci1(i32 signext, i32 signext, i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: selectcci1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)

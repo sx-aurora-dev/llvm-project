@@ -3,7 +3,7 @@
 define i64 @selectccsgti8(i8 signext, i8 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -15,7 +15,7 @@ define i64 @selectccsgti8(i8 signext, i8 signext, i64, i64) {
 define i64 @selectccsgti16(i16 signext, i16 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -27,7 +27,7 @@ define i64 @selectccsgti16(i16 signext, i16 signext, i64, i64) {
 define i64 @selectccsgti32(i32 signext, i32 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -51,7 +51,7 @@ define i64 @selectccsgti64(i64, i64, i64, i64) {
 define i64 @selectccsgti128(i128, i128, i64, i64) {
 ; CHECK-LABEL: selectccsgti128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s6, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s6, %s1, %s3
 ; CHECK-NEXT:    cmps.l %s1, %s3, %s1
 ; CHECK-NEXT:    srl %s1, %s1, 63
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0

@@ -1691,14 +1691,28 @@ namespace {
 class ConstraintRefersToContainingTemplateChecker
     : public TreeTransform<ConstraintRefersToContainingTemplateChecker> {
   bool Result = false;
+  const FunctionDecl *Friend = nullptr;
   unsigned TemplateDepth = 0;
+
+  // Check a record-decl that we've seen to see if it is a lexical parent of the
+  // Friend, likely because it was referred to without its template arguments.
+  void CheckIfContainingRecord(const CXXRecordDecl *CheckingRD) {
+    CheckingRD = CheckingRD->getMostRecentDecl();
+
+    for (const DeclContext *DC = Friend->getLexicalDeclContext();
+         DC && !DC->isFileContext(); DC = DC->getParent())
+      if (const auto *RD = dyn_cast<CXXRecordDecl>(DC))
+        if (CheckingRD == RD->getMostRecentDecl())
+          Result = true;
+  }
 
 public:
   using inherited = TreeTransform<ConstraintRefersToContainingTemplateChecker>;
 
   ConstraintRefersToContainingTemplateChecker(Sema &SemaRef,
+                                              const FunctionDecl *Friend,
                                               unsigned TemplateDepth)
-      : inherited(SemaRef), TemplateDepth(TemplateDepth) {}
+      : inherited(SemaRef), Friend(Friend), TemplateDepth(TemplateDepth) {}
   bool getResult() const { return Result; }
 
   // This should be the only template parm type that we have to deal with.
@@ -1728,6 +1742,8 @@ public:
       TransformType(VD->getType());
     else if (auto *TD = dyn_cast<TemplateDecl>(D))
       TransformTemplateParameterList(TD->getTemplateParameters());
+    else if (auto *RD = dyn_cast<CXXRecordDecl>(D))
+      CheckIfContainingRecord(RD);
     else if (isa<NamedDecl>(D)) {
       // No direct types to visit here I believe.
     } else
@@ -1738,8 +1754,11 @@ public:
 } // namespace
 
 bool Sema::ConstraintExpressionDependsOnEnclosingTemplate(
-    unsigned TemplateDepth, const Expr *Constraint) {
-  ConstraintRefersToContainingTemplateChecker Checker(*this, TemplateDepth);
+    const FunctionDecl *Friend, unsigned TemplateDepth,
+    const Expr *Constraint) {
+  assert(Friend->getFriendObjectKind() && "Only works on a friend");
+  ConstraintRefersToContainingTemplateChecker Checker(*this, Friend,
+                                                      TemplateDepth);
   Checker.TransformExpr(const_cast<Expr *>(Constraint));
   return Checker.getResult();
 }
@@ -4059,7 +4078,8 @@ TypeResult Sema::ActOnTemplateIdType(
     TemplateTy TemplateD, IdentifierInfo *TemplateII,
     SourceLocation TemplateIILoc, SourceLocation LAngleLoc,
     ASTTemplateArgsPtr TemplateArgsIn, SourceLocation RAngleLoc,
-    bool IsCtorOrDtorName, bool IsClassName) {
+    bool IsCtorOrDtorName, bool IsClassName,
+    ImplicitTypenameContext AllowImplicitTypename) {
   if (SS.isInvalid())
     return true;
 
@@ -4073,9 +4093,18 @@ TypeResult Sema::ActOnTemplateIdType(
     //   qualified-id denotes a type, forming an
     //   elaborated-type-specifier (7.1.5.3).
     if (!LookupCtx && isDependentScopeSpecifier(SS)) {
-      Diag(SS.getBeginLoc(), diag::err_typename_missing_template)
-        << SS.getScopeRep() << TemplateII->getName();
-      // Recover as if 'typename' were specified.
+      // C++2a relaxes some of those restrictions in [temp.res]p5.
+      if (AllowImplicitTypename == ImplicitTypenameContext::Yes) {
+        if (getLangOpts().CPlusPlus20)
+          Diag(SS.getBeginLoc(), diag::warn_cxx17_compat_implicit_typename);
+        else
+          Diag(SS.getBeginLoc(), diag::ext_implicit_typename)
+              << SS.getScopeRep() << TemplateII->getName()
+              << FixItHint::CreateInsertion(SS.getBeginLoc(), "typename ");
+      } else
+        Diag(SS.getBeginLoc(), diag::err_typename_missing_template)
+            << SS.getScopeRep() << TemplateII->getName();
+
       // FIXME: This is not quite correct recovery as we don't transform SS
       // into the corresponding dependent form (and we don't diagnose missing
       // 'template' keywords within SS as a result).
@@ -6093,9 +6122,9 @@ bool Sema::CheckTemplateArgumentList(
     CXXThisScopeRAII(*this, RD, ThisQuals, RD != nullptr);
 
     MultiLevelTemplateArgumentList MLTAL = getTemplateInstantiationArgs(
-        Template, &StackTemplateArgs, /*RelativeToPrimary*/ true,
-        /*Pattern*/ nullptr,
-        /*LookBeyondLambda*/ true, /*IncludeContainingStruct*/ true);
+        Template, &StackTemplateArgs, /*RelativeToPrimary=*/true,
+        /*Pattern=*/nullptr,
+        /*ForConceptInstantiation=*/true);
     if (EnsureTemplateArgumentListConstraints(
             Template, MLTAL,
             SourceRange(TemplateLoc, TemplateArgs.getRAngleLoc()))) {
@@ -6247,7 +6276,7 @@ bool UnnamedLocalNoLinkageFinder::VisitTypeOfExprType(const TypeOfExprType*) {
 }
 
 bool UnnamedLocalNoLinkageFinder::VisitTypeOfType(const TypeOfType* T) {
-  return Visit(T->getUnderlyingType());
+  return Visit(T->getUnmodifiedType());
 }
 
 bool UnnamedLocalNoLinkageFinder::VisitDecltypeType(const DecltypeType*) {
@@ -7819,8 +7848,8 @@ Sema::BuildExpressionFromIntegralTemplateArgument(const TemplateArgument &Arg,
     E = new (Context) CharacterLiteral(Arg.getAsIntegral().getZExtValue(),
                                        Kind, T, Loc);
   } else if (T->isBooleanType()) {
-    E = new (Context) CXXBoolLiteralExpr(Arg.getAsIntegral().getBoolValue(),
-                                         T, Loc);
+    E = CXXBoolLiteralExpr::Create(Context, Arg.getAsIntegral().getBoolValue(),
+                                   T, Loc);
   } else if (T->isNullPtrType()) {
     E = new (Context) CXXNullPtrLiteralExpr(Context.NullPtrTy, Loc);
   } else {
@@ -7933,12 +7962,26 @@ static bool MatchTemplateParameterKind(
                  : Kind),
             TemplateArgLoc))
       return false;
-  } else if (Kind != Sema::TPL_TemplateTemplateArgumentMatch) {
+  }
+
+  if (Kind != Sema::TPL_TemplateTemplateArgumentMatch &&
+      !isa<TemplateTemplateParmDecl>(Old)) {
     const Expr *NewC = nullptr, *OldC = nullptr;
-    if (const auto *TC = cast<TemplateTypeParmDecl>(New)->getTypeConstraint())
-      NewC = TC->getImmediatelyDeclaredConstraint();
-    if (const auto *TC = cast<TemplateTypeParmDecl>(Old)->getTypeConstraint())
-      OldC = TC->getImmediatelyDeclaredConstraint();
+
+    if (isa<TemplateTypeParmDecl>(New)) {
+      if (const auto *TC = cast<TemplateTypeParmDecl>(New)->getTypeConstraint())
+        NewC = TC->getImmediatelyDeclaredConstraint();
+      if (const auto *TC = cast<TemplateTypeParmDecl>(Old)->getTypeConstraint())
+        OldC = TC->getImmediatelyDeclaredConstraint();
+    } else if (isa<NonTypeTemplateParmDecl>(New)) {
+      if (const Expr *E = cast<NonTypeTemplateParmDecl>(New)
+                              ->getPlaceholderTypeConstraint())
+        NewC = E;
+      if (const Expr *E = cast<NonTypeTemplateParmDecl>(Old)
+                              ->getPlaceholderTypeConstraint())
+        OldC = E;
+    } else
+      llvm_unreachable("unexpected template parameter type");
 
     auto Diagnose = [&] {
       S.Diag(NewC ? NewC->getBeginLoc() : New->getBeginLoc(),
@@ -8895,9 +8938,12 @@ void Sema::CheckConceptRedefinition(ConceptDecl *NewDecl,
 
 /// \brief Strips various properties off an implicit instantiation
 /// that has just been explicitly specialized.
-static void StripImplicitInstantiation(NamedDecl *D) {
-  D->dropAttr<DLLImportAttr>();
-  D->dropAttr<DLLExportAttr>();
+static void StripImplicitInstantiation(NamedDecl *D, bool MinGW) {
+  if (MinGW || (isa<FunctionDecl>(D) &&
+                cast<FunctionDecl>(D)->isFunctionTemplateSpecialization())) {
+    D->dropAttr<DLLImportAttr>();
+    D->dropAttr<DLLExportAttr>();
+  }
 
   if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
     FD->setInlineSpecified(false);
@@ -8972,7 +9018,9 @@ Sema::CheckSpecializationInstantiationRedecl(SourceLocation NewLoc,
       if (PrevPointOfInstantiation.isInvalid()) {
         // The declaration itself has not actually been instantiated, so it is
         // still okay to specialize it.
-        StripImplicitInstantiation(PrevDecl);
+        StripImplicitInstantiation(
+            PrevDecl,
+            Context.getTargetInfo().getTriple().isWindowsGNUEnvironment());
         return false;
       }
       // Fall through
@@ -10601,10 +10649,11 @@ Sema::ActOnDependentTag(Scope *S, unsigned TagSpec, TagUseKind TUK,
   return CreateParsedType(Result, TLB.getTypeSourceInfo(Context, Result));
 }
 
-TypeResult
-Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
-                        const CXXScopeSpec &SS, const IdentifierInfo &II,
-                        SourceLocation IdLoc) {
+TypeResult Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
+                                   const CXXScopeSpec &SS,
+                                   const IdentifierInfo &II,
+                                   SourceLocation IdLoc,
+                                   ImplicitTypenameContext IsImplicitTypename) {
   if (SS.isInvalid())
     return true;
 
@@ -10617,9 +10666,13 @@ Sema::ActOnTypenameType(Scope *S, SourceLocation TypenameLoc,
 
   NestedNameSpecifierLoc QualifierLoc = SS.getWithLocInContext(Context);
   TypeSourceInfo *TSI = nullptr;
-  QualType T = CheckTypenameType(TypenameLoc.isValid()? ETK_Typename : ETK_None,
-                                 TypenameLoc, QualifierLoc, II, IdLoc, &TSI,
-                                 /*DeducedTSTContext=*/true);
+  QualType T =
+      CheckTypenameType((TypenameLoc.isValid() ||
+                         IsImplicitTypename == ImplicitTypenameContext::Yes)
+                            ? ETK_Typename
+                            : ETK_None,
+                        TypenameLoc, QualifierLoc, II, IdLoc, &TSI,
+                        /*DeducedTSTContext=*/true);
   if (T.isNull())
     return true;
   return CreateParsedType(T, TSI);

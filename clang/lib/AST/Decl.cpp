@@ -187,8 +187,9 @@ static bool usesTypeVisibility(const NamedDecl *D) {
 
 /// Does the given declaration have member specialization information,
 /// and if so, is it an explicit specialization?
-template <class T> static typename
-std::enable_if<!std::is_base_of<RedeclarableTemplateDecl, T>::value, bool>::type
+template <class T>
+static std::enable_if_t<!std::is_base_of<RedeclarableTemplateDecl, T>::value,
+                        bool>
 isExplicitMemberSpecialization(const T *D) {
   if (const MemberSpecializationInfo *member =
         D->getMemberSpecializationInfo()) {
@@ -2580,7 +2581,7 @@ bool VarDecl::isNonEscapingByref() const {
 
 bool VarDecl::hasDependentAlignment() const {
   QualType T = getType();
-  return T->isDependentType() || T->isUndeducedAutoType() ||
+  return T->isDependentType() || T->isUndeducedType() ||
          llvm::any_of(specific_attrs<AlignedAttr>(), [](const AlignedAttr *AA) {
            return AA->isAlignmentDependent();
          });

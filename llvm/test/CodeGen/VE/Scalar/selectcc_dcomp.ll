@@ -158,7 +158,6 @@ define i64 @func_dcomp_64(double %0, double %1, double %2, double %3, i64 %4, i6
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s6, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s0
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -180,7 +179,6 @@ define i64 @func_dcomp_u64(double %0, double %1, double %2, double %3, i64 %4, i
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s6, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s0
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -202,7 +200,6 @@ define i128 @func_dcomp_128(double %0, double %1, double %2, double %3, i128 %4,
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s34, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
 ; CHECK-NEXT:    or %s0, 0, %s6
@@ -226,7 +223,6 @@ define i128 @func_dcomp_u128(double %0, double %1, double %2, double %3, i128 %4
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s34, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
 ; CHECK-NEXT:    or %s0, 0, %s6
@@ -250,7 +246,6 @@ define float @func_dcomp_float(double %0, double %1, double %2, double %3, float
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s6, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s0
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -272,7 +267,6 @@ define double @func_dcomp_double(double %0, double %1, double %2, double %3, dou
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s6, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s0
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -294,7 +288,6 @@ define fp128 @func_dcomp_quad(double %0, double %1, double %2, double %3, fp128 
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s34, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
 ; CHECK-NEXT:    or %s0, 0, %s6
@@ -318,7 +311,6 @@ define { float, float } @func_dcomp_fcomp(double %0, double %1, double %2, doubl
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s34, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
 ; CHECK-NEXT:    or %s0, 0, %s6
@@ -345,7 +337,6 @@ define { double, double } @func_dcomp_dcomp(double %0, double %1, double %2, dou
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s34, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
 ; CHECK-NEXT:    or %s0, 0, %s6
@@ -376,7 +367,6 @@ define { fp128, fp128 } @func_dcomp_qcomp(double %0, double %1, double %2, doubl
 ; CHECK-NEXT:    fcmp.d %s0, %s1, %s3
 ; CHECK-NEXT:    cmov.d.eq %s2, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s38, %s2
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s36, %s4, %s0
 ; CHECK-NEXT:    cmov.w.ne %s37, %s5, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s6, %s0
@@ -538,7 +528,6 @@ define i64 @func_dcomp_64_zero(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -558,7 +547,6 @@ define i64 @func_dcomp_u64_zero(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -578,7 +566,6 @@ define i128 @func_dcomp_128_zero(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -600,7 +587,6 @@ define i128 @func_dcomp_u128_zero(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -622,7 +608,6 @@ define float @func_dcomp_float_zero(double %0, double %1, float %2, float %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -642,7 +627,6 @@ define double @func_dcomp_double_zero(double %0, double %1, double %2, double %3
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -662,7 +646,6 @@ define fp128 @func_dcomp_quad_zero(double %0, double %1, fp128 %2, fp128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -684,7 +667,6 @@ define { float, float } @func_dcomp_fcomp_zero(double %0, double %1, float %2, f
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -709,7 +691,6 @@ define { double, double } @func_dcomp_dcomp_zero(double %0, double %1, double %2
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -736,7 +717,6 @@ define { fp128, fp128 } @func_dcomp_qcomp_zero(double %0, double %1, fp128 %2, f
 ; CHECK-NEXT:    cmov.d.eq %s37, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s36, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s37, %s36
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0
@@ -914,7 +894,6 @@ define i64 @func_dcomp_64_i(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -936,7 +915,6 @@ define i64 @func_dcomp_u64_i(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -958,7 +936,6 @@ define i128 @func_dcomp_128_i(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -982,7 +959,6 @@ define i128 @func_dcomp_u128_i(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1006,7 +982,6 @@ define float @func_dcomp_float_i(double %0, double %1, float %2, float %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1028,7 +1003,6 @@ define double @func_dcomp_double_i(double %0, double %1, double %2, double %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1050,7 +1024,6 @@ define fp128 @func_dcomp_quad_i(double %0, double %1, fp128 %2, fp128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1074,7 +1047,6 @@ define { float, float } @func_dcomp_fcomp_i(double %0, double %1, float %2, floa
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1101,7 +1073,6 @@ define { double, double } @func_dcomp_dcomp_i(double %0, double %1, double %2, d
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1130,7 +1101,6 @@ define { fp128, fp128 } @func_dcomp_qcomp_i(double %0, double %1, fp128 %2, fp12
 ; CHECK-NEXT:    cmov.d.eq %s37, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s36, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s37, %s36
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0
@@ -1308,7 +1278,6 @@ define i64 @func_dcomp_64_m(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1330,7 +1299,6 @@ define i64 @func_dcomp_u64_m(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1352,7 +1320,6 @@ define i128 @func_dcomp_128_m(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1376,7 +1343,6 @@ define i128 @func_dcomp_u128_m(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1400,7 +1366,6 @@ define float @func_dcomp_float_m(double %0, double %1, float %2, float %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1422,7 +1387,6 @@ define double @func_dcomp_double_m(double %0, double %1, double %2, double %3) {
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s4, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s5, %s4
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -1444,7 +1408,6 @@ define fp128 @func_dcomp_quad_m(double %0, double %1, fp128 %2, fp128 %3) {
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1468,7 +1431,6 @@ define { float, float } @func_dcomp_fcomp_m(double %0, double %1, float %2, floa
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1495,7 +1457,6 @@ define { double, double } @func_dcomp_dcomp_m(double %0, double %1, double %2, d
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s6, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s7, %s6
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -1524,7 +1485,6 @@ define { fp128, fp128 } @func_dcomp_qcomp_m(double %0, double %1, fp128 %2, fp12
 ; CHECK-NEXT:    cmov.d.eq %s37, (63)0, %s0
 ; CHECK-NEXT:    cmov.d.eq %s36, (63)0, %s1
 ; CHECK-NEXT:    and %s0, %s37, %s36
-; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0

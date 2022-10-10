@@ -189,17 +189,6 @@ set(CLANG_SPAWN_CC1 OFF CACHE BOOL
 
 option(CLANG_DEFAULT_PIE_ON_LINUX "Default to -fPIE and -pie on linux-gnu" ON)
 
-# Manually handle default so we can change the meaning of a cached default.
-set(CLANG_ENABLE_OPAQUE_POINTERS "DEFAULT" CACHE STRING
-    "Enable opaque pointers by default")
-if(CLANG_ENABLE_OPAQUE_POINTERS STREQUAL "DEFAULT")
-  set(CLANG_ENABLE_OPAQUE_POINTERS_INTERNAL ON)
-elseif(CLANG_ENABLE_OPAQUE_POINTERS)
-  set(CLANG_ENABLE_OPAQUE_POINTERS_INTERNAL ON)
-else()
-  set(CLANG_ENABLE_OPAQUE_POINTERS_INTERNAL OFF)
-endif()
-
 # TODO: verify the values against LangStandards.def?
 set(CLANG_DEFAULT_STD_C "" CACHE STRING
   "Default standard to use for C/ObjC code (IDENT from LangStandards.def, empty for platform default)")
@@ -481,6 +470,10 @@ mark_as_advanced(CLANG_EXECUTABLE_VERSION LIBCLANG_LIBRARY_VERSION)
 option(CLANG_INCLUDE_TESTS
        "Generate build targets for the Clang unit tests."
        ${LLVM_INCLUDE_TESTS})
+
+option(CLANG_ENABLE_HLSL "Include HLSL build products" Off)
+# While HLSL support is experimental this should stay hidden.
+mark_as_advanced(CLANG_ENABLE_HLSL)
 
 add_subdirectory(utils/TableGen)
 

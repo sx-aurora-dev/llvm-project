@@ -134,7 +134,8 @@ static fir::GlobalOp declareGlobal(Fortran::lower::AbstractConverter &converter,
     mlir::emitError(loc, "processing global declaration: symbol '")
         << toStringRef(sym.name()) << "' has unexpected details\n";
   return builder.createGlobal(loc, converter.genType(var), globalName, linkage,
-                              mlir::Attribute{}, isConstant(ultimate));
+                              mlir::Attribute{}, isConstant(ultimate),
+                              var.isTarget());
 }
 
 /// Temporary helper to catch todos in initial data target lowering.
@@ -217,7 +218,7 @@ mlir::Value Fortran::lower::genInitialDataTarget(
       fir::ExtendedValue exv =
           globalOpSymMap.lookupSymbol(sym).toExtendedValue();
       const auto *mold = exv.getBoxOf<fir::MutableBoxValue>();
-      fir::BoxType boxType = mold->getBoxTy();
+      fir::BaseBoxType boxType = mold->getBoxTy();
       mlir::Value box =
           fir::factory::createUnallocatedBox(builder, loc, boxType, {});
       return box;
@@ -442,7 +443,7 @@ static fir::GlobalOp defineGlobal(Fortran::lower::AbstractConverter &converter,
   }
   if (!global)
     global = builder.createGlobal(loc, symTy, globalName, linkage,
-                                  mlir::Attribute{}, isConst);
+                                  mlir::Attribute{}, isConst, var.isTarget());
   if (Fortran::semantics::IsAllocatableOrPointer(sym)) {
     const auto *details =
         sym.detailsIf<Fortran::semantics::ObjectEntityDetails>();
@@ -1650,7 +1651,7 @@ void Fortran::lower::mapSymbolAttributes(
         mlir::Value argBox;
         mlir::Type castTy = builder.getRefType(varType);
         if (addr) {
-          if (auto boxTy = addr.getType().dyn_cast<fir::BoxType>()) {
+          if (auto boxTy = addr.getType().dyn_cast<fir::BaseBoxType>()) {
             argBox = addr;
             mlir::Type refTy = builder.getRefType(boxTy.getEleTy());
             addr = builder.create<fir::BoxAddrOp>(loc, refTy, argBox);

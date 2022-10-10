@@ -3,7 +3,7 @@
 define signext i32 @selectcceq(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectcceq:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -15,7 +15,7 @@ define signext i32 @selectcceq(i32 signext, i32 signext, i32 signext, i32 signex
 define signext i32 @selectccne(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccne:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.ne %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -27,7 +27,7 @@ define signext i32 @selectccne(i32 signext, i32 signext, i32 signext, i32 signex
 define signext i32 @selectccsgt(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -39,7 +39,7 @@ define signext i32 @selectccsgt(i32 signext, i32 signext, i32 signext, i32 signe
 define signext i32 @selectccsge(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsge:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.ge %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -51,7 +51,7 @@ define signext i32 @selectccsge(i32 signext, i32 signext, i32 signext, i32 signe
 define signext i32 @selectccslt(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccslt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.lt %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -63,7 +63,7 @@ define signext i32 @selectccslt(i32 signext, i32 signext, i32 signext, i32 signe
 define signext i32 @selectccsle(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsle:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.le %s3, %s2, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s3, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)

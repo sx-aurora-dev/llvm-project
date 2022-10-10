@@ -22,12 +22,14 @@ namespace llvm {
 namespace MIPatternMatch {
 
 template <typename Reg, typename Pattern>
-bool mi_match(Reg R, const MachineRegisterInfo &MRI, Pattern &&P) {
+[[nodiscard]] bool mi_match(Reg R, const MachineRegisterInfo &MRI,
+                            Pattern &&P) {
   return P.match(MRI, R);
 }
 
 template <typename Pattern>
-bool mi_match(MachineInstr &MI, const MachineRegisterInfo &MRI, Pattern &&P) {
+[[nodiscard]] bool mi_match(MachineInstr &MI, const MachineRegisterInfo &MRI,
+                            Pattern &&P) {
   return P.match(MRI, &MI);
 }
 
@@ -237,6 +239,20 @@ inline SpecificConstantMatch m_AllOnesInt() {
 }
 ///}
 
+/// Matcher for a specific register.
+struct SpecificRegisterMatch {
+  Register RequestedReg;
+  SpecificRegisterMatch(Register RequestedReg) : RequestedReg(RequestedReg) {}
+  bool match(const MachineRegisterInfo &MRI, Register Reg) {
+    return Reg == RequestedReg;
+  }
+};
+
+/// Matches a register only if it is equal to \p RequestedReg.
+inline SpecificRegisterMatch m_SpecificReg(Register RequestedReg) {
+  return SpecificRegisterMatch(RequestedReg);
+}
+
 // TODO: Rework this for different kinds of MachineOperand.
 // Currently assumes the Src for a match is a register.
 // We might want to support taking in some MachineOperands and call getReg on
@@ -354,6 +370,17 @@ inline bind_ty<LLT> m_Type(LLT Ty) { return Ty; }
 inline bind_ty<CmpInst::Predicate> m_Pred(CmpInst::Predicate &P) { return P; }
 inline operand_type_match m_Pred() { return operand_type_match(); }
 
+struct ImplicitDefMatch {
+  bool match(const MachineRegisterInfo &MRI, Register Reg) {
+    MachineInstr *TmpMI;
+    if (mi_match(Reg, MRI, m_MInstr(TmpMI)))
+      return TmpMI->getOpcode() == TargetOpcode::G_IMPLICIT_DEF;
+    return false;
+  }
+};
+
+inline ImplicitDefMatch m_GImplicitDef() { return ImplicitDefMatch(); }
+
 // Helper for matching G_FCONSTANT
 inline bind_ty<const ConstantFP *> m_GFCst(const ConstantFP *&C) { return C; }
 
@@ -421,6 +448,19 @@ template <typename LHS, typename RHS>
 inline BinaryOp_match<LHS, RHS, TargetOpcode::G_ADD, true>
 m_GAdd(const LHS &L, const RHS &R) {
   return BinaryOp_match<LHS, RHS, TargetOpcode::G_ADD, true>(L, R);
+}
+
+template <typename LHS, typename RHS>
+inline BinaryOp_match<LHS, RHS, TargetOpcode::G_BUILD_VECTOR, false>
+m_GBuildVector(const LHS &L, const RHS &R) {
+  return BinaryOp_match<LHS, RHS, TargetOpcode::G_BUILD_VECTOR, false>(L, R);
+}
+
+template <typename LHS, typename RHS>
+inline BinaryOp_match<LHS, RHS, TargetOpcode::G_BUILD_VECTOR_TRUNC, false>
+m_GBuildVectorTrunc(const LHS &L, const RHS &R) {
+  return BinaryOp_match<LHS, RHS, TargetOpcode::G_BUILD_VECTOR_TRUNC, false>(L,
+                                                                             R);
 }
 
 template <typename LHS, typename RHS>
