@@ -248,6 +248,7 @@ def ImmSubFrom32 : SDNodeXForm<imm, [{
 }]>;
 
 def BaseAddr : ComplexPattern<iPTR, 1, "SelectBaseAddr">;
+def NonFIBaseAddr : ComplexPattern<iPTR, 1, "selectNonFIBaseAddr">;
 
 def fma_nsz : PatFrag<(ops node:$fj, node:$fk, node:$fa),
                       (fma node:$fj, node:$fk, node:$fa), [{
@@ -338,7 +339,7 @@ class STORE_2RI14<bits<8> op, string opstr>
                "$rd, $rj, $imm14">;
 } // mayStore = 1
 
-let mayLoad = 1, mayStore = 1 in
+let mayLoad = 1, mayStore = 1, Constraints = "@earlyclobber $rd" in
 class AM_3R<bits<17> op, string opstr>
     : Fmt3R<op, (outs GPR:$rd), (ins GPR:$rk, GPR:$rj), opstr, "$rd, $rk, $rj">;
 
@@ -925,6 +926,18 @@ def PseudoLA_PCREL : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
 def PseudoLA_GOT : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
 
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def PseudoLA_TLS_LE : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+def PseudoLA_TLS_IE : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+def PseudoLA_TLS_LD : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+def PseudoLA_TLS_GD : Pseudo<(outs GPR:$dst), (ins grlenimm:$src), []>;
+
 /// BSTRINS and BSTRPICK
 
 let Predicates = [IsLA32] in {
@@ -987,8 +1000,8 @@ defm : LdPat<load, LD_D, i64>;
 // LA64 register-register-addressed loads
 let Predicates = [IsLA64] in {
 class RegRegLdPat<PatFrag LoadOp, LAInst Inst, ValueType vt>
-  : Pat<(vt (LoadOp (add BaseAddr:$rj, GPR:$rk))),
-        (Inst BaseAddr:$rj, GPR:$rk)>;
+  : Pat<(vt (LoadOp (add NonFIBaseAddr:$rj, GPR:$rk))),
+        (Inst NonFIBaseAddr:$rj, GPR:$rk)>;
 
 def : RegRegLdPat<extloadi8, LDX_B, i64>;
 def : RegRegLdPat<sextloadi8, LDX_B, i64>;
@@ -1036,8 +1049,8 @@ def : Pat<(store (i64 GPR:$rd), (AddLike BaseAddr:$rj, simm14_lsl2:$imm14)),
 let Predicates = [IsLA64] in {
 class RegRegStPat<PatFrag StoreOp, LAInst Inst, RegisterClass StTy,
                   ValueType vt>
-  : Pat<(StoreOp (vt StTy:$rd), (add BaseAddr:$rj, GPR:$rk)),
-        (Inst StTy:$rd, BaseAddr:$rj, GPR:$rk)>;
+  : Pat<(StoreOp (vt StTy:$rd), (add NonFIBaseAddr:$rj, GPR:$rk)),
+        (Inst StTy:$rd, NonFIBaseAddr:$rj, GPR:$rk)>;
 
 def : RegRegStPat<truncstorei8, STX_B, GPR, i64>;
 def : RegRegStPat<truncstorei16, STX_H, GPR, i64>;
