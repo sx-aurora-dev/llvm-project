@@ -39,11 +39,6 @@ std::unique_ptr<Pass> createFoldReshapeOpsByLinearizationPass();
 std::unique_ptr<Pass> createLinalgNamedOpConversionPass();
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-createLinalgTilingPass(ArrayRef<int64_t> tileSizes = {},
-                       linalg::LinalgTilingLoopType loopType =
-                           linalg::LinalgTilingLoopType::Loops);
-
-std::unique_ptr<OperationPass<func::FuncOp>>
 createLinalgInlineScalarOperandsPass();
 
 /// Create a pass to convert Linalg operations to scf.for loops and
@@ -72,27 +67,6 @@ std::unique_ptr<OperationPass<func::FuncOp>> createLinalgGeneralizationPass();
 /// Create a pass to convert Linalg operations to equivalent operations that
 /// work on primitive types, if possible.
 std::unique_ptr<Pass> createLinalgDetensorizePass();
-
-//===----------------------------------------------------------------------===//
-/// Linalg strategy passes.
-//===----------------------------------------------------------------------===//
-/// Create a LinalgStrategyTileAndFusePass.
-std::unique_ptr<OperationPass<func::FuncOp>>
-createLinalgStrategyTileAndFusePass(
-    StringRef opName = "", const linalg::LinalgTilingAndFusionOptions &opt = {},
-    const linalg::LinalgTransformationFilter &filter =
-        linalg::LinalgTransformationFilter());
-
-/// Create a LinalgStrategyTilePass.
-std::unique_ptr<OperationPass<func::FuncOp>> createLinalgStrategyTilePass(
-    StringRef opName = "",
-    const linalg::LinalgTilingOptions &opt = linalg::LinalgTilingOptions(),
-    const linalg::LinalgTransformationFilter &filter =
-        linalg::LinalgTransformationFilter());
-
-/// Create a LinalgStrategyRemoveMarkersPass.
-std::unique_ptr<OperationPass<func::FuncOp>>
-createLinalgStrategyRemoveMarkersPass();
 
 //===----------------------------------------------------------------------===//
 // Registration

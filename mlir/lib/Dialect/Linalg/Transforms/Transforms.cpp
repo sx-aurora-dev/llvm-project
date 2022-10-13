@@ -47,75 +47,6 @@ using namespace mlir::linalg;
 //===----------------------------------------------------------------------===//
 // Transformations exposed as rewrite patterns.
 //===----------------------------------------------------------------------===//
-// Marker used as attribute name in generated Linalg rewriting transformations.
-const StringLiteral mlir::linalg::LinalgTransforms::kLinalgTransformMarker =
-    "__internal_linalg_transform__";
-
-mlir::linalg::LinalgTransformationFilter::LinalgTransformationFilter(
-    ArrayRef<StringAttr> matchDisjunction, Optional<StringAttr> replacement)
-    : matchDisjunction(matchDisjunction.begin(), matchDisjunction.end()),
-      replacement(replacement), matchByDefault(false) {}
-
-mlir::linalg::LinalgTransformationFilter::LinalgTransformationFilter(
-    const FilterFunction &f, ArrayRef<StringAttr> matchDisjunction,
-    Optional<StringAttr> replacement)
-    : matchDisjunction(matchDisjunction.begin(), matchDisjunction.end()),
-      replacement(replacement), matchByDefault(false) {
-  if (f)
-    filters.push_back(f);
-}
-
-LogicalResult mlir::linalg::LinalgTransformationFilter::checkAndNotify(
-    PatternRewriter &rewriter, Operation *op) const {
-  if (llvm::any_of(filters,
-                   [&](const FilterFunction &f) { return failed(f(op)); }))
-    return failure();
-
-  auto attr = op->template getAttrOfType<StringAttr>(
-      LinalgTransforms::kLinalgTransformMarker);
-
-  if (!attr) {
-    // 1. Has no filter case and matchDisjunction is empty.
-    if (matchDisjunction.empty() || matchByDefault)
-      return success();
-
-    // 2. Has no filter but was expecting a filter.
-    return rewriter.notifyMatchFailure(op, [&](Diagnostic &diag) {
-      diag << " does not have any filter from list: ";
-      interleaveComma(matchDisjunction, diag);
-    });
-  }
-
-  // 4. Match explicit filter.
-  for (auto filter : matchDisjunction)
-    if (attr.getValue() == filter)
-      return success();
-
-  // 5. Fail to match.
-  return rewriter.notifyMatchFailure(op, [&](Diagnostic &diag) {
-    diag << " does not have any filter from list: ";
-    interleaveComma(matchDisjunction, diag);
-  });
-}
-
-void mlir::linalg::LinalgTransformationFilter::
-    replaceLinalgTransformationFilter(PatternRewriter &rewriter,
-                                      Operation *op) const {
-  if (replacement.has_value())
-    op->setAttr(LinalgTransforms::kLinalgTransformMarker, replacement.value());
-  else
-    op->removeAttr(
-        rewriter.getStringAttr(LinalgTransforms::kLinalgTransformMarker));
-}
-
-bool mlir::linalg::LinalgTransformationFilter::hasReplacementFilter(
-    Operation *op) const {
-  if (!replacement)
-    return false;
-  auto attr = op->getAttr(LinalgTransforms::kLinalgTransformMarker)
-                  .dyn_cast<StringAttr>();
-  return attr && attr == *replacement;
-}
 
 LinalgTilingOptions &
 mlir::linalg::LinalgTilingOptions::setTileSizes(ArrayRef<int64_t> ts) {
@@ -356,32 +287,12 @@ void mlir::linalg::peelTiledLinalgOp(RewriterBase &rewriter, TiledLinalgOp &res,
   }
 }
 
-/// Linalg tiling pattern.
-mlir::linalg::LinalgTilingPattern::LinalgTilingPattern(
-    MLIRContext *context, LinalgTilingOptions options,
-    LinalgTransformationFilter f, PatternBenefit benefit)
-    : OpInterfaceRewritePattern<LinalgOp>(context, benefit),
-      filter(std::move(f)), options(std::move(options)) {}
-
-mlir::linalg::LinalgTilingPattern::LinalgTilingPattern(
-    StringRef opName, MLIRContext *context, LinalgTilingOptions options,
-    LinalgTransformationFilter f, PatternBenefit benefit)
-    : OpInterfaceRewritePattern<LinalgOp>(context, benefit),
-      filter(f.addOpNameFilter(opName)), options(std::move(options)) {}
-
 FailureOr<TiledLinalgOp>
-mlir::linalg::LinalgTilingPattern::returningMatchAndRewrite(
-    LinalgOp op, PatternRewriter &rewriter) const {
-  if (failed(filter.checkAndNotify(rewriter, op)))
-    return failure();
-
+mlir::linalg::tileWithLinalgTilingOptions(RewriterBase &rewriter, LinalgOp op,
+                                          const LinalgTilingOptions &options) {
   FailureOr<TiledLinalgOp> res = tileLinalgOp(rewriter, op, options);
   if (failed(res))
     return failure();
-
-  // Clear filter to stop recursive pattern application.
-  // This must be done here to properly propagate to peeling branches.
-  filter.replaceLinalgTransformationFilter(rewriter, res->op);
 
   // Peel the loops of the TiledLinalgOp.
   peelTiledLinalgOp(rewriter, *res, options.peeledLoops, options.loopType);
@@ -447,140 +358,9 @@ mlir::linalg::LinalgPaddingPattern::returningMatchAndRewrite(
   return paddedOp;
 }
 
-/// Linalg tile and fuse tensor ops pattern.
-mlir::linalg::LinalgTileAndFuseTensorOpsPattern::
-    LinalgTileAndFuseTensorOpsPattern(MLIRContext *context,
-                                      LinalgTilingAndFusionOptions options,
-                                      LinalgTransformationFilter f,
-                                      PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
-      filter(std::move(f)), options(std::move(options)) {}
-
-mlir::linalg::LinalgTileAndFuseTensorOpsPattern::
-    LinalgTileAndFuseTensorOpsPattern(StringRef opName, MLIRContext *context,
-                                      LinalgTilingAndFusionOptions options,
-                                      LinalgTransformationFilter f,
-                                      PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context), filter(std::move(f)),
-      options(std::move(options)) {}
-
-FailureOr<mlir::linalg::TileLoopNest>
-mlir::linalg::LinalgTileAndFuseTensorOpsPattern::returningMatchAndRewrite(
-    Operation *op, PatternRewriter &rewriter) const {
-  LinalgOp rootOp = dyn_cast<LinalgOp>(op);
-  if (!rootOp)
-    return failure();
-  if (failed(filter.checkAndNotify(rewriter, op)))
-    return failure();
-
-  // Check `tileSizes` contains a tile size for every `rootOp` loop dimension.
-  if (options.tileSizes.size() < rootOp.getNumLoops())
-    return rewriter.notifyMatchFailure(op, "expect #tile sizes >= #loops");
-
-  // Check `tileInterchange` contains no entries or as many as `tileSizes`.
-  if (!options.tileInterchange.empty() &&
-      options.tileInterchange.size() != options.tileSizes.size())
-    return rewriter.notifyMatchFailure(
-        op, "expect the number of tile sizes and interchange dims to match");
-
-  // Copy the `tileSizes` and `tileInterchange` prefixes needed for `rootOp`.
-  SmallVector<int64_t> rootTileSizes(options.tileSizes.begin(),
-                                     options.tileSizes.begin() +
-                                         rootOp.getNumLoops());
-  SmallVector<int64_t> rootInterchange =
-      options.tileInterchange.empty()
-          ? llvm::to_vector<6>(llvm::seq<int64_t>(0, rootOp.getNumLoops()))
-          : SmallVector<int64_t>(options.tileInterchange.begin(),
-                                 options.tileInterchange.begin() +
-                                     rootOp.getNumLoops());
-
-  // Check `rootTileSizes` contains non-zero tile sizes.
-  if (llvm::count(rootTileSizes, 0) == static_cast<long>(rootTileSizes.size()))
-    return rewriter.notifyMatchFailure(
-        op, "expect at least one non-zero tile size");
-
-  // Check `rootInterchange` is a permutation of the `rootOp` loop dimensions.
-  // It has to be a permutation since the tiling cannot tile the same loop
-  // dimension multiple times.
-  if (!isPermutation(rootInterchange))
-    return rewriter.notifyMatchFailure(
-        op, "expect the tile interchange permutes the root loops");
-
-  // Tile `rootOp` and fuse its producers.
-  FailureOr<TileLoopNest> tileLoopNest =
-      tileConsumerAndFuseProducers(rewriter, rootOp, rootTileSizes,
-                                   rootInterchange, options.tileDistribution);
-  if (failed(tileLoopNest))
-    return rewriter.notifyMatchFailure(
-        op, "tileConsumerAndFuseProducers failed unexpectedly");
-
-  // Replace all uses of the tiled loop operation.
-  rootOp->replaceAllUsesWith(tileLoopNest->getRootOpReplacementResults());
-
-  // Apply the filter if specified.
-  for (LinalgOp linalgOp : tileLoopNest->getAllTiledAndFusedOps())
-    filter.replaceLinalgTransformationFilter(rewriter, linalgOp);
-  return tileLoopNest;
-}
-
-/// Linalg generalization pattern.
-mlir::linalg::LinalgGeneralizationPattern::LinalgGeneralizationPattern(
-    MLIRContext *context, LinalgTransformationFilter f, PatternBenefit benefit)
-    : OpInterfaceRewritePattern<LinalgOp>(context, benefit),
-      filter(std::move(f)) {}
-
-mlir::linalg::LinalgGeneralizationPattern::LinalgGeneralizationPattern(
-    StringRef opName, MLIRContext *context, LinalgTransformationFilter f,
-    PatternBenefit benefit)
-    : OpInterfaceRewritePattern<LinalgOp>(context, benefit),
-      filter(f.addOpNameFilter(opName)) {}
-
-FailureOr<GenericOp>
-mlir::linalg::LinalgGeneralizationPattern::returningMatchAndRewrite(
-    LinalgOp linalgOp, PatternRewriter &rewriter) const {
-  if (failed(filter.checkAndNotify(rewriter, linalgOp)))
-    return failure();
-  FailureOr<GenericOp> genericOp = generalizeNamedOp(rewriter, linalgOp);
-  if (failed(genericOp))
-    return failure();
-  filter.replaceLinalgTransformationFilter(rewriter, *genericOp);
-  return genericOp;
-}
-
 LogicalResult mlir::linalg::CopyVectorizationPattern::matchAndRewrite(
     memref::CopyOp copyOp, PatternRewriter &rewriter) const {
   return vectorizeCopy(rewriter, copyOp);
-}
-
-LogicalResult mlir::linalg::applyStagedPatterns(
-    Operation *op, ArrayRef<FrozenRewritePatternSet> stage1Patterns,
-    const FrozenRewritePatternSet &stage2Patterns,
-    function_ref<LogicalResult(Operation *)> stage3Lambda) {
-  unsigned iteration = 0;
-  (void)iteration;
-  for (const auto &patterns : stage1Patterns) {
-    LLVM_DEBUG(DBGS() << "Before 1st stage, iter: " << ++iteration << "\n"
-                      << *op);
-    if (failed(applyPatternsAndFoldGreedily(op, patterns))) {
-      LLVM_DEBUG(DBGS() << "Underlying first stage rewrite did not converge");
-      return failure();
-    }
-    LLVM_DEBUG(DBGS() << "After 1st stage, iter: " << ++iteration << "\n"
-                      << *op);
-    if (failed(applyPatternsAndFoldGreedily(op, stage2Patterns))) {
-      LLVM_DEBUG(DBGS() << "Underlying 2nd stage rewrite did not converge");
-      return failure();
-    }
-    LLVM_DEBUG(DBGS() << "After 2nd stage, iter : " << iteration << "\n"
-                      << *op);
-    if (stage3Lambda) {
-      if (failed(stage3Lambda(op)))
-        return failure();
-      LLVM_DEBUG(DBGS() << "After 3rd stage, iter : " << iteration << "\n"
-                        << *op);
-    }
-  }
-  return success();
 }
 
 static SmallVector<StringRef> getNParallelLoopsAttrs(unsigned nParallelLoops) {
