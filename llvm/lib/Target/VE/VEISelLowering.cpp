@@ -3498,6 +3498,171 @@ SDValue VETargetLowering::combineExtBoolTrunc(SDNode *N,
   return SDValue();
 }
 
+SDValue VETargetLowering::combineSelect(SDNode *N,
+                                        DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SELECT &&
+         "Should be called with a SELECT node");
+  ISD::CondCode CC = ISD::CondCode::SETNE;
+  SDValue Cond = N->getOperand(0);
+  SDValue True = N->getOperand(1);
+  SDValue False = N->getOperand(2);
+
+  // We handle only scalar SELECT.
+  EVT VT = N->getValueType(0);
+  if (VT.isVector())
+    return SDValue();
+
+  // Peform combineSelect after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
+  EVT VT0 = Cond.getValueType();
+  if (isMImm(True)) {
+    // VE's condition move can handle MImm in True clause, so nothing to do.
+  } else if (isMImm(False)) {
+    // VE's condition move can handle MImm in True clause, so swap True and
+    // False clauses if False has MImm value.  And, update condition code.
+    std::swap(True, False);
+    CC = getSetCCInverse(CC, VT0);
+  }
+
+  SDLoc DL(N);
+  SelectionDAG &DAG = DCI.DAG;
+  VECC::CondCode VECCVal;
+  if (VT0.isFloatingPoint()) {
+    VECCVal = fpCondCode2Fcc(CC);
+  } else {
+    VECCVal = intCondCode2Icc(CC);
+  }
+  SDValue Ops[] = {Cond, True, False,
+                   DAG.getConstant(VECCVal, DL, MVT::i32)};
+  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
+}
+
+SDValue VETargetLowering::combineSelectCC(SDNode *N,
+                                          DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SELECT_CC &&
+         "Should be called with a SELECT_CC node");
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(4))->get();
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  SDValue True = N->getOperand(2);
+  SDValue False = N->getOperand(3);
+
+  // We handle only scalar SELECT_CC.
+  EVT VT = N->getValueType(0);
+  if (VT.isVector())
+    return SDValue();
+
+  // Peform combineSelectCC after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
+  // We handle only i32/i64/f32/f64/f128 comparisons.
+  EVT LHSVT = LHS.getValueType();
+  assert(LHSVT == RHS.getValueType());
+  switch (LHSVT.getSimpleVT().SimpleTy) {
+  case MVT::i32:
+  case MVT::i64:
+  case MVT::f32:
+  case MVT::f64:
+  case MVT::f128:
+    break;
+  default:
+    // Return SDValue to let llvm handle other types.
+    return SDValue();
+  }
+
+  if (isMImm(RHS)) {
+    // VE's comparison can handle MImm in RHS, so nothing to do.
+  } else if (isSimm7(RHS)) {
+    // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
+    // update condition code.
+    std::swap(LHS, RHS);
+    CC = getSetCCSwappedOperands(CC);
+  }
+  if (isMImm(True)) {
+    // VE's condition move can handle MImm in True clause, so nothing to do.
+  } else if (isMImm(False)) {
+    // VE's condition move can handle MImm in True clause, so swap True and
+    // False clauses if False has MImm value.  And, update condition code.
+    std::swap(True, False);
+    CC = getSetCCInverse(CC, LHSVT);
+  }
+
+  SDLoc DL(N);
+  SelectionDAG &DAG = DCI.DAG;
+
+  bool Commutable = isIntEqualitySetCC(CC);
+  bool Signed = isSignedIntSetCC(CC);
+  bool WithCMov = true;
+  SDValue CompNode = generateComparison(LHSVT, LHS, RHS, Commutable, Signed,
+                                        WithCMov, DL, DAG);
+
+  VECC::CondCode VECCVal;
+  if (LHSVT.isFloatingPoint()) {
+    VECCVal = fpCondCode2Fcc(CC);
+  } else {
+    VECCVal = intCondCode2Icc(CC);
+  }
+  SDValue Ops[] = {CompNode, True, False,
+                   DAG.getConstant(VECCVal, DL, MVT::i32)};
+  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
+}
+
+SDValue VETargetLowering::combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SETCC && "Should be called with a SETCC node");
+
+  // We handle only scalar and i32 SETCC.
+  EVT VT = N->getValueType(0);
+  if (VT.isVector() || VT != MVT::i32)
+    return SDValue();
+
+  // We handle only integer comparison
+  EVT SrcVT = N->getOperand(0).getValueType();
+  if (SrcVT.isFloatingPoint())
+    return SDValue();
+
+  // Peform combineSetCC after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
+  // Check all use of this SETCC.
+  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
+       ++UI) {
+    SDNode *User = *UI;
+
+    // Make sure that we're not going to promote SETCC for SELECT or BRCOND
+    // or BR_CC.
+    // FIXME: Although we could sometimes handle this, and it does occur in
+    // practice that one of the condition inputs to the select is also one of
+    // the outputs, we currently can't deal with this.
+    if (User->getOpcode() == ISD::SELECT || User->getOpcode() == ISD::BRCOND) {
+      if (User->getOperand(0).getNode() == N)
+        return SDValue();
+    } else if (User->getOpcode() == ISD::BR_CC) {
+      if (User->getOperand(1).getNode() == N ||
+          User->getOperand(2).getNode() == N)
+        return SDValue();
+    } else if (User->getOpcode() == ISD::AND) {
+      // Atomic expansion may construct instructions like below.
+      //   %cond = SETCC
+      //   %and = AND %cond, 1
+      //   BR_CC %and
+      //
+      // This patterns will be combined into a single BR_CC later.
+      // So, we defer optimization on SETCC for a while.
+      // FIXME: create combine for (AND (SETCC ), 1).
+      if (User->getOperand(0).getNode() == N &&
+          User->getOperand(1).getValueType().isScalarInteger() &&
+          isOneConstant(User->getOperand(1)))
+        return SDValue();
+    }
+  }
+
+  return optimizeSetCC(N, DCI);
+}
+
 static bool isI32InsnAllUses(const SDNode *User, const SDNode *N);
 static bool isI32Insn(const SDNode *User, const SDNode *N) {
   switch (User->getOpcode()) {
@@ -3630,171 +3795,6 @@ SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
                  0);
 }
 
-SDValue VETargetLowering::combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
-  assert(N->getOpcode() == ISD::SETCC && "Should be called with a SETCC node");
-
-  // We handle only scalar and i32 SETCC.
-  EVT VT = N->getValueType(0);
-  if (VT.isVector() || VT != MVT::i32)
-    return SDValue();
-
-  // We handle only integer comparison
-  EVT SrcVT = N->getOperand(0).getValueType();
-  if (SrcVT.isFloatingPoint())
-    return SDValue();
-
-  // Peform combineSetCC after leagalize DAG.
-  if (!DCI.isAfterLegalizeDAG())
-    return SDValue();
-
-  // Check all use of this SETCC.
-  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
-       ++UI) {
-    SDNode *User = *UI;
-
-    // Make sure that we're not going to promote SETCC for SELECT or BRCOND
-    // or BR_CC.
-    // FIXME: Although we could sometimes handle this, and it does occur in
-    // practice that one of the condition inputs to the select is also one of
-    // the outputs, we currently can't deal with this.
-    if (User->getOpcode() == ISD::SELECT || User->getOpcode() == ISD::BRCOND) {
-      if (User->getOperand(0).getNode() == N)
-        return SDValue();
-    } else if (User->getOpcode() == ISD::BR_CC) {
-      if (User->getOperand(1).getNode() == N ||
-          User->getOperand(2).getNode() == N)
-        return SDValue();
-    } else if (User->getOpcode() == ISD::AND) {
-      // Atomic expansion may construct instructions like below.
-      //   %cond = SETCC
-      //   %and = AND %cond, 1
-      //   BR_CC %and
-      //
-      // This patterns will be combined into a single BR_CC later.
-      // So, we defer optimization on SETCC for a while.
-      // FIXME: create combine for (AND (SETCC ), 1).
-      if (User->getOperand(0).getNode() == N &&
-          User->getOperand(1).getValueType().isScalarInteger() &&
-          isOneConstant(User->getOperand(1)))
-        return SDValue();
-    }
-  }
-
-  return optimizeSetCC(N, DCI);
-}
-
-SDValue VETargetLowering::combineSelectCC(SDNode *N,
-                                          DAGCombinerInfo &DCI) const {
-  assert(N->getOpcode() == ISD::SELECT_CC &&
-         "Should be called with a SELECT_CC node");
-  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(4))->get();
-  SDValue LHS = N->getOperand(0);
-  SDValue RHS = N->getOperand(1);
-  SDValue True = N->getOperand(2);
-  SDValue False = N->getOperand(3);
-
-  // We handle only scalar SELECT_CC.
-  EVT VT = N->getValueType(0);
-  if (VT.isVector())
-    return SDValue();
-
-  // Peform combineSelectCC after leagalize DAG.
-  if (!DCI.isAfterLegalizeDAG())
-    return SDValue();
-
-  // We handle only i32/i64/f32/f64/f128 comparisons.
-  EVT LHSVT = LHS.getValueType();
-  assert(LHSVT == RHS.getValueType());
-  switch (LHSVT.getSimpleVT().SimpleTy) {
-  case MVT::i32:
-  case MVT::i64:
-  case MVT::f32:
-  case MVT::f64:
-  case MVT::f128:
-    break;
-  default:
-    // Return SDValue to let llvm handle other types.
-    return SDValue();
-  }
-
-  if (isMImm(RHS)) {
-    // VE's comparison can handle MImm in RHS, so nothing to do.
-  } else if (isSimm7(RHS)) {
-    // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
-    // update condition code.
-    std::swap(LHS, RHS);
-    CC = getSetCCSwappedOperands(CC);
-  }
-  if (isMImm(True)) {
-    // VE's condition move can handle MImm in True clause, so nothing to do.
-  } else if (isMImm(False)) {
-    // VE's condition move can handle MImm in True clause, so swap True and
-    // False clauses if False has MImm value.  And, update condition code.
-    std::swap(True, False);
-    CC = getSetCCInverse(CC, LHSVT);
-  }
-
-  SDLoc DL(N);
-  SelectionDAG &DAG = DCI.DAG;
-
-  bool Commutable = isIntEqualitySetCC(CC);
-  bool Signed = isSignedIntSetCC(CC);
-  bool WithCMov = true;
-  SDValue CompNode = generateComparison(LHSVT, LHS, RHS, Commutable, Signed,
-                                        WithCMov, DL, DAG);
-
-  VECC::CondCode VECCVal;
-  if (LHSVT.isFloatingPoint()) {
-    VECCVal = fpCondCode2Fcc(CC);
-  } else {
-    VECCVal = intCondCode2Icc(CC);
-  }
-  SDValue Ops[] = {CompNode, True, False,
-                   DAG.getConstant(VECCVal, DL, MVT::i32)};
-  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
-}
-
-SDValue VETargetLowering::combineSelect(SDNode *N,
-                                        DAGCombinerInfo &DCI) const {
-  assert(N->getOpcode() == ISD::SELECT &&
-         "Should be called with a SELECT node");
-  ISD::CondCode CC = ISD::CondCode::SETNE;
-  SDValue Cond = N->getOperand(0);
-  SDValue True = N->getOperand(1);
-  SDValue False = N->getOperand(2);
-
-  // We handle only scalar SELECT.
-  EVT VT = N->getValueType(0);
-  if (VT.isVector())
-    return SDValue();
-
-  // Peform combineSelect after leagalize DAG.
-  if (!DCI.isAfterLegalizeDAG())
-    return SDValue();
-
-  EVT VT0 = Cond.getValueType();
-  if (isMImm(True)) {
-    // VE's condition move can handle MImm in True clause, so nothing to do.
-  } else if (isMImm(False)) {
-    // VE's condition move can handle MImm in True clause, so swap True and
-    // False clauses if False has MImm value.  And, update condition code.
-    std::swap(True, False);
-    CC = getSetCCInverse(CC, VT0);
-  }
-
-  SDLoc DL(N);
-  SelectionDAG &DAG = DCI.DAG;
-  VECC::CondCode VECCVal;
-  if (VT0.isFloatingPoint()) {
-    VECCVal = fpCondCode2Fcc(CC);
-  } else {
-    VECCVal = intCondCode2Icc(CC);
-  }
-  SDValue Ops[] = {Cond, True, False,
-                   DAG.getConstant(VECCVal, DL, MVT::i32)};
-  return DAG.getNode(VEISD::CMOV, DL, VT, Ops);
-}
-
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
@@ -3818,12 +3818,12 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
     return combineExtBoolTrunc(N, DCI);
-  case ISD::SETCC:
-    return combineSetCC(N, DCI);
-  case ISD::SELECT_CC:
-    return combineSelectCC(N, DCI);
   case ISD::SELECT:
     return combineSelect(N, DCI);
+  case ISD::SELECT_CC:
+    return combineSelectCC(N, DCI);
+  case ISD::SETCC:
+    return combineSetCC(N, DCI);
   case ISD::TRUNCATE:
     return combineTRUNCATE(N, DCI);
   }
