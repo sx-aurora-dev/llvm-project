@@ -2273,9 +2273,11 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(
     // Filter out previous declarations that don't match the scope. The only
     // effect this has is to remove declarations found in inline namespaces
     // for friend declarations with unqualified names.
-    SemaRef.FilterLookupForScope(Previous, DC, /*Scope*/ nullptr,
-                                 /*ConsiderLinkage*/ true,
-                                 QualifierLoc.hasQualifier());
+    if (isFriend && !QualifierLoc && !FunctionTemplate) {
+      SemaRef.FilterLookupForScope(Previous, DC, /*Scope=*/ nullptr,
+                                   /*ConsiderLinkage=*/ true,
+                                   QualifierLoc.hasQualifier());
+    }
   }
 
   // Per [temp.inst], default arguments in function declarations at local scope
@@ -3292,9 +3294,11 @@ Decl *TemplateDeclInstantiator::VisitUsingEnumDecl(UsingEnumDecl *D) {
   if (SemaRef.RequireCompleteEnumDecl(EnumD, EnumD->getLocation()))
     return nullptr;
 
+  TypeSourceInfo *TSI = SemaRef.SubstType(D->getEnumType(), TemplateArgs,
+                                          D->getLocation(), D->getDeclName());
   UsingEnumDecl *NewUD =
       UsingEnumDecl::Create(SemaRef.Context, Owner, D->getUsingLoc(),
-                            D->getEnumLoc(), D->getLocation(), EnumD);
+                            D->getEnumLoc(), D->getLocation(), TSI);
 
   SemaRef.Context.setInstantiatedFromUsingEnumDecl(NewUD, D);
   NewUD->setAccess(D->getAccess());

@@ -4512,7 +4512,7 @@ SDValue RISCVTargetLowering::lowerSPLAT_VECTOR_PARTS(SDValue Op,
   if (VecVT.isFixedLengthVector()) {
     MVT ContainerVT = getContainerForFixedLengthVector(VecVT);
     SDLoc DL(Op);
-    auto [Mask, VL] = getDefaultVLOps(VecVT, ContainerVT, DL, DAG, Subtarget);
+    auto VL = getDefaultVLOps(VecVT, ContainerVT, DL, DAG, Subtarget).second;
 
     SDValue Res =
         splatPartsI64WithVL(DL, ContainerVT, SDValue(), Lo, Hi, VL, DAG);
@@ -9423,9 +9423,9 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
       return TrueV;
 
     // (select (x in [0,1] == 0), y, (z ^ y) ) -> (-x & z ) ^ y
-    // (select (x in [0,1] != 0), (z ^ y) ), y -> (-x & z ) ^ y
+    // (select (x in [0,1] != 0), (z ^ y), y ) -> (-x & z ) ^ y
     // (select (x in [0,1] == 0), y, (z | y) ) -> (-x & z ) | y
-    // (select (x in [0,1] != 0), (z | y) ), y -> (-x & z ) | y
+    // (select (x in [0,1] != 0), (z | y), y ) -> (-x & z ) | y
     APInt Mask = APInt::getBitsSetFrom(LHS.getValueSizeInBits(), 1);
     if (isNullConstant(RHS) && ISD::isIntEqualitySetCC(CCVal) &&
         DAG.MaskedValueIsZero(LHS, Mask)) {
@@ -9493,6 +9493,21 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
       SDValue Neg = DAG.getNegative(C, DL, VT);
       return DAG.getNode(ISD::OR, DL, VT, Neg, TrueV);
     }
+
+    // (select c, 0, y) -> -!c & y
+    if (isNullConstant(TrueV)) {
+      SDValue C = DAG.getSetCC(DL, VT, LHS, RHS,
+                               ISD::getSetCCInverse(CCVal, VT));
+      SDValue Neg = DAG.getNegative(C, DL, VT);
+      return DAG.getNode(ISD::AND, DL, VT, Neg, FalseV);
+    }
+    // (select c, y, 0) -> -c & y
+    if (isNullConstant(FalseV)) {
+      SDValue C = DAG.getSetCC(DL, VT, LHS, RHS, CCVal);
+      SDValue Neg = DAG.getNegative(C, DL, VT);
+      return DAG.getNode(ISD::AND, DL, VT, Neg, TrueV);
+    }
+
 
     return SDValue();
   }
