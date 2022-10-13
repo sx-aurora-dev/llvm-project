@@ -3384,14 +3384,6 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
   EVT SrcVT = N->getOperand(0).getValueType();
 
-  // FIXME: optimize floating point SetCC.
-  if (SrcVT.isFloatingPoint())
-    return SDValue();
-
-  // We prefer to do this when all types are legal.
-  if (!DCI.isAfterLegalizeDAG())
-    return SDValue();
-
   // For setcc, we generally create following instructions.
   //   INSN                     LATENCY
   //   CMP       %cmp, %a, %b   1
@@ -3641,33 +3633,18 @@ SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
 SDValue VETargetLowering::combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SETCC && "Should be called with a SETCC node");
 
-#if 0
-  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
-  if (CC == ISD::SETNE || CC == ISD::SETEQ) {
-    SDValue LHS = N->getOperand(0);
-    SDValue RHS = N->getOperand(1);
-
-    // If there is a '0 - y' pattern, canonicalize the pattern to the RHS.
-    if (LHS.getOpcode() == ISD::SUB && isNullConstant(LHS.getOperand(0)) &&
-        LHS.hasOneUse())
-      std::swap(LHS, RHS);
-
-    // x == 0-y --> x+y == 0
-    // x != 0-y --> x+y != 0
-    if (RHS.getOpcode() == ISD::SUB && isNullConstant(RHS.getOperand(0)) &&
-        RHS.hasOneUse()) {
-      SDLoc DL(N);
-      SelectionDAG &DAG = DCI.DAG;
-      EVT VT = N->getValueType(0);
-      EVT OpVT = LHS.getValueType();
-      SDValue Add = DAG.getNode(ISD::ADD, DL, OpVT, LHS, RHS.getOperand(1));
-      return DAG.getSetCC(DL, VT, Add, DAG.getConstant(0, DL, OpVT), CC);
-    }
-  }
-#endif
-
+  // We handle only scalar and i32 SETCC.
   EVT VT = N->getValueType(0);
-  if (VT != MVT::i32)
+  if (VT.isVector() || VT != MVT::i32)
+    return SDValue();
+
+  // We handle only integer comparison
+  EVT SrcVT = N->getOperand(0).getValueType();
+  if (SrcVT.isFloatingPoint())
+    return SDValue();
+
+  // Peform combineSetCC after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
     return SDValue();
 
   // Check all use of this SETCC.
