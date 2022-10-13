@@ -3721,6 +3721,10 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   if (VT.isVector())
     return SDValue();
 
+  // Peform combineSelectCC after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
   // We handle only i32/i64/f32/f64/f128 comparisons.
   EVT LHSVT = LHS.getValueType();
   assert(LHSVT == RHS.getValueType());
