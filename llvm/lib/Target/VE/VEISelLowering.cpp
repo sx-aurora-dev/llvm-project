@@ -3787,19 +3787,11 @@ SDValue VETargetLowering::combineSelect(SDNode *N,
   if (VT.isVector())
     return SDValue();
 
-  // We handle only i32 condition.
+  // Peform combineSelect after leagalize DAG.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
   EVT VT0 = Cond.getValueType();
-  if (VT0 != MVT::i32)
-    return SDValue();
-
-  if (DCI.isBeforeLegalizeOps())
-    return SDValue();
-
-  // (select (setcc ...), true, false) may be optimized later, so
-  // don't combine them here.
-  if (Cond->getOpcode() == ISD::SETCC)
-    return SDValue();
-
   if (isMImm(True)) {
     // VE's condition move can handle MImm in True clause, so nothing to do.
   } else if (isMImm(False)) {
