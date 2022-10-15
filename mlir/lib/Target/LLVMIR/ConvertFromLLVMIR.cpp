@@ -236,6 +236,13 @@ static StringRef getLLVMSyncScope(llvm::FenceInst *fenceInst) {
   llvm_unreachable("incorrect sync scope identifier");
 }
 
+/// Converts an array of unsigned indices to a signed integer position array.
+static SmallVector<int64_t> getPositionFromIndices(ArrayRef<unsigned> indices) {
+  SmallVector<int64_t> position;
+  llvm::append_range(position, indices);
+  return position;
+}
+
 DataLayoutSpecInterface
 mlir::translateDataLayout(const llvm::DataLayout &dataLayout,
                           MLIRContext *context) {
@@ -633,10 +640,9 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *gv) {
     b.create<ReturnOp>(op.getLoc(), ArrayRef<Value>({v}));
   }
   if (gv->hasAtLeastLocalUnnamedAddr())
-    op.setUnnamedAddrAttr(UnnamedAddrAttr::get(
-        context, convertUnnamedAddrFromLLVM(gv->getUnnamedAddr())));
+    op.setUnnamedAddr(convertUnnamedAddrFromLLVM(gv->getUnnamedAddr()));
   if (gv->hasSection())
-    op.setSectionAttr(b.getStringAttr(gv->getSection()));
+    op.setSection(gv->getSection());
 
   return globals[gv] = op;
 }
@@ -804,36 +810,6 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
 
   // Convert all special instructions that do not provide an MLIR builder.
   Location loc = translateLoc(inst->getDebugLoc());
-  if (inst->getOpcode() == llvm::Instruction::ICmp) {
-    Value lhs = processValue(inst->getOperand(0));
-    Value rhs = processValue(inst->getOperand(1));
-    Value res = b.create<ICmpOp>(
-        loc, getICmpPredicate(cast<llvm::ICmpInst>(inst)->getPredicate()), lhs,
-        rhs);
-    mapValue(inst, res);
-    return success();
-  }
-  if (inst->getOpcode() == llvm::Instruction::FCmp) {
-    Value lhs = processValue(inst->getOperand(0));
-    Value rhs = processValue(inst->getOperand(1));
-
-    if (lhs.getType() != rhs.getType())
-      return failure();
-
-    Type boolType = b.getI1Type();
-    Type resType = boolType;
-    if (LLVM::isCompatibleVectorType(lhs.getType())) {
-      unsigned numElements =
-          LLVM::getVectorNumElements(lhs.getType()).getFixedValue();
-      resType = VectorType::get({numElements}, boolType);
-    }
-
-    Value res = b.create<FCmpOp>(
-        loc, resType,
-        getFCmpPredicate(cast<llvm::FCmpInst>(inst)->getPredicate()), lhs, rhs);
-    mapValue(inst, res);
-    return success();
-  }
   if (inst->getOpcode() == llvm::Instruction::Br) {
     auto *brInst = cast<llvm::BranchInst>(inst);
     OperationState state(loc,
@@ -964,37 +940,6 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
       mapValue(inst, op->getResult(0));
     return success();
   }
-  if (inst->getOpcode() == llvm::Instruction::AtomicRMW) {
-    auto *atomicInst = cast<llvm::AtomicRMWInst>(inst);
-    Value ptr = processValue(atomicInst->getPointerOperand());
-    Value val = processValue(atomicInst->getValOperand());
-
-    LLVM::AtomicBinOp binOp = getLLVMAtomicBinOp(atomicInst->getOperation());
-    LLVM::AtomicOrdering ordering =
-        getLLVMAtomicOrdering(atomicInst->getOrdering());
-
-    Type type = convertType(inst->getType());
-    Value res = b.create<AtomicRMWOp>(loc, type, binOp, ptr, val, ordering);
-    mapValue(inst, res);
-    return success();
-  }
-  if (inst->getOpcode() == llvm::Instruction::AtomicCmpXchg) {
-    auto *cmpXchgInst = cast<llvm::AtomicCmpXchgInst>(inst);
-    Value ptr = processValue(cmpXchgInst->getPointerOperand());
-    Value cmpVal = processValue(cmpXchgInst->getCompareOperand());
-    Value newVal = processValue(cmpXchgInst->getNewValOperand());
-
-    LLVM::AtomicOrdering ordering =
-        getLLVMAtomicOrdering(cmpXchgInst->getSuccessOrdering());
-    LLVM::AtomicOrdering failOrdering =
-        getLLVMAtomicOrdering(cmpXchgInst->getFailureOrdering());
-
-    Type type = convertType(inst->getType());
-    Value res = b.create<AtomicCmpXchgOp>(loc, type, ptr, cmpVal, newVal,
-                                          ordering, failOrdering);
-    mapValue(inst, res);
-    return success();
-  }
   if (inst->getOpcode() == llvm::Instruction::GetElementPtr) {
     // FIXME: Support inbounds GEPs.
     llvm::GetElementPtrInst *gep = cast<llvm::GetElementPtrInst>(inst);
@@ -1013,37 +958,6 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
 
     Type type = convertType(inst->getType());
     Value res = b.create<GEPOp>(loc, type, sourceElementType, basePtr, indices);
-    mapValue(inst, res);
-    return success();
-  }
-  if (inst->getOpcode() == llvm::Instruction::InsertValue) {
-    auto *ivInst = cast<llvm::InsertValueInst>(inst);
-    Value inserted = processValue(ivInst->getInsertedValueOperand());
-    Value aggOperand = processValue(ivInst->getAggregateOperand());
-
-    SmallVector<int64_t> indices;
-    llvm::append_range(indices, ivInst->getIndices());
-    Value res = b.create<InsertValueOp>(loc, aggOperand, inserted, indices);
-    mapValue(inst, res);
-    return success();
-  }
-  if (inst->getOpcode() == llvm::Instruction::ExtractValue) {
-    auto *evInst = cast<llvm::ExtractValueInst>(inst);
-    Value aggOperand = processValue(evInst->getAggregateOperand());
-
-    SmallVector<int64_t> indices;
-    llvm::append_range(indices, evInst->getIndices());
-    Value res = b.create<ExtractValueOp>(loc, aggOperand, indices);
-    mapValue(inst, res);
-    return success();
-  }
-  if (inst->getOpcode() == llvm::Instruction::ShuffleVector) {
-    auto *svInst = cast<llvm::ShuffleVectorInst>(inst);
-    Value vec1 = processValue(svInst->getOperand(0));
-    Value vec2 = processValue(svInst->getOperand(1));
-
-    SmallVector<int32_t> mask(svInst->getShuffleMask());
-    Value res = b.create<ShuffleVectorOp>(loc, vec1, vec2, mask);
     mapValue(inst, res);
     return success();
   }
@@ -1131,13 +1045,13 @@ LogicalResult Importer::processFunction(llvm::Function *f) {
   }
 
   if (FlatSymbolRefAttr personality = getPersonalityAsAttr(f))
-    fop->setAttr(b.getStringAttr("personality"), personality);
+    fop.setPersonalityAttr(personality);
   else if (f->hasPersonalityFn())
     emitWarning(UnknownLoc::get(context),
                 "could not deduce personality, skipping it");
 
   if (f->hasGC())
-    fop.setGarbageCollectorAttr(b.getStringAttr(f->getGC()));
+    fop.setGarbageCollector(StringRef(f->getGC()));
 
   // Handle Function attributes.
   processFunctionAttributes(f, fop);

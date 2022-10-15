@@ -1302,7 +1302,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::ZERO_EXTEND);
   setTargetDAGCombine(ISD::ANY_EXTEND);
   setTargetDAGCombine(ISD::TRUNCATE);
-
   setTargetDAGCombine(ISD::SETCC);
   setTargetDAGCombine(ISD::SELECT);
   setTargetDAGCombine(ISD::SELECT_CC);
@@ -1326,6 +1325,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((VEISD::NodeType)Opcode) {
   case VEISD::FIRST_NUMBER:
     break;
+    TARGET_NODE_CASE(CMOV)
     TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
     TARGET_NODE_CASE(EH_SJLJ_SETJMP)
@@ -1345,7 +1345,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(CMPU)
     TARGET_NODE_CASE(CMPF)
     TARGET_NODE_CASE(CMPQ)
-    TARGET_NODE_CASE(CMOV)
     TARGET_NODE_CASE(FLUSHW)
     TARGET_NODE_CASE(Wrapper)
 
@@ -3074,22 +3073,6 @@ static bool isSimm7(SDValue V) {
     }
   }
   return false;
-}
-
-/// getImmVal - get immediate representation of integer value
-inline static uint64_t getImmVal(const ConstantSDNode *N) {
-  return N->getSExtValue();
-}
-
-/// getFpImmVal - get immediate representation of floating point value
-inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
-  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getZExtValue();
-  if (Imm.getBitWidth() == 32) {
-    // Immediate value of float place places at higher bits on VE.
-    Val <<= 32;
-  }
-  return Val;
 }
 
 static bool isMImm(SDValue V) {
