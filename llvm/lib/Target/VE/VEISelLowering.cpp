@@ -3096,13 +3096,13 @@ static bool isMImm(SDValue V) {
   return false;
 }
 
-static unsigned decideComp(EVT SrcVT, bool Signed) {
+static unsigned decideComp(EVT SrcVT, ISD::CondCode CC) {
   if (SrcVT.isFloatingPoint()) {
     if (SrcVT == MVT::f128)
       return VEISD::CMPQ;
     return VEISD::CMPF;
   }
-  return Signed ? VEISD::CMPI : VEISD::CMPU;
+  return isSignedIntSetCC(CC) ? VEISD::CMPI : VEISD::CMPU;
 }
 
 static EVT decideCompType(EVT SrcVT) {
@@ -3111,7 +3111,8 @@ static EVT decideCompType(EVT SrcVT) {
   return SrcVT;
 }
 
-static bool safeWithoutComp(EVT SrcVT, bool Signed, bool WithCMov) {
+static bool safeWithoutCompWithNull(EVT SrcVT, ISD::CondCode CC,
+                                    bool WithCMov) {
   if (SrcVT.isFloatingPoint()) {
     // For the case of floating point setcc, only unordered comparison
     // or general comparison with -enable-no-nans-fp-math option reach
@@ -3119,68 +3120,90 @@ static bool safeWithoutComp(EVT SrcVT, bool Signed, bool WithCMov) {
     // safe since VE uses f64 result of f128 comparison.
     return SrcVT != MVT::f128;
   }
+  if (isIntEqualitySetCC(CC)) {
+    // For the case of equal or not equal, it is safe without comparison with 0.
+    return true;
+  }
   if (WithCMov) {
     // For the case of integer setcc with cmov, all signed comparison with 0
     // are safe.
-    return Signed ? true : false;
+    return isSignedIntSetCC(CC);
   }
   // For the case of integer setcc, only signed 64 bits comparison is safe.
   // For unsigned, "CMPU 0x80000000, 0" has to be greater than 0, but it becomes
   // less than 0 witout CMPU.  For 32 bits, other half of 32 bits are
   // uncoditional, so it is not safe too without CMPI..
-  return (Signed && SrcVT == MVT::i64) ? true : false;
+  return isSignedIntSetCC(CC) && SrcVT == MVT::i64;
 }
 
 static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
-                                  bool Commutable, bool Signed, bool WithCMov,
+                                  ISD::CondCode CC, bool WithCMov,
                                   const SDLoc &DL, SelectionDAG &DAG) {
-  if (Commutable && VT != MVT::f128) {
-    // VE comparison can holds simm7 at lhs and mimm at rhs.  Swap operands
-    // if it matches.
-    if (isMImm(RHS)) {
-      // VE's comparison can handle MImm in RHS, so nothing to do.
-    } else if (isSimm7(RHS)) {
-      // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
-      // update condition code.
-      std::swap(LHS, RHS);
-    }
-    assert(!(isNullConstant(LHS) || isNullFPConstant(LHS)) && "lhs is 0!");
-  }
-
   // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate an instruction for comparison.
   EVT CompVT = decideCompType(VT);
-  if (CompVT == VT && (Commutable || safeWithoutComp(VT, Signed, WithCMov)) &&
+  if (CompVT == VT && safeWithoutCompWithNull(VT, CC, WithCMov) &&
       (isNullConstant(RHS) || isNullFPConstant(RHS))) {
     return LHS;
   }
-  return DAG.getNode(decideComp(VT, Signed), DL, CompVT, LHS, RHS);
+  return DAG.getNode(decideComp(VT, CC), DL, CompVT, LHS, RHS);
 }
 
 /// This function is called when we have proved that a SETCC node can be
 /// replaced by subtraction (and other supporting instructions).
-SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
-                                                bool Complement, bool Swap,
+SDValue VETargetLowering::generateEquivalentSub(EVT VT, SDValue LHS,
+                                                SDValue RHS, ISD::CondCode CC,
+                                                const SDLoc &DL,
                                                 SelectionDAG &DAG) const {
-  assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
-
-  SDLoc DL(N);
-  auto Op0 = N->getOperand(0);
-  auto Op1 = N->getOperand(1);
-  unsigned Size = Op0.getValueSizeInBits();
-  EVT SrcVT = Op0.getValueType();
-  EVT VT = N->getValueType(0);
   assert(VT == MVT::i32 && "i32 is expected as a result of ISD::SETCC.");
 
-  // Swap if needed. Depends on the condition code.
-  if (Swap)
-    std::swap(Op0, Op1);
+  unsigned Size = LHS.getValueSizeInBits();
+  EVT SrcVT = LHS.getValueType();
 
-  // Compare values.  If Op1 is 0 and it is safe to calculate without
+  bool Complement = false;
+  switch (CC) {
+  default:
+    return SDValue();
+    break;
+  case ISD::SETLT:
+    //   a < b -> (CMPI a, b) >> size(a)-1
+    break;
+  case ISD::SETGT:
+    //   a > b -> (CMPI b, a) >> size(a)-1
+    std::swap(LHS, RHS);
+    break;
+  case ISD::SETLE:
+    //   a <= b -> (XOR (CMPI b, a) >> size(a)-1, 1)
+    std::swap(LHS, RHS);
+    Complement = true;
+    break;
+  case ISD::SETGE:
+    // a >= b -> (XOR (CMPI a, b) >> size(a)-1, 1)
+    Complement = true;
+    break;
+  case ISD::SETULT:
+    // a < b -> (CMPU a, b) >> size(a)-1
+    break;
+  case ISD::SETULE:
+    // a <= b -> (XOR (CMPU b, a) >> size(a)-1, 1)
+    std::swap(LHS, RHS);
+    Complement = true;
+    break;
+  case ISD::SETUGT:
+    // a > b -> (CMPU b, a) >> size(a)-1
+    std::swap(LHS, RHS);
+    break;
+  case ISD::SETUGE:
+    // a >= b -> (XOR (CMPU a, b) >> size(a)-1, 1)
+    Complement = true;
+    break;
+  }
+
+  // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
   SDValue CompNode =
-      generateComparison(SrcVT, Op0, Op1, false, Signed, false, DL, DAG);
+      generateComparison(SrcVT, LHS, RHS, CC, false /* WithCMov */, DL, DAG);
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3228,22 +3251,19 @@ SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
 
 /// This function is called when we have proved that a SETCC node can be
 /// replaced by leading-zero (and other supporting instructions).
-SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
+SDValue VETargetLowering::generateEquivalentLdz(EVT VT, SDValue LHS,
+                                                SDValue RHS, ISD::CondCode CC,
+                                                const SDLoc &DL,
                                                 SelectionDAG &DAG) const {
-  assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
-
-  SDLoc DL(N);
-  auto Op0 = N->getOperand(0);
-  auto Op1 = N->getOperand(1);
-  EVT SrcVT = Op0.getValueType();
-  EVT VT = N->getValueType(0);
   assert(VT == MVT::i32 && "i32 is expected as a result of ISD::SETCC.");
 
-  // Compare values.  If Op1 is 0 and it is safe to calculate without
+  EVT SrcVT = LHS.getValueType();
+
+  // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
   SDValue CompNode =
-      generateComparison(SrcVT, Op0, Op1, true, false, false, DL, DAG);
+      generateComparison(SrcVT, LHS, RHS, CC, false /* WithCMov */, DL, DAG);
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3279,11 +3299,6 @@ SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
                              DAG.getConstant(Log2_32(Size), DL, MVT::i32));
   auto Final = Shifted;
 
-  // Complement the result if needed. Based on the condition code.
-  if (Complement)
-    Final = DAG.getNode(ISD::XOR, DL, MVT::i64, Shifted,
-                        DAG.getConstant(1, DL, MVT::i64));
-
   // Final is either 0 or 1, so it is safe for EXTRACT_SUBREG
   SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
   Final = SDValue(
@@ -3296,7 +3311,26 @@ SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
 // Perform optiization on SetCC similar to PowerPC.
 SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
+
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
+
+  SDLoc DL(N);
+  EVT VT = N->getValueType(0);
+  assert(VT == MVT::i32 && "i32 is expected as a result of ISD::SETCC.");
+
+  // We handle only scalar SELECT.
   EVT SrcVT = N->getOperand(0).getValueType();
+
+  if (isMImm(RHS)) {
+    // VE's comparison can handle MImm in RHS, so nothing to do.
+  } else if (isSimm7(RHS)) {
+    // VE's comparison can handle Simm7 in LHS, so swap LHS and RHS, and
+    // update condition code.
+    std::swap(LHS, RHS);
+    CC = getSetCCSwappedOperands(CC);
+  }
 
   // For setcc, we generally create following instructions.
   //   INSN                     LATENCY
@@ -3312,12 +3346,8 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   // Therefore, we decide to optimize these instructions using better
   // instructions.
 
-  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
   SelectionDAG &DAG = DCI.DAG;
-  switch (CC) {
-  default:
-    break;
-  case ISD::SETEQ:
+  if (CC == ISD::SETEQ) {
     //   INSN                     LATENCY
     //   CMP %t1, %a, %b          1
     //   LDZ %t2, %t1             1       ; 64 iff %t1 is equal to 0
@@ -3325,66 +3355,41 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
     // Convert a DAG like below.
     //   a == b -> (LDZ (CMP a, b)) >> 6
     // 3 insns are equal to CMP+LEA+CMOV but faster.
-    return generateEquivalentLdz(N, false, DAG);
-    break;
-
-  case ISD::SETNE:
+    return generateEquivalentLdz(VT, LHS, RHS, CC, DL, DAG);
+  } else if (CC == ISD::SETNE) {
     // Generate code for "setugt a, 0" instead of "setne a, 0" since it
     // requires only 2 cycles.
-    if (isNullConstant(N->getOperand(1)))
-      return generateEquivalentSub(N, false, false, true, DAG);
-    LLVM_FALLTHROUGH;
-  case ISD::SETUNE: {
-    // Generate code for "setugt (cmp a, b), 0" instead of "setne a, b"
+    if (isNullConstant(RHS))
+      return generateEquivalentSub(VT, LHS, RHS, ISD::SETUGT, DL, DAG);
+
+    // Generate code for "setugt (cmpu a, b), 0" instead of "setne a, b"
     // since it requires only 3 cycles.
-    SDLoc DL(N);
-    EVT CompVT = decideCompType(SrcVT);
-    SDValue CompNode = generateComparison(
-        SrcVT, N->getOperand(0), N->getOperand(1), true, false, false, DL, DAG);
-    SDValue SetCC = DAG.getNode(ISD::SETCC, DL, MVT::i32, CompNode,
-                                DAG.getConstant(0, DL, CompVT),
-                                DAG.getCondCode(ISD::SETUGT));
-    return generateEquivalentSub(SetCC.getNode(), false, false, true, DAG);
+    SDValue CompNode = generateComparison(SrcVT, LHS, RHS, ISD::SETUGT,
+                                          false /* WithCMov */, DL, DAG);
+    return generateEquivalentSub(VT, CompNode, DAG.getConstant(0, DL, SrcVT),
+                                 ISD::SETUGT, DL, DAG);
   }
-  case ISD::SETLT:
-    //   INSN                     LATENCY
-    //   CMP %t1, %a, %b          1
-    //   SRL %res, %t1, 63/31     1
-    // Convert a DAG like below.
-    //   a < b -> (CMP a, b) >> size(a)-1
-    // 2 insns are less than CMP+LEA+CMOV.
-    return generateEquivalentSub(N, true, false, false, DAG);
-  case ISD::SETGT:
-    // Convert a DAG like below.
-    //   a > b -> (CMP b, a) >> size(a)-1
-    // 2 insns are less than CMP+LEA+CMOV.
-    return generateEquivalentSub(N, true, false, true, DAG);
-  case ISD::SETLE:
-    //   INSN                     LATENCY
-    //   CMP %t1, %b, %a          1
-    //   SRL %t2, %t1, 63/31      1
-    //   XOR %res, %t2, 1         1
-    // Convert a DAG like below.
-    //   a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
-    // 3 insns are equal to CMP+LEA+CMOV but faster.
-    return generateEquivalentSub(N, true, true, true, DAG);
-  case ISD::SETGE:
-    // a >= b -> (XOR (CMP a, b) >> size(a)-1, 1)
-    return generateEquivalentSub(N, true, true, false, DAG);
-  case ISD::SETULT:
-    // a < b -> (CMP a, b) >> size(a)-1
-    return generateEquivalentSub(N, false, false, false, DAG);
-  case ISD::SETULE:
-    // a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
-    return generateEquivalentSub(N, false, true, true, DAG);
-  case ISD::SETUGT:
-    // a > b -> (CMP b, a) >> size(a)-1
-    return generateEquivalentSub(N, false, false, true, DAG);
-  case ISD::SETUGE:
-    // a >= b -> (XOR (CMP a, b) >> size(a)-1, 1)
-    return generateEquivalentSub(N, false, true, false, DAG);
-  }
-  return SDValue();
+
+  // For SETLT, we generate following instructions.
+  //   INSN                     LATENCY
+  //   CMP %t1, %a, %b          1
+  //   SRL %res, %t1, 63/31     1
+  // Convert a DAG like below.
+  //   a < b -> (CMP a, b) >> size(a)-1
+  // 2 insns are less than CMP+LEA+CMOV.
+  //
+  // For SETLE, we generate following instructions.
+  //   INSN                     LATENCY
+  //   CMP %t1, %b, %a          1
+  //   SRL %t2, %t1, 63/31      1
+  //   XOR %res, %t2, 1         1
+  // Convert a DAG like below.
+  //   a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
+  // 3 insns are equal to CMP+LEA+CMOV but faster.
+  //
+  // For other comparisons for signed and unsigned integers, we generate
+  // similar instructions.
+  return generateEquivalentSub(VT, LHS, RHS, CC, DL, DAG);
 }
 
 SDValue VETargetLowering::combineExtBoolTrunc(SDNode *N,
@@ -3507,11 +3512,8 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   SDLoc DL(N);
   SelectionDAG &DAG = DCI.DAG;
 
-  bool Commutable = isIntEqualitySetCC(CC);
-  bool Signed = isSignedIntSetCC(CC);
   bool WithCMov = true;
-  SDValue CompNode = generateComparison(LHSVT, LHS, RHS, Commutable, Signed,
-                                        WithCMov, DL, DAG);
+  SDValue CompNode = generateComparison(LHSVT, LHS, RHS, CC, WithCMov, DL, DAG);
 
   VECC::CondCode VECCVal;
   if (LHSVT.isFloatingPoint()) {

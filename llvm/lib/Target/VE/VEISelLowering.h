@@ -472,9 +472,11 @@ public:
   /// of doing it.
   SDValue optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
 
-  SDValue generateEquivalentSub(SDNode *N, bool Signed, bool Complement,
-                                bool Swap, SelectionDAG &DAG) const;
-  SDValue generateEquivalentLdz(SDNode *N, bool Complement,
+  SDValue generateEquivalentSub(EVT VT, SDValue LHS, SDValue RHS,
+                                ISD::CondCode CC, const SDLoc &DL,
+                                SelectionDAG &DAG) const;
+  SDValue generateEquivalentLdz(EVT VT, SDValue LHS, SDValue RHS,
+                                ISD::CondCode CC, const SDLoc &DL,
                                 SelectionDAG &DAG) const;
 
   /// Inline Assembly {
