@@ -474,8 +474,6 @@ public:
 
   SDValue generateEquivalentSub(SDNode *N, bool Signed, bool Complement,
                                 bool Swap, SelectionDAG &DAG) const;
-  SDValue generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
-                                SelectionDAG &DAG) const;
   SDValue generateEquivalentLdz(SDNode *N, bool Complement,
                                 SelectionDAG &DAG) const;
 
