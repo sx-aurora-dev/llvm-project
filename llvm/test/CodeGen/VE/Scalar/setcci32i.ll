@@ -14,7 +14,7 @@ define zeroext i1 @setcceq(i32, i32) {
 define zeroext i1 @setccne(i32, i32) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, 12, %s0
+; CHECK-NEXT:    cmpu.w %s0, 12, %s0
 ; CHECK-NEXT:    cmpu.w %s0, 0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 31
 ; CHECK-NEXT:    b.l.t (, %s10)

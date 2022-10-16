@@ -3340,7 +3340,7 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
     SDLoc DL(N);
     EVT CompVT = decideCompType(SrcVT);
     SDValue CompNode = generateComparison(
-        SrcVT, N->getOperand(0), N->getOperand(1), true, true, false, DL, DAG);
+        SrcVT, N->getOperand(0), N->getOperand(1), true, false, false, DL, DAG);
     SDValue SetCC = DAG.getNode(ISD::SETCC, DL, MVT::i32, CompNode,
                                 DAG.getConstant(0, DL, CompVT),
                                 DAG.getCondCode(ISD::SETUGT));
