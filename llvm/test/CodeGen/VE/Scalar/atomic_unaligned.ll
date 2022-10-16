@@ -647,7 +647,7 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:    nnd %s7, %s7, %s4
 ; CHECK-NEXT:    brne.w %s5, %s7, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
-; CHECK-NEXT:    cmps.w.zx %s0, %s4, %s6
+; CHECK-NEXT:    cmpu.w %s0, %s4, %s6
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
@@ -696,7 +696,7 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:    nnd %s7, %s7, %s4
 ; CHECK-NEXT:    brne.w %s5, %s7, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
-; CHECK-NEXT:    cmps.w.zx %s0, %s4, %s6
+; CHECK-NEXT:    cmpu.w %s0, %s4, %s6
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
@@ -718,7 +718,7 @@ define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, i@hi(, %s2)
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -741,7 +741,7 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sci1@hi(, %s2)
 ; CHECK-NEXT:    cas.w %s1, 1(%s2), %s0
-; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -763,7 +763,7 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -785,7 +785,7 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, scl1@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, 1(%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -808,7 +808,7 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sil1@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, 4(%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -854,7 +854,7 @@ define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -874,7 +874,7 @@ define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -895,7 +895,7 @@ define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -917,7 +917,7 @@ define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -938,7 +938,7 @@ define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -960,7 +960,7 @@ define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -981,7 +981,7 @@ define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -1001,7 +1001,7 @@ define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -1022,7 +1022,7 @@ define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -1044,7 +1044,7 @@ define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -1065,7 +1065,7 @@ define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -2191,7 +2191,7 @@ define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.l %s1, 192(%s11), %s0
-; CHECK-NEXT:    cmps.l %s0, %s1, %s0
+; CHECK-NEXT:    cmpu.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1

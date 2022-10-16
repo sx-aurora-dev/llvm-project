@@ -3243,7 +3243,7 @@ SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
   // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
   SDValue CompNode =
-      generateComparison(SrcVT, Op0, Op1, true, true, false, DL, DAG);
+      generateComparison(SrcVT, Op0, Op1, true, false, false, DL, DAG);
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);

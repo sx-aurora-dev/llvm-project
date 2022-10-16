@@ -3,7 +3,7 @@
 define zeroext i1 @setcceq(i32, i32) {
 ; CHECK-LABEL: setcceq:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
