@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: nounwind readnone speculatable willreturn
 declare <253 x double> @llvm.sqrt.v253f64(<253 x double>)

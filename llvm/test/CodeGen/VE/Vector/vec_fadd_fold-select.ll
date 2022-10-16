@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: nounwind
 define fastcc <256 x float> @vec_add_fold_v256f32(<256 x float> %a, <256 x float> %b, <256 x i1> %m) {
