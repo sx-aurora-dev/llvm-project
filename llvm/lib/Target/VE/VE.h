@@ -17,6 +17,7 @@
 #include "MCTargetDesc/VEMCTargetDesc.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -210,67 +211,6 @@ inline static unsigned VECondCodeToVal(VECC::CondCode CC) {
   }
 }
 
-inline static VECC::CondCode VEValToCondCode(unsigned Val, bool IsInteger) {
-  if (IsInteger) {
-    switch (Val) {
-    case 0:
-      return VECC::CC_AF;
-    case 1:
-      return VECC::CC_IG;
-    case 2:
-      return VECC::CC_IL;
-    case 3:
-      return VECC::CC_INE;
-    case 4:
-      return VECC::CC_IEQ;
-    case 5:
-      return VECC::CC_IGE;
-    case 6:
-      return VECC::CC_ILE;
-    case 15:
-      return VECC::CC_AT;
-    }
-  } else {
-    switch (Val) {
-    case 0:
-      return VECC::CC_AF;
-    case 1:
-      return VECC::CC_G;
-    case 2:
-      return VECC::CC_L;
-    case 3:
-      return VECC::CC_NE;
-    case 4:
-      return VECC::CC_EQ;
-    case 5:
-      return VECC::CC_GE;
-    case 6:
-      return VECC::CC_LE;
-    case 7:
-      return VECC::CC_NUM;
-    case 8:
-      return VECC::CC_NAN;
-    case 9:
-      return VECC::CC_GNAN;
-    case 10:
-      return VECC::CC_LNAN;
-    case 11:
-      return VECC::CC_NENAN;
-    case 12:
-      return VECC::CC_EQNAN;
-    case 13:
-      return VECC::CC_GENAN;
-    case 14:
-      return VECC::CC_LENAN;
-    case 15:
-      return VECC::CC_AT;
-    }
-  }
-  // Invalid condition may come through disassembler from corrupted input.
-  // Therefore, return AF instead of `llvm_unreachable`
-  return VECC::CC_AF;
-}
-
 /// Convert a DAG integer condition code to a VE ICC condition.
 inline static VECC::CondCode intCondCode2Icc(ISD::CondCode CC) {
   switch (CC) {
@@ -343,6 +283,67 @@ inline static VECC::CondCode fpCondCode2Fcc(ISD::CondCode CC) {
   case ISD::SETTRUE:
     return VECC::CC_AT;
   }
+}
+
+inline static VECC::CondCode VEValToCondCode(unsigned Val, bool IsInteger) {
+  if (IsInteger) {
+    switch (Val) {
+    case 0:
+      return VECC::CC_AF;
+    case 1:
+      return VECC::CC_IG;
+    case 2:
+      return VECC::CC_IL;
+    case 3:
+      return VECC::CC_INE;
+    case 4:
+      return VECC::CC_IEQ;
+    case 5:
+      return VECC::CC_IGE;
+    case 6:
+      return VECC::CC_ILE;
+    case 15:
+      return VECC::CC_AT;
+    }
+  } else {
+    switch (Val) {
+    case 0:
+      return VECC::CC_AF;
+    case 1:
+      return VECC::CC_G;
+    case 2:
+      return VECC::CC_L;
+    case 3:
+      return VECC::CC_NE;
+    case 4:
+      return VECC::CC_EQ;
+    case 5:
+      return VECC::CC_GE;
+    case 6:
+      return VECC::CC_LE;
+    case 7:
+      return VECC::CC_NUM;
+    case 8:
+      return VECC::CC_NAN;
+    case 9:
+      return VECC::CC_GNAN;
+    case 10:
+      return VECC::CC_LNAN;
+    case 11:
+      return VECC::CC_NENAN;
+    case 12:
+      return VECC::CC_EQNAN;
+    case 13:
+      return VECC::CC_GENAN;
+    case 14:
+      return VECC::CC_LENAN;
+    case 15:
+      return VECC::CC_AT;
+    }
+  }
+  // Invalid condition may come through disassembler from corrupted input.
+  // Therefore, return AF instead of `llvm_unreachable`
+  return VECC::CC_AF;
 }
 
 inline static const char *VEBPToString(VEBP::Prediction P) {
@@ -439,6 +440,22 @@ inline static VERD::RoundingMode VEValToRD(unsigned Val) {
   }
   llvm_unreachable("Invalid branch predicates");
   return VERD::UNKNOWN;
+}
+
+/// getImmVal - get immediate representation of integer value
+inline static uint64_t getImmVal(const ConstantSDNode *N) {
+  return N->getSExtValue();
+}
+
+/// getFpImmVal - get immediate representation of floating point value
+inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
+  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getZExtValue();
+  if (Imm.getBitWidth() == 32) {
+    // Immediate value of float place places at higher bits on VE.
+    Val <<= 32;
+  }
+  return Val;
 }
 
 // MImm - Special immediate value of sequential bit stream of 0 or 1.

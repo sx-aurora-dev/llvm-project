@@ -525,9 +525,6 @@ def getFunPLT     : Operand<iPTR> {
   let PrintMethod = "printGetFunPLT";
 }
 
-// res = cmov cmp, t, f, cond
-def SDTCmovOp : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
-                                     SDTCisVT<4, i32>]>;
 def EQV : SDNode<"VEISD::EQV", SDTIntBinOp>;
 def XOR : SDNode<"VEISD::XOR", SDTIntBinOp>;
 def cmpi : SDNode<"VEISD::CMPI", SDTIntBinOp>;
@@ -537,7 +534,11 @@ def SDTFPCmpQOp : SDTypeProfile<1, 2, [
   SDTCisSameAs<1, 2>, SDTCisFP<0>, SDTCisFP<2>
 ]>;
 def CMPQ : SDNode<"VEISD::CMPQ", SDTFPCmpQOp>;
-def cmov : SDNode<"VEISD::CMOV", SDTCmovOp>;
+
+// res = cmov cmp, t, f, cond
+def SDT_Cmov      : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
+                                  SDTCisVT<4, i32>]>;
+def cmov          : SDNode<"VEISD::CMOV", SDT_Cmov>;
 
 def VEeh_sjlj_setjmp: SDNode<"VEISD::EH_SJLJ_SETJMP",
                              SDTypeProfile<1, 1, [SDTCisInt<0>,

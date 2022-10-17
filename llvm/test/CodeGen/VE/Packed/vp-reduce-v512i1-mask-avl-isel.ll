@@ -14,7 +14,7 @@ define fastcc i1 @test_reduce_and(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    pcvm %s1, %vm1
 ; CHECK-NEXT:    adds.l %s1, %s1, %s3
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s2
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s2
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    ldz %s1, %s1

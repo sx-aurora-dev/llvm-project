@@ -21,7 +21,7 @@ define zeroext i1 @setcc_i1(i1 zeroext %0, i1 zeroext %1) {
 define zeroext i1 @setcc_i8(i8 signext %0, i8 signext %1) {
 ; CHECK-LABEL: setcc_i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -33,7 +33,7 @@ define zeroext i1 @setcc_i8(i8 signext %0, i8 signext %1) {
 define zeroext i1 @setcc_u8(i8 zeroext %0, i8 zeroext %1) {
 ; CHECK-LABEL: setcc_u8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -45,7 +45,7 @@ define zeroext i1 @setcc_u8(i8 zeroext %0, i8 zeroext %1) {
 define zeroext i1 @setcc_i16(i16 signext %0, i16 signext %1) {
 ; CHECK-LABEL: setcc_i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -57,7 +57,7 @@ define zeroext i1 @setcc_i16(i16 signext %0, i16 signext %1) {
 define zeroext i1 @setcc_u16(i16 zeroext %0, i16 zeroext %1) {
 ; CHECK-LABEL: setcc_u16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -69,7 +69,7 @@ define zeroext i1 @setcc_u16(i16 zeroext %0, i16 zeroext %1) {
 define zeroext i1 @setcc_i32(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: setcc_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -81,7 +81,7 @@ define zeroext i1 @setcc_i32(i32 signext %0, i32 signext %1) {
 define zeroext i1 @setcc_u32(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: setcc_u32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -93,7 +93,7 @@ define zeroext i1 @setcc_u32(i32 zeroext %0, i32 zeroext %1) {
 define zeroext i1 @setcc_i64(i64 %0, i64 %1) {
 ; CHECK-LABEL: setcc_i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -105,7 +105,7 @@ define zeroext i1 @setcc_i64(i64 %0, i64 %1) {
 define zeroext i1 @setcc_u64(i64 %0, i64 %1) {
 ; CHECK-LABEL: setcc_u64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)

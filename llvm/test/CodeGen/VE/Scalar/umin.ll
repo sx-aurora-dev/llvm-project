@@ -264,10 +264,8 @@ define i128 @func_umin_fore_const_u128(i128 noundef %0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s2, %s0, (56)0
 ; CHECK-NEXT:    cmov.l.ge %s0, (56)0, %s2
-; CHECK-NEXT:    lea %s2, 255
-; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
+; CHECK-NEXT:    cmov.l.ne %s0, (56)0, %s1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = tail call i128 @llvm.umin.i128(i128 %0, i128 255)
   ret i128 %2
@@ -329,10 +327,8 @@ define i128 @func_umin_back_const_u128(i128 noundef %0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s2, %s0, (56)0
 ; CHECK-NEXT:    cmov.l.ge %s0, (56)0, %s2
-; CHECK-NEXT:    lea %s2, 255
-; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
+; CHECK-NEXT:    cmov.l.ne %s0, (56)0, %s1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = tail call i128 @llvm.umin.i128(i128 %0, i128 255)
   ret i128 %2

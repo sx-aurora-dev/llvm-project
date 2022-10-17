@@ -93,7 +93,7 @@ define zeroext i1 @_Z26atomic_cmp_swap_relaxed_i1RNSt3__16atomicIbEERbb(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    breq.w %s2, %s5, .LBB0_2
@@ -137,7 +137,7 @@ define signext i8 @_Z26atomic_cmp_swap_relaxed_i8RNSt3__16atomicIcEERcc(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    breq.w %s2, %s5, .LBB1_2
@@ -180,7 +180,7 @@ define zeroext i8 @_Z26atomic_cmp_swap_relaxed_u8RNSt3__16atomicIhEERhh(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    breq.w %s2, %s5, .LBB2_2
@@ -224,7 +224,7 @@ define signext i16 @_Z27atomic_cmp_swap_relaxed_i16RNSt3__16atomicIsEERss(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    breq.w %s2, %s5, .LBB3_2
@@ -267,7 +267,7 @@ define zeroext i16 @_Z27atomic_cmp_swap_relaxed_u16RNSt3__16atomicItEERtt(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    breq.w %s2, %s5, .LBB4_2
@@ -300,7 +300,7 @@ define signext i32 @_Z27atomic_cmp_swap_relaxed_i32RNSt3__16atomicIiEERii(%"stru
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    breq.w %s2, %s3, .LBB5_2
@@ -331,7 +331,7 @@ define zeroext i32 @_Z27atomic_cmp_swap_relaxed_u32RNSt3__16atomicIjEERjj(%"stru
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    breq.w %s2, %s3, .LBB6_2
@@ -362,7 +362,7 @@ define i64 @_Z27atomic_cmp_swap_relaxed_i64RNSt3__16atomicIlEERll(%"struct.std::
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    breq.l %s2, %s3, .LBB7_2
@@ -393,7 +393,7 @@ define i64 @_Z27atomic_cmp_swap_relaxed_u64RNSt3__16atomicImEERmm(%"struct.std::
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    breq.l %s2, %s3, .LBB8_2
@@ -532,7 +532,7 @@ define zeroext i1 @_Z26atomic_cmp_swap_acquire_i1RNSt3__16atomicIbEERbb(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 2
@@ -577,7 +577,7 @@ define signext i8 @_Z26atomic_cmp_swap_acquire_i8RNSt3__16atomicIcEERcc(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 2
@@ -621,7 +621,7 @@ define zeroext i8 @_Z26atomic_cmp_swap_acquire_u8RNSt3__16atomicIhEERhh(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 2
@@ -666,7 +666,7 @@ define signext i16 @_Z27atomic_cmp_swap_acquire_i16RNSt3__16atomicIsEERss(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 2
@@ -710,7 +710,7 @@ define zeroext i16 @_Z27atomic_cmp_swap_acquire_u16RNSt3__16atomicItEERtt(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 2
@@ -744,7 +744,7 @@ define signext i32 @_Z27atomic_cmp_swap_acquire_i32RNSt3__16atomicIiEERii(%"stru
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 2
@@ -776,7 +776,7 @@ define zeroext i32 @_Z27atomic_cmp_swap_acquire_u32RNSt3__16atomicIjEERjj(%"stru
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 2
@@ -808,7 +808,7 @@ define i64 @_Z27atomic_cmp_swap_acquire_i64RNSt3__16atomicIlEERll(%"struct.std::
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 2
@@ -840,7 +840,7 @@ define i64 @_Z27atomic_cmp_swap_acquire_u64RNSt3__16atomicImEERmm(%"struct.std::
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 2
@@ -981,7 +981,7 @@ define zeroext i1 @_Z26atomic_cmp_swap_seq_cst_i1RNSt3__16atomicIbEERbb(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 3
@@ -1027,7 +1027,7 @@ define signext i8 @_Z26atomic_cmp_swap_seq_cst_i8RNSt3__16atomicIcEERcc(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 3
@@ -1072,7 +1072,7 @@ define zeroext i8 @_Z26atomic_cmp_swap_seq_cst_u8RNSt3__16atomicIhEERhh(%"struct
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 3
@@ -1118,7 +1118,7 @@ define signext i16 @_Z27atomic_cmp_swap_seq_cst_i16RNSt3__16atomicIsEERss(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 3
@@ -1163,7 +1163,7 @@ define zeroext i16 @_Z27atomic_cmp_swap_seq_cst_u16RNSt3__16atomicItEERtt(%"stru
 ; CHECK-NEXT:    or %s2, %s5, %s2
 ; CHECK-NEXT:    or %s5, %s5, %s3
 ; CHECK-NEXT:    cas.w %s2, (%s4), %s5
-; CHECK-NEXT:    cmps.w.zx %s3, %s2, %s5
+; CHECK-NEXT:    cmpu.w %s3, %s2, %s5
 ; CHECK-NEXT:    ldz %s3, %s3
 ; CHECK-NEXT:    srl %s3, %s3, 6
 ; CHECK-NEXT:    fencem 3
@@ -1198,7 +1198,7 @@ define signext i32 @_Z27atomic_cmp_swap_seq_cst_i32RNSt3__16atomicIiEERii(%"stru
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 3
@@ -1231,7 +1231,7 @@ define zeroext i32 @_Z27atomic_cmp_swap_seq_cst_u32RNSt3__16atomicIjEERjj(%"stru
 ; CHECK-NEXT:    ldl.sx %s3, (, %s1)
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.w.zx %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.w %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 3
@@ -1264,7 +1264,7 @@ define i64 @_Z27atomic_cmp_swap_seq_cst_i64RNSt3__16atomicIlEERll(%"struct.std::
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 3
@@ -1297,7 +1297,7 @@ define i64 @_Z27atomic_cmp_swap_seq_cst_u64RNSt3__16atomicImEERmm(%"struct.std::
 ; CHECK-NEXT:    ld %s3, (, %s1)
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
-; CHECK-NEXT:    cmps.l %s0, %s2, %s3
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s3
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    fencem 3
@@ -1445,7 +1445,7 @@ define zeroext i1 @_Z30atomic_cmp_swap_relaxed_stk_i1Rbb(i8* nocapture nonnull a
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s2
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB33_2
@@ -1505,7 +1505,7 @@ define signext i8 @_Z30atomic_cmp_swap_relaxed_stk_i8Rcc(i8* nocapture nonnull a
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s2
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB34_2
@@ -1558,7 +1558,7 @@ define zeroext i8 @_Z30atomic_cmp_swap_relaxed_stk_u8Rhh(i8* nocapture nonnull a
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s2
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB35_2
@@ -1612,7 +1612,7 @@ define signext i16 @_Z31atomic_cmp_swap_relaxed_stk_i16Rss(i16* nocapture nonnul
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s2
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB36_2
@@ -1666,7 +1666,7 @@ define zeroext i16 @_Z31atomic_cmp_swap_relaxed_stk_u16Rtt(i16* nocapture nonnul
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s2
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB37_2
@@ -1714,7 +1714,7 @@ define signext i32 @_Z31atomic_cmp_swap_relaxed_stk_i32Rii(i32* nocapture nonnul
 ; CHECK-NEXT:  .LBB38_4:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s0)
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB38_2
@@ -1762,7 +1762,7 @@ define zeroext i32 @_Z31atomic_cmp_swap_relaxed_stk_u32Rjj(i32* nocapture nonnul
 ; CHECK-NEXT:  .LBB39_4:
 ; CHECK-NEXT:    ldl.sx %s3, (, %s0)
 ; CHECK-NEXT:    cas.w %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB39_2
@@ -1810,7 +1810,7 @@ define i64 @_Z31atomic_cmp_swap_relaxed_stk_i64Rll(i64* nocapture nonnull align 
 ; CHECK-NEXT:  .LBB40_4:
 ; CHECK-NEXT:    ld %s3, (, %s0)
 ; CHECK-NEXT:    cas.l %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.l %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.l %s1, %s3, .LBB40_2
@@ -1858,7 +1858,7 @@ define i64 @_Z31atomic_cmp_swap_relaxed_stk_u64Rmm(i64* nocapture nonnull align 
 ; CHECK-NEXT:  .LBB41_4:
 ; CHECK-NEXT:    ld %s3, (, %s0)
 ; CHECK-NEXT:    cas.l %s1, 8(%s11), %s3
-; CHECK-NEXT:    cmps.l %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.l %s1, %s3, .LBB41_2
@@ -2008,7 +2008,7 @@ define zeroext i1 @_Z29atomic_cmp_swap_relaxed_gv_i1Rbb(i8* nocapture nonnull al
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s5
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB44_2
@@ -2049,7 +2049,7 @@ define signext i8 @_Z29atomic_cmp_swap_relaxed_gv_i8Rcc(i8* nocapture nonnull al
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s5
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB45_2
@@ -2089,7 +2089,7 @@ define zeroext i8 @_Z29atomic_cmp_swap_relaxed_gv_u8Rhh(i8* nocapture nonnull al
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s5
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB46_2
@@ -2128,7 +2128,7 @@ define signext i16 @_Z30atomic_cmp_swap_relaxed_gv_i16Rss(i16* nocapture nonnull
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s4
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB47_2
@@ -2166,7 +2166,7 @@ define zeroext i16 @_Z30atomic_cmp_swap_relaxed_gv_u16Rtt(i16* nocapture nonnull
 ; CHECK-NEXT:    or %s1, %s3, %s1
 ; CHECK-NEXT:    or %s3, %s3, %s4
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB48_2
@@ -2199,7 +2199,7 @@ define signext i32 @_Z30atomic_cmp_swap_relaxed_gv_i32Rii(i32* nocapture nonnull
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, gv_i32@hi(, %s2)
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB49_2
@@ -2232,7 +2232,7 @@ define zeroext i32 @_Z30atomic_cmp_swap_relaxed_gv_u32Rjj(i32* nocapture nonnull
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, gv_u32@hi(, %s2)
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.w.zx %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.w %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.w %s1, %s3, .LBB50_2
@@ -2265,7 +2265,7 @@ define i64 @_Z30atomic_cmp_swap_relaxed_gv_i64Rll(i64* nocapture nonnull align 8
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, gv_i64@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.l %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.l %s1, %s3, .LBB51_2
@@ -2298,7 +2298,7 @@ define i64 @_Z30atomic_cmp_swap_relaxed_gv_u64Rmm(i64* nocapture nonnull align 8
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, gv_u64@hi(, %s2)
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s3
-; CHECK-NEXT:    cmps.l %s2, %s1, %s3
+; CHECK-NEXT:    cmpu.l %s2, %s1, %s3
 ; CHECK-NEXT:    ldz %s2, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 6
 ; CHECK-NEXT:    breq.l %s1, %s3, .LBB52_2

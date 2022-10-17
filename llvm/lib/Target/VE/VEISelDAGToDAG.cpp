@@ -27,22 +27,6 @@ using namespace llvm;
 // Instruction Selector Implementation
 //===----------------------------------------------------------------------===//
 
-/// getImmVal - get immediate representation of integer value
-inline static uint64_t getImmVal(const ConstantSDNode *N) {
-  return N->getSExtValue();
-}
-
-/// getFpImmVal - get immediate representation of floating point value
-inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
-  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getZExtValue();
-  if (Imm.getBitWidth() == 32) {
-    // Immediate value of float place places at higher bits on VE.
-    Val <<= 32;
-  }
-  return Val;
-}
-
 /// getFpImm - get immediate representation of floating point value as a double value.
 inline static double getFpImm(const ConstantFPSDNode *N) {
   const APInt &Imm = N->getValueAPF().bitcastToAPInt();
@@ -66,7 +50,6 @@ inline static double getFpImm(const ConstantFPSDNode *N) {
     return CastUnion.FpNumber;
   }
 }
-
 
 //===--------------------------------------------------------------------===//
 /// VEDAGToDAGISel - VE specific code to select VE machine

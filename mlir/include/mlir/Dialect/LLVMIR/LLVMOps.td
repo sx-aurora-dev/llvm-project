@@ -284,19 +284,39 @@ def ICmpPredicate : I64EnumAttr<
   let cppNamespace = "::mlir::LLVM";
 }
 
-// Other integer operations.
-def LLVM_ICmpOp : LLVM_Op<"icmp", [Pure]> {
-  let arguments = (ins ICmpPredicate:$predicate,
-                   AnyTypeOf<[LLVM_ScalarOrVectorOf<AnyInteger>, LLVM_ScalarOrVectorOf<LLVM_AnyPointer>]>:$lhs,
-                   AnyTypeOf<[LLVM_ScalarOrVectorOf<AnyInteger>, LLVM_ScalarOrVectorOf<LLVM_AnyPointer>]>:$rhs);
+// Base class for compare operations. A compare operation takes two operands
+// of the same type and returns a boolean result. If the operands are
+// vectors, then the result has to be a boolean vector of the same shape.
+class LLVM_ArithmeticCmpOp<string mnemonic, list<Trait> traits = []> :
+    LLVM_Op<mnemonic, traits # [SameTypeOperands, TypesMatchWith<
+    "result type has i1 element type and same shape as operands",
+    "lhs", "res", "::getI1SameShape($_self)">]> {
   let results = (outs LLVM_ScalarOrVectorOf<I1>:$res);
-  let llvmBuilder = [{
-    $res = builder.CreateICmp(getLLVMCmpPredicate($predicate), $lhs, $rhs);
-  }];
+}
+
+// Other integer operations.
+def LLVM_ICmpOp : LLVM_ArithmeticCmpOp<"icmp", [Pure]> {
+  let arguments = (ins ICmpPredicate:$predicate,
+                   AnyTypeOf<[LLVM_ScalarOrVectorOf<AnyInteger>,
+                              LLVM_ScalarOrVectorOf<LLVM_AnyPointer>]>:$lhs,
+                   AnyTypeOf<[LLVM_ScalarOrVectorOf<AnyInteger>,
+                              LLVM_ScalarOrVectorOf<LLVM_AnyPointer>]>:$rhs);
   let builders = [
     OpBuilder<(ins "ICmpPredicate":$predicate, "Value":$lhs, "Value":$rhs)>
   ];
   let hasCustomAssemblyFormat = 1;
+  string llvmInstName = "ICmp";
+  string llvmBuilder = [{
+    $res = builder.CreateICmp(getLLVMCmpPredicate($predicate), $lhs, $rhs);
+  }];
+  string mlirBuilder = [{
+    auto *iCmpInst = cast<llvm::ICmpInst>(inst);
+    $res = $_builder.create<$_qualCppClassName>(
+      $_location, getICmpPredicate(iCmpInst->getPredicate()), $lhs, $rhs);
+  }];
+  // Set the $predicate index to -1 to indicate there is no matching operand
+  // and decrement the following indices.
+  list<int> llvmArgIndices = [-1, 0, 1];
 }
 
 // Predicate for float comparisons
@@ -329,17 +349,29 @@ def FCmpPredicate : I64EnumAttr<
 }
 
 // Other floating-point operations.
-def LLVM_FCmpOp : LLVM_Op<"fcmp", [
+def LLVM_FCmpOp : LLVM_ArithmeticCmpOp<"fcmp", [
     Pure, DeclareOpInterfaceMethods<FastmathFlagsInterface>]> {
   let arguments = (ins FCmpPredicate:$predicate,
                    LLVM_ScalarOrVectorOf<LLVM_AnyFloat>:$lhs,
                    LLVM_ScalarOrVectorOf<LLVM_AnyFloat>:$rhs,
                    DefaultValuedAttr<LLVM_FMFAttr, "{}">:$fastmathFlags);
-  let results = (outs LLVM_ScalarOrVectorOf<I1>:$res);
-  let llvmBuilder = [{
+  let builders = [
+    OpBuilder<(ins "FCmpPredicate":$predicate, "Value":$lhs, "Value":$rhs)>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  string llvmInstName = "FCmp";
+  string llvmBuilder = [{
     $res = builder.CreateFCmp(getLLVMCmpPredicate($predicate), $lhs, $rhs);
   }];
-  let hasCustomAssemblyFormat = 1;
+  // FIXME: Import fastmath flags.
+  string mlirBuilder = [{
+    auto *fCmpInst = cast<llvm::FCmpInst>(inst);
+    $res = $_builder.create<$_qualCppClassName>(
+      $_location, getFCmpPredicate(fCmpInst->getPredicate()), $lhs, $rhs);
+  }];
+  // Set the $predicate index to -1 to indicate there is no matching operand
+  // and decrement the following indices.
+  list<int> llvmArgIndices = [-1, 0, 1, 2];
 }
 
 // Floating point binary operations.
@@ -783,8 +815,14 @@ def LLVM_ExtractValueOp : LLVM_Op<"extractvalue", [Pure]> {
   let hasFolder = 1;
   let hasVerifier = 1;
 
+  string llvmInstName = "ExtractValue";
   string llvmBuilder = [{
     $res = builder.CreateExtractValue($container, extractPosition($position));
+  }];
+  string mlirBuilder = [{
+    auto *evInst = cast<llvm::ExtractValueInst>(inst);
+    $res = $_builder.create<LLVM::ExtractValueOp>($_location,
+      $container, getPositionFromIndices(evInst->getIndices()));
   }];
 }
 
@@ -839,9 +877,15 @@ def LLVM_InsertValueOp : LLVM_Op<
 
   let hasVerifier = 1;
 
+  string llvmInstName = "InsertValue";
   string llvmBuilder = [{
     $res = builder.CreateInsertValue($container, $value,
                                      extractPosition($position));
+  }];
+  string mlirBuilder = [{
+    auto *ivInst = cast<llvm::InsertValueInst>(inst);
+    $res = $_builder.create<LLVM::InsertValueOp>($_location,
+      $container, $value, getPositionFromIndices(ivInst->getIndices()));
   }];
 }
 
@@ -870,8 +914,15 @@ def LLVM_ShuffleVectorOp : LLVM_Op<"shufflevector",
 
   let hasVerifier = 1;
 
+  string llvmInstName = "ShuffleVector";
   string llvmBuilder = [{
     $res = builder.CreateShuffleVector($v1, $v2, $mask);
+  }];
+  string mlirBuilder = [{
+    auto *svInst = cast<llvm::ShuffleVectorInst>(inst);
+    SmallVector<int32_t> mask(svInst->getShuffleMask());
+    $res = $_builder.create<LLVM::ShuffleVectorOp>(
+      $_location, $v1, $v2, mask);
   }];
 }
 
@@ -1736,13 +1787,22 @@ def LLVM_AtomicRMWOp : LLVM_Op<"atomicrmw"> {
                    LLVM_PointerTo<LLVM_AtomicRMWType>:$ptr,
                    LLVM_AtomicRMWType:$val, AtomicOrdering:$ordering);
   let results = (outs LLVM_AtomicRMWType:$res);
-  let llvmBuilder = [{
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  string llvmInstName = "AtomicRMW";
+  string llvmBuilder = [{
     $res = builder.CreateAtomicRMW(getLLVMAtomicBinOp($bin_op), $ptr, $val,
                                    llvm::MaybeAlign(),
                                    getLLVMAtomicOrdering($ordering));
   }];
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  string mlirBuilder = [{
+    auto *atomicInst = cast<llvm::AtomicRMWInst>(inst);
+    $res = $_builder.create<LLVM::AtomicRMWOp>($_location, $_resultType,
+        getLLVMAtomicBinOp(atomicInst->getOperation()), $ptr, $val,
+        getLLVMAtomicOrdering(atomicInst->getOrdering()));
+  }];
+  // Only $ptr and $val are llvm instruction operands.
+  list<int> llvmArgIndices = [-1, 0, 1, -1];
 }
 
 def LLVM_AtomicCmpXchgType : AnyTypeOf<[AnyInteger, LLVM_AnyPointer]>;
@@ -1765,13 +1825,21 @@ def LLVM_AtomicCmpXchgOp : LLVM_Op<"cmpxchg"> {
                    AtomicOrdering:$success_ordering,
                    AtomicOrdering:$failure_ordering);
   let results = (outs LLVM_AtomicCmpXchgResultType:$res);
-  let llvmBuilder = [{
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  string llvmInstName = "AtomicCmpXchg";
+  string llvmBuilder = [{
     $res = builder.CreateAtomicCmpXchg($ptr, $cmp, $val, llvm::MaybeAlign(),
                    getLLVMAtomicOrdering($success_ordering),
                    getLLVMAtomicOrdering($failure_ordering));
   }];
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  string mlirBuilder = [{
+    auto *cmpXchgInst = cast<llvm::AtomicCmpXchgInst>(inst);
+    $res = $_builder.create<LLVM::AtomicCmpXchgOp>(
+      $_location, $_resultType, $ptr, $cmp, $val,
+      getLLVMAtomicOrdering(cmpXchgInst->getSuccessOrdering()),
+      getLLVMAtomicOrdering(cmpXchgInst->getFailureOrdering()));
+  }];
 }
 
 def LLVM_FenceOp : LLVM_Op<"fence"> {

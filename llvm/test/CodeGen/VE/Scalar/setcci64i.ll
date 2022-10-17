@@ -3,7 +3,7 @@
 define zeroext i1 @setcceq(i64, i64) {
 ; CHECK-LABEL: setcceq:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, 12, %s0
+; CHECK-NEXT:    cmpu.l %s0, 12, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -14,7 +14,7 @@ define zeroext i1 @setcceq(i64, i64) {
 define zeroext i1 @setccne(i64, i64) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.l %s0, 12, %s0
+; CHECK-NEXT:    cmpu.l %s0, 12, %s0
 ; CHECK-NEXT:    cmpu.l %s0, 0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    b.l.t (, %s10)

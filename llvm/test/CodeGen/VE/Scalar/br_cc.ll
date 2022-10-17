@@ -879,10 +879,9 @@ define void @br_cc_imm_u128(i128 %0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s0, %s0, (58)1
 ; CHECK-NEXT:    srl %s0, %s0, 63
-; CHECK-NEXT:    cmps.l %s2, %s1, (0)0
-; CHECK-NEXT:    cmpu.l %s2, 0, %s2
-; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    cmpu.l %s1, %s1, (0)0
+; CHECK-NEXT:    cmpu.l %s2, 0, %s1
+; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
 ; CHECK-NEXT:    brne.w 0, %s2, .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  # %bb.1:

@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 define fastcc <1 x i1> @vec_trunc_v1_i32_to_i1(<1 x i32> %a) {
 ; CHECK-LABEL: vec_trunc_v1_i32_to_i1:
