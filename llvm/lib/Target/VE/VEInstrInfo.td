@@ -527,13 +527,14 @@ def getFunPLT     : Operand<iPTR> {
 
 def EQV : SDNode<"VEISD::EQV", SDTIntBinOp>;
 def XOR : SDNode<"VEISD::XOR", SDTIntBinOp>;
-def cmpi : SDNode<"VEISD::CMPI", SDTIntBinOp>;
-def cmpu : SDNode<"VEISD::CMPU", SDTIntBinOp>;
-def cmpf : SDNode<"VEISD::CMPF", SDTFPBinOp>;
-def SDTFPCmpQOp : SDTypeProfile<1, 2, [
-  SDTCisSameAs<1, 2>, SDTCisFP<0>, SDTCisFP<2>
-]>;
-def CMPQ : SDNode<"VEISD::CMPQ", SDTFPCmpQOp>;
+
+// Comparisons
+def cmpi          : SDNode<"VEISD::CMPI", SDTIntBinOp>;
+def cmpu          : SDNode<"VEISD::CMPU", SDTIntBinOp>;
+def cmpf          : SDNode<"VEISD::CMPF", SDTFPBinOp>;
+def SDT_Cmpq      : SDTypeProfile<1, 2, [SDTCisSameAs<1, 2>, SDTCisFP<0>,
+                                  SDTCisFP<2>]>;
+def cmpq          : SDNode<"VEISD::CMPQ", SDT_Cmpq>;
 
 // res = cmov cmp, t, f, cond
 def SDT_Cmov      : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
@@ -1560,7 +1561,7 @@ defm FSUBQ : RRFm<"fsub.q", 0x7C, F128, f128, fsub>;
 defm FMULQ : RRFm<"fmul.q", 0x6D, F128, f128, fmul>;
 
 // Section 8.7.10 - FCQ (Floating Compare Quadruple)
-defm FCMPQ : RRNCbm<"fcmp.q", 0x7D, I64, f64, F128, f128, CMPQ, simm7fp,
+defm FCMPQ : RRNCbm<"fcmp.q", 0x7D, I64, f64, F128, f128, cmpq, simm7fp,
                     mimmfp>;
 
 // Section 8.7.11 - FIX (Convert to Fixed Point)

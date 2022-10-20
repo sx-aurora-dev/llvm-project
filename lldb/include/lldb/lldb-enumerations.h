@@ -20,15 +20,18 @@
 // this entire block, as it is not necessary for swig processing.
 #define LLDB_MARK_AS_BITMASK_ENUM(Enum)                                        \
   constexpr Enum operator|(Enum a, Enum b) {                                   \
-    return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(a) |    \
-                             static_cast<std::underlying_type_t<Enum>>(b));    \
+    return static_cast<Enum>(                                                  \
+        static_cast<std::underlying_type<Enum>::type>(a) |                     \
+        static_cast<std::underlying_type<Enum>::type>(b));                     \
   }                                                                            \
   constexpr Enum operator&(Enum a, Enum b) {                                   \
-    return static_cast<Enum>(static_cast<std::underlying_type_t<Enum>>(a) &    \
-                             static_cast<std::underlying_type_t<Enum>>(b));    \
+    return static_cast<Enum>(                                                  \
+        static_cast<std::underlying_type<Enum>::type>(a) &                     \
+        static_cast<std::underlying_type<Enum>::type>(b));                     \
   }                                                                            \
   constexpr Enum operator~(Enum a) {                                           \
-    return static_cast<Enum>(~static_cast<std::underlying_type_t<Enum>>(a));   \
+    return static_cast<Enum>(                                                  \
+        ~static_cast<std::underlying_type<Enum>::type>(a));                    \
   }                                                                            \
   inline Enum &operator|=(Enum &a, Enum b) {                                   \
     a = a | b;                                                                 \
@@ -832,8 +835,9 @@ enum TemplateArgumentKind {
 enum FormatterMatchType {
   eFormatterMatchExact,
   eFormatterMatchRegex,
+  eFormatterMatchCallback,
 
-  eLastFormatterMatchType = eFormatterMatchRegex,
+  eLastFormatterMatchType = eFormatterMatchCallback,
 };
 
 /// Options that can be set for a formatter to alter its behavior. Not
