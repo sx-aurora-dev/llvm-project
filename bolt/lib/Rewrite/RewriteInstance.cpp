@@ -407,14 +407,6 @@ Error RewriteInstance::discoverStorage() {
   NamedRegionTimer T("discoverStorage", "discover storage", TimerGroupName,
                      TimerGroupDesc, opts::TimeRewrite);
 
-  // Stubs are harmful because RuntimeDyld may try to increase the size of
-  // sections accounting for stubs when we need those sections to match the
-  // same size seen in the input binary, in case this section is a copy
-  // of the original one seen in the binary.
-  BC->EFMM.reset(new ExecutableFileMemoryManager(*BC, /*AllowStubs*/ false));
-  BC->EFMM->setNewSecPrefix(getNewSecPrefix());
-  BC->EFMM->setOrgSecPrefix(getOrgSecPrefix());
-
   auto ELF64LEFile = dyn_cast<ELF64LEObjectFile>(InputFile);
   const ELFFile<ELF64LE> &Obj = ELF64LEFile->getELFFile();
 
@@ -974,7 +966,19 @@ void RewriteInstance::discoverFileObjects() {
     if (Name.empty()) {
       UniqueName = "ANONYMOUS." + std::to_string(AnonymousId++);
     } else if (cantFail(Symbol.getFlags()) & SymbolRef::SF_Global) {
-      assert(!BC->getBinaryDataByName(Name) && "global name not unique");
+      if (const BinaryData *BD = BC->getBinaryDataByName(Name)) {
+        if (BD->getSize() == ELFSymbolRef(Symbol).getSize() &&
+            BD->getAddress() == Address) {
+          if (opts::Verbosity > 1)
+            errs() << "BOLT-WARNING: ignoring duplicate global symbol " << Name
+                   << "\n";
+          // Ignore duplicate entry - possibly a bug in the linker
+          continue;
+        }
+        errs() << "BOLT-ERROR: bad input binary, global symbol \"" << Name
+               << "\" is not unique\n";
+        exit(1);
+      }
       UniqueName = Name;
     } else {
       // If we have a local file name, we should create 2 variants for the
@@ -1068,6 +1072,7 @@ void RewriteInstance::discoverFileObjects() {
         if (opts::Verbosity >= 1)
           outs() << "BOLT-INFO: skipping possibly another entry for function "
                  << *PreviousFunction << " : " << UniqueName << '\n';
+        registerName(SymbolSize);
       } else {
         outs() << "BOLT-INFO: using " << UniqueName << " as another entry to "
                << "function " << *PreviousFunction << '\n';
@@ -1084,7 +1089,6 @@ void RewriteInstance::discoverFileObjects() {
         assert(SI->second == Symbol && "wrong symbol found");
         FileSymRefs.erase(SI);
       }
-      registerName(SymbolSize);
       continue;
     }
 
@@ -3179,6 +3183,14 @@ void RewriteInstance::emitAndLink() {
 
   MCAsmLayout FinalLayout(
       static_cast<MCObjectStreamer *>(Streamer.get())->getAssembler());
+
+  // Disable stubs because RuntimeDyld may try to increase the size of
+  // sections accounting for stubs. We need those sections to match the
+  // same size seen in the input binary, in case this section is a copy
+  // of the original one seen in the binary.
+  BC->EFMM.reset(new ExecutableFileMemoryManager(*BC, /*AllowStubs=*/false));
+  BC->EFMM->setNewSecPrefix(getNewSecPrefix());
+  BC->EFMM->setOrgSecPrefix(getOrgSecPrefix());
 
   RTDyld.reset(new decltype(RTDyld)::element_type(*BC->EFMM, Resolver));
   RTDyld->setProcessAllSections(false);

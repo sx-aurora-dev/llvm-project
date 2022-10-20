@@ -1325,6 +1325,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((VEISD::NodeType)Opcode) {
   case VEISD::FIRST_NUMBER:
     break;
+    TARGET_NODE_CASE(CMPI)
+    TARGET_NODE_CASE(CMPU)
+    TARGET_NODE_CASE(CMPF)
+    TARGET_NODE_CASE(CMPQ)
     TARGET_NODE_CASE(CMOV)
     TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
@@ -1341,10 +1345,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(TS1AM)
     TARGET_NODE_CASE(EQV)
     TARGET_NODE_CASE(XOR)
-    TARGET_NODE_CASE(CMPI)
-    TARGET_NODE_CASE(CMPU)
-    TARGET_NODE_CASE(CMPF)
-    TARGET_NODE_CASE(CMPQ)
     TARGET_NODE_CASE(FLUSHW)
     TARGET_NODE_CASE(Wrapper)
 

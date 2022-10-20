@@ -43,14 +43,17 @@ struct SparseTensorRewritePass
 
   SparseTensorRewritePass() = default;
   SparseTensorRewritePass(const SparseTensorRewritePass &pass) = default;
-  SparseTensorRewritePass(const SparsificationOptions &options) {
-    enableRuntimeLibrary = options.enableRuntimeLibrary;
+  SparseTensorRewritePass(bool enableRT, bool foreach, bool convert) {
+    enableRuntimeLibrary = enableRT;
+    enableForeach = foreach;
+    enableConvert = convert;
   }
 
   void runOnOperation() override {
     auto *ctx = &getContext();
     RewritePatternSet patterns(ctx);
-    populateSparseTensorRewriting(patterns, enableRuntimeLibrary);
+    populateSparseTensorRewriting(patterns, enableRuntimeLibrary, enableForeach,
+                                  enableConvert);
     (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
   }
 };
@@ -62,19 +65,12 @@ struct SparsificationPass
   SparsificationPass(const SparsificationPass &pass) = default;
   SparsificationPass(const SparsificationOptions &options) {
     parallelization = options.parallelizationStrategy;
-    vectorization = options.vectorizationStrategy;
-    vectorLength = options.vectorLength;
-    enableSIMDIndex32 = options.enableSIMDIndex32;
-    enableVLAVectorization = options.enableVLAVectorization;
-    enableRuntimeLibrary = options.enableRuntimeLibrary;
   }
 
   void runOnOperation() override {
     auto *ctx = &getContext();
     // Translate strategy flags to strategy options.
-    SparsificationOptions options(parallelization, vectorization, vectorLength,
-                                  enableSIMDIndex32, enableVLAVectorization,
-                                  enableRuntimeLibrary);
+    SparsificationOptions options(parallelization);
     // Apply sparsification and vector cleanup rewriting.
     RewritePatternSet patterns(ctx);
     populateSparsificationPatterns(patterns, options);
@@ -254,9 +250,11 @@ std::unique_ptr<Pass> mlir::createSparseTensorRewritePass() {
   return std::make_unique<SparseTensorRewritePass>();
 }
 
-std::unique_ptr<Pass>
-mlir::createSparseTensorRewritePass(const SparsificationOptions &options) {
-  return std::make_unique<SparseTensorRewritePass>(options);
+std::unique_ptr<Pass> mlir::createSparseTensorRewritePass(bool enableRT,
+                                                          bool enableForeach,
+                                                          bool enableConvert) {
+  return std::make_unique<SparseTensorRewritePass>(enableRT, enableForeach,
+                                                   enableConvert);
 }
 
 std::unique_ptr<Pass> mlir::createSparsificationPass() {

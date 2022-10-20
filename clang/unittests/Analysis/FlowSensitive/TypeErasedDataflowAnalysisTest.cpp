@@ -462,7 +462,7 @@ TEST_F(JoinFlowConditionsTest, JoinDistinctButProvablyEquivalentValues) {
         EXPECT_FALSE(Env1.flowConditionImplies(*GetFooValue(Env1)));
         EXPECT_TRUE(Env2.flowConditionImplies(*GetFooValue(Env2)));
         EXPECT_TRUE(Env3.flowConditionImplies(*GetFooValue(Env3)));
-        EXPECT_TRUE(Env4.flowConditionImplies(*GetFooValue(Env3)));
+        EXPECT_TRUE(Env4.flowConditionImplies(*GetFooValue(Env4)));
       });
 }
 
@@ -517,11 +517,10 @@ public:
         Type->getAsCXXRecordDecl()->getQualifiedNameAsString() != "OptionalInt")
       return false;
 
-    auto *Prop1  = Val1.getProperty("has_value");
+    auto *Prop1 = Val1.getProperty("has_value");
     auto *Prop2 = Val2.getProperty("has_value");
-    return Prop1 == Prop2 ||
-           (Prop1 != nullptr && Prop2 != nullptr && isa<TopBoolValue>(Prop1) &&
-            isa<TopBoolValue>(Prop2));
+    assert(Prop1 != nullptr && Prop2 != nullptr);
+    return areEquivalentValues(*Prop1, *Prop2);
   }
 
   bool merge(QualType Type, const Value &Val1, const Environment &Env1,

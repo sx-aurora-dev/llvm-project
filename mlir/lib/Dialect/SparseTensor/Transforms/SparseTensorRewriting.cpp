@@ -41,8 +41,7 @@ static bool isZeroValue(Value val) {
 // Helper to detect a sparse tensor type operand.
 static bool isSparseTensor(OpOperand *op) {
   if (auto enc = getSparseTensorEncoding(op->get().getType())) {
-    if (llvm::is_contained(enc.getDimLevelType(),
-                           SparseTensorEncodingAttr::DimLevelType::Compressed))
+    if (llvm::is_contained(enc.getDimLevelType(), DimLevelType::Compressed))
       return true;
   }
   return false;
@@ -105,8 +104,7 @@ static bool isZeroYield(GenericOp op) {
   auto yieldOp = cast<linalg::YieldOp>(op.getRegion().front().getTerminator());
   if (auto arg = yieldOp.getOperand(0).dyn_cast<BlockArgument>()) {
     if (arg.getOwner()->getParentOp() == op) {
-      OpOperand *t = op.getInputAndOutputOperands()[arg.getArgNumber()];
-      return isZeroValue(t->get());
+      return isZeroValue(op->getOperand(arg.getArgNumber()));
     }
   }
   return isZeroValue(yieldOp.getOperand(0));
@@ -132,27 +130,27 @@ static void sizesForTensor(OpBuilder &builder, SmallVector<Value, 4> &sizes,
 static RankedTensorType getUnorderedCOOFromType(RankedTensorType src) {
   auto *ctx = src.getContext();
   auto rank = src.getRank();
-  SmallVector<SparseTensorEncodingAttr::DimLevelType, 4> dims;
+  SmallVector<DimLevelType, 4> dims;
 
   // An unordered and non-unique compressed dim at beginning unless the tensor
   // is a 1D tensor.
   if (rank > 1)
-    dims.push_back(SparseTensorEncodingAttr::DimLevelType::CompressedNuNo);
+    dims.push_back(DimLevelType::CompressedNuNo);
 
   // TODO: it is actually ordered at the level for ordered input.
   // Followed by unordered non-unique n-2 singleton levels.
-  std::fill_n(std::back_inserter(dims), rank - 2,
-              SparseTensorEncodingAttr::DimLevelType::SingletonNuNo);
+  std::fill_n(std::back_inserter(dims), rank - 2, DimLevelType::SingletonNuNo);
   // TODO: only if all the inputs (for concatentate) are unique at the last
   // level should the COO has a unique level at the end. Ends by a unordered
   // unique singleton level.
-  dims.push_back(SparseTensorEncodingAttr::DimLevelType::SingletonNo);
+  dims.push_back(DimLevelType::SingletonNo);
+  SparseTensorEncodingAttr encSrc = getSparseTensorEncoding(src);
   // TODO: Maybe pick the bitwidth based on input/output tensors (probably the
   // largest one among them) in the original operation instead of using the
   // default value.
   auto enc = SparseTensorEncodingAttr::get(
-      ctx, dims, AffineMap::getMultiDimIdentityMap(rank, ctx), AffineMap(), 0,
-      0);
+      ctx, dims, AffineMap::getMultiDimIdentityMap(rank, ctx), AffineMap(),
+      encSrc.getPointerBitWidth(), encSrc.getIndexBitWidth());
   return RankedTensorType::get(src.getShape(), src.getElementType(), enc);
 }
 
@@ -242,8 +240,8 @@ public:
       return failure();
     // Modify operand structure of producer and consumer.
     Location loc = prod.getLoc();
-    SmallVector<Value> inputOps = prod.getInputOperands();
-    SmallVector<Value> outputOps = op.getOutputOperands();
+    SmallVector<Value> inputOps = prod.getInputs();
+    SmallVector<Value> outputOps = op.getOutputs();
     SmallVector<AffineMap> fusedIndexMaps = prod.getIndexingMapsArray();
     inputOps.push_back(op.getInputOperand(1 - other)->get());
     fusedIndexMaps.push_back(fusedIndexMaps.back()); // mimic other
@@ -612,11 +610,14 @@ struct NewRewriter : public OpRewritePattern<NewOp> {
 // Methods that add patterns described in this file to a pattern list.
 //===---------------------------------------------------------------------===//
 void mlir::populateSparseTensorRewriting(RewritePatternSet &patterns,
-                                         bool enableRT) {
+                                         bool enableRT, bool enableForeach,
+                                         bool /*enableConvert*/) {
   patterns.add<FoldInvariantYield, FuseSparseMultiplyOverAdd,
                ReshapeRewriter<tensor::ExpandShapeOp>,
-               ReshapeRewriter<tensor::CollapseShapeOp>, ForeachRewriter>(
-      patterns.getContext());
+               ReshapeRewriter<tensor::CollapseShapeOp>>(patterns.getContext());
+  if (enableForeach)
+    patterns.add<ForeachRewriter>(patterns.getContext());
+
   // TODO: If RT not enabled, rewrite concatenate ops, etc here.
   if (!enableRT)
     patterns.add<ConcatenateRewriter, NewRewriter,
