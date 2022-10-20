@@ -67,11 +67,11 @@ func.func @fill_view(%arg0: memref<?xf32, strided<[1], offset: ?>>, %arg1: f32) 
 
 // -----
 
-func.func @transpose(%arg0: memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>) {
+func.func @memref_transpose(%arg0: memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>) {
   %0 = memref.transpose %arg0 (i, j, k) -> (k, j, i) : memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>> to memref<?x?x?xf32, strided<[1, ?, ?], offset: ?>>
   return
 }
-// CHECK-LABEL: func @transpose
+// CHECK-LABEL: func @memref_transpose
 //       CHECK:   memref.transpose %{{.*}} ([[i:.*]], [[j:.*]], [[k:.*]]) -> ([[k]], [[j]], [[i]]) :
 //  CHECK-SAME:      memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>> to memref<?x?x?xf32, strided<[1, ?, ?], offset: ?>>
 
@@ -118,26 +118,6 @@ func.func @generic(%arg0: memref<?x?xvector<3x4xi4>, strided<[?, 1], offset: ?>>
 //  CHECK-SAME:     iterator_types = ["parallel", "parallel", "parallel"],
 //  CHECK-SAME:     library_call = "some_external_function_name_1"}
 //  CHECK-SAME:      ins({{.*}}, {{.*}} : memref<?x?xvector<3x4xi4>, strided<[?, 1], offset: ?>>, f32)
-//  CHECK-SAME:     outs({{.*}} : memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>)
-//  CHECK-SAME:     {foo = 1 : i64}
-
-func.func @generic_with_tensor_input(%arg0: tensor<?x?xvector<3x4xi4>>,
-                                %arg1: memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>) {
-  %cst = arith.constant 0.0 : f32
-  linalg.generic #trait_0
-       ins(%arg0, %cst : tensor<?x?xvector<3x4xi4>>, f32)
-      outs(%arg1 : memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>)
-      attrs = {foo = 1} {
-    ^bb(%0: vector<3x4xi4>, %1: f32, %2: f32) :
-      linalg.yield %1 : f32
-  }
-  return
-}
-// CHECK-LABEL: func @generic_with_tensor_input
-//       CHECK:   linalg.generic {
-//  CHECK-SAME:     indexing_maps = [#{{.*}}, #{{.*}}], iterator_types = ["parallel", "parallel", "parallel"],
-//  CHECK-SAME:     library_call = "some_external_function_name_1"}
-//  CHECK-SAME:     ins({{.*}}, {{.*}} : tensor<?x?xvector<3x4xi4>>, f32)
 //  CHECK-SAME:     outs({{.*}} : memref<?x?x?xf32, strided<[?, ?, 1], offset: ?>>)
 //  CHECK-SAME:     {foo = 1 : i64}
 
@@ -300,25 +280,17 @@ func.func @generic_region(%arg0: memref<?x?xvector<3x4xi4>, strided<[?, 1], offs
 
 func.func @named_ops(%a3: memref<?x?x?xf32>, %b3: memref<?x?x?xf32>, %c3: memref<?x?x?xf32>,
                 %ta3: tensor<?x?x?xf32>, %tb3: tensor<?x?x?xf32>, %tc3: tensor<?x?x?xf32>)
-  -> (tensor<?x?x?xf32>, tensor<?x?x?xf32>)
+  -> (tensor<?x?x?xf32>)
 {
   linalg.batch_matmul ins(%a3, %b3: memref<?x?x?xf32>, memref<?x?x?xf32>)
-                     outs(%c3: memref<?x?x?xf32>)
-  linalg.batch_matmul ins(%ta3, %tb3: tensor<?x?x?xf32>, tensor<?x?x?xf32>)
                      outs(%c3: memref<?x?x?xf32>)
   %res1 = linalg.batch_matmul
                       ins(%ta3, %tb3: tensor<?x?x?xf32>, tensor<?x?x?xf32>)
                      outs(%tc3: tensor<?x?x?xf32>)
                   -> tensor<?x?x?xf32>
-  %res2 = linalg.batch_matmul
-                      ins(%ta3, %b3: tensor<?x?x?xf32>, memref<?x?x?xf32>)
-                     outs(%tc3: tensor<?x?x?xf32>)
-                  -> tensor<?x?x?xf32>
-  return %res1, %res2 : tensor<?x?x?xf32>, tensor<?x?x?xf32>
+  return %res1 : tensor<?x?x?xf32>
 }
 // CHECK-LABEL: func @named_ops
-//       CHECK:   linalg.batch_matmul
-//       CHECK:   linalg.batch_matmul
 //       CHECK:   linalg.batch_matmul
 //       CHECK:   linalg.batch_matmul
 
@@ -485,3 +457,27 @@ func.func @variadic_reduce_memref(%input1: memref<16x32x64xf32>,
 }
 // CHECK-LABEL: func @variadic_reduce_memref
 //       CHECK:     linalg.reduce
+
+// -----
+
+func.func @transpose(%input: tensor<16x32x64xf32>,
+                     %init: tensor<32x64x16xf32>) -> tensor<32x64x16xf32> {
+  %transpose = linalg.transpose
+      ins(%input:tensor<16x32x64xf32>)
+      outs(%init:tensor<32x64x16xf32>)
+      permutation = [1, 2, 0]
+  func.return %transpose : tensor<32x64x16xf32>
+}
+// CHECK-LABEL: func @transpose
+
+// -----
+
+func.func @transpose_memref(%input: memref<16x32x64xf32>,
+                            %init: memref<32x64x16xf32>) {
+  linalg.transpose
+      ins(%input:memref<16x32x64xf32>)
+      outs(%init:memref<32x64x16xf32>)
+      permutation = [1, 2, 0]
+  func.return
+}
+// CHECK-LABEL: func @transpose_memref

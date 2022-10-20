@@ -1,14 +1,8 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i32 @selectccsgti8(i8, i8, i32, i32) {
+define i32 @selectccsgti8(i8 signext, i8 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    sla.w.sx %s1, %s1, 24
-; CHECK-NEXT:    sra.w.sx %s1, %s1, 24
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
@@ -18,15 +12,9 @@ define i32 @selectccsgti8(i8, i8, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccsgti16(i16, i16, i32, i32) {
+define i32 @selectccsgti16(i16 signext, i16 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    sla.w.sx %s1, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s1, %s1, 16
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
@@ -36,7 +24,7 @@ define i32 @selectccsgti16(i16, i16, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccsgti32(i32, i32, i32, i32) {
+define i32 @selectccsgti32(i32 signext, i32 signext, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
@@ -48,7 +36,7 @@ define i32 @selectccsgti32(i32, i32, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccsgti64(i64, i64, i32, i32) {
+define i32 @selectccsgti64(i64, i64, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgti64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.l %s0, %s0, %s1
@@ -60,7 +48,7 @@ define i32 @selectccsgti64(i64, i64, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccsgti128(i128, i128, i32, i32) {
+define i32 @selectccsgti128(i128, i128, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccsgti128:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s6, %s1, %s3
@@ -77,7 +65,7 @@ define i32 @selectccsgti128(i128, i128, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccogtf32(float, float, i32, i32) {
+define i32 @selectccogtf32(float, float, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccogtf32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
@@ -89,7 +77,7 @@ define i32 @selectccogtf32(float, float, i32, i32) {
   ret i32 %6
 }
 
-define i32 @selectccogtf64(double, double, i32, i32) {
+define i32 @selectccogtf64(double, double, i32 signext, i32 signext) {
 ; CHECK-LABEL: selectccogtf64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s1

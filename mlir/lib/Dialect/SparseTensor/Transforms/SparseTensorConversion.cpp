@@ -23,10 +23,10 @@
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SparseTensor/IR/Enums.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/SparseTensor/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/ExecutionEngine/SparseTensor/Enums.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -155,14 +155,6 @@ static void concatSizesFromInputs(OpBuilder &builder,
   }
 }
 
-/// Generates an uninitialized temporary buffer of the given size and
-/// type, but returns it as type `memref<? x $tp>` (rather than as type
-/// `memref<$sz x $tp>`).
-static Value genAlloca(OpBuilder &builder, Location loc, Value sz, Type tp) {
-  auto memTp = MemRefType::get({ShapedType::kDynamicSize}, tp);
-  return builder.create<memref::AllocaOp>(loc, memTp, ValueRange{sz});
-}
-
 /// Generates an uninitialized buffer of the given size and type,
 /// but returns it as type `memref<? x $tp>` (rather than as type
 /// `memref<$sz x $tp>`). Unlike temporary buffers on the stack,
@@ -170,19 +162,6 @@ static Value genAlloca(OpBuilder &builder, Location loc, Value sz, Type tp) {
 static Value genAlloc(RewriterBase &rewriter, Location loc, Value sz, Type tp) {
   auto memTp = MemRefType::get({ShapedType::kDynamicSize}, tp);
   return rewriter.create<memref::AllocOp>(loc, memTp, ValueRange{sz});
-}
-
-/// Generates an uninitialized temporary buffer of the given size and
-/// type, but returns it as type `memref<? x $tp>` (rather than as type
-/// `memref<$sz x $tp>`).
-static Value genAlloca(OpBuilder &builder, Location loc, unsigned sz, Type tp) {
-  return genAlloca(builder, loc, constantIndex(builder, loc, sz), tp);
-}
-
-/// Generates an uninitialized temporary buffer with room for one value
-/// of the given type, and returns the `memref<$tp>`.
-static Value genAllocaScalar(OpBuilder &builder, Location loc, Type tp) {
-  return builder.create<memref::AllocaOp>(loc, MemRefType::get({}, tp));
 }
 
 /// Generates a temporary buffer of the given type and given contents.
@@ -204,7 +183,7 @@ static void newParams(OpBuilder &builder, SmallVector<Value, 8> &params,
                       Location loc, ShapedType stp,
                       SparseTensorEncodingAttr &enc, Action action,
                       ValueRange szs, Value ptr = Value()) {
-  ArrayRef<SparseTensorEncodingAttr::DimLevelType> dlt = enc.getDimLevelType();
+  ArrayRef<DimLevelType> dlt = enc.getDimLevelType();
   unsigned sz = dlt.size();
   // Sparsity annotations.
   SmallVector<Value, 4> attrs;
@@ -407,11 +386,10 @@ static void insertScalarIntoDenseTensor(OpBuilder &builder, Location loc,
 
 /// Determine if the runtime library supports direct conversion to the
 /// given target `dimTypes`.
-static bool canUseDirectConversion(
-    ArrayRef<SparseTensorEncodingAttr::DimLevelType> dimTypes) {
+static bool canUseDirectConversion(ArrayRef<DimLevelType> dimTypes) {
   bool alreadyCompressed = false;
   for (uint64_t rank = dimTypes.size(), r = 0; r < rank; r++) {
-    const DimLevelType dlt = dimLevelTypeEncoding(dimTypes[r]);
+    const DimLevelType dlt = dimTypes[r];
     if (isCompressedDLT(dlt)) {
       if (alreadyCompressed)
         return false; // Multiple compressed dimensions not yet supported.
@@ -852,10 +830,8 @@ public:
       // The dimLevelTypes aren't actually used by Action::kToIterator.
       encDst = SparseTensorEncodingAttr::get(
           op->getContext(),
-          SmallVector<SparseTensorEncodingAttr::DimLevelType>(
-              rank, SparseTensorEncodingAttr::DimLevelType::Dense),
-          AffineMap(), AffineMap(), encSrc.getPointerBitWidth(),
-          encSrc.getIndexBitWidth());
+          SmallVector<DimLevelType>(rank, DimLevelType::Dense), AffineMap(),
+          AffineMap(), encSrc.getPointerBitWidth(), encSrc.getIndexBitWidth());
       SmallVector<Value, 4> sizes;
       SmallVector<Value, 8> params;
       sizesFromPtr(rewriter, sizes, loc, encSrc, srcTensorTp, src);
@@ -1092,9 +1068,9 @@ public:
                                        constantIndex(rewriter, loc, i));
     rewriter.create<memref::StoreOp>(loc, adaptor.getValue(), vref);
     SmallString<12> name{"lexInsert", primaryTypeFunctionSuffix(elemTp)};
-    replaceOpWithFuncCall(rewriter, op, name, {},
-                          {adaptor.getTensor(), mref, vref},
-                          EmitCInterface::On);
+    createFuncCall(rewriter, loc, name, {}, {adaptor.getTensor(), mref, vref},
+                   EmitCInterface::On);
+    rewriter.replaceOp(op, adaptor.getTensor());
     return success();
   }
 };
@@ -1170,9 +1146,10 @@ public:
       rewriter.create<memref::StoreOp>(loc, adaptor.getIndices()[i], mref,
                                        constantIndex(rewriter, loc, i));
     SmallString<12> name{"expInsert", primaryTypeFunctionSuffix(elemTp)};
-    replaceOpWithFuncCall(rewriter, op, name, {},
-                          {tensor, mref, values, filled, added, count},
-                          EmitCInterface::On);
+    createFuncCall(rewriter, loc, name, {},
+                   {tensor, mref, values, filled, added, count},
+                   EmitCInterface::On);
+    rewriter.replaceOp(op, adaptor.getTensor());
     // Deallocate the buffers on exit of the loop nest.
     Operation *parent = op;
     for (; isa<scf::ForOp>(parent->getParentOp()) ||

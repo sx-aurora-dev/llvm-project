@@ -1475,6 +1475,7 @@ static inline void __kmp_x86_pause(void) { _mm_pause(); }
 // requested. Uses a timed TPAUSE, and exponential backoff. If TPAUSE isn't
 // available, fall back to the regular CPU pause and yield combination.
 #if KMP_HAVE_UMWAIT
+#define KMP_TPAUSE_MAX_MASK ((kmp_uint64)0xFFFF)
 #define KMP_YIELD_OVERSUB_ELSE_SPIN(count, time)                               \
   {                                                                            \
     if (__kmp_tpause_enabled) {                                                \
@@ -1483,7 +1484,7 @@ static inline void __kmp_x86_pause(void) { _mm_pause(); }
       } else {                                                                 \
         __kmp_tpause(__kmp_tpause_hint, (time));                               \
       }                                                                        \
-      (time) *= 2;                                                             \
+      (time) = (time << 1 | 1) & KMP_TPAUSE_MAX_MASK;                          \
     } else {                                                                   \
       KMP_CPU_PAUSE();                                                         \
       if ((KMP_TRY_YIELD_OVERSUB)) {                                           \
