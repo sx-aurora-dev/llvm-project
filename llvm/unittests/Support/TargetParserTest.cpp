@@ -1295,7 +1295,8 @@ INSTANTIATE_TEST_SUITE_P(
                              AArch64::AEK_LSE | AArch64::AEK_RDM,
                          "8.2-A")));
 
-static constexpr unsigned NumAArch64CPUArchs = 58;
+// Note: number of CPUs includes aliases.
+static constexpr unsigned NumAArch64CPUArchs = 59;
 
 TEST(TargetParserTest, testAArch64CPUArchList) {
   SmallVector<StringRef, NumAArch64CPUArchs> List;
@@ -1505,7 +1506,7 @@ TEST(TargetParserTest, AArch64ExtensionFeatures) {
       AArch64::AEK_BRBE,    AArch64::AEK_PAUTH,    AArch64::AEK_FLAGM,
       AArch64::AEK_SME,     AArch64::AEK_SMEF64F64, AArch64::AEK_SMEI16I64,
       AArch64::AEK_SME2,    AArch64::AEK_HBC,      AArch64::AEK_MOPS,
-      AArch64::AEK_PERFMON};
+      AArch64::AEK_PERFMON, AArch64::AEK_SVE2p1};
 
   std::vector<StringRef> Features;
 
@@ -1544,6 +1545,7 @@ TEST(TargetParserTest, AArch64ExtensionFeatures) {
   EXPECT_TRUE(llvm::is_contained(Features, "+sve2-sm4"));
   EXPECT_TRUE(llvm::is_contained(Features, "+sve2-sha3"));
   EXPECT_TRUE(llvm::is_contained(Features, "+sve2-bitperm"));
+  EXPECT_TRUE(llvm::is_contained(Features, "+sve2p1"));
   EXPECT_TRUE(llvm::is_contained(Features, "+rcpc"));
   EXPECT_TRUE(llvm::is_contained(Features, "+rand"));
   EXPECT_TRUE(llvm::is_contained(Features, "+mte"));
@@ -1625,6 +1627,7 @@ TEST(TargetParserTest, AArch64ArchExtFeature) {
       {"sve2-aes", "nosve2-aes", "+sve2-aes", "-sve2-aes"},
       {"sve2-sm4", "nosve2-sm4", "+sve2-sm4", "-sve2-sm4"},
       {"sve2-sha3", "nosve2-sha3", "+sve2-sha3", "-sve2-sha3"},
+      {"sve2p1", "nosve2p1", "+sve2p1", "-sve2p1"},
       {"sve2-bitperm", "nosve2-bitperm", "+sve2-bitperm", "-sve2-bitperm"},
       {"dotprod", "nodotprod", "+dotprod", "-dotprod"},
       {"rcpc", "norcpc", "+rcpc", "-rcpc"},

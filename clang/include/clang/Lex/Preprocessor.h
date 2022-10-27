@@ -164,6 +164,7 @@ class Preprocessor {
   IdentifierInfo *Ident__has_feature;              // __has_feature
   IdentifierInfo *Ident__has_extension;            // __has_extension
   IdentifierInfo *Ident__has_builtin;              // __has_builtin
+  IdentifierInfo *Ident__has_constexpr_builtin;    // __has_constexpr_builtin
   IdentifierInfo *Ident__has_attribute;            // __has_attribute
   IdentifierInfo *Ident__has_include;              // __has_include
   IdentifierInfo *Ident__has_include_next;         // __has_include_next
@@ -1009,15 +1010,6 @@ private:
   /// indicate where CachedLexPos should be set when the BackTrack() method is
   /// invoked (at which point the last position is popped).
   std::vector<CachedTokensTy::size_type> BacktrackPositions;
-
-  struct MacroInfoChain {
-    MacroInfo MI;
-    MacroInfoChain *Next;
-  };
-
-  /// MacroInfos are managed as a chain for easy disposal.  This is the head
-  /// of that list.
-  MacroInfoChain *MIChainHead = nullptr;
 
   /// True if \p Preprocessor::SkipExcludedConditionalBlock() is running.
   /// This is used to guard against calling this function recursively.

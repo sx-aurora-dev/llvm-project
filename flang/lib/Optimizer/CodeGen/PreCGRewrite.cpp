@@ -107,7 +107,8 @@ public:
     }
     auto xbox = rewriter.create<fir::cg::XEmboxOp>(
         loc, embox.getType(), embox.getMemref(), shapeOpers, llvm::None,
-        llvm::None, llvm::None, llvm::None, embox.getTypeparams());
+        llvm::None, llvm::None, llvm::None, embox.getTypeparams(),
+        embox.getTdesc());
     LLVM_DEBUG(llvm::dbgs() << "rewriting " << embox << " to " << xbox << '\n');
     rewriter.replaceOp(embox, xbox.getOperation()->getResults());
     return mlir::success();
@@ -142,7 +143,8 @@ public:
       }
     auto xbox = rewriter.create<fir::cg::XEmboxOp>(
         loc, embox.getType(), embox.getMemref(), shapeOpers, shiftOpers,
-        sliceOpers, subcompOpers, substrOpers, embox.getTypeparams());
+        sliceOpers, subcompOpers, substrOpers, embox.getTypeparams(),
+        embox.getTdesc());
     LLVM_DEBUG(llvm::dbgs() << "rewriting " << embox << " to " << xbox << '\n');
     rewriter.replaceOp(embox, xbox.getOperation()->getResults());
     return mlir::success();
@@ -266,6 +268,18 @@ public:
   }
 };
 
+class DeclareOpConversion : public mlir::OpRewritePattern<fir::DeclareOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  mlir::LogicalResult
+  matchAndRewrite(fir::DeclareOp declareOp,
+                  mlir::PatternRewriter &rewriter) const override {
+    rewriter.replaceOp(declareOp, declareOp.getMemref());
+    return mlir::success();
+  }
+};
+
 class CodeGenRewrite : public fir::impl::CodeGenRewriteBase<CodeGenRewrite> {
 public:
   void runOn(mlir::Operation *op, mlir::Region &region) {
@@ -276,6 +290,7 @@ public:
                            fir::FIRCodeGenDialect, mlir::func::FuncDialect>();
     target.addIllegalOp<fir::ArrayCoorOp>();
     target.addIllegalOp<fir::ReboxOp>();
+    target.addIllegalOp<fir::DeclareOp>();
     target.addDynamicallyLegalOp<fir::EmboxOp>([](fir::EmboxOp embox) {
       return !(embox.getShape() || embox.getType()
                                        .cast<fir::BaseBoxType>()
@@ -283,8 +298,8 @@ public:
                                        .isa<fir::SequenceType>());
     });
     mlir::RewritePatternSet patterns(&context);
-    patterns.insert<EmboxConversion, ArrayCoorConversion, ReboxConversion>(
-        &context);
+    patterns.insert<EmboxConversion, ArrayCoorConversion, ReboxConversion,
+                    DeclareOpConversion>(&context);
     if (mlir::failed(
             mlir::applyPartialConversion(op, target, std::move(patterns)))) {
       mlir::emitError(mlir::UnknownLoc::get(&context),

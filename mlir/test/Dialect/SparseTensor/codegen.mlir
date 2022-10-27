@@ -239,6 +239,20 @@ func.func @sparse_values_dcsr(%arg0: tensor<?x?xf64, #DCSR>) -> memref<?xf64> {
   return %0 : memref<?xf64>
 }
 
+// CHECK-LABEL: func @sparse_noe(
+//  CHECK-SAME: %[[A0:.*0]]: memref<1xindex>,
+//  CHECK-SAME: %[[A1:.*1]]: memref<3xindex>,
+//  CHECK-SAME: %[[A2:.*2]]: memref<?xi32>,
+//  CHECK-SAME: %[[A3:.*3]]: memref<?xi64>,
+//  CHECK-SAME: %[[A4:.*4]]: memref<?xf64>)
+//       CHECK: %[[C2:.*]] = arith.constant 2 : index
+//       CHECK: %[[NOE:.*]] = memref.load %[[A1]][%[[C2]]] : memref<3xindex>
+//       CHECK: return %[[NOE]] : index
+func.func @sparse_noe(%arg0: tensor<128xf64, #SparseVector>) -> index {
+  %0 = sparse_tensor.number_of_entries %arg0 : tensor<128xf64, #SparseVector>
+  return %0 : index
+}
+
 // CHECK-LABEL: func @sparse_dealloc_csr(
 //  CHECK-SAME: %[[A0:.*0]]: memref<2xindex>,
 //  CHECK-SAME: %[[A1:.*1]]: memref<3xindex>,
@@ -526,7 +540,7 @@ func.func @sparse_insert_typed(%arg0: tensor<128xf64, #SparseVector>, %arg1: ind
 //  CHECK-SAME:   %[[A3:.*]]: memref<?xi64>,
 //  CHECK-SAME:   %[[A4:.*]]: memref<?xf32>)
 //       CHECK:   return %[[A0]], %[[A1]], %[[A2]], %[[A3]], %[[A4]] : memref<1xindex>, memref<3xindex>, memref<?xi32>, memref<?xi64>, memref<?xf32>
-func.func @sparse_nop_convert(%arg0: tensor<?xf32, #SparseVector>) -> tensor<?xf32, #SparseVector> {
-  %0 = sparse_tensor.convert %arg0 : tensor<?xf32, #SparseVector> to tensor<?xf32, #SparseVector>
+func.func @sparse_nop_convert(%arg0: tensor<32xf32, #SparseVector>) -> tensor<?xf32, #SparseVector> {
+  %0 = sparse_tensor.convert %arg0 : tensor<32xf32, #SparseVector> to tensor<?xf32, #SparseVector>
   return %0 : tensor<?xf32, #SparseVector>
 }

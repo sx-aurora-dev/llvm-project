@@ -265,7 +265,8 @@ static ExprResult calculateConstraintSatisfaction(
   return calculateConstraintSatisfaction(
       S, ConstraintExpr, Satisfaction, [&](const Expr *AtomicExpr) {
         EnterExpressionEvaluationContext ConstantEvaluated(
-            S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+            S, Sema::ExpressionEvaluationContext::ConstantEvaluated,
+            Sema::ReuseLambdaContextDecl);
 
         // Atomic constraint - substitute arguments and check satisfaction.
         ExprResult SubstitutedExpression;
@@ -511,7 +512,7 @@ Sema::SetupConstraintCheckingTemplateArgumentsAndScope(
                                        /*Pattern=*/nullptr,
                                        /*ForConstraintInstantiation=*/true);
   if (SetupConstraintScope(FD, TemplateArgs, MLTAL, Scope))
-    return {};
+    return llvm::None;
 
   return MLTAL;
 }
@@ -546,6 +547,9 @@ bool Sema::CheckFunctionConstraints(const FunctionDecl *FD,
   llvm::Optional<MultiLevelTemplateArgumentList> MLTAL =
       SetupConstraintCheckingTemplateArgumentsAndScope(
           const_cast<FunctionDecl *>(FD), {}, Scope);
+
+  if (!MLTAL)
+    return true;
 
   Qualifiers ThisQuals;
   CXXRecordDecl *Record = nullptr;
@@ -1107,14 +1111,8 @@ NormalizedConstraint::fromConstraintExpr(Sema &S, NamedDecl *D, const Expr *E) {
 
   // C++2a [temp.param]p4:
   //     [...] If T is not a pack, then E is E', otherwise E is (E' && ...).
-  //
-  // Using the pattern suffices because the partial ordering rules guarantee
-  // the template paramaters are equivalent.
-  if (auto *FoldE = dyn_cast<const CXXFoldExpr>(E)) {
-    assert(FoldE->isRightFold() && FoldE->getOperator() == BO_LAnd);
-    assert(E->IgnoreParenImpCasts() == E);
-    E = FoldE->getPattern();
-  }
+  // Fold expression is considered atomic constraints per current wording.
+  // See http://cplusplus.github.io/concepts-ts/ts-active.html#28
 
   if (LogicalBinOp BO = E) {
     auto LHS = fromConstraintExpr(S, D, BO.getLHS());

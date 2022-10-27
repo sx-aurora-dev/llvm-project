@@ -111,6 +111,7 @@ set(x86_files
 # Intrinsics
   adxintrin.h
   ammintrin.h
+  amxfp16intrin.h
   amxintrin.h
   avx2intrin.h
   avx512bf16intrin.h
@@ -150,6 +151,7 @@ set(x86_files
   clflushoptintrin.h
   clwbintrin.h
   clzerointrin.h
+  cmpccxaddintrin.h
   crc32intrin.h
   emmintrin.h
   enqcmdintrin.h
@@ -174,6 +176,7 @@ set(x86_files
   pkuintrin.h
   pmmintrin.h
   popcntintrin.h
+  prfchiintrin.h
   prfchwintrin.h
   ptwriteintrin.h
   rdpruintrin.h

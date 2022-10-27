@@ -128,6 +128,8 @@ def HasSVE           : Predicate<"Subtarget->hasSVE()">,
                                  AssemblerPredicateWithAll<(all_of FeatureSVE), "sve">;
 def HasSVE2          : Predicate<"Subtarget->hasSVE2()">,
                                  AssemblerPredicateWithAll<(all_of FeatureSVE2), "sve2">;
+def HasSVE2p1        : Predicate<"Subtarget->hasSVE2p1()">,
+                                 AssemblerPredicate<(any_of FeatureSVE2p1), "sve2p1">;
 def HasSVE2AES       : Predicate<"Subtarget->hasSVE2AES()">,
                                  AssemblerPredicateWithAll<(all_of FeatureSVE2AES), "sve2-aes">;
 def HasSVE2SM4       : Predicate<"Subtarget->hasSVE2SM4()">,
@@ -154,6 +156,12 @@ def HasSVE2orSME
     : Predicate<"Subtarget->hasSVE2() || Subtarget->hasSME()">,
                 AssemblerPredicateWithAll<(any_of FeatureSVE2, FeatureSME),
                 "sve2 or sme">;
+def HasSVE2p1_or_HasSME
+    : Predicate<"Subtarget->hasSVE2p1() || Subtarget->hasSME()">,
+                 AssemblerPredicate<(any_of FeatureSME, FeatureSVE2p1), "sme or sve2p1">;
+def HasSVE2p1_or_HasSME2
+    : Predicate<"Subtarget->hasSVE2p1() || Subtarget->hasSME2()">,
+                 AssemblerPredicate<(any_of FeatureSME2, FeatureSVE2p1), "sme2 or sve2p1">;
 // A subset of NEON instructions are legal in Streaming SVE execution mode,
 // they should be enabled if either has been specified.
 def HasNEONorSME
@@ -1353,7 +1361,12 @@ let Predicates = [HasPAuth] in {
   defm AUT : SignAuth<0b001, 0b011, "aut", null_frag>;
 
   def XPACI : ClearAuth<0, "xpaci">;
+  def : Pat<(int_ptrauth_strip GPR64:$Rd, 0), (XPACI GPR64:$Rd)>;
+  def : Pat<(int_ptrauth_strip GPR64:$Rd, 1), (XPACI GPR64:$Rd)>;
+
   def XPACD : ClearAuth<1, "xpacd">;
+  def : Pat<(int_ptrauth_strip GPR64:$Rd, 2), (XPACD GPR64:$Rd)>;
+  def : Pat<(int_ptrauth_strip GPR64:$Rd, 3), (XPACD GPR64:$Rd)>;
 
   def PACGA : SignAuthTwoOperand<0b1100, "pacga", int_ptrauth_sign_generic>;
 
