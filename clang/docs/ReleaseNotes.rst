@@ -321,6 +321,18 @@ Improvements to Clang's diagnostics
   on the previous undocumented behavior. As a side effect of this change,
   constructor calls outside of initializer expressions are no longer ignored,
   which can result in new warnings (or make existing warnings disappear).
+- The wording of diagnostics regarding arithmetic on fixed-sized arrays and
+  pointers is improved to include the type of the array and whether it's cast
+  to another type. This should improve comprehension for why an index is
+  out-of-bounds.
+- Clang now correctly points to the problematic parameter for the ``-Wnonnull``
+  warning. This fixes
+  `Issue 58273 <https://github.com/llvm/llvm-project/issues/58273>`_.
+- Introduced ``-Wcast-function-type-strict`` to warn about function type mismatches
+  in casts that may result in runtime indirect call `Control-Flow Integrity (CFI)
+  <https://clang.llvm.org/docs/ControlFlowIntegrity.html>`_ failures. This diagnostic
+  is grouped under ``-Wcast-function-type`` as it identifies a more strict set of
+  potentially problematic function type casts.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -356,6 +368,11 @@ Non-comprehensive list of changes in this release
   timestamp to be used in replacement of the current date and time in
   the ``__DATE__``, ``__TIME__``, and ``__TIMESTAMP__`` macros. See
   `<https://reproducible-builds.org/docs/source-date-epoch/>`_.
+- Clang now supports ``__has_constexpr_builtin`` function-like macro that
+  evaluates to 1 if the builtin is supported and can be constant evaluated.
+  It can be used to writing conditionally constexpr code that uses builtins.
+- The time profiler (using ``-ftime-trace`` option) now traces various constant
+  evaluation events.
 
 New Compiler Flags
 ------------------
@@ -545,6 +562,8 @@ C++2b Feature Support
 
 - Support label at end of compound statement (`P2324 <https://wg21.link/p2324r2>`_).
 - Implemented `P1169R4: static operator() <https://wg21.link/P1169R4>`_.
+- Implemented "char8_t Compatibility and Portability Fix" (`P2513R3 <https://wg21.link/P2513R3>`_).
+  This Change was applied to C++20 as a Defect Report.
 
 CUDA/HIP Language Changes in Clang
 ----------------------------------
@@ -586,7 +605,18 @@ X86 Support in Clang
 --------------------
 - Support ``-mindirect-branch-cs-prefix`` for call and jmp to indirect thunk.
 - Fix 32-bit ``__fastcall`` and ``__vectorcall`` ABI mismatch with MSVC.
+- Add ISA of ``AMX-FP16`` which support ``_tile_dpfp16ps``.
 - Switch ``AVX512-BF16`` intrinsics types from ``short`` to ``__bf16``.
+- Add support for ``PREFETCHI`` instructions.
+- Support ISA of ``CMPCCXADD``.
+  * Support intrinsic of ``__cmpccxadd_epi32``.
+  * Support intrinsic of ``__cmpccxadd_epi64``.
+
+WebAssembly Support in Clang
+----------------------------
+
+The -mcpu=generic configuration now enables sign-ext and mutable-globals. These
+proposals are standardized and available in all major engines.
 
 DWARF Support in Clang
 ----------------------
@@ -624,7 +654,10 @@ AST Matchers
 
 clang-format
 ------------
-- Add `RemoveSemicolon` option for removing `;` after a non-empty function definition.
+- Add ``RemoveSemicolon`` option for removing ``;`` after a non-empty function definition.
+- Add ``RequiresExpressionIndentation`` option for configuring the alignment of requires-expressions.
+  The default value of this option is ``OuterScope``, which differs in behavior from clang-format 15.
+  To match the default behavior of clang-format 15, use the ``Keyword`` value.
 
 clang-extdef-mapping
 --------------------
@@ -637,8 +670,8 @@ libclang
   the behavior of ``QualType::getNonReferenceType`` for ``CXType``.
 - Introduced the new function ``clang_CXXMethod_isDeleted``, which queries
   whether the method is declared ``= delete``.
-- ``clang_Cursor_getNumTemplateArguments``, ``clang_Cursor_getTemplateArgumentKind``, 
-  ``clang_Cursor_getTemplateArgumentType``, ``clang_Cursor_getTemplateArgumentValue`` and 
+- ``clang_Cursor_getNumTemplateArguments``, ``clang_Cursor_getTemplateArgumentKind``,
+  ``clang_Cursor_getTemplateArgumentType``, ``clang_Cursor_getTemplateArgumentValue`` and
   ``clang_Cursor_getTemplateArgumentUnsignedValue`` now work on struct, class,
   and partial template specialization cursors in addition to function cursors.
 

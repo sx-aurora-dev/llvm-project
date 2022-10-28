@@ -761,9 +761,13 @@ canonicalizeImmediatelyDeclaredConstraint(const ASTContext &C, Expr *IDC,
     NewConverted.push_back(ConstrainedType);
     llvm::append_range(NewConverted, OldConverted.drop_front(1));
   }
+  auto *CSD = ImplicitConceptSpecializationDecl::Create(
+      C, CSE->getNamedConcept()->getDeclContext(),
+      CSE->getNamedConcept()->getLocation(), NewConverted);
+
   Expr *NewIDC = ConceptSpecializationExpr::Create(
-      C, CSE->getNamedConcept(), NewConverted, nullptr,
-      CSE->isInstantiationDependent(), CSE->containsUnexpandedParameterPack());
+      C, CSE->getNamedConcept(), CSD, nullptr, CSE->isInstantiationDependent(),
+      CSE->containsUnexpandedParameterPack());
 
   if (auto *OrigFold = dyn_cast<CXXFoldExpr>(IDC))
     NewIDC = new (C) CXXFoldExpr(
@@ -949,7 +953,8 @@ static const LangASMap *getAddressSpaceMap(const TargetInfo &T,
         0,  // sycl_private
         10, // ptr32_sptr
         11, // ptr32_uptr
-        12  // ptr64
+        12, // ptr64
+        13, // hlsl_groupshared
     };
     return &FakeAddrSpaceMap;
   } else {
@@ -1891,6 +1896,44 @@ TypeInfoChars ASTContext::getTypeInfoInChars(const Type *T) const {
 
 TypeInfoChars ASTContext::getTypeInfoInChars(QualType T) const {
   return getTypeInfoInChars(T.getTypePtr());
+}
+
+bool ASTContext::isPromotableIntegerType(QualType T) const {
+  // HLSL doesn't promote all small integer types to int, it
+  // just uses the rank-based promotion rules for all types.
+  if (getLangOpts().HLSL)
+    return false;
+
+  if (const auto *BT = T->getAs<BuiltinType>())
+    switch (BT->getKind()) {
+    case BuiltinType::Bool:
+    case BuiltinType::Char_S:
+    case BuiltinType::Char_U:
+    case BuiltinType::SChar:
+    case BuiltinType::UChar:
+    case BuiltinType::Short:
+    case BuiltinType::UShort:
+    case BuiltinType::WChar_S:
+    case BuiltinType::WChar_U:
+    case BuiltinType::Char8:
+    case BuiltinType::Char16:
+    case BuiltinType::Char32:
+      return true;
+    default:
+      return false;
+    }
+
+  // Enumerated types are promotable to their compatible integer types
+  // (C99 6.3.1.1) a.k.a. its underlying type (C++ [conv.prom]p2).
+  if (const auto *ET = T->getAs<EnumType>()) {
+    if (T->isDependentType() || ET->getDecl()->getPromotionType().isNull() ||
+        ET->getDecl()->isScoped())
+      return false;
+
+    return true;
+  }
+
+  return false;
 }
 
 bool ASTContext::isAlignmentRequired(const Type *T) const {
@@ -5107,12 +5150,9 @@ QualType ASTContext::getDependentNameType(ElaboratedTypeKeyword Keyword,
   return QualType(T, 0);
 }
 
-QualType
-ASTContext::getDependentTemplateSpecializationType(
-                                 ElaboratedTypeKeyword Keyword,
-                                 NestedNameSpecifier *NNS,
-                                 const IdentifierInfo *Name,
-                                 const TemplateArgumentListInfo &Args) const {
+QualType ASTContext::getDependentTemplateSpecializationType(
+    ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
+    const IdentifierInfo *Name, ArrayRef<TemplateArgumentLoc> Args) const {
   // TODO: avoid this copy
   SmallVector<TemplateArgument, 16> ArgCopy;
   for (unsigned I = 0, E = Args.size(); I != E; ++I)
@@ -7127,7 +7167,7 @@ QualType ASTContext::isPromotableBitField(Expr *E) const {
 /// integer type.
 QualType ASTContext::getPromotedIntegerType(QualType Promotable) const {
   assert(!Promotable.isNull());
-  assert(Promotable->isPromotableIntegerType());
+  assert(isPromotableIntegerType(Promotable));
   if (const auto *ET = Promotable->getAs<EnumType>())
     return ET->getDecl()->getPromotionType();
 
@@ -10328,7 +10368,7 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
           return {};
       }
 
-      if (paramTy->isPromotableIntegerType() ||
+      if (isPromotableIntegerType(paramTy) ||
           getCanonicalType(paramTy).getUnqualifiedType() == FloatTy)
         return {};
     }
