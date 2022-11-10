@@ -341,6 +341,9 @@ END_REGISTER_VP(vp_roundtozero, VP_FROUNDTOZERO)
 
 // llvm.vp.rint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
 END_REGISTER_VP(vp_rint, VP_FRINT)
 
 ///// } Floating-Point Arithmetic
@@ -411,13 +414,6 @@ HELPER_REGISTER_INT_CAST_VP(inttoptr, VP_INTTOPTR, IntToPtr)
 ///// } Type Casts
 
 ///// Rounding {
-
-// llvm.vp.rint(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
-END_REGISTER_VP(vp_rint, VP_FRINT)
 
 // llvm.vp.nearbyint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
