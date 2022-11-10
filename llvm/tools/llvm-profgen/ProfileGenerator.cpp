@@ -434,7 +434,7 @@ bool ProfileGeneratorBase::collectFunctionsFromRawProfile(
 
     for (auto Item : CI.second.BranchCounter) {
       uint64_t SourceAddress = Item.first.first;
-      uint64_t TargetAddress = Item.first.first;
+      uint64_t TargetAddress = Item.first.second;
       if (FuncRange *FRange = Binary->findFuncRange(SourceAddress))
         ProfiledFunctions.insert(FRange->Func);
       if (FuncRange *FRange = Binary->findFuncRange(TargetAddress))
@@ -787,7 +787,6 @@ void CSProfileGenerator::generateProfile() {
 }
 
 void CSProfileGenerator::computeSizeForProfiledFunctions() {
-  std::unordered_set<const BinaryFunction *> ProfiledFunctions;
   for (auto *Func : Binary->getProfiledFunctions())
     Binary->computeInlinedContextSizeForFunc(Func);
 

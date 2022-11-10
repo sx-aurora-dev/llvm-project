@@ -56,6 +56,9 @@ enum NodeType : unsigned {
   REVB_2W,
   BITREV_4B,
   BITREV_W,
+
+  // Intrinsic operations
+  DBAR,
 };
 } // end namespace LoongArchISD
 
@@ -109,6 +112,13 @@ public:
 
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;
+  TargetLowering::AtomicExpansionKind
+  shouldExpandAtomicCmpXchgInIR(AtomicCmpXchgInst *CI) const override;
+  Value *emitMaskedAtomicCmpXchgIntrinsic(IRBuilderBase &Builder,
+                                          AtomicCmpXchgInst *CI,
+                                          Value *AlignedAddr, Value *CmpVal,
+                                          Value *NewVal, Value *Mask,
+                                          AtomicOrdering Ord) const override;
 
   bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
                           MachineFunction &MF,
@@ -122,6 +132,10 @@ public:
 
   Register
   getExceptionSelectorRegister(const Constant *PersonalityFn) const override;
+
+  ISD::NodeType getExtendForAtomicOps() const override {
+    return ISD::SIGN_EXTEND;
+  }
 
 private:
   /// Target-specific function used to lower LoongArch calling conventions.
@@ -160,8 +174,10 @@ private:
   SDValue lowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBITCAST(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerUINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
 
