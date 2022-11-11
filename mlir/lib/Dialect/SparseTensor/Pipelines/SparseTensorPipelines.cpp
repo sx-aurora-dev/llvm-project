@@ -65,10 +65,10 @@ void mlir::sparse_tensor::buildSparseCompiler(
         options.sparseTensorConversionOptions()));
   else
     pm.addPass(createSparseTensorCodegenPass());
-  pm.addPass(createSparseBufferRewritePass());
-  pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
+  pm.addPass(createSparseBufferRewritePass(options.enableBufferInitialization));
   pm.addPass(createDenseBufferizationPass(
       getBufferizationOptions(/*analysisOnly=*/false)));
+  pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   pm.addNestedPass<func::FuncOp>(
       mlir::bufferization::createFinalizingBufferizePass());
   // TODO(springerm): Add sparse support to the BufferDeallocation pass and add

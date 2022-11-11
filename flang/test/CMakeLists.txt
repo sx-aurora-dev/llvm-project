@@ -1,5 +1,6 @@
 # Test runner infrastructure for Flang. This configures the Flang test trees
 # for use by Lit, and delegates to LLVM's lit test handlers.
+add_subdirectory(lib)
 
 llvm_canonicalize_cmake_booleans(
   FLANG_BUILD_EXAMPLES
@@ -62,6 +63,9 @@ set(FLANG_TEST_DEPENDS
   Fortran_main
   FortranDecimal
 )
+if (LLVM_ENABLE_PLUGINS AND NOT WIN32)
+  list(APPEND FLANG_TEST_DEPENDS Bye)
+endif()
 
 if (FLANG_INCLUDE_TESTS)
   if (FLANG_GTEST_AVAIL)
