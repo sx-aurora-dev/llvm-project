@@ -475,6 +475,9 @@ def FeatureSMEF64F64 : SubtargetFeature<"sme-f64f64", "HasSMEF64F64", "true",
 def FeatureSMEI16I64 : SubtargetFeature<"sme-i16i64", "HasSMEI16I64", "true",
   "Enable Scalable Matrix Extension (SME) I16I64 instructions (FEAT_SME_I16I64)", [FeatureSME]>;
 
+def FeatureSMEF16F16 : SubtargetFeature<"sme-f16f16", "HasSMEF16F16", "true",
+  "Enable SME2.1 non-widening Float16 instructions (FEAT_SME_F16F16)", []>;
+
 def FeatureSME2 : SubtargetFeature<"sme2", "HasSME2", "true",
   "Enable Scalable Matrix Extension 2 (SME2) instructions", [FeatureSME]>;
 
@@ -544,6 +547,10 @@ def HasV8_8aOps : SubtargetFeature<
   "v8.8a", "HasV8_8aOps", "true", "Support ARM v8.8a instructions",
   [HasV8_7aOps, FeatureHBC, FeatureMOPS]>;
 
+def HasV8_9aOps : SubtargetFeature<
+  "v8.9a", "HasV8_9aOps", "true", "Support ARM v8.9a instructions",
+  [HasV8_8aOps]>;
+
 def HasV9_0aOps : SubtargetFeature<
   "v9a", "HasV9_0aOps", "true", "Support ARM v9a instructions",
   [HasV8_5aOps, FeatureMEC, FeatureSVE2]>;
@@ -559,6 +566,10 @@ def HasV9_2aOps : SubtargetFeature<
 def HasV9_3aOps : SubtargetFeature<
   "v9.3a", "HasV9_3aOps", "true", "Support ARM v9.3a instructions",
   [HasV8_8aOps, HasV9_2aOps]>;
+
+def HasV9_4aOps : SubtargetFeature<
+  "v9.4a", "HasV9_4aOps", "true", "Support ARM v9.4a instructions",
+  [HasV8_9aOps, HasV9_3aOps]>;
 
 def HasV8_0rOps : SubtargetFeature<
   "v8r", "HasV8_0rOps", "true", "Support ARM v8r instructions",
@@ -653,7 +664,8 @@ def PAUnsupported : AArch64Unsupported {
 }
 
 def SMEUnsupported : AArch64Unsupported {
-  let F = [HasSME, HasSMEF64F64, HasSMEI16I64, HasSME2, HasSVE2p1_or_HasSME2, HasSVE2p1_or_HasSME2p1];
+  let F = [HasSME, HasSMEF64F64, HasSMEI16I64, HasSME2, HasSVE2p1_or_HasSME2,
+           HasSVE2p1_or_HasSME2p1, HasSME2p1, HasSMEF16F16];
 }
 
 include "AArch64SchedA53.td"

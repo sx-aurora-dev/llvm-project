@@ -1019,6 +1019,7 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::ABS:
   case ISD::BITREVERSE:
   case ISD::BSWAP:
+  case ISD::VP_BSWAP:
   case ISD::CTLZ:
   case ISD::CTTZ:
   case ISD::CTLZ_ZERO_UNDEF:
@@ -1036,6 +1037,7 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::FLOG10:
   case ISD::FLOG2:
   case ISD::FNEARBYINT:
+  case ISD::VP_FNEARBYINT:
   case ISD::FNEG: case ISD::VP_FNEG:
   case ISD::FREEZE:
   case ISD::ARITH_FENCE:
@@ -4127,6 +4129,7 @@ void DAGTypeLegalizer::WidenVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::ABS:
   case ISD::BITREVERSE:
   case ISD::BSWAP:
+  case ISD::VP_BSWAP:
   case ISD::CTLZ:
   case ISD::CTLZ_ZERO_UNDEF:
   case ISD::CTPOP:
@@ -4138,6 +4141,7 @@ void DAGTypeLegalizer::WidenVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::VP_FCEIL:
   case ISD::VP_FFLOOR:
   case ISD::VP_FRINT:
+  case ISD::VP_FNEARBYINT:
   case ISD::VP_FROUND:
   case ISD::VP_FROUNDEVEN:
   case ISD::VP_FROUNDTOZERO:

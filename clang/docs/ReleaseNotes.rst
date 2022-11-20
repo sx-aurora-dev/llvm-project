@@ -388,6 +388,13 @@ Improvements to Clang's diagnostics
 - Clang now diagnoses use of invalid or reserved module names in a module
   export declaration. Both are diagnosed as an error, but the diagnostic is
   suppressed for use of reserved names in a system header.
+- ``-Winteger-overflow`` will diagnose overflow in more cases. This fixes
+  `Issue 58944 <https://github.com/llvm/llvm-project/issues/58944>`_.
+- Clang has an internal limit of 2GB of preprocessed source code per
+  compilation, including source reachable through imported AST files such as
+  PCH or modules. When Clang hits this limit, it now produces notes mentioning
+  which header and source files are consuming large amounts of this space.
+  ``#pragma clang __debug sloc_usage`` can also be used to request this report.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -511,6 +518,8 @@ Windows Support
   ``-mguard=cf-nochecks`` (equivalent to ``/guard:cf-``, ``/guard:cf`` and
   ``/guard:cf,nochecks`` in clang-cl) for enabling Control Flow Guard checks
   and generation of address-taken function table.
+
+- Switched from SHA1 to BLAKE3 for PDB type hashing / ``-gcodeview-ghash``
 
 AIX Support
 -----------
@@ -760,6 +769,7 @@ Floating Point Support in Clang
 - The driver option ``-menable-unsafe-fp-math`` has been removed. To enable
   unsafe floating-point optimizations use ``-funsafe-math-optimizations`` or
   ``-ffast-math`` instead.
+- Add ``__builtin_elementwise_sin`` and ``__builtin_elementwise_cos`` builtins for floating point types only.
 
 Internal API Changes
 --------------------
@@ -790,6 +800,9 @@ libclang
   whether the method is declared ``= delete``.
 - Introduced the new function ``clang_CXXMethod_isCopyAssignmentOperator``,
   which identifies whether a method cursor is a copy-assignment
+  operator.
+- Introduced the new function ``clang_CXXMethod_isMoveAssignmentOperator``,
+  which identifies whether a method cursor is a move-assignment
   operator.
 - ``clang_Cursor_getNumTemplateArguments``, ``clang_Cursor_getTemplateArgumentKind``, 
   ``clang_Cursor_getTemplateArgumentType``, ``clang_Cursor_getTemplateArgumentValue`` and 

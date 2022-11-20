@@ -107,6 +107,15 @@ llvm::Constant *CodeGenModule::getBuiltinLibFunction(const FunctionDecl *FD,
       {Builtin::BI__builtin_nexttowardf128, "__nexttowardieee128"},
   };
 
+  // The AIX library functions frexpl, ldexpl, and modfl are for 128-bit
+  // IBM 'long double' (i.e. __ibm128). Map to the 'double' versions
+  // if it is 64-bit 'long double' mode.
+  static SmallDenseMap<unsigned, StringRef, 4> AIXLongDouble64Builtins{
+      {Builtin::BI__builtin_frexpl, "frexp"},
+      {Builtin::BI__builtin_ldexpl, "ldexp"},
+      {Builtin::BI__builtin_modfl, "modf"},
+  };
+
   // If the builtin has been declared explicitly with an assembler label,
   // use the mangled name. This differs from the plain label on platforms
   // that prefix labels.
@@ -119,6 +128,12 @@ llvm::Constant *CodeGenModule::getBuiltinLibFunction(const FunctionDecl *FD,
         &getTarget().getLongDoubleFormat() == &llvm::APFloat::IEEEquad() &&
         F128Builtins.find(BuiltinID) != F128Builtins.end())
       Name = F128Builtins[BuiltinID];
+    else if (getTriple().isOSAIX() &&
+             &getTarget().getLongDoubleFormat() ==
+                 &llvm::APFloat::IEEEdouble() &&
+             AIXLongDouble64Builtins.find(BuiltinID) !=
+                 AIXLongDouble64Builtins.end())
+      Name = AIXLongDouble64Builtins[BuiltinID];
     else
       Name = Context.BuiltinInfo.getName(BuiltinID) + 10;
   }
@@ -3061,12 +3076,19 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_elementwise_ceil:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::ceil, "elt.ceil"));
+  case Builtin::BI__builtin_elementwise_cos:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::cos, "elt.cos"));
   case Builtin::BI__builtin_elementwise_floor:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::floor, "elt.floor"));
   case Builtin::BI__builtin_elementwise_roundeven:
     return RValue::get(emitUnaryBuiltin(*this, E, llvm::Intrinsic::roundeven,
                                         "elt.roundeven"));
+  case Builtin::BI__builtin_elementwise_sin:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::sin, "elt.sin"));
+
   case Builtin::BI__builtin_elementwise_trunc:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::trunc, "elt.trunc"));
@@ -19638,6 +19660,9 @@ Value *CodeGenFunction::EmitLoongArchBuiltinExpr(unsigned BuiltinID,
     llvm_unreachable("unexpected builtin ID.");
   case LoongArch::BI__builtin_loongarch_dbar:
     ID = Intrinsic::loongarch_dbar;
+    break;
+  case LoongArch::BI__builtin_loongarch_crc_w_d_w:
+    ID = Intrinsic::loongarch_crc_w_d_w;
     break;
     // TODO: Support more Intrinsics.
   }

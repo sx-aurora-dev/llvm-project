@@ -450,7 +450,7 @@ public:
   /// specified type.
   bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, Align A,
                                       MachineMemOperand::Flags Flags,
-                                      bool *Fast) const override;
+                                      unsigned *Fast) const override;
 
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
   /// in Mask are known to be either zero or one and return them in the

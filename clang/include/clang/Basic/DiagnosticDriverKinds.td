@@ -225,8 +225,6 @@ def note_drv_config_file_searched_in : Note<
   "was searched for in the directory: %0">;
 def err_drv_cannot_read_config_file : Error<
   "cannot read configuration file '%0': %1">;
-def err_drv_nested_config_file: Error<
-  "option '--config' is not allowed inside configuration file">;
 def err_drv_arg_requires_bitcode_input: Error<
   "option '%0' requires input to be LLVM bitcode">;
 
@@ -693,5 +691,5 @@ def err_drv_riscv_unsupported_with_linker_relaxation : Error<
   "%0 is unsupported with RISC-V linker relaxation (-mrelax)">;
 
 def err_drv_loongarch_invalid_mfpu_EQ : Error<
-  "invalid argument '%0' to -mfpu=; must be one of: 64, 32, 0, none">;
+  "invalid argument '%0' to -mfpu=; must be one of: 64, 32, none, 0 (alias for none)">;
 }

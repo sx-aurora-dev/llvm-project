@@ -18,12 +18,10 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const Symbol &S) {
   switch (S.kind()) {
   case Symbol::Declaration:
     if (const auto *ND = llvm::dyn_cast<NamedDecl>(&S.declaration()))
-      return OS << ND->getNameAsString();
+      return OS << ND->getQualifiedNameAsString();
     return OS << S.declaration().getDeclKindName();
   case Symbol::Macro:
-    return OS << S.macro().Name;
-  case Symbol::Standard:
-    return OS << S.standard().scope() << S.standard().name();
+    return OS << S.macro().Name->getName();
   }
   llvm_unreachable("Unhandled Symbol kind");
 }
@@ -34,6 +32,8 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const Header &H) {
     return OS << H.physical()->getName();
   case Header::Standard:
     return OS << H.standard().name();
+  case Header::Verbatim:
+    return OS << H.verbatim();
   }
   llvm_unreachable("Unhandled Header kind");
 }
@@ -50,6 +50,18 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const SymbolReference &R) {
             << llvm::utohexstr(
                    R.RefLocation.getRawEncoding(), /*LowerCase=*/false,
                    /*Width=*/CHAR_BIT * sizeof(SourceLocation::UIntTy));
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, RefType T) {
+  switch (T) {
+  case RefType::Explicit:
+    return OS << "explicit";
+  case RefType::Implicit:
+    return OS << "implicit";
+  case RefType::Ambiguous:
+    return OS << "ambiguous";
+  }
+  llvm_unreachable("Unexpected RefType");
 }
 
 } // namespace clang::include_cleaner
