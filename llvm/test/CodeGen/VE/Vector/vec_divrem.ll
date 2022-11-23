@@ -7,14 +7,33 @@
 define <4 x i8> @udiv_by_minus_one(<4 x i8> %x) {
 ; CHECK-LABEL: udiv_by_minus_one:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s0, %s0, (56)0
-; CHECK-NEXT:    and %s1, %s1, (56)0
-; CHECK-NEXT:    and %s2, %s2, (56)0
-; CHECK-NEXT:    and %s3, %s3, (56)0
-; CHECK-NEXT:    divu.w %s3, %s3, (56)0
-; CHECK-NEXT:    divu.w %s2, %s2, (56)0
-; CHECK-NEXT:    divu.w %s1, %s1, (56)0
-; CHECK-NEXT:    divu.w %s0, %s0, (56)0
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v0(3), %s3
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.w.eq %vm1, %v0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v0, 1
+; CHECK-NEXT:    vbrd %v1, 0
+; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm1
+; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    lvs %s1, %v1(1)
+; CHECK-NEXT:    lvs %s2, %v1(2)
+; CHECK-NEXT:    lvs %s3, %v1(3)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = udiv <4 x i8> %x, <i8 255, i8 255, i8 255, i8 255>
   ret <4 x i8> %r
@@ -23,22 +42,82 @@ define <4 x i8> @udiv_by_minus_one(<4 x i8> %x) {
 define <4 x i8> @urem_by_minus_one(<4 x i8> %x) {
 ; CHECK-LABEL: urem_by_minus_one:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s0, %s0, (56)0
-; CHECK-NEXT:    and %s1, %s1, (56)0
-; CHECK-NEXT:    and %s2, %s2, (56)0
-; CHECK-NEXT:    and %s3, %s3, (56)0
-; CHECK-NEXT:    divu.w %s4, %s3, (56)0
-; CHECK-NEXT:    muls.w.sx %s4, %s4, (56)0
-; CHECK-NEXT:    subs.w.sx %s3, %s3, %s4
-; CHECK-NEXT:    divu.w %s4, %s2, (56)0
-; CHECK-NEXT:    muls.w.sx %s4, %s4, (56)0
-; CHECK-NEXT:    subs.w.sx %s2, %s2, %s4
-; CHECK-NEXT:    divu.w %s4, %s1, (56)0
-; CHECK-NEXT:    muls.w.sx %s4, %s4, (56)0
-; CHECK-NEXT:    subs.w.sx %s1, %s1, %s4
-; CHECK-NEXT:    divu.w %s4, %s0, (56)0
-; CHECK-NEXT:    muls.w.sx %s4, %s4, (56)0
-; CHECK-NEXT:    subs.w.sx %s0, %s0, %s4
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lsv %v0(1), %s1
+; CHECK-NEXT:    and %s0, %s2, (32)0
+; CHECK-NEXT:    lsv %v0(2), %s0
+; CHECK-NEXT:    and %s0, %s3, (32)0
+; CHECK-NEXT:    lsv %v0(3), %s0
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v0
+; CHECK-NEXT:    vbrd %v2, %s1
+; CHECK-NEXT:    pvand.lo %v2, %s1, %v2
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.w %v1, %v1, %v2
+; CHECK-NEXT:    vfmk.w.eq %vm1, %v1
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, 0
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    lvs %s1, %v0(1)
+; CHECK-NEXT:    lvs %s2, %v0(2)
+; CHECK-NEXT:    lvs %s3, %v0(3)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %r = urem <4 x i8> %x, <i8 255, i8 255, i8 255, i8 255>
+  ret <4 x i8> %r
+}
+
+define fastcc <4 x i8> @udiv_by_minus_one_reg(<4 x i8> %x) {
+; CHECK-LABEL: udiv_by_minus_one_reg:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.w.eq %vm1, %v0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, 1
+; CHECK-NEXT:    vbrd %v0, 0
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    b.l.t (, %s10)
+  %r = udiv <4 x i8> %x, <i8 255, i8 255, i8 255, i8 255>
+  ret <4 x i8> %r
+}
+
+define fastcc <4 x i8> @urem_by_minus_one_reg(<4 x i8> %x) {
+; CHECK-LABEL: urem_by_minus_one_reg:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvand.lo %v1, %s1, %v0
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
+; CHECK-NEXT:    vbrd %v2, %s1
+; CHECK-NEXT:    pvand.lo %v2, %s1, %v2
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
+; CHECK-NEXT:    vfmk.w.eq %vm1, %v0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v0, 0
+; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = urem <4 x i8> %x, <i8 255, i8 255, i8 255, i8 255>
   ret <4 x i8> %r
