@@ -1,4 +1,4 @@
-; RUN: opt -indvars < %s 2>&1 | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
+; RUN: opt -indvars < %s | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
 
 ; void test(int64_t n, int64_t m, int64_t A[n][m]) {
 ;   for (int64_t i = 0; i < m - 2; ++i)
@@ -11,7 +11,7 @@
 
 ; Explanation: We want to check that by shuffling the
 ; indices (i.e. j, which is IV of the innermost loop, is used
-; in the outermost dimension in the array), 
+; in the outermost dimension in the array),
 ; we still can deduce the loop vectorizable.
 
 ; We also want to check that the inner loop is vectorizable.

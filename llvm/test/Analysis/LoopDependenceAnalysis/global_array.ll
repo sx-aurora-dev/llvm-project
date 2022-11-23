@@ -1,7 +1,7 @@
-; RUN: opt -indvars < %s 2>&1 | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
+; RUN: opt -indvars < %s | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
 
 ; extern int A[30][10];
-; 
+;
 ; void test() {
 ;   for (int i = 0; i < 29; ++i) {
 ;     for (int j = 0; j < 8; ++j) {
