@@ -1,4 +1,4 @@
-; RUN: opt -indvars < %s 2>&1 | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
+; RUN: opt -indvars < %s | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
 
 ; IMPORTANT: You _must_ add target data layout otherwise -indvars won't know if it's good to widen.
 target datalayout = "n8:16:32:64"

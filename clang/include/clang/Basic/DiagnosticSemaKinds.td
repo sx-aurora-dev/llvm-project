@@ -11095,7 +11095,7 @@ def err_invalid_type_for_program_scope_var : Error<
 let CategoryName = "Modules Issue" in {
 def err_module_decl_in_module_map_module : Error<
   "'module' declaration found while building module from module map">;
-def err_module_decl_in_header_module : Error<
+def err_module_decl_in_header_unit : Error<
   "'module' declaration found while building header unit">;
 def err_module_interface_implementation_mismatch : Error<
   "missing 'export' specifier in module declaration while "
@@ -11729,4 +11729,8 @@ def err_non_designated_init_used : Error<
   "a randomized struct can only be initialized with a designated initializer">;
 def err_cast_from_randomized_struct : Error<
   "casting from randomized structure pointer type %0 to %1">;
+
+// LoongArch-specific Diagnostics
+def err_loongarch_builtin_requires_la64 : Error<
+  "this builtin requires target: loongarch64">;
 } // end of sema component.

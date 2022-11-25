@@ -16,6 +16,7 @@
 #include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Tooling/Inclusions/HeaderAnalysis.h"
 
 namespace clang::include_cleaner {
 namespace {
@@ -118,12 +119,25 @@ static llvm::Optional<StringRef> parseIWYUPragma(const char *Text) {
 class PragmaIncludes::RecordPragma : public PPCallbacks, public CommentHandler {
 public:
   RecordPragma(const CompilerInstance &CI, PragmaIncludes *Out)
-      : SM(CI.getSourceManager()), Out(Out), UniqueStrings(Arena) {}
+      : SM(CI.getSourceManager()),
+        HeaderInfo(CI.getPreprocessor().getHeaderSearchInfo()), Out(Out),
+        UniqueStrings(Arena) {}
 
   void FileChanged(SourceLocation Loc, FileChangeReason Reason,
                    SrcMgr::CharacteristicKind FileType,
                    FileID PrevFID) override {
     InMainFile = SM.isWrittenInMainFile(Loc);
+
+    if (Reason == PPCallbacks::ExitFile) {
+      // At file exit time HeaderSearchInfo is valid and can be used to
+      // determine whether the file was a self-contained header or not.
+      if (const FileEntry *FE = SM.getFileEntryForID(PrevFID)) {
+        if (tooling::isSelfContainedHeader(FE, SM, HeaderInfo))
+          Out->NonSelfContainedFiles.erase(FE->getUniqueID());
+        else
+          Out->NonSelfContainedFiles.insert(FE->getUniqueID());
+      }
+    }
   }
 
   void EndOfMainFile() override {
@@ -225,9 +239,9 @@ public:
       // 2. handleCommentInMainFile("// IWYU pragma: keep")
       // 3. InclusionDirective("bar.h")
       //
-      // This code stores the last location of "IWYU pragma: keep" (or export)
-      // comment in the main file, so that when next InclusionDirective is
-      // called, it will know that the next inclusion is behind the IWYU pragma.
+      // This code stores the last location of "IWYU pragma: keep" comment in
+      // the main file, so that when next InclusionDirective is called, it will
+      // know that the next inclusion is behind the IWYU pragma.
       LastPragmaKeepInMainFileLine = CommentLine;
     }
     return false;
@@ -238,6 +252,7 @@ private:
 
   bool InMainFile = false;
   const SourceManager &SM;
+  HeaderSearch &HeaderInfo;
   PragmaIncludes *Out;
   llvm::BumpPtrAllocator Arena;
   /// Intern table for strings. Contents are on the arena.
@@ -287,6 +302,10 @@ PragmaIncludes::getExporters(const FileEntry *File, FileManager &FM) const {
   return Results;
 }
 
+bool PragmaIncludes::isSelfContained(const FileEntry *FE) const {
+  return !NonSelfContainedFiles.contains(FE->getUniqueID());
+}
+
 std::unique_ptr<ASTConsumer> RecordedAST::record() {
   class Recorder : public ASTConsumer {
     RecordedAST *Out;
@@ -330,6 +349,10 @@ RecordedPP::RecordedIncludes::match(Header H) const {
     break;
   case Header::Standard:
     for (unsigned I : BySpelling.lookup(H.standard().name().trim("<>")))
+      Result.push_back(&All[I]);
+    break;
+  case Header::Verbatim:
+    for (unsigned I : BySpelling.lookup(H.verbatim().trim("\"<>")))
       Result.push_back(&All[I]);
     break;
   }

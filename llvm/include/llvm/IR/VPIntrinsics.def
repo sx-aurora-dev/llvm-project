@@ -226,6 +226,10 @@ BEGIN_REGISTER_VP(vp_umax, 2, 3, VP_UMAX, -1)
 VP_PROPERTY_BINARYOP
 END_REGISTER_VP(vp_umax, VP_UMAX)
 
+// llvm.vp.bswap(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_bswap, 1, 2, VP_BSWAP, -1)
+END_REGISTER_VP(vp_bswap, VP_BSWAP)
+
 // llvm.vp.ctpop(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ctpop, 1, 2, VP_CTPOP, -1)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ctpop)
@@ -346,6 +350,13 @@ VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
 END_REGISTER_VP(vp_rint, VP_FRINT)
 
+// llvm.vp.nearbyint(x,mask,vlen)
+BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
+VP_PROPERTY_UNARYOP
+VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
+VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
+END_REGISTER_VP(vp_nearbyint, VP_FNEARBYINT)
+
 ///// } Floating-Point Arithmetic
 
 ///// Type Casts {
@@ -412,17 +423,6 @@ HELPER_REGISTER_INT_CAST_VP(inttoptr, VP_INTTOPTR, IntToPtr)
 #undef HELPER_REGISTER_INT_CAST_VP
 
 ///// } Type Casts
-
-///// Rounding {
-
-// llvm.vp.nearbyint(x,mask,vlen)
-BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
-VP_PROPERTY_UNARYOP
-VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
-VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
-END_REGISTER_VP(vp_nearbyint, VP_FNEARBYINT)
-
-///// } Rounding
 
 ///// Comparisons {
 

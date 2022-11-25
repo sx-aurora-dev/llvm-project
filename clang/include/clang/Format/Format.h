@@ -1752,6 +1752,35 @@ struct FormatStyle {
   /// \version 12
   BreakBeforeConceptDeclarationsStyle BreakBeforeConceptDeclarations;
 
+  /// Different ways to break ASM parameters.
+  enum BreakBeforeInlineASMColonStyle : int8_t {
+    /// No break before inline ASM colon.
+    /// \code
+    ///    asm volatile("string", : : val);
+    /// \endcode
+    BBIAS_Never,
+    /// Break before inline ASM colon if the line length is longer than column
+    /// limit.
+    /// \code
+    ///    asm volatile("string", : : val);
+    ///    asm("cmoveq %1, %2, %[result]"
+    ///        : [result] "=r"(result)
+    ///        : "r"(test), "r"(new), "[result]"(old));
+    /// \endcode
+    BBIAS_OnlyMultiline,
+    /// Always break before inline ASM colon.
+    /// \code
+    ///    asm volatile("string",
+    ///                 :
+    ///                 : val);
+    /// \endcode
+    BBIAS_Always,
+  };
+
+  /// The inline ASM colon style to use.
+  /// \version 16
+  BreakBeforeInlineASMColonStyle BreakBeforeInlineASMColon;
+
   /// If ``true``, ternary operators will be placed after line breaks.
   /// \code
   ///    true:
@@ -2092,14 +2121,17 @@ struct FormatStyle {
   bool ExperimentalAutoDetectBinPacking;
 
   /// If ``true``, clang-format adds missing namespace end comments for
-  /// short namespaces and fixes invalid existing ones. Short ones are
-  /// controlled by "ShortNamespaceLines".
+  /// namespaces and fixes invalid existing ones. This doesn't affect short
+  /// namespaces, which are controlled by ``ShortNamespaceLines``.
   /// \code
   ///    true:                                  false:
-  ///    namespace a {                  vs.     namespace a {
-  ///    foo();                                 foo();
-  ///    bar();                                 bar();
+  ///    namespace longNamespace {      vs.     namespace longNamespace {
+  ///    void foo();                            void foo();
+  ///    void bar();                            void bar();
   ///    } // namespace a                       }
+  ///    namespace shortNamespace {             namespace shortNamespace {
+  ///    void baz();                            void baz();
+  ///    }                                      }
   /// \endcode
   /// \version 5
   bool FixNamespaceComments;
@@ -3041,7 +3073,9 @@ struct FormatStyle {
   ReferenceAlignmentStyle ReferenceAlignment;
 
   // clang-format off
-  /// If ``true``, clang-format will attempt to re-flow comments.
+  /// If ``true``, clang-format will attempt to re-flow comments. That is it
+  /// will touch a comment and *reflow* long comments into new lines, trying to
+  /// obey the ``ColumnLimit``.
   /// \code
   ///    false:
   ///    // veryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryLongComment with plenty of information
@@ -3792,7 +3826,7 @@ struct FormatStyle {
   /// \version 3.7
   bool SpacesInCStyleCastParentheses;
 
-  /// Control of spaces within a single line comment
+  /// Control of spaces within a single line comment.
   struct SpacesInLineComment {
     /// The minimum number of spaces at the start of the comment.
     unsigned Minimum;
@@ -3829,6 +3863,8 @@ struct FormatStyle {
   ///   ///  - Foo                                /// - Foo
   ///   ///    - Bar                              ///   - Bar
   /// \endcode
+  ///
+  /// This option has only effect if ``ReflowComments`` is set to ``true``.
   /// \version 13
   SpacesInLineComment SpacesInLineCommentPrefix;
 
@@ -4016,6 +4052,7 @@ struct FormatStyle {
            BreakBeforeBinaryOperators == R.BreakBeforeBinaryOperators &&
            BreakBeforeBraces == R.BreakBeforeBraces &&
            BreakBeforeConceptDeclarations == R.BreakBeforeConceptDeclarations &&
+           BreakBeforeInlineASMColon == R.BreakBeforeInlineASMColon &&
            BreakBeforeTernaryOperators == R.BreakBeforeTernaryOperators &&
            BreakConstructorInitializers == R.BreakConstructorInitializers &&
            BreakInheritanceList == R.BreakInheritanceList &&

@@ -52,27 +52,21 @@ struct Symbol {
     Declaration,
     /// A preprocessor macro, as defined in a specific location.
     Macro,
-    /// A recognized symbol from the standard library, like std::string.
-    Standard,
   };
 
   Symbol(const Decl &D) : Storage(&D) {}
   Symbol(struct Macro M) : Storage(M) {}
-  Symbol(tooling::stdlib::Symbol S) : Storage(S) {}
 
   Kind kind() const { return static_cast<Kind>(Storage.index()); }
   bool operator==(const Symbol &RHS) const { return Storage == RHS.Storage; }
 
   const Decl &declaration() const { return *std::get<Declaration>(Storage); }
   struct Macro macro() const { return std::get<Macro>(Storage); }
-  tooling::stdlib::Symbol standard() const {
-    return std::get<Standard>(Storage);
-  }
 
 private:
   // FIXME: Add support for macros.
   // Order must match Kind enum!
-  std::variant<const Decl *, struct Macro, tooling::stdlib::Symbol> Storage;
+  std::variant<const Decl *, struct Macro> Storage;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Symbol &);
 
@@ -85,6 +79,7 @@ enum class RefType {
   /// Target's use can't be proven, e.g. a candidate for an unresolved overload.
   Ambiguous,
 };
+llvm::raw_ostream &operator<<(llvm::raw_ostream &, RefType);
 
 /// Indicates that a piece of code refers to a symbol.
 struct SymbolReference {
@@ -105,10 +100,14 @@ struct Header {
     Physical,
     /// A recognized standard library header, like <string>.
     Standard,
+    /// A verbatim header spelling, a string quoted with <> or "" that can be
+    /// #included directly.
+    Verbatim,
   };
 
   Header(const FileEntry *FE) : Storage(FE) {}
   Header(tooling::stdlib::Header H) : Storage(H) {}
+  Header(StringRef VerbatimSpelling) : Storage(VerbatimSpelling) {}
 
   Kind kind() const { return static_cast<Kind>(Storage.index()); }
   bool operator==(const Header &RHS) const { return Storage == RHS.Storage; }
@@ -117,11 +116,11 @@ struct Header {
   tooling::stdlib::Header standard() const {
     return std::get<Standard>(Storage);
   }
+  StringRef verbatim() const { return std::get<Verbatim>(Storage); }
 
 private:
-  // FIXME: Handle verbatim spellings.
   // Order must match Kind enum!
-  std::variant<const FileEntry *, tooling::stdlib::Header> Storage;
+  std::variant<const FileEntry *, tooling::stdlib::Header, StringRef> Storage;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Header &);
 
