@@ -82,10 +82,10 @@ void llvm::detachDeadBlocks(
       // eventually be removed (they are themselves dead).
       if (!I.use_empty())
         I.replaceAllUsesWith(PoisonValue::get(I.getType()));
-      BB->getInstList().pop_back();
+      BB->back().eraseFromParent();
     }
     new UnreachableInst(BB->getContext(), BB);
-    assert(BB->getInstList().size() == 1 &&
+    assert(BB->size() == 1 &&
            isa<UnreachableInst>(BB->getTerminator()) &&
            "The successor list of BB isn't empty before "
            "applying corresponding DTU updates.");
@@ -279,13 +279,13 @@ bool llvm::MergeBlockIntoPredecessor(BasicBlock *BB, DomTreeUpdater *DTU,
 
   if (PredecessorWithTwoSuccessors) {
     // Delete the unconditional branch from BB.
-    BB->getInstList().pop_back();
+    BB->back().eraseFromParent();
 
     // Update branch in the predecessor.
     PredBB_BI->setSuccessor(FallThruPath, NewSucc);
   } else {
     // Delete the unconditional branch from the predecessor.
-    PredBB->getInstList().pop_back();
+    PredBB->back().eraseFromParent();
 
     // Move terminator instruction.
     PredBB->getInstList().splice(PredBB->end(), BB->getInstList());
@@ -428,8 +428,7 @@ static bool removeRedundantDbgInstrsUsingForwardScan(BasicBlock *BB) {
       VariableMap;
   for (auto &I : *BB) {
     if (DbgValueInst *DVI = dyn_cast<DbgValueInst>(&I)) {
-      DebugVariable Key(DVI->getVariable(),
-                        NoneType(),
+      DebugVariable Key(DVI->getVariable(), None,
                         DVI->getDebugLoc()->getInlinedAt());
       auto VMI = VariableMap.find(Key);
       auto *DAI = dyn_cast<DbgAssignIntrinsic>(DVI);
@@ -490,7 +489,7 @@ static bool remomveUndefDbgAssignsFromEntryBlock(BasicBlock *BB) {
   DenseSet<DebugVariable> SeenDefForAggregate;
   // Returns the DebugVariable for DVI with no fragment info.
   auto GetAggregateVariable = [](DbgValueInst *DVI) {
-    return DebugVariable(DVI->getVariable(), NoneType(),
+    return DebugVariable(DVI->getVariable(), None,
                          DVI->getDebugLoc()->getInlinedAt());
   };
 
