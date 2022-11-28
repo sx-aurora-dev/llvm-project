@@ -60,7 +60,10 @@ enum NodeType : unsigned {
   BITREV_W,
 
   // Intrinsic operations
+  BREAK,
   DBAR,
+  IBAR,
+  SYSCALL,
 
   // CRC check operations
   CRC_W_D_W
@@ -189,6 +192,7 @@ private:
   SDValue lowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerWRITE_REGISTER(SDValue Op, SelectionDAG &DAG) const;
 
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;

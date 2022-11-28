@@ -3710,7 +3710,10 @@ bool Sema::CheckLoongArchBuiltinFunctionCall(const TargetInfo &TI,
                   diag::err_loongarch_builtin_requires_la64)
              << TheCall->getSourceRange();
     break;
+  case LoongArch::BI__builtin_loongarch_break:
   case LoongArch::BI__builtin_loongarch_dbar:
+  case LoongArch::BI__builtin_loongarch_ibar:
+  case LoongArch::BI__builtin_loongarch_syscall:
     // Check if immediate is in [0, 32767].
     return SemaBuiltinConstantArgRange(TheCall, 0, 0, 32767);
   }
@@ -8582,6 +8585,15 @@ tryAgain:
     return SLCT_UncheckedLiteral;
 
   switch (E->getStmtClass()) {
+  case Stmt::InitListExprClass:
+    // Handle expressions like {"foobar"}.
+    if (const clang::Expr *SLE = maybeConstEvalStringLiteral(S.Context, E)) {
+      return checkFormatStringExpr(S, SLE, Args, APK, format_idx, firstDataArg,
+                                   Type, CallType, /*InFunctionCall*/ false,
+                                   CheckedVarArgs, UncoveredArg, Offset,
+                                   IgnoreStringsWithoutSpecifiers);
+    }
+    return SLCT_NotALiteral;
   case Stmt::BinaryConditionalOperatorClass:
   case Stmt::ConditionalOperatorClass: {
     // The expression is a literal if both sub-expressions were, and it was

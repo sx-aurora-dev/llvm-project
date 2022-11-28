@@ -176,6 +176,7 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef emul) {
           .Case("elf_iamcu", {ELF32LEKind, EM_IAMCU})
           .Case("elf64_sparc", {ELF64BEKind, EM_SPARCV9})
           .Case("msp430elf", {ELF32LEKind, EM_MSP430})
+          .Case("elf64_amdgpu", {ELF64LEKind, EM_AMDGPU})
           .Case("elf64ve", {ELF64LEKind, EM_VE})
           .Default({ELFNoneKind, EM_NONE});
 
@@ -183,6 +184,8 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef emul) {
     error("unknown emulation: " + emul);
   if (ret.second == EM_MSP430)
     osabi = ELFOSABI_STANDALONE;
+  else if (ret.second == EM_AMDGPU)
+    osabi = ELFOSABI_AMDGPU_HSA;
   return std::make_tuple(ret.first, ret.second, osabi);
 }
 
@@ -1390,7 +1393,7 @@ static void readConfigs(opt::InputArgList &args) {
     parallel::strategy = hardware_concurrency(threads);
     config->thinLTOJobs = v;
   }
-  if (auto *arg = args.getLastArg(OPT_thinlto_jobs))
+  if (auto *arg = args.getLastArg(OPT_thinlto_jobs_eq))
     config->thinLTOJobs = arg->getValue();
   config->threadCount = parallel::strategy.compute_thread_count();
 
@@ -2124,7 +2127,7 @@ static void readSymbolPartitionSection(InputSectionBase *s) {
   if (!isa<Defined>(sym) || !sym->includeInDynsym())
     return;
 
-  StringRef partName = reinterpret_cast<const char *>(s->rawData.data());
+  StringRef partName = reinterpret_cast<const char *>(s->content().data());
   for (Partition &part : partitions) {
     if (part.name == partName) {
       sym->partition = part.getNumber();
