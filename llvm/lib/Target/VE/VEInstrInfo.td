@@ -2190,42 +2190,52 @@ multiclass SETCCREGm<ValueType TY, Operand COND,
 
 // Integer setcc multiclass.
 multiclass SETCCIm<ValueType TY, RR CMOV,
-                   RR CMPIir, RR CMPIrr, RR CMPUir, RR CMPUrr> :
+                   RR CMPIir, RR CMPIrm, RR CMPIrr,
+                   RR CMPUir, RR CMPUrm, RR CMPUrr> :
   // Avoid CMP instruction iff rhs == 0 and signed comparison.
   SETCCZEROm<TY, zero, CCSIOp, CMOV, icond2cc>,
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
   // RHS, so we swap them and use calculate condition code with swap
   SETCCIMMm<TY, simm7, CCSIOp, CMOV, icond2ccSwap, (CMPIir (LO7 $r), $l)>,
   SETCCIMMm<TY, simm7, CCUIOp, CMOV, icond2ccSwap, (CMPUir (LO7 $r), $l)>,
+  // Instrument another format of immediate value in CMP instruction.
+  SETCCIMMm<TY, mimm, CCSIOp, CMOV, icond2cc, (CMPIrm $l, (MIMM $r))>,
+  SETCCIMMm<TY, mimm, CCUIOp, CMOV, icond2cc, (CMPUrm $l, (MIMM $r))>,
   // Otherwise, we use generic register comparison.
   SETCCREGm<TY, CCSIOp, CMOV, icond2cc, (CMPIrr $l, $r)>,
   SETCCREGm<TY, CCUIOp, CMOV, icond2cc, (CMPUrr $l, $r)>;
 
 // Floating point setcc multiclass.
-multiclass SETCCFm<ValueType TY, RR CMOV, RR CMPir, RR CMPrr> :
+multiclass SETCCFm<ValueType TY, RR CMOV, RR CMPir, RR CMPrm, RR CMPrr> :
   // Avoid CMP instruction iff rhs == 0 and no-nans.
   SETCCZEROm<TY, fpzero, cond, CMOV, fcond2cc>,
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
   // RHS, so we swap them and use calculate condition code with swap
   SETCCIMMm<TY, simm7fp, cond, CMOV, fcond2ccSwap, (CMPir (LO7FP $r), $l)>,
+  // Instrument another format of immediate value in CMP instruction.
+  SETCCIMMm<TY, mimmfp, cond, CMOV, fcond2cc, (CMPrm $l, (MIMMFP $r))>,
   // Otherwise, we use generic register comparison.
   SETCCREGm<TY, cond, CMOV, fcond2cc, (CMPrr $l, $r)>;
 
-multiclass SETCCF128m<ValueType TY, RR CMOV, RR CMPir, RR CMPrr> :
+multiclass SETCCF128m<ValueType TY, RR CMOV, RR CMPir, RR CMPrm, RR CMPrr> :
   // Avoiding CMP instruction is not possible for f128 since VE's CMOV uses
   // a f64 result of a f128 comparison.
 
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
   // RHS, so we swap them and use calculate condition code with swap
   SETCCIMMm<TY, simm7fp, cond, CMOV, fcond2ccSwap, (CMPir (LO7FP $r), $l)>,
+  // Instrument another format of immediate value in CMP instruction.
+  SETCCIMMm<TY, mimmfp, cond, CMOV, fcond2cc, (CMPrm $l, (MIMMFP $r))>,
   // Otherwise, we use generic register comparison.
   SETCCREGm<TY, cond, CMOV, fcond2cc, (CMPrr $l, $r)>;
 
-defm : SETCCIm<i32, CMOVWrm, CMPSWSXir, CMPSWSXrr, CMPUWir, CMPUWrr>;
-defm : SETCCIm<i64, CMOVLrm, CMPSLir, CMPSLrr, CMPULir, CMPULrr>;
-defm : SETCCFm<f32, CMOVSrm, FCMPSir, FCMPSrr>;
-defm : SETCCFm<f64, CMOVDrm, FCMPDir, FCMPDrr>;
-defm : SETCCF128m<f128, CMOVDrm, FCMPQir, FCMPQrr>;
+defm : SETCCIm<i32, CMOVWrm, CMPSWSXir, CMPSWSXrm, CMPSWSXrr, CMPUWir,
+               CMPUWrm, CMPUWrr>;
+defm : SETCCIm<i64, CMOVLrm, CMPSLir, CMPSLrm, CMPSLrr, CMPULir, CMPULrm,
+               CMPULrr>;
+defm : SETCCFm<f32, CMOVSrm, FCMPSir, FCMPSrm, FCMPSrr>;
+defm : SETCCFm<f64, CMOVDrm, FCMPDir, FCMPDrm, FCMPDrr>;
+defm : SETCCF128m<f128, CMOVDrm, FCMPQir, FCMPQrm, FCMPQrr>;
 
 // Generic CMOV pattern matches
 //   CMOV accepts i64 $t, $f, and result.  So, we extend it to support
