@@ -1124,8 +1124,7 @@ define { fp128, fp128 } @func_dcomp_qcomp_i(double %0, double %1, fp128 %2, fp12
 define zeroext i1 @func_dcomp_1_m(double %0, double %1, i1 zeroext %2, i1 zeroext %3) {
 ; CHECK-LABEL: func_dcomp_1_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1145,8 +1144,7 @@ define zeroext i1 @func_dcomp_1_m(double %0, double %1, i1 zeroext %2, i1 zeroex
 define signext i8 @func_dcomp_8_m(double %0, double %1, i8 signext %2, i8 signext %3) {
 ; CHECK-LABEL: func_dcomp_8_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1166,8 +1164,7 @@ define signext i8 @func_dcomp_8_m(double %0, double %1, i8 signext %2, i8 signex
 define zeroext i8 @func_dcomp_u8_m(double %0, double %1, i8 zeroext %2, i8 zeroext %3) {
 ; CHECK-LABEL: func_dcomp_u8_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1187,8 +1184,7 @@ define zeroext i8 @func_dcomp_u8_m(double %0, double %1, i8 zeroext %2, i8 zeroe
 define signext i16 @func_dcomp_16_m(double %0, double %1, i16 signext %2, i16 signext %3) {
 ; CHECK-LABEL: func_dcomp_16_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1208,8 +1204,7 @@ define signext i16 @func_dcomp_16_m(double %0, double %1, i16 signext %2, i16 si
 define zeroext i16 @func_dcomp_u16_m(double %0, double %1, i16 zeroext %2, i16 zeroext %3) {
 ; CHECK-LABEL: func_dcomp_u16_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1229,8 +1224,7 @@ define zeroext i16 @func_dcomp_u16_m(double %0, double %1, i16 zeroext %2, i16 z
 define signext i32 @func_dcomp_32_m(double %0, double %1, i32 signext %2, i32 signext %3) {
 ; CHECK-LABEL: func_dcomp_32_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1250,8 +1244,7 @@ define signext i32 @func_dcomp_32_m(double %0, double %1, i32 signext %2, i32 si
 define zeroext i32 @func_dcomp_u32_m(double %0, double %1, i32 zeroext %2, i32 zeroext %3) {
 ; CHECK-LABEL: func_dcomp_u32_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1271,8 +1264,7 @@ define zeroext i32 @func_dcomp_u32_m(double %0, double %1, i32 zeroext %2, i32 z
 define i64 @func_dcomp_64_m(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: func_dcomp_64_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1292,8 +1284,7 @@ define i64 @func_dcomp_64_m(double %0, double %1, i64 %2, i64 %3) {
 define i64 @func_dcomp_u64_m(double %0, double %1, i64 %2, i64 %3) {
 ; CHECK-LABEL: func_dcomp_u64_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1313,8 +1304,7 @@ define i64 @func_dcomp_u64_m(double %0, double %1, i64 %2, i64 %3) {
 define i128 @func_dcomp_128_m(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: func_dcomp_128_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s6, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s6
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s6, 0, (0)1
 ; CHECK-NEXT:    or %s7, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
@@ -1336,8 +1326,7 @@ define i128 @func_dcomp_128_m(double %0, double %1, i128 %2, i128 %3) {
 define i128 @func_dcomp_u128_m(double %0, double %1, i128 %2, i128 %3) {
 ; CHECK-LABEL: func_dcomp_u128_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s6, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s6
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s6, 0, (0)1
 ; CHECK-NEXT:    or %s7, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
@@ -1359,8 +1348,7 @@ define i128 @func_dcomp_u128_m(double %0, double %1, i128 %2, i128 %3) {
 define float @func_dcomp_float_m(double %0, double %1, float %2, float %3) {
 ; CHECK-LABEL: func_dcomp_float_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1380,8 +1368,7 @@ define float @func_dcomp_float_m(double %0, double %1, float %2, float %3) {
 define double @func_dcomp_double_m(double %0, double %1, double %2, double %3) {
 ; CHECK-LABEL: func_dcomp_double_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s4, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s4
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:    or %s5, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s5, (63)0, %s0
@@ -1401,8 +1388,7 @@ define double @func_dcomp_double_m(double %0, double %1, double %2, double %3) {
 define fp128 @func_dcomp_quad_m(double %0, double %1, fp128 %2, fp128 %3) {
 ; CHECK-LABEL: func_dcomp_quad_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s6, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s6
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s6, 0, (0)1
 ; CHECK-NEXT:    or %s7, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
@@ -1424,8 +1410,7 @@ define fp128 @func_dcomp_quad_m(double %0, double %1, fp128 %2, fp128 %3) {
 define { float, float } @func_dcomp_fcomp_m(double %0, double %1, float %2, float %3, float %4, float %5) {
 ; CHECK-LABEL: func_dcomp_fcomp_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s6, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s6
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s6, 0, (0)1
 ; CHECK-NEXT:    or %s7, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
@@ -1450,8 +1435,7 @@ define { float, float } @func_dcomp_fcomp_m(double %0, double %1, float %2, floa
 define { double, double } @func_dcomp_dcomp_m(double %0, double %1, double %2, double %3, double %4, double %5) {
 ; CHECK-LABEL: func_dcomp_dcomp_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea.sl %s6, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s6
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s6, 0, (0)1
 ; CHECK-NEXT:    or %s7, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s7, (63)0, %s0
@@ -1478,8 +1462,7 @@ define { fp128, fp128 } @func_dcomp_qcomp_m(double %0, double %1, fp128 %2, fp12
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s35, 240(, %s11)
 ; CHECK-NEXT:    ld %s34, 248(, %s11)
-; CHECK-NEXT:    lea.sl %s36, -1073741824
-; CHECK-NEXT:    fcmp.d %s0, %s0, %s36
+; CHECK-NEXT:    fcmp.d %s0, %s0, (2)1
 ; CHECK-NEXT:    or %s36, 0, (0)1
 ; CHECK-NEXT:    or %s37, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s37, (63)0, %s0
