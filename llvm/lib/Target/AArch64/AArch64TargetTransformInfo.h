@@ -25,6 +25,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include <cstdint>
+#include <optional>
 
 namespace llvm {
 
@@ -126,7 +127,7 @@ public:
     return ST->getMinVectorRegisterBitWidth();
   }
 
-  Optional<unsigned> getVScaleForTuning() const {
+  std::optional<unsigned> getVScaleForTuning() const {
     return ST->getVScaleForTuning();
   }
 
@@ -259,7 +260,7 @@ public:
   }
 
   bool isLegalMaskedGatherScatter(Type *DataType) const {
-    if (!ST->hasSVE())
+    if (!ST->hasSVE() || ST->forceStreamingCompatibleSVE())
       return false;
 
     // For fixed vectors, scalarize if not using SVE for them.

@@ -30,6 +30,7 @@
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/InstructionCost.h"
 #include <functional>
+#include <optional>
 #include <utility>
 
 namespace llvm {
@@ -971,10 +972,10 @@ public:
 
   /// \return The maximum value of vscale if the target specifies an
   ///  architectural maximum vector length, and None otherwise.
-  Optional<unsigned> getMaxVScale() const;
+  std::optional<unsigned> getMaxVScale() const;
 
   /// \return the value of vscale to tune the cost model for.
-  Optional<unsigned> getVScaleForTuning() const;
+  std::optional<unsigned> getVScaleForTuning() const;
 
   /// \return True if the vectorization factor should be chosen to
   /// make the vector of the smallest element type match the size of a
@@ -1714,8 +1715,8 @@ public:
   virtual const char *getRegisterClassName(unsigned ClassID) const = 0;
   virtual TypeSize getRegisterBitWidth(RegisterKind K) const = 0;
   virtual unsigned getMinVectorRegisterBitWidth() const = 0;
-  virtual Optional<unsigned> getMaxVScale() const = 0;
-  virtual Optional<unsigned> getVScaleForTuning() const = 0;
+  virtual std::optional<unsigned> getMaxVScale() const = 0;
+  virtual std::optional<unsigned> getVScaleForTuning() const = 0;
   virtual bool
   shouldMaximizeVectorBandwidth(TargetTransformInfo::RegisterKind K) const = 0;
   virtual ElementCount getMinimumVF(unsigned ElemWidth,
@@ -2238,10 +2239,10 @@ public:
   unsigned getMinVectorRegisterBitWidth() const override {
     return Impl.getMinVectorRegisterBitWidth();
   }
-  Optional<unsigned> getMaxVScale() const override {
+  std::optional<unsigned> getMaxVScale() const override {
     return Impl.getMaxVScale();
   }
-  Optional<unsigned> getVScaleForTuning() const override {
+  std::optional<unsigned> getVScaleForTuning() const override {
     return Impl.getVScaleForTuning();
   }
   bool shouldMaximizeVectorBandwidth(
@@ -2640,7 +2641,7 @@ private:
 /// and is queried by passes.
 class TargetTransformInfoWrapperPass : public ImmutablePass {
   TargetIRAnalysis TIRA;
-  Optional<TargetTransformInfo> TTI;
+  std::optional<TargetTransformInfo> TTI;
 
   virtual void anchor();
 

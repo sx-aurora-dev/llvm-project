@@ -140,9 +140,8 @@ void MCELFStreamer::emitAssemblerFlag(MCAssemblerFlag Flag) {
 // needs to be aligned to at least the bundle size.
 static void setSectionAlignmentForBundling(const MCAssembler &Assembler,
                                            MCSection *Section) {
-  if (Section && Assembler.isBundlingEnabled() && Section->hasInstructions() &&
-      Section->getAlign() < Assembler.getBundleAlignSize())
-    Section->setAlignment(Align(Assembler.getBundleAlignSize()));
+  if (Section && Assembler.isBundlingEnabled() && Section->hasInstructions())
+    Section->ensureMinAlignment(Align(Assembler.getBundleAlignSize()));
 }
 
 void MCELFStreamer::changeSection(MCSection *Section,
@@ -286,6 +285,10 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
 
   case MCSA_Protected:
     Symbol->setVisibility(ELF::STV_PROTECTED);
+    break;
+
+  case MCSA_Memtag:
+    Symbol->setMemtag(true);
     break;
 
   case MCSA_Hidden:

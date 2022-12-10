@@ -22,6 +22,7 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/IR/Function.h"
+#include <optional>
 
 namespace llvm {
 
@@ -46,6 +47,10 @@ class RISCVTTIImpl : public BasicTTIImplBase<RISCVTTIImpl> {
   /// the true cost significantly if getVScaleForTuning is wildly off for the
   /// actual target hardware.
   unsigned getEstimatedVLFor(VectorType *Ty);
+
+  /// Return the cost of LMUL. The larger the LMUL, the higher the cost.
+  InstructionCost getLMULCost(MVT VT);
+
 public:
   explicit RISCVTTIImpl(const RISCVTargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
@@ -75,8 +80,8 @@ public:
     return ST->hasVInstructions() ? PredicationStyle::Data
                                   : PredicationStyle::None;
   }
-  Optional<unsigned> getMaxVScale() const;
-  Optional<unsigned> getVScaleForTuning() const;
+  std::optional<unsigned> getMaxVScale() const;
+  std::optional<unsigned> getVScaleForTuning() const;
 
   TypeSize getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const;
 
