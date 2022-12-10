@@ -45,10 +45,10 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
     return nullptr;
   }
 
-  Optional<unsigned> MaskPosOpt = VPIntrinsic::getMaskParamPos(VPID);
-  Optional<unsigned> VLenPosOpt = VPIntrinsic::getVectorLengthParamPos(VPID);
+  std::optional<unsigned> MaskPosOpt = VPIntrinsic::getMaskParamPos(VPID);
+  std::optional<unsigned> VLenPosOpt = VPIntrinsic::getVectorLengthParamPos(VPID);
 
-  Optional<int> CmpPredPos = None;
+  std::optional<int> CmpPredPos = std::nullopt;
   if (isa<CmpInst>(Inst)) {
     CmpPredPos = 2;
   }

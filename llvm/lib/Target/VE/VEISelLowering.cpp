@@ -36,6 +36,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include <optional>
 
 #define DEBUG_TYPE "ve-lower"
 
@@ -4030,12 +4031,12 @@ getSplitVectorConversion(LLVMContext &Context, EVT ElemVT, unsigned NumElems) {
                       EVT::getVectorVT(Context, ElemVT, (NumElems + 1) / 2));
 }
 
-Optional<TargetLoweringBase::LegalizeKind>
+std::optional<TargetLoweringBase::LegalizeKind>
 VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
   // Do not interfere with SPU legalization.
   if (!VT.isVector() || !Subtarget->enableVPU() ||
       VT.getVectorNumElements() == 1)
-    return None;
+    return std::nullopt;
 
   EVT ElemVT = VT.getVectorElementType();
   unsigned NumElems = VT.getVectorNumElements();
@@ -4049,7 +4050,7 @@ VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
 
   // Already a legal type.
   if (isVectorRegisterVT(VT))
-    return None;
+    return std::nullopt;
 
   // Promote small elements to i/f32.
   if (1 < ElemBits && ElemBits < 32)
@@ -4057,7 +4058,7 @@ VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
 
   // Excessive element size.
   if (ElemBits > 64)
-    return None; // Defer to builtin expansion for oversized vectors.
+    return std::nullopt; // Defer to builtin expansion for oversized vectors.
 
   // Widen to register width.
   const unsigned RegisterNumElems =
@@ -4071,17 +4072,17 @@ VETargetLowering::getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
     return getSplitVectorConversion(Context, ElemVT, NumElems);
 
   // Type is either legal or not custom converted.
-  return None;
+  return std::nullopt;
 }
 
-Optional<VETargetLowering::RegisterCountPair>
+std::optional<VETargetLowering::RegisterCountPair>
 VETargetLowering::getRegistersForCallingConv(LLVMContext &Context,
                                              CallingConv::ID CC, EVT VT) const {
   using RegisterCount = VETargetLowering::RegisterCountPair;
   if (CC != CallingConv::Fast)
-    return None;
+    return std::nullopt;
   if (!VT.isVector() || VT.isScalableVector())
-    return None;
+    return std::nullopt;
 
   MVT RegisterVT;
   EVT IntermediateVT;

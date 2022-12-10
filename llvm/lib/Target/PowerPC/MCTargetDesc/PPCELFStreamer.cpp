@@ -92,7 +92,8 @@ void PPCELFStreamer::emitInstruction(const MCInst &Inst,
   // instruction pair, return a value, otherwise return None. A true returned
   // value means the instruction is the PLDpc and a false value means it is
   // the user instruction.
-  Optional<bool> IsPartOfGOTToPCRelPair = isPartOfGOTToPCRelPair(Inst, STI);
+  std::optional<bool> IsPartOfGOTToPCRelPair =
+      isPartOfGOTToPCRelPair(Inst, STI);
 
   // User of the GOT-indirect address.
   // For example, the load that will get the relocation as follows:
@@ -196,11 +197,11 @@ void PPCELFStreamer::emitGOTToPCRelLabel(const MCInst &Inst) {
 // at the opcode and in the case of PLDpc we will return true. For the load
 // (or store) this function will return false indicating it has found the second
 // instruciton in the pair.
-Optional<bool> llvm::isPartOfGOTToPCRelPair(const MCInst &Inst,
-                                            const MCSubtargetInfo &STI) {
+std::optional<bool> llvm::isPartOfGOTToPCRelPair(const MCInst &Inst,
+                                                 const MCSubtargetInfo &STI) {
   // Need at least two operands.
   if (Inst.getNumOperands() < 2)
-    return None;
+    return std::nullopt;
 
   unsigned LastOp = Inst.getNumOperands() - 1;
   // The last operand needs to be an MCExpr and it needs to have a variant kind
@@ -208,13 +209,13 @@ Optional<bool> llvm::isPartOfGOTToPCRelPair(const MCInst &Inst,
   // link time GOT PC Rel opt instruction and we can ignore it and return None.
   const MCOperand &Operand = Inst.getOperand(LastOp);
   if (!Operand.isExpr())
-    return None;
+    return std::nullopt;
 
   // Check for the variant kind VK_PPC_PCREL_OPT in this expression.
   const MCExpr *Expr = Operand.getExpr();
   const MCSymbolRefExpr *SymExpr = static_cast<const MCSymbolRefExpr *>(Expr);
   if (!SymExpr || SymExpr->getKind() != MCSymbolRefExpr::VK_PPC_PCREL_OPT)
-    return None;
+    return std::nullopt;
 
   return (Inst.getOpcode() == PPC::PLDpc);
 }

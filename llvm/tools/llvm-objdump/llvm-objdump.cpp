@@ -863,19 +863,19 @@ addDynamicElfSymbols(const ELFObjectFileBase &Obj,
     llvm_unreachable("Unsupported binary format");
 }
 
-static Optional<SectionRef> getWasmCodeSection(const WasmObjectFile &Obj) {
+static std::optional<SectionRef> getWasmCodeSection(const WasmObjectFile &Obj) {
   for (auto SecI : Obj.sections()) {
     const WasmSection &Section = Obj.getWasmSection(SecI);
     if (Section.Type == wasm::WASM_SEC_CODE)
       return SecI;
   }
-  return None;
+  return std::nullopt;
 }
 
 static void
 addMissingWasmCodeSymbols(const WasmObjectFile &Obj,
                           std::map<SectionRef, SectionSymbolsTy> &AllSymbols) {
-  Optional<SectionRef> Section = getWasmCodeSection(Obj);
+  std::optional<SectionRef> Section = getWasmCodeSection(Obj);
   if (!Section)
     return;
   SectionSymbolsTy &Symbols = AllSymbols[*Section];
@@ -1084,7 +1084,7 @@ SymbolInfoTy objdump::createSymbolInfo(const ObjectFile &Obj,
     DataRefImpl SymbolDRI = Symbol.getRawDataRefImpl();
 
     const uint32_t SymbolIndex = XCOFFObj.getSymbolIndex(SymbolDRI.p);
-    Optional<XCOFF::StorageMappingClass> Smc =
+    std::optional<XCOFF::StorageMappingClass> Smc =
         getXCOFFSymbolCsectSMC(XCOFFObj, Symbol);
     return SymbolInfoTy(Addr, Name, Smc, SymbolIndex,
                         isLabel(XCOFFObj, Symbol));
@@ -1101,7 +1101,7 @@ static SymbolInfoTy createDummySymbolInfo(const ObjectFile &Obj,
                                           const uint64_t Addr, StringRef &Name,
                                           uint8_t Type) {
   if (Obj.isXCOFF() && SymbolDescription)
-    return SymbolInfoTy(Addr, Name, None, None, false);
+    return SymbolInfoTy(Addr, Name, std::nullopt, std::nullopt, false);
   else
     return SymbolInfoTy(Addr, Name, Type);
 }
@@ -1272,18 +1272,18 @@ static void createFakeELFSections(ObjectFile &Obj) {
 
 // Tries to fetch a more complete version of the given object file using its
 // Build ID. Returns None if nothing was found.
-static Optional<OwningBinary<Binary>>
+static std::optional<OwningBinary<Binary>>
 fetchBinaryByBuildID(const ObjectFile &Obj) {
-  Optional<object::BuildIDRef> BuildID = getBuildID(&Obj);
+  std::optional<object::BuildIDRef> BuildID = getBuildID(&Obj);
   if (!BuildID)
-    return None;
-  Optional<std::string> Path = BIDFetcher->fetch(*BuildID);
+    return std::nullopt;
+  std::optional<std::string> Path = BIDFetcher->fetch(*BuildID);
   if (!Path)
-    return None;
+    return std::nullopt;
   Expected<OwningBinary<Binary>> DebugBinary = createBinary(*Path);
   if (!DebugBinary) {
     reportWarning(toString(DebugBinary.takeError()), *Path);
-    return None;
+    return std::nullopt;
   }
   return std::move(*DebugBinary);
 }
@@ -1423,13 +1423,13 @@ static void disassembleObject(const Target *TheTarget, ObjectFile &Obj,
   LLVM_DEBUG(LVP.dump());
 
   std::unordered_map<uint64_t, BBAddrMap> AddrToBBAddrMap;
-  auto ReadBBAddrMap = [&](Optional<unsigned> SectionIndex = None) {
+  auto ReadBBAddrMap = [&](std::optional<unsigned> SectionIndex =
+                               std::nullopt) {
     AddrToBBAddrMap.clear();
     if (const auto *Elf = dyn_cast<ELFObjectFileBase>(&Obj)) {
       auto BBAddrMapsOrErr = Elf->readBBAddrMap(SectionIndex);
       if (!BBAddrMapsOrErr)
-          reportWarning(toString(BBAddrMapsOrErr.takeError()),
-                        Obj.getFileName());
+        reportWarning(toString(BBAddrMapsOrErr.takeError()), Obj.getFileName());
       for (auto &FunctionBBAddrMap : *BBAddrMapsOrErr)
         AddrToBBAddrMap.emplace(FunctionBBAddrMap.Addr,
                                 std::move(FunctionBBAddrMap));
@@ -1823,7 +1823,7 @@ static void disassembleObject(const Target *TheTarget, ObjectFile &Obj,
             bool PrintTarget =
                 MIA->evaluateBranch(Inst, SectionAddr + Index, Size, Target);
             if (!PrintTarget)
-              if (Optional<uint64_t> MaybeTarget =
+              if (std::optional<uint64_t> MaybeTarget =
                       MIA->evaluateMemoryOperandAddress(
                           Inst, STI, SectionAddr + Index, Size)) {
                 Target = *MaybeTarget;
@@ -1976,7 +1976,7 @@ static void disassembleObject(ObjectFile *Obj, bool InlineRelocs) {
   // more complete binary and disassemble that instead.
   OwningBinary<Binary> FetchedBinary;
   if (Obj->symbols().empty()) {
-    if (Optional<OwningBinary<Binary>> FetchedBinaryOpt =
+    if (std::optional<OwningBinary<Binary>> FetchedBinaryOpt =
             fetchBinaryByBuildID(*Obj)) {
       if (auto *O = dyn_cast<ObjectFile>(FetchedBinaryOpt->getBinary())) {
         if (!O->symbols().empty() ||
@@ -2093,7 +2093,7 @@ static void disassembleObject(ObjectFile *Obj, bool InlineRelocs) {
 
   const ObjectFile *DbgObj = Obj;
   if (!FetchedBinary.getBinary() && !Obj->hasDebugInfo()) {
-    if (Optional<OwningBinary<Binary>> DebugBinaryOpt =
+    if (std::optional<OwningBinary<Binary>> DebugBinaryOpt =
             fetchBinaryByBuildID(*Obj)) {
       if (auto *FetchedObj =
               dyn_cast<const ObjectFile>(DebugBinaryOpt->getBinary())) {
@@ -2480,7 +2480,7 @@ void objdump::printSymbol(const ObjectFile &O, const SymbolRef &Symbol,
     StringRef SectionName = unwrapOrError(Section->getName(), FileName);
     outs() << SectionName;
     if (O.isXCOFF()) {
-      Optional<SymbolRef> SymRef =
+      std::optional<SymbolRef> SymRef =
           getXCOFFSymbolContainingSymbolRef(cast<XCOFFObjectFile>(O), Symbol);
       if (SymRef) {
 
@@ -3100,7 +3100,7 @@ static void parseObjdumpOptions(const llvm::opt::InputArgList &InputArgs) {
   // Look up any provided build IDs, then append them to the input filenames.
   for (const opt::Arg *A : InputArgs.filtered(OBJDUMP_build_id)) {
     object::BuildID BuildID = parseBuildIDArg(A);
-    Optional<std::string> Path = BIDFetcher->fetch(BuildID);
+    std::optional<std::string> Path = BIDFetcher->fetch(BuildID);
     if (!Path) {
       reportCmdLineError(A->getSpelling() + ": could not find build ID '" +
                          A->getValue() + "'");

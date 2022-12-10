@@ -255,8 +255,8 @@ void AArch64AsmPrinter::emitStartOfAsmFile(Module &M) {
 
 void AArch64AsmPrinter::emitFunctionHeaderComment() {
   const AArch64FunctionInfo *FI = MF->getInfo<AArch64FunctionInfo>();
-  Optional<std::string> OutlinerString = FI->getOutliningStyle();
-  if (OutlinerString != None)
+  std::optional<std::string> OutlinerString = FI->getOutliningStyle();
+  if (OutlinerString != std::nullopt)
     OutStreamer->getCommentOS() << ' ' << OutlinerString;
 }
 

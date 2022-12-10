@@ -116,7 +116,7 @@ static bool shouldLowerToVVP(SDNode &N) {
     return false;
   }
 
-  Optional<EVT> IdiomVT = getIdiomaticType(&N);
+  std::optional<EVT> IdiomVT = getIdiomaticType(&N);
   if (!IdiomVT.has_value() || !isLegalVectorVT(*IdiomVT))
     return false;
 
@@ -382,7 +382,7 @@ VETargetLowering::widenInternalVectorOperation(SDNode *N,
 
 #if 0
    // Otw, widen this VVP operation to the next OR native vector width
-  Optional<EVT> OpVecTyOpt = getIdiomaticType(N);
+  std::optional<EVT> OpVecTyOpt = getIdiomaticType(N);
   assert(OpVecTyOpt.has_value());
   EVT OpVecTy = OpVecTyOpt.getValue();
 #endif
@@ -1129,7 +1129,7 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op,
 
 VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
-  Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
+  std::optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
   if (!VecVTOpt.has_value() || !VecVTOpt.value().isVector()) {
     LLVM_DEBUG(if (VecVTOpt) dbgs()
                << "VecVT: " << VecVTOpt->getEVTString() << "\n");
@@ -1139,7 +1139,7 @@ VVPWideningInfo VETargetLowering::pickResultType(VECustomDAG &CDAG, SDValue Op,
   EVT OpVecVT = VecVTOpt.value();
 
   // try to narrow the vector length
-  Optional<unsigned> NarrowLen = peekForNarrow(Op);
+  std::optional<unsigned> NarrowLen = peekForNarrow(Op);
   unsigned OpVectorLength =
       NarrowLen ? NarrowLen.value() : OpVecVT.getVectorNumElements();
 
@@ -1272,7 +1272,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return Op;
   }
 
-  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
+  std::optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.value();
 
   if (!OpVecTyOpt.has_value()) {
@@ -1501,7 +1501,7 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
     return Op;
 
   // Otw, widen this VVP operation to the next OR native vector width
-  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
+  std::optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   assert(OpVecTyOpt);
   EVT OpVecTy = OpVecTyOpt.value();
 
@@ -1787,7 +1787,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   case ISD::VP_GATHER:
   case ISD::VP_SCATTER:
     return lowerVVP_GATHER_SCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth,
-                                   None);
+                                   std::nullopt);
 
   default:
     break;

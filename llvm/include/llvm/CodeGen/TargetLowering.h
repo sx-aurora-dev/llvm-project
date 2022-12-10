@@ -55,6 +55,7 @@
 #include <climits>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <map>
 #include <string>
 #include <utility>
@@ -300,7 +301,7 @@ public:
     bool IsSwiftAsync : 1;
     bool IsSwiftError : 1;
     bool IsCFGuardTarget : 1;
-    MaybeAlign Alignment = None;
+    MaybeAlign Alignment = std::nullopt;
     Type *IndirectType = nullptr;
 
     ArgListEntry()
@@ -1117,9 +1118,9 @@ public:
   // Use this to bypass the builtin legalization decisions for EVTs. The builtin
   // scheme may lead to undesirable results (eg power-of-two-padding or
   // scalarization) for EVT-typed nodes (eg v7f16).
-  virtual Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
-                                                         EVT VT) const {
-    return None;
+  virtual std::optional<LegalizeKind>
+  getCustomTypeConversion(LLVMContext &Context, EVT VT) const {
+    return std::nullopt;
   }
 
   /// Return how this operation should be treated: either it is legal, needs to

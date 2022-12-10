@@ -957,7 +957,7 @@ void TargetLoweringBase::setJumpIsExpensive(bool isExpensive) {
 TargetLoweringBase::LegalizeKind
 TargetLoweringBase::getTypeConversion(LLVMContext &Context, EVT VT) const {
   // Fully customized legalization.
-  Optional<LegalizeKind> CustomLK = getCustomTypeConversion(Context, VT);
+  std::optional<LegalizeKind> CustomLK = getCustomTypeConversion(Context, VT);
   if (CustomLK)
     return *CustomLK;
 
