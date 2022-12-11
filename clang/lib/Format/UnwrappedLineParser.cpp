@@ -934,9 +934,6 @@ FormatToken *UnwrappedLineParser::parseBlock(
     return IfLBrace;
   }
 
-  Tok->MatchingParen = FormatTok;
-  FormatTok->MatchingParen = Tok;
-
   const bool IsFunctionRBrace =
       FormatTok->is(tok::r_brace) && Tok->is(TT_FunctionLBrace);
 
@@ -970,7 +967,10 @@ FormatToken *UnwrappedLineParser::parseBlock(
     }
     return mightFitOnOneLine((*CurrentLines)[Index], Tok);
   };
-  Tok->Optional = RemoveBraces();
+  if (RemoveBraces()) {
+    Tok->MatchingParen = FormatTok;
+    FormatTok->MatchingParen = Tok;
+  }
 
   size_t PPEndHash = computePPHash();
 
@@ -2707,20 +2707,10 @@ static void markOptionalBraces(FormatToken *LeftBrace) {
 
   assert(RightBrace->is(tok::r_brace));
   assert(RightBrace->MatchingParen == LeftBrace);
+  assert(LeftBrace->Optional == RightBrace->Optional);
 
-  RightBrace->Optional = LeftBrace->Optional;
-}
-
-static void resetOptional(FormatToken *LeftBrace) {
-  if (!LeftBrace)
-    return;
-
-  const auto *RightBrace = LeftBrace->MatchingParen;
-  const bool IsOptionalRightBrace = RightBrace && RightBrace->Optional;
-  assert(LeftBrace->Optional || !IsOptionalRightBrace);
-
-  if (!IsOptionalRightBrace)
-    LeftBrace->Optional = false;
+  LeftBrace->Optional = true;
+  RightBrace->Optional = true;
 }
 
 void UnwrappedLineParser::handleAttributes() {
@@ -2737,6 +2727,14 @@ bool UnwrappedLineParser::handleCppAttributes() {
     return true;
   }
   return false;
+}
+
+/// Returns whether \c Tok begins a block.
+bool UnwrappedLineParser::isBlockBegin(const FormatToken &Tok) const {
+  // FIXME: rename the function or make
+  // Tok.isOneOf(tok::l_brace, TT_MacroBlockBegin) work.
+  return Style.isVerilog() ? Keywords.isVerilogBegin(Tok)
+                           : Tok.is(tok::l_brace);
 }
 
 FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
@@ -2764,7 +2762,7 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
   FormatToken *IfLeftBrace = nullptr;
   IfStmtKind IfBlockKind = IfStmtKind::NotIf;
 
-  if (Keywords.isBlockBegin(*FormatTok, Style)) {
+  if (isBlockBegin(*FormatTok)) {
     FormatTok->setFinalizedType(TT_ControlStatementLBrace);
     IfLeftBrace = FormatTok;
     CompoundStatementIndenter Indenter(this, Style, Line->Level);
@@ -2780,7 +2778,8 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
 
   if (Style.RemoveBracesLLVM) {
     assert(!NestedTooDeep.empty());
-    KeepIfBraces = KeepIfBraces || (IfLeftBrace && !IfLeftBrace->Optional) ||
+    KeepIfBraces = KeepIfBraces ||
+                   (IfLeftBrace && !IfLeftBrace->MatchingParen) ||
                    NestedTooDeep.back() || IfBlockKind == IfStmtKind::IfOnly ||
                    IfBlockKind == IfStmtKind::IfElseIf;
   }
@@ -2796,7 +2795,7 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
     }
     nextToken();
     handleAttributes();
-    if (Keywords.isBlockBegin(*FormatTok, Style)) {
+    if (isBlockBegin(*FormatTok)) {
       const bool FollowedByIf = Tokens->peekNextToken()->is(tok::kw_if);
       FormatTok->setFinalizedType(TT_ElseLBrace);
       ElseLeftBrace = FormatTok;
@@ -2811,9 +2810,8 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
                          ElseBlockKind == IfStmtKind::IfElseIf;
       } else if (FollowedByIf && IfLBrace && !IfLBrace->Optional) {
         KeepElseBraces = true;
-        assert(ElseLeftBrace->Optional);
         assert(ElseLeftBrace->MatchingParen);
-        ElseLeftBrace->MatchingParen->Optional = true;
+        markOptionalBraces(ElseLeftBrace);
       }
       addUnwrappedLine();
     } else if (FormatTok->is(tok::kw_if)) {
@@ -2848,7 +2846,7 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
 
   assert(!NestedTooDeep.empty());
   KeepElseBraces = KeepElseBraces ||
-                   (ElseLeftBrace && !ElseLeftBrace->Optional) ||
+                   (ElseLeftBrace && !ElseLeftBrace->MatchingParen) ||
                    NestedTooDeep.back();
 
   NestedTooDeep.pop_back();
@@ -2856,10 +2854,16 @@ FormatToken *UnwrappedLineParser::parseIfThenElse(IfStmtKind *IfKind,
   if (!KeepIfBraces && !KeepElseBraces) {
     markOptionalBraces(IfLeftBrace);
     markOptionalBraces(ElseLeftBrace);
+  } else if (IfLeftBrace) {
+    FormatToken *IfRightBrace = IfLeftBrace->MatchingParen;
+    if (IfRightBrace) {
+      assert(IfRightBrace->MatchingParen == IfLeftBrace);
+      assert(!IfLeftBrace->Optional);
+      assert(!IfRightBrace->Optional);
+      IfLeftBrace->MatchingParen = nullptr;
+      IfRightBrace->MatchingParen = nullptr;
+    }
   }
-
-  resetOptional(IfLeftBrace);
-  resetOptional(ElseLeftBrace);
 
   if (IfKind)
     *IfKind = Kind;
@@ -3063,7 +3067,7 @@ void UnwrappedLineParser::parseNew() {
 void UnwrappedLineParser::parseLoopBody(bool KeepBraces, bool WrapRightBrace) {
   keepAncestorBraces();
 
-  if (Keywords.isBlockBegin(*FormatTok, Style)) {
+  if (isBlockBegin(*FormatTok)) {
     if (!KeepBraces)
       FormatTok->setFinalizedType(TT_ControlStatementLBrace);
     FormatToken *LeftBrace = FormatTok;
@@ -3075,7 +3079,6 @@ void UnwrappedLineParser::parseLoopBody(bool KeepBraces, bool WrapRightBrace) {
       if (!NestedTooDeep.back())
         markOptionalBraces(LeftBrace);
     }
-    resetOptional(LeftBrace);
     if (WrapRightBrace)
       addUnwrappedLine();
   } else {

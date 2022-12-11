@@ -483,8 +483,8 @@ public: // Part of public interface to class.
   /// than using a Default binding at the base of the entire region. This is a
   /// heuristic attempting to avoid building long chains of LazyCompoundVals.
   ///
-  /// \returns The updated store bindings, or \c None if binding non-lazily
-  ///          would be too expensive.
+  /// \returns The updated store bindings, or \c std::nullopt if binding
+  ///          non-lazily would be too expensive.
   Optional<RegionBindingsRef> tryBindSmallStruct(RegionBindingsConstRef B,
                                                  const TypedValueRegion *R,
                                                  const RecordDecl *RD,
@@ -1665,7 +1665,7 @@ getElementRegionOffsetsWithBase(const ElementRegion *ER) {
 /// \param ArrayExtents [in] The array of extents.
 /// \param DstOffsets [out]  The array of offsets of type `uint64_t`.
 /// \returns:
-/// - `None` for successful convertion.
+/// - `std::nullopt` for successful convertion.
 /// - `UndefinedVal` or `UnknownVal` otherwise. It's expected that this SVal
 ///   will be returned as a suitable value of the access operation.
 ///   which should be returned as a correct
@@ -1674,7 +1674,7 @@ getElementRegionOffsetsWithBase(const ElementRegion *ER) {
 ///   const int arr[10][20][30] = {}; // ArrayExtents { 10, 20, 30 }
 ///   int x1 = arr[4][5][6]; // SrcOffsets { NonLoc(6), NonLoc(5), NonLoc(4) }
 ///                          // DstOffsets { 4, 5, 6 }
-///                          // returns None
+///                          // returns std::nullopt
 ///   int x2 = arr[42][5][-6]; // returns UndefinedVal
 ///   int x3 = arr[4][5][x2];  // returns UnknownVal
 static Optional<SVal>

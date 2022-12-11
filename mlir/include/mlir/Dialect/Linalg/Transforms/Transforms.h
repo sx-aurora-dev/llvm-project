@@ -81,9 +81,16 @@ void populateElementwiseOpsFusionPatterns(
     RewritePatternSet &patterns,
     const ControlFusionFn &controlElementwiseOpFusion);
 
+/// Patterns to bubble up or down data layout ops across other operations.
+void populateDataLayoutPropagationPatterns(RewritePatternSet &patterns);
+
 /// Pattern to remove dead operands and results of `linalg.generic` operations.
 /// This is effectively DCE for a linalg op.
 void populateEraseUnusedOperandsAndResultsPatterns(RewritePatternSet &patterns);
+
+/// Patterns to promote inputs to outputs and remove unused inputs of
+/// `linalg.generic` ops.
+void populateEraseUnnecessaryInputsPatterns(RewritePatternSet &patterns);
 
 /// Function type to control generic op dimension collapsing. It is expected
 /// to return an array of `ReassociationIndices` representing dimensions that
@@ -184,7 +191,7 @@ std::pair<TilingInterface, TilingInterface> splitOp(RewriterBase &rewriter,
 /// transformation returns early.
 ///
 /// Return a struct containing the tiled loops in the specified order
-/// and the cloned op if successful, llvm::None otherwise.
+/// and the cloned op if successful, std::nullopt otherwise.
 ///
 /// E.g. the permutation `(i,j,k) -> (j,k,i)` is expressed by
 /// `interchangeVector = [1,2,0]`. All values in `interchangeVector` must be
@@ -493,7 +500,8 @@ struct ForeachThreadReductionTilingResult {
 FailureOr<ForeachThreadReductionTilingResult>
 tileReductionUsingForeachThread(RewriterBase &b, PartialReductionOpInterface op,
                                 ArrayRef<OpFoldResult> numThreads,
-                                Optional<ArrayAttr> mapping);
+                                ArrayRef<OpFoldResult> tileSizes = {},
+                                Optional<ArrayAttr> mapping = std::nullopt);
 
 /// All indices returned by IndexOp should be invariant with respect to
 /// tiling. Therefore, if an operation is tiled, we have to transform the

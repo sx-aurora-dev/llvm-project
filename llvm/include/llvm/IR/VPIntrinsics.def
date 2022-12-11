@@ -230,6 +230,14 @@ END_REGISTER_VP(vp_umax, VP_UMAX)
 BEGIN_REGISTER_VP(vp_bswap, 1, 2, VP_BSWAP, -1)
 END_REGISTER_VP(vp_bswap, VP_BSWAP)
 
+// llvm.vp.fshl(x,y,z,mask,vlen)
+BEGIN_REGISTER_VP(vp_fshl, 3, 4, VP_FSHL, -1)
+END_REGISTER_VP(vp_fshl, VP_FSHL)
+
+// llvm.vp.fshr(x,y,z,mask,vlen)
+BEGIN_REGISTER_VP(vp_fshr, 3, 4, VP_FSHR, -1)
+END_REGISTER_VP(vp_fshr, VP_FSHR)
+
 // llvm.vp.ctpop(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ctpop, 1, 2, VP_CTPOP, -1)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ctpop)

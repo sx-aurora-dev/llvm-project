@@ -2184,6 +2184,12 @@ LogicalResult LLVMFuncOp::verifyRegions() {
   return success();
 }
 
+Region *LLVMFuncOp::getCallableRegion() {
+  if (isExternal())
+    return nullptr;
+  return &getBody();
+}
+
 //===----------------------------------------------------------------------===//
 // Verification for LLVM::ConstantOp.
 //===----------------------------------------------------------------------===//
@@ -2810,6 +2816,15 @@ LogicalResult LLVMDialect::verifyRegionResultAttribute(Operation *op,
       if (verifyValueType && !resTy.isa<LLVMPointerType>())
         return op->emitError()
                << "llvm.noalias attribute attached to non-pointer result";
+      return success();
+    }
+    if (name == LLVMDialect::getReadonlyAttrName()) {
+      if (!attrValue.isa<UnitAttr>())
+        return op->emitError() << "expected llvm.readonly result attribute to "
+                                  "be a unit attribute";
+      if (verifyValueType && !resTy.isa<LLVMPointerType>())
+        return op->emitError()
+               << "llvm.readonly attribute attached to non-pointer result";
       return success();
     }
     if (name == LLVMDialect::getNoUndefAttrName()) {
