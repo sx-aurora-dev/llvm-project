@@ -49,14 +49,13 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/VCSRevision.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/IPO/WholeProgramDevirt.h"
 #include "llvm/Transforms/Utils/FunctionImportUtils.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
 
+#include <optional>
 #include <set>
 
 using namespace llvm;
@@ -1254,7 +1253,7 @@ class InProcessThinBackend : public ThinBackendProc {
   std::set<GlobalValue::GUID> CfiFunctionDefs;
   std::set<GlobalValue::GUID> CfiFunctionDecls;
 
-  Optional<Error> Err;
+  std::optional<Error> Err;
   std::mutex ErrMu;
 
   bool ShouldEmitIndexFiles;
@@ -1646,7 +1645,7 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
 Expected<std::unique_ptr<ToolOutputFile>> lto::setupLLVMOptimizationRemarks(
     LLVMContext &Context, StringRef RemarksFilename, StringRef RemarksPasses,
     StringRef RemarksFormat, bool RemarksWithHotness,
-    Optional<uint64_t> RemarksHotnessThreshold, int Count) {
+    std::optional<uint64_t> RemarksHotnessThreshold, int Count) {
   std::string Filename = std::string(RemarksFilename);
   // For ThinLTO, file.opt.<format> becomes
   // file.opt.<format>.thin.<num>.<format>.

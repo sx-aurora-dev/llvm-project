@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include <bitset>
+#include <optional>
 
 namespace llvm {
 
@@ -119,7 +120,7 @@ SDValue getUnpackAVL(SDValue N);
 
 /// } Packing
 
-using PosOpt = Optional<unsigned>;
+using PosOpt = std::optional<unsigned>;
 
 //// VVP Machinery {
 // VVP property queries
@@ -148,18 +149,18 @@ EVT splitType(LLVMContext &Ctx, EVT PackedVT, PackElem P);
 bool hasVVPReductionStartParam(unsigned VVPROPC);
 
 // Return the representative vector type of this operation.
-Optional<EVT> getIdiomaticType(SDNode *Op);
+std::optional<EVT> getIdiomaticType(SDNode *Op);
 
-Optional<unsigned> getVVPForVP(unsigned VPOC);
+std::optional<unsigned> getVVPForVP(unsigned VPOC);
 
 // Return the mask operand position for this VVP/VEC or standard SDNode.
 // Note that this will return the v.i1 operand also for vp_select and vp_merge,
 // which do not report their selection mask as mask operands in the vp sense.
-Optional<int> getMaskPos(unsigned Opc);
+std::optional<int> getMaskPos(unsigned Opc);
 SDValue getNodeMask(SDValue Op);
 
 // Return the AVL operand position for this VVP or VEC op.
-Optional<int> getAVLPos(unsigned Opc);
+std::optional<int> getAVLPos(unsigned Opc);
 SDValue getNodeAVL(SDValue Op);
 
 VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B);
@@ -181,11 +182,11 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask);
 
 PosOpt getVVPReductionStartParamPos(unsigned ISD);
 
-Optional<unsigned> getReductionStartParamPos(unsigned ISD);
+std::optional<unsigned> getReductionStartParamPos(unsigned ISD);
 
-Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
+std::optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
-Optional<unsigned> peekForNarrow(SDValue Op);
+std::optional<unsigned> peekForNarrow(SDValue Op);
 
 unsigned getMaskBits(EVT Ty);
 
@@ -233,7 +234,7 @@ bool maySafelyIgnoreMask(unsigned Opc);
 //
 /// AVL Functions {
 // The AVL operand position of this node.
-Optional<int> getAVLPos(unsigned);
+std::optional<int> getAVLPos(unsigned);
 
 // Whether this is a LEGALAVL node.
 bool isLegalAVL(SDValue AVL);
@@ -242,7 +243,7 @@ bool isLegalAVL(SDValue AVL);
 SDValue getNodeAVL(SDValue);
 
 // Mask position of this node.
-Optional<int> getMaskPos(unsigned);
+std::optional<int> getMaskPos(unsigned);
 
 SDValue getNodeMask(SDValue);
 
@@ -254,7 +255,7 @@ std::pair<SDValue, bool> getAnnotatedNodeAVL(SDValue);
 
 /// Node Properties {
 
-Optional<EVT> getIdiomaticVectorType(SDNode *Op);
+std::optional<EVT> getIdiomaticVectorType(SDNode *Op);
 
 SDValue getLoadStoreStride(SDValue Op, VECustomDAG &CDAG);
 
@@ -302,7 +303,7 @@ struct VECustomDAG {
               const SDNode *WhereN)
       : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
-  SDValue getSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
+  SDValue getSeq(EVT ResTy, std::optional<SDValue> OpVectorLength) const;
 
   // create a vector element or scalar bitshift depending on the element type
   // \p ResVT will only be used in case any new node is created
@@ -361,7 +362,7 @@ struct VECustomDAG {
 
   /// getNode {
   SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV,
-                  Optional<SDNodeFlags> Flags = None) const {
+                  std::optional<SDNodeFlags> Flags = std::nullopt) const {
     auto N = DAG.getNode(OC, DL, VTL, OpV);
     if (Flags)
       N->setFlags(*Flags);
@@ -369,7 +370,7 @@ struct VECustomDAG {
   }
 
   SDValue getNode(unsigned OC, ArrayRef<EVT> ResVT, ArrayRef<SDValue> OpV,
-                  Optional<SDNodeFlags> Flags = None) const {
+                  std::optional<SDNodeFlags> Flags = std::nullopt) const {
     auto N = DAG.getNode(OC, DL, ResVT, OpV);
     if (Flags)
       N->setFlags(*Flags);
@@ -377,7 +378,7 @@ struct VECustomDAG {
   }
 
   SDValue getNode(unsigned OC, EVT ResVT, ArrayRef<SDValue> OpV,
-                  Optional<SDNodeFlags> Flags = None) const {
+                  std::optional<SDNodeFlags> Flags = std::nullopt) const {
     auto N = DAG.getNode(OC, DL, ResVT, OpV);
     if (Flags)
       N->setFlags(*Flags);

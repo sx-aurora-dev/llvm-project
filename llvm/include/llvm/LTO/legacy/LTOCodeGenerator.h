@@ -24,6 +24,7 @@
 //   As of this writing, we don't separate IPO and the Post-IPO SOPT. They
 // are intermingled together, and are driven by a single pass manager (see
 // PassManagerBuilder::populateLTOPassManager()).
+//   FIXME: populateLTOPassManager no longer exists.
 //
 //   The "LTOCodeGenerator" is the driver for the IPO and Post-IPO stages.
 // The "CodeGenerator" here is bit confusing. Don't confuse the "CodeGenerator"
@@ -88,7 +89,7 @@ struct LTOCodeGenerator {
   void setAsmUndefinedRefs(struct LTOModule *);
   void setTargetOptions(const TargetOptions &Options);
   void setDebugInfo(lto_debug_model);
-  void setCodePICModel(Optional<Reloc::Model> Model) {
+  void setCodePICModel(std::optional<Reloc::Model> Model) {
     Config.RelocModel = Model;
   }
 

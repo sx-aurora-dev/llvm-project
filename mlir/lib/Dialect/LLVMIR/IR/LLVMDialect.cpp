@@ -776,7 +776,7 @@ static Optional<Type> getLoadStoreElementType(OpAsmParser &parser, Type type,
   auto llvmTy = type.dyn_cast<LLVM::LLVMPointerType>();
   if (!llvmTy) {
     parser.emitError(trailingTypeLoc, "expected LLVM pointer type");
-    return llvm::None;
+    return std::nullopt;
   }
   return llvmTy.getElementType();
 }
@@ -2007,7 +2007,7 @@ void LLVMFuncOp::build(OpBuilder &builder, OperationState &result,
   assert(type.cast<LLVMFunctionType>().getNumParams() == argAttrs.size() &&
          "expected as many argument attribute lists as arguments");
   function_interface_impl::addArgAndResultAttrs(builder, result, argAttrs,
-                                                /*resultAttrs=*/llvm::None);
+                                                /*resultAttrs=*/std::nullopt);
 }
 
 // Builds an LLVM function type from the given lists of input and output types.
@@ -2182,6 +2182,12 @@ LogicalResult LLVMFuncOp::verifyRegions() {
   }
 
   return success();
+}
+
+Region *LLVMFuncOp::getCallableRegion() {
+  if (isExternal())
+    return nullptr;
+  return &getBody();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2810,6 +2816,15 @@ LogicalResult LLVMDialect::verifyRegionResultAttribute(Operation *op,
       if (verifyValueType && !resTy.isa<LLVMPointerType>())
         return op->emitError()
                << "llvm.noalias attribute attached to non-pointer result";
+      return success();
+    }
+    if (name == LLVMDialect::getReadonlyAttrName()) {
+      if (!attrValue.isa<UnitAttr>())
+        return op->emitError() << "expected llvm.readonly result attribute to "
+                                  "be a unit attribute";
+      if (verifyValueType && !resTy.isa<LLVMPointerType>())
+        return op->emitError()
+               << "llvm.readonly attribute attached to non-pointer result";
       return success();
     }
     if (name == LLVMDialect::getNoUndefAttrName()) {

@@ -18,7 +18,6 @@
 
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/None.h"
-#include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/type_traits.h"
 #include <cassert>
@@ -26,8 +25,6 @@
 #include <utility>
 
 namespace llvm {
-
-class raw_ostream;
 
 namespace optional_detail {
 
@@ -292,12 +289,12 @@ public:
     return has_value() ? value() : std::forward<U>(alt);
   }
 
-  /// Apply a function to the value if present; otherwise return None.
+  /// Apply a function to the value if present; otherwise return std::nullopt.
   template <class Function>
   auto transform(const Function &F) const & -> Optional<decltype(F(value()))> {
     if (*this)
       return F(value());
-    return None;
+    return std::nullopt;
   }
 
   T &&value() && { return std::move(Storage.value()); }
@@ -307,13 +304,13 @@ public:
     return has_value() ? std::move(value()) : std::forward<U>(alt);
   }
 
-  /// Apply a function to the value if present; otherwise return None.
+  /// Apply a function to the value if present; otherwise return std::nullopt.
   template <class Function>
   auto transform(
       const Function &F) && -> Optional<decltype(F(std::move(*this).value()))> {
     if (*this)
       return F(std::move(*this).value());
-    return None;
+    return std::nullopt;
   }
 };
 
@@ -365,17 +362,17 @@ constexpr bool operator==(const Optional<T> &X, std::nullopt_t) {
 
 template <typename T>
 constexpr bool operator==(std::nullopt_t, const Optional<T> &X) {
-  return X == None;
+  return X == std::nullopt;
 }
 
 template <typename T>
 constexpr bool operator!=(const Optional<T> &X, std::nullopt_t) {
-  return !(X == None);
+  return !(X == std::nullopt);
 }
 
 template <typename T>
 constexpr bool operator!=(std::nullopt_t, const Optional<T> &X) {
-  return X != None;
+  return X != std::nullopt;
 }
 
 template <typename T>
@@ -390,32 +387,32 @@ constexpr bool operator<(std::nullopt_t, const Optional<T> &X) {
 
 template <typename T>
 constexpr bool operator<=(const Optional<T> &X, std::nullopt_t) {
-  return !(None < X);
+  return !(std::nullopt < X);
 }
 
 template <typename T>
 constexpr bool operator<=(std::nullopt_t, const Optional<T> &X) {
-  return !(X < None);
+  return !(X < std::nullopt);
 }
 
 template <typename T>
 constexpr bool operator>(const Optional<T> &X, std::nullopt_t) {
-  return None < X;
+  return std::nullopt < X;
 }
 
 template <typename T>
 constexpr bool operator>(std::nullopt_t, const Optional<T> &X) {
-  return X < None;
+  return X < std::nullopt;
 }
 
 template <typename T>
 constexpr bool operator>=(const Optional<T> &X, std::nullopt_t) {
-  return None <= X;
+  return std::nullopt <= X;
 }
 
 template <typename T>
 constexpr bool operator>=(std::nullopt_t, const Optional<T> &X) {
-  return X <= None;
+  return X <= std::nullopt;
 }
 
 template <typename T>
@@ -476,18 +473,6 @@ constexpr bool operator>=(const Optional<T> &X, const T &Y) {
 template <typename T>
 constexpr bool operator>=(const T &X, const Optional<T> &Y) {
   return !(X < Y);
-}
-
-raw_ostream &operator<<(raw_ostream &OS, std::nullopt_t);
-
-template <typename T, typename = decltype(std::declval<raw_ostream &>()
-                                          << std::declval<const T &>())>
-raw_ostream &operator<<(raw_ostream &OS, const Optional<T> &O) {
-  if (O)
-    OS << *O;
-  else
-    OS << None;
-  return OS;
 }
 
 } // end namespace llvm

@@ -894,7 +894,8 @@ public:
   BinaryBasicBlock *getLandingPadBBFor(const BinaryBasicBlock &BB,
                                        const MCInst &InvokeInst) const {
     assert(BC.MIB->isInvoke(InvokeInst) && "must be invoke instruction");
-    const Optional<MCPlus::MCLandingPad> LP = BC.MIB->getEHInfo(InvokeInst);
+    const std::optional<MCPlus::MCLandingPad> LP =
+        BC.MIB->getEHInfo(InvokeInst);
     if (LP && LP->first) {
       BinaryBasicBlock *LBB = BB.getLandingPad(LP->first);
       assert(LBB && "Landing pad should be defined");
@@ -980,7 +981,7 @@ public:
       if (Callback(StringRef(Name)))
         return StringRef(Name);
 
-    return None;
+    return std::nullopt;
   }
 
   /// Check if (possibly one out of many) function name matches the given
@@ -1318,7 +1319,7 @@ public:
   /// Return the name of the section this function originated from.
   Optional<StringRef> getOriginSectionName() const {
     if (!OriginSection)
-      return None;
+      return std::nullopt;
     return OriginSection->getName();
   }
 

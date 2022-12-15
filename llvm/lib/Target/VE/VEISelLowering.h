@@ -17,6 +17,7 @@
 #include "VE.h"
 #include "VELoweringInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include <optional>
 #include <set>
 
 namespace llvm {
@@ -115,7 +116,7 @@ enum NodeType : unsigned {
 };
 } // namespace VEISD
 
-using VecLenOpt = Optional<unsigned>;
+using VecLenOpt = std::optional<unsigned>;
 
 struct VVPWideningInfo {
   EVT ResultVT;
@@ -216,9 +217,9 @@ public:
     return Opt->second;
   }
 
-  Optional<RegisterCountPair> getRegistersForCallingConv(LLVMContext &Context,
-                                                         CallingConv::ID CC,
-                                                         EVT VT) const;
+  std::optional<RegisterCountPair>
+  getRegistersForCallingConv(LLVMContext &Context,
+                             CallingConv::ID CC, EVT VT) const;
 
   unsigned getVectorTypeBreakdownForCallingConv(LLVMContext &Context,
                                                 CallingConv::ID CC, EVT VT,
@@ -245,8 +246,8 @@ public:
   //       `include/llvm/CodeGen/TargetLowering.h`
   TargetLowering::LegalizeAction
   getActionForExtendedType(unsigned Op, EVT VT) const override;
-  Optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
-                                                 EVT VT) const override;
+  std::optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
+                                                      EVT VT) const override;
 
   void LowerOperationWrapper(
       SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
@@ -259,9 +260,9 @@ public:
   // Custom Operations
   // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG,
   // bool IsTrue=true) const; SDValue CreateBroadcast(SDLoc dl, EVT ResTy,
-  // SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None)
+  // SDValue ScaValue, SelectionDAG &DAG, std::optional<SDValue> OpVectorLength=std::nullopt)
   // const; SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG,
-  // Optional<SDValue> OpVectorLength=None) const;
+  // std::optional<SDValue> OpVectorLength=std::nullopt) const;
 
   // Vector Operations
   // main shuffle handler
@@ -331,15 +332,15 @@ public:
                                      VVPExpansionMode) const;
   SDValue lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
                                     VVPExpansionMode,
-                                    VecLenOpt VecLenHint = None) const;
+                                    VecLenOpt VecLenHint = std::nullopt) const;
   SDValue lowerVVP_INSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVVP_GATHER_SCATTER(SDValue Op, SelectionDAG &DAG,
                                   VVPExpansionMode Mode,
-                                  VecLenOpt VecLenHint = None) const;
+                                  VecLenOpt VecLenHint = std::nullopt) const;
   SDValue lowerVVP_LOAD_STORE(SDValue Op, SelectionDAG &DAG,
                               VVPExpansionMode Mode,
-                              VecLenOpt VecLenHint = None) const;
+                              VecLenOpt VecLenHint = std::nullopt) const;
   /// } Custom Lower for VVP
 
   EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,

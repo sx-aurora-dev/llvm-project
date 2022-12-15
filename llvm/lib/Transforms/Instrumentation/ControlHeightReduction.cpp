@@ -38,6 +38,7 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 
+#include <optional>
 #include <set>
 #include <sstream>
 
@@ -1686,7 +1687,8 @@ void CHR::transformScopes(CHRScope *Scope, DenseSet<PHINode *> &TrivialPHIs) {
   for (RegInfo &RI : Scope->RegInfos) {
     const Region *R = RI.R;
     unsigned Duplication = getRegionDuplicationCount(R);
-    dbgs() << "Dup count for R=" << R << "  is " << Duplication << "\n";
+    CHR_DEBUG(dbgs() << "Dup count for R=" << R << "  is " << Duplication
+                     << "\n");
     if (Duplication >= CHRDupThreshsold) {
       CHR_DEBUG(dbgs() << "Reached the dup threshold of " << Duplication
                        << " for this region");
@@ -1706,7 +1708,7 @@ void CHR::transformScopes(CHRScope *Scope, DenseSet<PHINode *> &TrivialPHIs) {
   BasicBlock *EntryBlock = FirstRegion->getEntry();
   Region *LastRegion = Scope->RegInfos[Scope->RegInfos.size() - 1].R;
   BasicBlock *ExitBlock = LastRegion->getExit();
-  Optional<uint64_t> ProfileCount = BFI.getBlockProfileCount(EntryBlock);
+  std::optional<uint64_t> ProfileCount = BFI.getBlockProfileCount(EntryBlock);
 
   if (ExitBlock) {
     // Insert a trivial phi at the exit block (where the CHR hot path and the

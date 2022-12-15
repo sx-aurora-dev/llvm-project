@@ -1119,7 +1119,9 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
     break;
   case ISD::FMA: case ISD::VP_FMA:
   case ISD::FSHL:
+  case ISD::VP_FSHL:
   case ISD::FSHR:
+  case ISD::VP_FSHR:
     SplitVecRes_TernaryOp(N, Lo, Hi);
     break;
 
@@ -1485,7 +1487,11 @@ void DAGTypeLegalizer::SplitVecRes_IS_FPCLASS(SDNode *N, SDValue &Lo,
   SDLoc DL(N);
   SDValue ArgLo, ArgHi;
   SDValue Test = N->getOperand(1);
-  GetSplitVector(N->getOperand(0), ArgLo, ArgHi);
+  SDValue FpValue = N->getOperand(0);
+  if (getTypeAction(FpValue.getValueType()) == TargetLowering::TypeSplitVector)
+    GetSplitVector(FpValue, ArgLo, ArgHi);
+  else
+    std::tie(ArgLo, ArgHi) = DAG.SplitVector(FpValue, SDLoc(FpValue));
   EVT LoVT, HiVT;
   std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
 
@@ -4152,7 +4158,9 @@ void DAGTypeLegalizer::WidenVectorResult(SDNode *N, unsigned ResNo) {
     break;
   case ISD::FMA: case ISD::VP_FMA:
   case ISD::FSHL:
+  case ISD::VP_FSHL:
   case ISD::FSHR:
+  case ISD::VP_FSHR:
     Res = WidenVecRes_Ternary(N);
     break;
   }
@@ -4763,8 +4771,11 @@ SDValue DAGTypeLegalizer::WidenVecRes_FCOPYSIGN(SDNode *N) {
 }
 
 SDValue DAGTypeLegalizer::WidenVecRes_IS_FPCLASS(SDNode *N) {
+  SDValue FpValue = N->getOperand(0);
   EVT WidenVT = TLI.getTypeToTransformTo(*DAG.getContext(), N->getValueType(0));
-  SDValue Arg = GetWidenedVector(N->getOperand(0));
+  if (getTypeAction(FpValue.getValueType()) != TargetLowering::TypeWidenVector)
+    return DAG.UnrollVectorOp(N, WidenVT.getVectorNumElements());
+  SDValue Arg = GetWidenedVector(FpValue);
   return DAG.getNode(N->getOpcode(), SDLoc(N), WidenVT, {Arg, N->getOperand(1)},
                      N->getFlags());
 }
@@ -6683,7 +6694,7 @@ static Optional<EVT> findMemType(SelectionDAG &DAG, const TargetLowering &TLI,
   // Using element-wise loads and stores for widening operations is not
   // supported for scalable vectors
   if (Scalable)
-    return None;
+    return std::nullopt;
 
   return RetVT;
 }

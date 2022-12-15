@@ -177,20 +177,20 @@ static SDNode *selectImmSeq(SelectionDAG *CurDAG, const SDLoc &DL, const MVT VT,
   SDNode *Result = nullptr;
   SDValue SrcReg = CurDAG->getRegister(RISCV::X0, VT);
   for (RISCVMatInt::Inst &Inst : Seq) {
-    SDValue SDImm = CurDAG->getTargetConstant(Inst.Imm, DL, VT);
+    SDValue SDImm = CurDAG->getTargetConstant(Inst.getImm(), DL, VT);
     switch (Inst.getOpndKind()) {
     case RISCVMatInt::Imm:
-      Result = CurDAG->getMachineNode(Inst.Opc, DL, VT, SDImm);
+      Result = CurDAG->getMachineNode(Inst.getOpcode(), DL, VT, SDImm);
       break;
     case RISCVMatInt::RegX0:
-      Result = CurDAG->getMachineNode(Inst.Opc, DL, VT, SrcReg,
+      Result = CurDAG->getMachineNode(Inst.getOpcode(), DL, VT, SrcReg,
                                       CurDAG->getRegister(RISCV::X0, VT));
       break;
     case RISCVMatInt::RegReg:
-      Result = CurDAG->getMachineNode(Inst.Opc, DL, VT, SrcReg, SrcReg);
+      Result = CurDAG->getMachineNode(Inst.getOpcode(), DL, VT, SrcReg, SrcReg);
       break;
     case RISCVMatInt::RegImm:
-      Result = CurDAG->getMachineNode(Inst.Opc, DL, VT, SrcReg, SDImm);
+      Result = CurDAG->getMachineNode(Inst.getOpcode(), DL, VT, SrcReg, SDImm);
       break;
     }
 
@@ -1834,10 +1834,12 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
         /*IsMasked*/ false, /*IsTU*/ false, /*IsStrided*/ true, /*FF*/ false,
         Log2SEW, static_cast<unsigned>(LMUL));
     MachineSDNode *Load =
-        CurDAG->getMachineNode(P->Pseudo, DL, Node->getVTList(), Operands);
-
+        CurDAG->getMachineNode(P->Pseudo, DL, {VT, MVT::Other}, Operands);
+    // Update the chain.
+    ReplaceUses(Src.getValue(1), SDValue(Load, 1));
+    // Record the mem-refs
     CurDAG->setNodeMemRefs(Load, {Ld->getMemOperand()});
-
+    // Replace the splat with the vlse.
     ReplaceNode(Node, Load);
     return;
   }
@@ -1933,9 +1935,9 @@ static bool selectConstantAddr(SelectionDAG *CurDAG, const SDLoc &DL,
 
   // If the last instruction would be an ADDI, we can fold its immediate and
   // emit the rest of the sequence as the base.
-  if (Seq.back().Opc != RISCV::ADDI)
+  if (Seq.back().getOpcode() != RISCV::ADDI)
     return false;
-  Lo12 = Seq.back().Imm;
+  Lo12 = Seq.back().getImm();
 
   // Drop the last instruction.
   Seq.pop_back();

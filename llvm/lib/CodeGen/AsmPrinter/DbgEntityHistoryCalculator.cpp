@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/DbgEntityHistoryCalculator.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -118,13 +117,13 @@ intersects(const MachineInstr *StartMI, const MachineInstr *EndMI,
   for (auto RangesI = Ranges.begin(), RangesE = Ranges.end();
        RangesI != RangesE; ++RangesI) {
     if (EndMI && Ordering.isBefore(EndMI, RangesI->first))
-      return None;
+      return std::nullopt;
     if (EndMI && !Ordering.isBefore(RangesI->second, EndMI))
       return RangesI;
     if (Ordering.isBefore(StartMI, RangesI->second))
       return RangesI;
   }
-  return None;
+  return std::nullopt;
 }
 
 void DbgValueHistoryMap::trimLocationRanges(

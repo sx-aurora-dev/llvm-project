@@ -364,8 +364,8 @@ void llvm::setInlineRemark(CallBase &CB, StringRef Message) {
 
 /// Return the cost only if the inliner should attempt to inline at the given
 /// CallSite. If we return the cost, we will emit an optimisation remark later
-/// using that cost, so we won't do so from this function. Return None if
-/// inlining should not be attempted.
+/// using that cost, so we won't do so from this function. Return std::nullopt
+/// if inlining should not be attempted.
 Optional<InlineCost>
 llvm::shouldInline(CallBase &CB,
                    function_ref<InlineCost(CallBase &CB)> GetInlineCost,
@@ -402,7 +402,7 @@ llvm::shouldInline(CallBase &CB,
       });
     }
     setInlineRemark(CB, inlineCostStr(IC));
-    return None;
+    return std::nullopt;
   }
 
   int TotalSecondaryCost = 0;
@@ -419,7 +419,7 @@ llvm::shouldInline(CallBase &CB,
              << "' in other contexts";
     });
     setInlineRemark(CB, "deferred");
-    return None;
+    return std::nullopt;
   }
 
   LLVM_DEBUG(dbgs() << "    Inlining " << inlineCostStr(IC) << ", Call: " << CB

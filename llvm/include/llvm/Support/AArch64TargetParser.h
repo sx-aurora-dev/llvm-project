@@ -26,6 +26,7 @@ namespace AArch64 {
 
 // Arch extension modifiers for CPUs. These are labelled with their Arm ARM
 // feature name (though the canonical reference for those is AArch64.td)
+// clang-format off
 enum ArchExtKind : uint64_t {
   AEK_INVALID =     0,
   AEK_NONE =        1,
@@ -78,7 +79,12 @@ enum ArchExtKind : uint64_t {
   AEK_SMEF16F16 =   1ULL << 47, // FEAT_SMEF16F16
   AEK_CSSC =        1ULL << 48, // FEAT_CSSC
   AEK_RCPC3 =       1ULL << 49, // FEAT_LRCPC3
+  AEK_THE =         1ULL << 50, // FEAT_THE
+  AEK_D128 =        1ULL << 51, // FEAT_D128
+  AEK_LSE128 =      1ULL << 52, // FEAT_LSE128
+  AEK_SPECRES2 =    1ULL << 53, // FEAT_SPECRES2
 };
+// clang-format on
 
 enum class ArchKind {
 #define AARCH64_ARCH(NAME, ID, ARCH_FEATURE, ARCH_BASE_EXT) ID,
@@ -122,13 +128,12 @@ const ExtName AArch64ARCHExtNames[] = {
 struct CpuNames {
   StringRef Name;
   ArchKind ArchID;
-  bool Default; // is $Name the default CPU for $ArchID ?
   uint64_t DefaultExtensions;
 };
 
 const CpuNames AArch64CPUNames[] = {
-#define AARCH64_CPU_NAME(NAME, ID, DEFAULT_FPU, IS_DEFAULT, DEFAULT_EXT)       \
-  {NAME, AArch64::ArchKind::ID, IS_DEFAULT, DEFAULT_EXT},
+#define AARCH64_CPU_NAME(NAME, ID, DEFAULT_EXT)                                \
+  {NAME, AArch64::ArchKind::ID, DEFAULT_EXT},
 #include "AArch64TargetParser.def"
 };
 
@@ -158,7 +163,7 @@ inline ArchKind &operator--(ArchKind &Kind) {
 
 bool getExtensionFeatures(uint64_t Extensions,
                           std::vector<StringRef> &Features);
-bool getArchFeatures(ArchKind AK, std::vector<StringRef> &Features);
+StringRef getArchFeature(ArchKind AK);
 
 StringRef getArchName(ArchKind AK);
 StringRef getSubArch(ArchKind AK);

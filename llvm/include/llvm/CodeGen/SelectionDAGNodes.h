@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -458,7 +459,7 @@ public:
   }
 };
 
-using PosOpt = Optional<unsigned>;
+using PosOpt = std::optional<unsigned>;
 
 /// Represents one node in the SelectionDAG.
 ///
@@ -710,7 +711,7 @@ public:
   PosOpt getVPMaskPos() const {
     switch (NodeType) {
     default:
-      return None;
+      return std::nullopt;
 
 #define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALARG, DEFNAME, MASKPOS, VLENPOS) \
     case ISD::VPID: return MASKPOS;
@@ -721,7 +722,7 @@ public:
   PosOpt getVPVectorLenPos() const {
     switch (NodeType) {
     default:
-      return None;
+      return std::nullopt;
 
 #define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALARG, DEFNAME, MASKPOS, VLENPOS) \
     case ISD::VPID: return VLENPOS;

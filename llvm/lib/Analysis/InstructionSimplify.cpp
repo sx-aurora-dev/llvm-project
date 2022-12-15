@@ -41,6 +41,7 @@
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/KnownBits.h"
 #include <algorithm>
+#include <optional>
 using namespace llvm;
 using namespace llvm::PatternMatch;
 
@@ -4555,9 +4556,26 @@ static Value *simplifySelectInst(Value *Cond, Value *TrueVal, Value *FalseVal,
     if (match(TrueVal, m_One()) && match(FalseVal, m_ZeroInt()))
       return Cond;
 
-    // (X || Y) && (X || !Y) --> X (commuted 8 ways)
+    // (X && Y) ? X : Y --> Y (commuted 2 ways)
+    if (match(Cond, m_c_LogicalAnd(m_Specific(TrueVal), m_Specific(FalseVal))))
+      return FalseVal;
+
+    // (X || Y) ? X : Y --> X (commuted 2 ways)
+    if (match(Cond, m_c_LogicalOr(m_Specific(TrueVal), m_Specific(FalseVal))))
+      return TrueVal;
+
+    // (X || Y) ? false : X --> false (commuted 2 ways)
+    if (match(Cond, m_c_LogicalOr(m_Specific(FalseVal), m_Value())) &&
+        match(TrueVal, m_ZeroInt()))
+      return ConstantInt::getFalse(Cond->getType());
+
     Value *X, *Y;
     if (match(FalseVal, m_ZeroInt())) {
+      // !(X || Y) && X --> false (commuted 2 ways)
+      if (match(Cond, m_Not(m_c_LogicalOr(m_Specific(TrueVal), m_Value()))))
+        return ConstantInt::getFalse(Cond->getType());
+
+      // (X || Y) && (X || !Y) --> X (commuted 8 ways)
       if (match(Cond, m_c_LogicalOr(m_Value(X), m_Not(m_Value(Y)))) &&
           match(TrueVal, m_c_LogicalOr(m_Specific(X), m_Specific(Y))))
         return X;
@@ -4795,8 +4813,10 @@ static Value *simplifyInsertValueInst(Value *Agg, Value *Val,
     if (Constant *CVal = dyn_cast<Constant>(Val))
       return ConstantFoldInsertValueInstruction(CAgg, CVal, Idxs);
 
-  // insertvalue x, undef, n -> x
-  if (Q.isUndefValue(Val))
+  // insertvalue x, poison, n -> x
+  // insertvalue x, undef, n -> x if x cannot be poison
+  if (isa<PoisonValue>(Val) ||
+      (Q.isUndefValue(Val) && isGuaranteedNotToBePoison(Agg)))
     return Agg;
 
   // insertvalue x, (extractvalue y, n), n
@@ -5882,8 +5902,7 @@ static Value *simplifyUnaryIntrinsic(Function *F, Value *Op0,
     break;
   case Intrinsic::experimental_vector_reverse:
     // experimental.vector.reverse(experimental.vector.reverse(x)) -> x
-    if (match(Op0,
-              m_Intrinsic<Intrinsic::experimental_vector_reverse>(m_Value(X))))
+    if (match(Op0, m_VecReverse(m_Value(X))))
       return X;
     // experimental.vector.reverse(splat(X)) -> splat(X)
     if (isSplatValue(Op0))
@@ -6202,7 +6221,7 @@ static Value *simplifyIntrinsic(CallBase *Call, const SimplifyQuery &Q) {
       if (!Attr.isValid())
         return nullptr;
       unsigned VScaleMin = Attr.getVScaleRangeMin();
-      Optional<unsigned> VScaleMax = Attr.getVScaleRangeMax();
+      std::optional<unsigned> VScaleMax = Attr.getVScaleRangeMax();
       if (VScaleMax && VScaleMin == VScaleMax)
         return ConstantInt::get(F->getReturnType(), VScaleMin);
       return nullptr;

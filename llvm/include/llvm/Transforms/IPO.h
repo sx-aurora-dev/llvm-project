@@ -140,20 +140,11 @@ ModulePass *createDeadArgEliminationPass();
 ModulePass *createDeadArgHackingPass();
 
 //===----------------------------------------------------------------------===//
-/// createOpenMPOptLegacyPass - OpenMP specific optimizations.
-Pass *createOpenMPOptCGSCCLegacyPass();
-
-//===----------------------------------------------------------------------===//
 /// createIPSCCPPass - This pass propagates constants from call sites into the
 /// bodies of functions, and keeps track of whether basic blocks are executable
 /// in the process.
 ///
 ModulePass *createIPSCCPPass();
-
-//===----------------------------------------------------------------------===//
-/// createFunctionSpecializationPass - This pass propagates constants from call
-/// sites to the specialized version of the callee function.
-ModulePass *createFunctionSpecializationPass();
 
 //===----------------------------------------------------------------------===//
 //

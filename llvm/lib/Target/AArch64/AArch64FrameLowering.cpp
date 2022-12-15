@@ -1475,7 +1475,7 @@ void AArch64FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Set tagged base pointer to the requested stack slot.
   // Ideally it should match SP value after prologue.
-  Optional<int> TBPI = AFI->getTaggedBasePointerIndex();
+  std::optional<int> TBPI = AFI->getTaggedBasePointerIndex();
   if (TBPI)
     AFI->setTaggedBasePointerOffset(-MFI.getObjectOffset(*TBPI));
   else
@@ -3576,7 +3576,7 @@ void TagStoreEdit::emitCode(MachineBasicBlock::iterator &InsertI,
       *MF, FirstTagStore.Offset, false /*isFixed*/, false /*isSVE*/, Reg,
       /*PreferFP=*/false, /*ForSimm=*/true);
   FrameReg = Reg;
-  FrameRegUpdate = None;
+  FrameRegUpdate = std::nullopt;
 
   mergeMemRefs(TagStores, CombinedMemRefs);
 
@@ -3933,7 +3933,7 @@ void AArch64FrameLowering::orderFrameObjects(
   // and save one instruction when generating the base pointer because IRG does
   // not allow an immediate offset.
   const AArch64FunctionInfo &AFI = *MF.getInfo<AArch64FunctionInfo>();
-  Optional<int> TBPI = AFI.getTaggedBasePointerIndex();
+  std::optional<int> TBPI = AFI.getTaggedBasePointerIndex();
   if (TBPI) {
     FrameObjects[*TBPI].ObjectFirst = true;
     FrameObjects[*TBPI].GroupFirst = true;

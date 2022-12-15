@@ -680,12 +680,12 @@ void CheckRelation(const Optional<T> &Lhs, const Optional<T> &Rhs,
   if (Lhs)
     EXPECT_EQ(Expected, OperatorT::apply(*Lhs, Rhs));
   else
-    EXPECT_EQ(Expected, OperatorT::apply(None, Rhs));
+    EXPECT_EQ(Expected, OperatorT::apply(std::nullopt, Rhs));
 
   if (Rhs)
     EXPECT_EQ(Expected, OperatorT::apply(Lhs, *Rhs));
   else
-    EXPECT_EQ(Expected, OperatorT::apply(Lhs, None));
+    EXPECT_EQ(Expected, OperatorT::apply(Lhs, std::nullopt));
 }
 
 struct EqualityMock {};
@@ -800,7 +800,7 @@ TEST(OptionalTest, StreamOperator) {
   };
   EXPECT_EQ("ComparableAndStreamable",
             to_string(ComparableAndStreamable::get()));
-  EXPECT_EQ("None", to_string(None));
+  EXPECT_EQ("None", to_string(std::nullopt));
 }
 
 struct Comparable {
@@ -813,16 +813,17 @@ struct Comparable {
 TEST(OptionalTest, UseInUnitTests) {
   // Test that we invoke the streaming operators when pretty-printing values in
   // EXPECT macros.
-  EXPECT_NONFATAL_FAILURE(EXPECT_EQ(llvm::None, ComparableAndStreamable::get()),
-                          "Expected equality of these values:\n"
-                          "  llvm::None\n"
-                          "    Which is: None\n"
-                          "  ComparableAndStreamable::get()\n"
-                          "    Which is: ComparableAndStreamable");
+  EXPECT_NONFATAL_FAILURE(
+      EXPECT_EQ(std::nullopt, ComparableAndStreamable::get()),
+      "Expected equality of these values:\n"
+      "  std::nullopt\n"
+      "    Which is: None\n"
+      "  ComparableAndStreamable::get()\n"
+      "    Which is: ComparableAndStreamable");
 
   // Test that it is still possible to compare objects which do not have a
   // custom streaming operator.
-  EXPECT_NONFATAL_FAILURE(EXPECT_EQ(llvm::None, Comparable::get()), "object");
+  EXPECT_NONFATAL_FAILURE(EXPECT_EQ(std::nullopt, Comparable::get()), "object");
 }
 
 TEST(OptionalTest, HashValue) {

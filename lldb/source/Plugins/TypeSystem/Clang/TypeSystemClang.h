@@ -744,7 +744,7 @@ public:
                        ExecutionContextScope *exe_scope) {
     if (llvm::Optional<uint64_t> bit_size = GetBitSize(type, exe_scope))
       return (*bit_size + 7) / 8;
-    return llvm::None;
+    return std::nullopt;
   }
 
   llvm::Optional<uint64_t>
@@ -1062,6 +1062,8 @@ public:
   /// function in contexts where the usual C++ rules require a type to be
   /// complete (base class, member, etc.).
   static void RequireCompleteType(CompilerType type);
+
+  bool SetDeclIsForcefullyCompleted(const clang::TagDecl *td);
 
 private:
   /// Returns the PrintingPolicy used when generating the internal type names.

@@ -14,7 +14,6 @@
 #define LLVM_ANALYSIS_MEMORYDEPENDENCEANALYSIS_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerSumType.h"
@@ -24,6 +23,7 @@
 #include "llvm/IR/PredIteratorCache.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Pass.h"
+#include <optional>
 
 namespace llvm {
 
@@ -470,11 +470,11 @@ public:
   void releaseMemory();
 
   /// Return the clobber offset to dependent instruction.
-  Optional<int32_t> getClobberOffset(LoadInst *DepInst) const {
+  std::optional<int32_t> getClobberOffset(LoadInst *DepInst) const {
     const auto Off = ClobberOffsets.find(DepInst);
     if (Off != ClobberOffsets.end())
       return Off->getSecond();
-    return None;
+    return std::nullopt;
   }
 
 private:
@@ -524,7 +524,7 @@ public:
 /// A wrapper analysis pass for the legacy pass manager that exposes a \c
 /// MemoryDepnedenceResults instance.
 class MemoryDependenceWrapperPass : public FunctionPass {
-  Optional<MemoryDependenceResults> MemDep;
+  std::optional<MemoryDependenceResults> MemDep;
 
 public:
   static char ID;

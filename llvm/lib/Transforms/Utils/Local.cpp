@@ -17,7 +17,6 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
@@ -58,6 +57,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Metadata.h"
@@ -80,6 +80,7 @@
 #include <cstdint>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <utility>
 
 using namespace llvm;
@@ -443,8 +444,23 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     if (isRemovableAlloc(CB, TLI))
       return true;
 
-  if (!I->willReturn())
-    return false;
+  if (!I->willReturn()) {
+    auto *II = dyn_cast<IntrinsicInst>(I);
+    if (!II)
+      return false;
+
+    // TODO: These intrinsics are not safe to remove, because this may remove
+    // a well-defined trap.
+    switch (II->getIntrinsicID()) {
+    case Intrinsic::wasm_trunc_signed:
+    case Intrinsic::wasm_trunc_unsigned:
+    case Intrinsic::ptrauth_auth:
+    case Intrinsic::ptrauth_resign:
+      return true;
+    default:
+      return false;
+    }
+  }
 
   if (!I->mayHaveSideEffects())
     return true;
@@ -488,7 +504,8 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     }
 
     if (auto *FPI = dyn_cast<ConstrainedFPIntrinsic>(I)) {
-      Optional<fp::ExceptionBehavior> ExBehavior = FPI->getExceptionBehavior();
+      std::optional<fp::ExceptionBehavior> ExBehavior =
+          FPI->getExceptionBehavior();
       return *ExBehavior != fp::ebStrict;
     }
   }
@@ -798,7 +815,7 @@ void llvm::MergeBasicBlockIntoOnlyPred(BasicBlock *DestBB,
 
   // Splice all the instructions from PredBB to DestBB.
   PredBB->getTerminator()->eraseFromParent();
-  DestBB->getInstList().splice(DestBB->begin(), PredBB->getInstList());
+  DestBB->splice(DestBB->begin(), PredBB);
   new UnreachableInst(PredBB->getContext(), PredBB);
 
   // If the PredBB is the entry block of the function, move DestBB up to
@@ -1203,8 +1220,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
 
     // Copy over any phi, debug or lifetime instruction.
     BB->getTerminator()->eraseFromParent();
-    Succ->getInstList().splice(Succ->getFirstNonPHI()->getIterator(),
-                               BB->getInstList());
+    Succ->splice(Succ->getFirstNonPHI()->getIterator(), BB);
   } else {
     while (PHINode *PN = dyn_cast<PHINode>(&BB->front())) {
       // We explicitly check for such uses in CanPropagatePredecessorsForPHIs.
@@ -1472,7 +1488,7 @@ static bool PhiHasDebugValue(DILocalVariable *DIVar,
 static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
   const DataLayout &DL = DII->getModule()->getDataLayout();
   TypeSize ValueSize = DL.getTypeAllocSizeInBits(ValTy);
-  if (Optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits()) {
+  if (std::optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits()) {
     assert(!ValueSize.isScalable() &&
            "Fragments don't work on scalable types.");
     return ValueSize.getFixedSize() >= *FragmentSize;
@@ -1486,7 +1502,8 @@ static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
            "address of variable must have exactly 1 location operand.");
     if (auto *AI =
             dyn_cast_or_null<AllocaInst>(DII->getVariableLocationOp(0))) {
-      if (Optional<TypeSize> FragmentSize = AI->getAllocationSizeInBits(DL)) {
+      if (std::optional<TypeSize> FragmentSize =
+              AI->getAllocationSizeInBits(DL)) {
         return TypeSize::isKnownGE(ValueSize, *FragmentSize);
       }
     }
@@ -2048,7 +2065,7 @@ Value *llvm::salvageDebugInfoImpl(Instruction &I, uint64_t CurrentLocOps,
 }
 
 /// A replacement for a dbg.value expression.
-using DbgValReplacement = Optional<DIExpression *>;
+using DbgValReplacement = std::optional<DIExpression *>;
 
 /// Point debug users of \p From to \p To using exprs given by \p RewriteExpr,
 /// possibly moving/undefing users to prevent use-before-def. Returns true if
@@ -2174,7 +2191,7 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
       // Without knowing signedness, sign/zero extension isn't possible.
       auto Signedness = Var->getSignedness();
       if (!Signedness)
-        return None;
+        return std::nullopt;
 
       bool Signed = *Signedness == DIBasicType::Signedness::Signed;
       return DIExpression::appendExt(DII.getExpression(), ToBits, FromBits,
@@ -2912,7 +2929,7 @@ void llvm::copyRangeMetadata(const DataLayout &DL, const LoadInst &OldLI,
 
   unsigned BitWidth = DL.getPointerTypeSizeInBits(NewTy);
   if (!getConstantRangeFromMetadata(*N).contains(APInt(BitWidth, 0))) {
-    MDNode *NN = MDNode::get(OldLI.getContext(), None);
+    MDNode *NN = MDNode::get(OldLI.getContext(), std::nullopt);
     NewLI.setMetadata(LLVMContext::MD_nonnull, NN);
   }
 }
@@ -2961,9 +2978,8 @@ void llvm::hoistAllInstructionsInto(BasicBlock *DomBlock, Instruction *InsertPt,
     I->setDebugLoc(InsertPt->getDebugLoc());
     ++II;
   }
-  DomBlock->getInstList().splice(InsertPt->getIterator(), BB->getInstList(),
-                                 BB->begin(),
-                                 BB->getTerminator()->getIterator());
+  DomBlock->splice(InsertPt->getIterator(), BB, BB->begin(),
+                   BB->getTerminator()->getIterator());
 }
 
 namespace {
@@ -3022,7 +3038,7 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
   if (I != BPS.end())
     return I->second;
 
-  auto &Result = BPS[V] = None;
+  auto &Result = BPS[V] = std::nullopt;
   auto BitWidth = V->getType()->getScalarSizeInBits();
 
   // Can't do integer/elements > 128 bits.
@@ -3058,7 +3074,7 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
         if (A->Provenance[BitIdx] != BitPart::Unset &&
             B->Provenance[BitIdx] != BitPart::Unset &&
             A->Provenance[BitIdx] != B->Provenance[BitIdx])
-          return Result = None;
+          return Result = std::nullopt;
 
         if (A->Provenance[BitIdx] == BitPart::Unset)
           Result->Provenance[BitIdx] = B->Provenance[BitIdx];

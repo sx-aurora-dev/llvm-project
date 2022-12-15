@@ -41,6 +41,7 @@
 #include "llvm/Transforms/Utils/UnrollLoop.h"
 
 #include <cstdint>
+#include <optional>
 
 #define DEBUG_TYPE "openmp-ir-builder"
 
@@ -261,8 +262,7 @@ void llvm::spliceBB(IRBuilderBase::InsertPoint IP, BasicBlock *New,
 
   // Move instructions to new block.
   BasicBlock *Old = IP.getBlock();
-  New->getInstList().splice(New->begin(), Old->getInstList(), IP.getPoint(),
-                            Old->end());
+  New->splice(New->begin(), Old, IP.getPoint(), Old->end());
 
   if (CreateBranch)
     BranchInst::Create(New, Old);
@@ -625,7 +625,7 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(DebugLoc DL,
     return getOrCreateDefaultSrcLocStr(SrcLocStrSize);
   StringRef FileName = M.getName();
   if (DIFile *DIF = DIL->getFile())
-    if (Optional<StringRef> Source = DIF->getSource())
+    if (std::optional<StringRef> Source = DIF->getSource())
       FileName = *Source;
   StringRef Function = DIL->getScope()->getSubprogram()->getName();
   if (Function.empty() && F)
@@ -914,34 +914,21 @@ IRBuilder<>::InsertPoint OpenMPIRBuilder::createParallel(
   AllocaInst *TIDAddr = Builder.CreateAlloca(Int32, nullptr, "tid.addr");
   AllocaInst *ZeroAddr = Builder.CreateAlloca(Int32, nullptr, "zero.addr");
 
-  // If there is an if condition we actually use the TIDAddr and ZeroAddr in the
-  // program, otherwise we only need them for modeling purposes to get the
-  // associated arguments in the outlined function. In the former case,
-  // initialize the allocas properly, in the latter case, delete them later.
-  if (IfCondition) {
-    Builder.CreateStore(Constant::getNullValue(Int32), TIDAddr);
-    Builder.CreateStore(Constant::getNullValue(Int32), ZeroAddr);
-  } else {
-    ToBeDeleted.push_back(TIDAddr);
-    ToBeDeleted.push_back(ZeroAddr);
-  }
+  // We only need TIDAddr and ZeroAddr for modeling purposes to get the
+  // associated arguments in the outlined function, so we delete them later.
+  ToBeDeleted.push_back(TIDAddr);
+  ToBeDeleted.push_back(ZeroAddr);
 
   // Create an artificial insertion point that will also ensure the blocks we
   // are about to split are not degenerated.
   auto *UI = new UnreachableInst(Builder.getContext(), InsertBB);
 
-  Instruction *ThenTI = UI, *ElseTI = nullptr;
-  if (IfCondition)
-    SplitBlockAndInsertIfThenElse(IfCondition, UI, &ThenTI, &ElseTI);
-
-  BasicBlock *ThenBB = ThenTI->getParent();
-  BasicBlock *PRegEntryBB = ThenBB->splitBasicBlock(ThenTI, "omp.par.entry");
-  BasicBlock *PRegBodyBB =
-      PRegEntryBB->splitBasicBlock(ThenTI, "omp.par.region");
+  BasicBlock *EntryBB = UI->getParent();
+  BasicBlock *PRegEntryBB = EntryBB->splitBasicBlock(UI, "omp.par.entry");
+  BasicBlock *PRegBodyBB = PRegEntryBB->splitBasicBlock(UI, "omp.par.region");
   BasicBlock *PRegPreFiniBB =
-      PRegBodyBB->splitBasicBlock(ThenTI, "omp.par.pre_finalize");
-  BasicBlock *PRegExitBB =
-      PRegPreFiniBB->splitBasicBlock(ThenTI, "omp.par.exit");
+      PRegBodyBB->splitBasicBlock(UI, "omp.par.pre_finalize");
+  BasicBlock *PRegExitBB = PRegPreFiniBB->splitBasicBlock(UI, "omp.par.exit");
 
   auto FiniCBWrapper = [&](InsertPointTy IP) {
     // Hide "open-ended" blocks from the given FiniCB by setting the right jump
@@ -975,7 +962,7 @@ IRBuilder<>::InsertPoint OpenMPIRBuilder::createParallel(
       Builder.CreateLoad(Int32, ZeroAddr, "zero.addr.use");
   ToBeDeleted.push_back(ZeroAddrUse);
 
-  // ThenBB
+  // EntryBB
   //   |
   //   V
   // PRegionEntryBB         <- Privatization allocas are placed here.
@@ -998,8 +985,12 @@ IRBuilder<>::InsertPoint OpenMPIRBuilder::createParallel(
   BodyGenCB(InnerAllocaIP, CodeGenIP);
 
   LLVM_DEBUG(dbgs() << "After  body codegen: " << *OuterFn << "\n");
+  FunctionCallee RTLFn;
+  if (IfCondition)
+    RTLFn = getOrCreateRuntimeFunctionPtr(OMPRTL___kmpc_fork_call_if);
+  else
+    RTLFn = getOrCreateRuntimeFunctionPtr(OMPRTL___kmpc_fork_call);
 
-  FunctionCallee RTLFn = getOrCreateRuntimeFunctionPtr(OMPRTL___kmpc_fork_call);
   if (auto *F = dyn_cast<llvm::Function>(RTLFn.getCallee())) {
     if (!F->hasMetadata(llvm::LLVMContext::MD_callback)) {
       llvm::LLVMContext &Ctx = F->getContext();
@@ -1034,14 +1025,29 @@ IRBuilder<>::InsertPoint OpenMPIRBuilder::createParallel(
     CI->getParent()->setName("omp_parallel");
     Builder.SetInsertPoint(CI);
 
-    // Build call __kmpc_fork_call(Ident, n, microtask, var1, .., varn);
+    // Build call __kmpc_fork_call[_if](Ident, n, microtask, var1, .., varn);
     Value *ForkCallArgs[] = {
         Ident, Builder.getInt32(NumCapturedVars),
         Builder.CreateBitCast(&OutlinedFn, ParallelTaskPtr)};
 
     SmallVector<Value *, 16> RealArgs;
     RealArgs.append(std::begin(ForkCallArgs), std::end(ForkCallArgs));
+    if (IfCondition) {
+      Value *Cond = Builder.CreateSExtOrTrunc(IfCondition,
+                                              Type::getInt32Ty(M.getContext()));
+      RealArgs.push_back(Cond);
+    }
     RealArgs.append(CI->arg_begin() + /* tid & bound tid */ 2, CI->arg_end());
+
+    // __kmpc_fork_call_if always expects a void ptr as the last argument
+    // If there are no arguments, pass a null pointer.
+    auto PtrTy = Type::getInt8PtrTy(M.getContext());
+    if (IfCondition && NumCapturedVars == 0) {
+      llvm::Value *Void = ConstantPointerNull::get(PtrTy);
+      RealArgs.push_back(Void);
+    }
+    if (IfCondition && RealArgs.back()->getType() != PtrTy)
+      RealArgs.back() = Builder.CreateBitCast(RealArgs.back(), PtrTy);
 
     Builder.CreateCall(RTLFn, RealArgs);
 
@@ -1055,35 +1061,7 @@ IRBuilder<>::InsertPoint OpenMPIRBuilder::createParallel(
     Function::arg_iterator OutlinedAI = OutlinedFn.arg_begin();
     Builder.CreateStore(Builder.CreateLoad(Int32, OutlinedAI), PrivTIDAddr);
 
-    // If no "if" clause was present we do not need the call created during
-    // outlining, otherwise we reuse it in the serialized parallel region.
-    if (!ElseTI) {
-      CI->eraseFromParent();
-    } else {
-
-      // If an "if" clause was present we are now generating the serialized
-      // version into the "else" branch.
-      Builder.SetInsertPoint(ElseTI);
-
-      // Build calls __kmpc_serialized_parallel(&Ident, GTid);
-      Value *SerializedParallelCallArgs[] = {Ident, ThreadID};
-      Builder.CreateCall(
-          getOrCreateRuntimeFunctionPtr(OMPRTL___kmpc_serialized_parallel),
-          SerializedParallelCallArgs);
-
-      // OutlinedFn(&GTid, &zero, CapturedStruct);
-      CI->removeFromParent();
-      Builder.Insert(CI);
-
-      // __kmpc_end_serialized_parallel(&Ident, GTid);
-      Value *EndArgs[] = {Ident, ThreadID};
-      Builder.CreateCall(
-          getOrCreateRuntimeFunctionPtr(OMPRTL___kmpc_end_serialized_parallel),
-          EndArgs);
-
-      LLVM_DEBUG(dbgs() << "With serialized parallel region: "
-                        << *Builder.GetInsertBlock()->getParent() << "\n");
-    }
+    CI->eraseFromParent();
 
     for (Instruction *I : ToBeDeleted)
       I->eraseFromParent();
@@ -3195,8 +3173,8 @@ createTargetMachine(Function *F, CodeGenOpt::Level OptLevel) {
 
   llvm::TargetOptions Options;
   return std::unique_ptr<TargetMachine>(TheTarget->createTargetMachine(
-      Triple, CPU, Features, Options, /*RelocModel=*/None, /*CodeModel=*/None,
-      OptLevel));
+      Triple, CPU, Features, Options, /*RelocModel=*/std::nullopt,
+      /*CodeModel=*/std::nullopt, OptLevel));
 }
 
 /// Heuristically determine the best-performant unroll factor for \p CLI. This
@@ -3241,12 +3219,12 @@ static int32_t computeHeuristicUnrollFactor(CanonicalLoopInfo *CLI) {
       gatherUnrollingPreferences(L, SE, TTI,
                                  /*BlockFrequencyInfo=*/nullptr,
                                  /*ProfileSummaryInfo=*/nullptr, ORE, OptLevel,
-                                 /*UserThreshold=*/None,
-                                 /*UserCount=*/None,
+                                 /*UserThreshold=*/std::nullopt,
+                                 /*UserCount=*/std::nullopt,
                                  /*UserAllowPartial=*/true,
                                  /*UserAllowRuntime=*/true,
-                                 /*UserUpperBound=*/None,
-                                 /*UserFullUnrollMaxCount=*/None);
+                                 /*UserUpperBound=*/std::nullopt,
+                                 /*UserFullUnrollMaxCount=*/std::nullopt);
 
   UP.Force = true;
 
@@ -3948,6 +3926,62 @@ void OpenMPIRBuilder::createTargetDeinit(const LocationDescription &Loc,
       omp::RuntimeFunction::OMPRTL___kmpc_target_deinit);
 
   Builder.CreateCall(Fn, {Ident, IsSPMDVal, RequiresFullRuntimeVal});
+}
+
+void OpenMPIRBuilder::setOutlinedTargetRegionFunctionAttributes(
+    Function *OutlinedFn, int32_t NumTeams, int32_t NumThreads) {
+  if (Config.isEmbedded()) {
+    OutlinedFn->setLinkage(GlobalValue::WeakODRLinkage);
+    // TODO: Determine if DSO local can be set to true.
+    OutlinedFn->setDSOLocal(false);
+    OutlinedFn->setVisibility(GlobalValue::ProtectedVisibility);
+    if (Triple(M.getTargetTriple()).isAMDGCN())
+      OutlinedFn->setCallingConv(CallingConv::AMDGPU_KERNEL);
+  }
+
+  if (NumTeams > 0)
+    OutlinedFn->addFnAttr("omp_target_num_teams", std::to_string(NumTeams));
+  if (NumThreads > 0)
+    OutlinedFn->addFnAttr("omp_target_thread_limit",
+                          std::to_string(NumThreads));
+}
+
+Constant *OpenMPIRBuilder::createOutlinedFunctionID(Function *OutlinedFn,
+                                                    StringRef EntryFnIDName) {
+  if (Config.isEmbedded()) {
+    assert(OutlinedFn && "The outlined function must exist if embedded");
+    return ConstantExpr::getBitCast(OutlinedFn, Builder.getInt8PtrTy());
+  }
+
+  return new GlobalVariable(
+      M, Builder.getInt8Ty(), /*isConstant=*/true, GlobalValue::WeakAnyLinkage,
+      Constant::getNullValue(Builder.getInt8Ty()), EntryFnIDName);
+}
+
+Constant *OpenMPIRBuilder::createTargetRegionEntryAddr(Function *OutlinedFn,
+                                                       StringRef EntryFnName) {
+  if (OutlinedFn)
+    return OutlinedFn;
+
+  assert(!M.getGlobalVariable(EntryFnName, true) &&
+         "Named kernel already exists?");
+  return new GlobalVariable(
+      M, Builder.getInt8Ty(), /*isConstant=*/true, GlobalValue::InternalLinkage,
+      Constant::getNullValue(Builder.getInt8Ty()), EntryFnName);
+}
+
+Constant *OpenMPIRBuilder::registerTargetRegionFunction(
+    OffloadEntriesInfoManager &InfoManager, TargetRegionEntryInfo &EntryInfo,
+    Function *OutlinedFn, StringRef EntryFnName, StringRef EntryFnIDName,
+    int32_t NumTeams, int32_t NumThreads) {
+  if (OutlinedFn)
+    setOutlinedTargetRegionFunctionAttributes(OutlinedFn, NumTeams, NumThreads);
+  auto OutlinedFnID = createOutlinedFunctionID(OutlinedFn, EntryFnIDName);
+  auto EntryAddr = createTargetRegionEntryAddr(OutlinedFn, EntryFnName);
+  InfoManager.registerTargetRegionEntryInfo(
+      EntryInfo, EntryAddr, OutlinedFnID,
+      OffloadEntriesInfoManager::OMPTargetRegionEntryTargetRegion);
+  return OutlinedFnID;
 }
 
 std::string OpenMPIRBuilder::getNameWithSeparators(ArrayRef<StringRef> Parts,

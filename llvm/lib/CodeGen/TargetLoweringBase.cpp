@@ -726,6 +726,8 @@ TargetLoweringBase::TargetLoweringBase(const TargetMachine &tm) : TM(tm) {
 
   MaxDivRemBitWidthSupported = llvm::IntegerType::MAX_INT_BITS;
 
+  MaxLargeFPConvertBitWidthSupported = llvm::IntegerType::MAX_INT_BITS;
+
   MinCmpXchgSizeInBits = 0;
   SupportsUnalignedAtomics = false;
 
@@ -955,7 +957,7 @@ void TargetLoweringBase::setJumpIsExpensive(bool isExpensive) {
 TargetLoweringBase::LegalizeKind
 TargetLoweringBase::getTypeConversion(LLVMContext &Context, EVT VT) const {
   // Fully customized legalization.
-  Optional<LegalizeKind> CustomLK = getCustomTypeConversion(Context, VT);
+  std::optional<LegalizeKind> CustomLK = getCustomTypeConversion(Context, VT);
   if (CustomLK)
     return *CustomLK;
 

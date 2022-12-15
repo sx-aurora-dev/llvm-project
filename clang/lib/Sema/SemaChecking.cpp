@@ -1066,7 +1066,7 @@ void Sema::checkFortifiedBuiltinMemoryFunction(FunctionDecl *FD,
                             ? DABAttr->argIndices_begin()[Index]
                             : Index - DABIndices + FD->getNumParams();
     if (NewIndex >= TheCall->getNumArgs())
-      return llvm::None;
+      return std::nullopt;
     return NewIndex;
   };
 
@@ -1074,12 +1074,12 @@ void Sema::checkFortifiedBuiltinMemoryFunction(FunctionDecl *FD,
       [&](unsigned Index) -> Optional<llvm::APSInt> {
     Optional<unsigned> IndexOptional = TranslateIndex(Index);
     if (!IndexOptional)
-      return llvm::None;
+      return std::nullopt;
     unsigned NewIndex = *IndexOptional;
     Expr::EvalResult Result;
     Expr *SizeArg = TheCall->getArg(NewIndex);
     if (!SizeArg->EvaluateAsInt(Result, getASTContext()))
-      return llvm::None;
+      return std::nullopt;
     llvm::APSInt Integer = Result.Val.getInt();
     Integer.setIsUnsigned(true);
     return Integer;
@@ -1099,16 +1099,16 @@ void Sema::checkFortifiedBuiltinMemoryFunction(FunctionDecl *FD,
 
     Optional<unsigned> IndexOptional = TranslateIndex(Index);
     if (!IndexOptional)
-      return llvm::None;
+      return std::nullopt;
     unsigned NewIndex = *IndexOptional;
 
     if (NewIndex >= TheCall->getNumArgs())
-      return llvm::None;
+      return std::nullopt;
 
     const Expr *ObjArg = TheCall->getArg(NewIndex);
     uint64_t Result;
     if (!ObjArg->tryEvaluateObjectSize(Result, getASTContext(), BOSType))
-      return llvm::None;
+      return std::nullopt;
 
     // Get the object size in the target's size_t width.
     return llvm::APSInt::getUnsigned(Result).extOrTrunc(SizeTypeWidth);
@@ -1117,13 +1117,13 @@ void Sema::checkFortifiedBuiltinMemoryFunction(FunctionDecl *FD,
   auto ComputeStrLenArgument = [&](unsigned Index) -> Optional<llvm::APSInt> {
     Optional<unsigned> IndexOptional = TranslateIndex(Index);
     if (!IndexOptional)
-      return llvm::None;
+      return std::nullopt;
     unsigned NewIndex = *IndexOptional;
 
     const Expr *ObjArg = TheCall->getArg(NewIndex);
     uint64_t Result;
     if (!ObjArg->tryEvaluateStrLen(Result, getASTContext()))
-      return llvm::None;
+      return std::nullopt;
     // Add 1 for null byte.
     return llvm::APSInt::getUnsigned(Result + 1).extOrTrunc(SizeTypeWidth);
   };
@@ -3704,7 +3704,16 @@ bool Sema::CheckLoongArchBuiltinFunctionCall(const TargetInfo &TI,
   switch (BuiltinID) {
   default:
     break;
+  case LoongArch::BI__builtin_loongarch_crc_w_b_w:
+  case LoongArch::BI__builtin_loongarch_crc_w_h_w:
+  case LoongArch::BI__builtin_loongarch_crc_w_w_w:
   case LoongArch::BI__builtin_loongarch_crc_w_d_w:
+  case LoongArch::BI__builtin_loongarch_crcc_w_b_w:
+  case LoongArch::BI__builtin_loongarch_crcc_w_h_w:
+  case LoongArch::BI__builtin_loongarch_crcc_w_w_w:
+  case LoongArch::BI__builtin_loongarch_crcc_w_d_w:
+  case LoongArch::BI__builtin_loongarch_iocsrrd_d:
+  case LoongArch::BI__builtin_loongarch_iocsrwr_d:
     if (!TI.hasFeature("64bit"))
       return Diag(TheCall->getBeginLoc(),
                   diag::err_loongarch_builtin_requires_la64)
@@ -3716,6 +3725,30 @@ bool Sema::CheckLoongArchBuiltinFunctionCall(const TargetInfo &TI,
   case LoongArch::BI__builtin_loongarch_syscall:
     // Check if immediate is in [0, 32767].
     return SemaBuiltinConstantArgRange(TheCall, 0, 0, 32767);
+  case LoongArch::BI__builtin_loongarch_csrrd_w:
+    return SemaBuiltinConstantArgRange(TheCall, 0, 0, 16383);
+  case LoongArch::BI__builtin_loongarch_csrwr_w:
+    return SemaBuiltinConstantArgRange(TheCall, 1, 0, 16383);
+  case LoongArch::BI__builtin_loongarch_csrxchg_w:
+    return SemaBuiltinConstantArgRange(TheCall, 2, 0, 16383);
+  case LoongArch::BI__builtin_loongarch_csrrd_d:
+    if (!TI.hasFeature("64bit"))
+      return Diag(TheCall->getBeginLoc(),
+                  diag::err_loongarch_builtin_requires_la64)
+             << TheCall->getSourceRange();
+    return SemaBuiltinConstantArgRange(TheCall, 0, 0, 16383);
+  case LoongArch::BI__builtin_loongarch_csrwr_d:
+    if (!TI.hasFeature("64bit"))
+      return Diag(TheCall->getBeginLoc(),
+                  diag::err_loongarch_builtin_requires_la64)
+             << TheCall->getSourceRange();
+    return SemaBuiltinConstantArgRange(TheCall, 1, 0, 16383);
+  case LoongArch::BI__builtin_loongarch_csrxchg_d:
+    if (!TI.hasFeature("64bit"))
+      return Diag(TheCall->getBeginLoc(),
+                  diag::err_loongarch_builtin_requires_la64)
+             << TheCall->getSourceRange();
+    return SemaBuiltinConstantArgRange(TheCall, 2, 0, 16383);
   }
 
   return false;
@@ -4264,10 +4297,11 @@ bool Sema::CheckPPCBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                             diag::err_ppc_builtin_requires_vsx);
   case PPC::BI__builtin_ppc_test_data_class: {
     // Check if the first argument of the __builtin_ppc_test_data_class call is
-    // valid. The argument must be either a 'float' or a 'double'.
+    // valid. The argument must be 'float' or 'double' or '__float128'.
     QualType ArgType = TheCall->getArg(0)->getType();
     if (ArgType != QualType(Context.FloatTy) &&
-        ArgType != QualType(Context.DoubleTy))
+        ArgType != QualType(Context.DoubleTy) &&
+        ArgType != QualType(Context.Float128Ty))
       return Diag(TheCall->getBeginLoc(),
                   diag::err_ppc_invalid_test_data_class_type);
     return SemaFeatureCheck(*this, TheCall, "isa-v30-instructions",
@@ -7196,6 +7230,9 @@ bool Sema::SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall) {
   if (checkVAStartABI(*this, BuiltinID, Fn))
     return true;
 
+  // In C2x mode, va_start only needs one argument. However, the builtin still
+  // requires two arguments (which matches the behavior of the GCC builtin),
+  // <stdarg.h> passes `0` as the second argument in C2x mode.
   if (checkArgCount(*this, TheCall, 2))
     return true;
 
@@ -7209,9 +7246,15 @@ bool Sema::SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall) {
     return true;
 
   // Verify that the second argument to the builtin is the last argument of the
-  // current function or method.
+  // current function or method. In C2x mode, if the second argument is an
+  // integer constant expression with value 0, then we don't bother with this
+  // check.
   bool SecondArgIsLastNamedArgument = false;
   const Expr *Arg = TheCall->getArg(1)->IgnoreParenCasts();
+  if (Optional<llvm::APSInt> Val =
+          TheCall->getArg(1)->getIntegerConstantExpr(Context);
+      Val && LangOpts.C2x && *Val == 0)
+    return false;
 
   // These are valid if SecondArgIsLastNamedArgument is false after the next
   // block.
@@ -7252,7 +7295,6 @@ bool Sema::SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall) {
     Diag(ParamLoc, diag::note_parameter_type) << Type;
   }
 
-  TheCall->setType(Context.VoidTy);
   return false;
 }
 
@@ -9122,7 +9164,7 @@ public:
   EmitFormatDiagnostic(Sema &S, bool inFunctionCall, const Expr *ArgumentExpr,
                        const PartialDiagnostic &PDiag, SourceLocation StringLoc,
                        bool IsStringLocation, Range StringRange,
-                       ArrayRef<FixItHint> Fixit = None);
+                       ArrayRef<FixItHint> Fixit = std::nullopt);
 
 protected:
   bool HandleInvalidConversionSpecifier(unsigned argIndex, SourceLocation Loc,
@@ -9149,7 +9191,7 @@ protected:
   template <typename Range>
   void EmitFormatDiagnostic(PartialDiagnostic PDiag, SourceLocation StringLoc,
                             bool IsStringLocation, Range StringRange,
-                            ArrayRef<FixItHint> Fixit = None);
+                            ArrayRef<FixItHint> Fixit = std::nullopt);
 };
 
 } // namespace
@@ -12732,7 +12774,7 @@ struct PromotedRange {
       if (R & EQ) return StringRef("'std::strong_ordering::equal'");
       if (R & LTFlag) return StringRef("'std::strong_ordering::less'");
       if (R & GTFlag) return StringRef("'std::strong_ordering::greater'");
-      return llvm::None;
+      return std::nullopt;
     }
 
     ComparisonResult TrueFlag, FalseFlag;
@@ -12757,7 +12799,7 @@ struct PromotedRange {
       return StringRef("true");
     if (R & FalseFlag)
       return StringRef("false");
-    return llvm::None;
+    return std::nullopt;
   }
 };
 }
@@ -15577,8 +15619,8 @@ void Sema::CheckUnsequencedOperations(const Expr *E) {
 
 void Sema::CheckCompletedExpr(Expr *E, SourceLocation CheckLoc,
                               bool IsConstexpr) {
-  llvm::SaveAndRestore<bool> ConstantContext(
-      isConstantEvaluatedOverride, IsConstexpr || isa<ConstantExpr>(E));
+  llvm::SaveAndRestore ConstantContext(isConstantEvaluatedOverride,
+                                       IsConstexpr || isa<ConstantExpr>(E));
   CheckImplicitConversions(E, CheckLoc);
   if (!E->isInstantiationDependent())
     CheckUnsequencedOperations(E);
@@ -15744,12 +15786,12 @@ getAlignmentAndOffsetFromBinAddOrSub(const Expr *PtrE, const Expr *IntE,
   QualType PointeeType = PtrE->getType()->getPointeeType();
 
   if (!PointeeType->isConstantSizeType())
-    return llvm::None;
+    return std::nullopt;
 
   auto P = getBaseAlignmentAndOffsetFromPtr(PtrE, Ctx);
 
   if (!P)
-    return llvm::None;
+    return std::nullopt;
 
   CharUnits EltSize = Ctx.getTypeSizeInChars(PointeeType);
   if (Optional<llvm::APSInt> IdxRes = IntE->getIntegerConstantExpr(Ctx)) {
@@ -15852,7 +15894,7 @@ static getBaseAlignmentAndOffsetFromLValue(const Expr *E, ASTContext &Ctx) {
     break;
   }
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// This helper function takes a pointer expression and returns the alignment of
@@ -15917,7 +15959,7 @@ static getBaseAlignmentAndOffsetFromPtr(const Expr *E, ASTContext &Ctx) {
     break;
   }
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 static CharUnits getPresumedAlignmentOfPointer(const Expr *E, Sema &S) {
@@ -16021,9 +16063,8 @@ void Sema::CheckArrayAccess(const Expr *BaseExpr, const Expr *IndexExpr,
       return;
     if (index.isUnsigned() || !index.isNegative()) {
       const auto &ASTC = getASTContext();
-      unsigned AddrBits =
-          ASTC.getTargetInfo().getPointerWidth(ASTC.getTargetAddressSpace(
-              EffectiveType->getCanonicalTypeInternal()));
+      unsigned AddrBits = ASTC.getTargetInfo().getPointerWidth(
+          EffectiveType->getCanonicalTypeInternal().getAddressSpace());
       if (index.getBitWidth() < AddrBits)
         index = index.zext(AddrBits);
       Optional<CharUnits> ElemCharUnits =
@@ -16485,7 +16526,7 @@ static Optional<int> GetNSMutableArrayArgumentIndex(Sema &S,
                                                 Message->getReceiverInterface(),
                                                 NSAPI::ClassId_NSMutableArray);
   if (!IsMutableArray) {
-    return None;
+    return std::nullopt;
   }
 
   Selector Sel = Message->getSelector();
@@ -16493,7 +16534,7 @@ static Optional<int> GetNSMutableArrayArgumentIndex(Sema &S,
   Optional<NSAPI::NSArrayMethodKind> MKOpt =
     S.NSAPIObj->getNSArrayMethodKind(Sel);
   if (!MKOpt) {
-    return None;
+    return std::nullopt;
   }
 
   NSAPI::NSArrayMethodKind MK = *MKOpt;
@@ -16507,10 +16548,10 @@ static Optional<int> GetNSMutableArrayArgumentIndex(Sema &S,
       return 1;
 
     default:
-      return None;
+      return std::nullopt;
   }
 
-  return None;
+  return std::nullopt;
 }
 
 static
@@ -16520,7 +16561,7 @@ Optional<int> GetNSMutableDictionaryArgumentIndex(Sema &S,
                                             Message->getReceiverInterface(),
                                             NSAPI::ClassId_NSMutableDictionary);
   if (!IsMutableDictionary) {
-    return None;
+    return std::nullopt;
   }
 
   Selector Sel = Message->getSelector();
@@ -16528,7 +16569,7 @@ Optional<int> GetNSMutableDictionaryArgumentIndex(Sema &S,
   Optional<NSAPI::NSDictionaryMethodKind> MKOpt =
     S.NSAPIObj->getNSDictionaryMethodKind(Sel);
   if (!MKOpt) {
-    return None;
+    return std::nullopt;
   }
 
   NSAPI::NSDictionaryMethodKind MK = *MKOpt;
@@ -16540,10 +16581,10 @@ Optional<int> GetNSMutableDictionaryArgumentIndex(Sema &S,
       return 0;
 
     default:
-      return None;
+      return std::nullopt;
   }
 
-  return None;
+  return std::nullopt;
 }
 
 static Optional<int> GetNSSetArgumentIndex(Sema &S, ObjCMessageExpr *Message) {
@@ -16555,14 +16596,14 @@ static Optional<int> GetNSSetArgumentIndex(Sema &S, ObjCMessageExpr *Message) {
                                             Message->getReceiverInterface(),
                                             NSAPI::ClassId_NSMutableOrderedSet);
   if (!IsMutableSet && !IsMutableOrderedSet) {
-    return None;
+    return std::nullopt;
   }
 
   Selector Sel = Message->getSelector();
 
   Optional<NSAPI::NSSetMethodKind> MKOpt = S.NSAPIObj->getNSSetMethodKind(Sel);
   if (!MKOpt) {
-    return None;
+    return std::nullopt;
   }
 
   NSAPI::NSSetMethodKind MK = *MKOpt;
@@ -16577,7 +16618,7 @@ static Optional<int> GetNSSetArgumentIndex(Sema &S, ObjCMessageExpr *Message) {
       return 1;
   }
 
-  return None;
+  return std::nullopt;
 }
 
 void Sema::CheckObjCCircularContainer(ObjCMessageExpr *Message) {

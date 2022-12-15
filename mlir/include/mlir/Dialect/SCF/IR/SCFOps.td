@@ -222,7 +222,7 @@ def ForOp : SCF_Op<"for",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$lowerBound, "Value":$upperBound, "Value":$step,
-      CArg<"ValueRange", "llvm::None">:$iterArgs,
+      CArg<"ValueRange", "std::nullopt">:$iterArgs,
       CArg<"function_ref<void(OpBuilder &, Location, Value, ValueRange)>",
            "nullptr">)>
   ];
@@ -273,13 +273,13 @@ def ForOp : SCF_Op<"for",
       return getOperation()->getNumOperands() - getNumControlOperands();
     }
     /// Get the iter arg number for an operand. If it isnt an iter arg
-    /// operand return llvm::None.
+    /// operand return std::nullopt.
     Optional<unsigned> getIterArgNumberForOpOperand(OpOperand &opOperand) {
       if (opOperand.getOwner() != getOperation())
-        return llvm::None;
+        return std::nullopt;
       unsigned operandNumber = opOperand.getOperandNumber();
       if (operandNumber < getNumControlOperands())
-        return llvm::None;
+        return std::nullopt;
       return operandNumber - getNumControlOperands();
     }
 
@@ -382,10 +382,10 @@ def ForeachThreadOp : SCF_Op<"foreach_thread", [
     An optional `mapping` is an attribute array that specifies processing units
     with their dimension, how it remaps 1-1 to a set of concrete processing
     element resources (e.g. a CUDA grid dimension or a level of concrete nested
-    async parallelism). It is expressed via any attribute that implements the 
-    device mapping interface. It is the reponsibility of the lowering mechanism 
-    to interpret the `mapping` attributes in the context of the concrete target 
-    the op is lowered to, or to ignore it when the specification is ill-formed 
+    async parallelism). It is expressed via any attribute that implements the
+    device mapping interface. It is the reponsibility of the lowering mechanism
+    to interpret the `mapping` attributes in the context of the concrete target
+    the op is lowered to, or to ignore it when the specification is ill-formed
     or unsupported for a particular target.
 
     The only allowed terminator is `scf.foreach_thread.perform_concurrently`.
@@ -445,7 +445,7 @@ def ForeachThreadOp : SCF_Op<"foreach_thread", [
 
     ```mlir
     //
-    // Sequential context. Here `mapping` is expressed as GPU thread mapping 
+    // Sequential context. Here `mapping` is expressed as GPU thread mapping
     // attributes
     //
     %matmul_and_pointwise:2 = scf.foreach_thread (%thread_id_1, %thread_id_2) in

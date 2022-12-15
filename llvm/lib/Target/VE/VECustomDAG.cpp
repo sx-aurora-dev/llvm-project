@@ -108,13 +108,13 @@ SDValue getUnpackAVL(SDValue N) { return N->getOperand(1); }
 
 /// Node Properties {
 
-Optional<unsigned> inferAVLFromMask(SDValue Mask) {
+std::optional<unsigned> inferAVLFromMask(SDValue Mask) {
   if (!Mask)
-    return None;
+    return std::nullopt;
 
   std::unique_ptr<MaskView> MV(requestMaskView(Mask.getNode()));
   if (!MV)
-    return None;
+    return std::nullopt;
 
   unsigned FirstDef, LastDef, NumElems;
   BVMaskKind BVK = AnalyzeBitMaskView(*MV.get(), FirstDef, LastDef, NumElems);
@@ -127,7 +127,7 @@ Optional<unsigned> inferAVLFromMask(SDValue Mask) {
   return Mask.getValueType().getVectorNumElements();
 }
 
-Optional<unsigned> getVVPOpcode(unsigned OpCode) {
+std::optional<unsigned> getVVPOpcode(unsigned OpCode) {
   if (isVVPOrVEC(OpCode))
     return OpCode;
 
@@ -138,7 +138,7 @@ Optional<unsigned> getVVPOpcode(unsigned OpCode) {
 
   switch (OpCode) {
   default:
-    return None;
+    return std::nullopt;
 
   case ISD::SCALAR_TO_VECTOR:
     return VEISD::VEC_BROADCAST;
@@ -309,7 +309,7 @@ bool isVVP(unsigned Opcode) {
 }
 
 // Return the AVL operand position for this VVP Op.
-Optional<int> getAVLPos(unsigned Opc) {
+std::optional<int> getAVLPos(unsigned Opc) {
   // This is only available for VP SDNodes
   auto PosOpt = ISD::getVPExplicitVectorLengthIdx(Opc);
   if (PosOpt)
@@ -344,14 +344,14 @@ Optional<int> getAVLPos(unsigned Opc) {
   if (isVVP(Opc)) {
     auto MaskOpt = getMaskPos(Opc);
     if (!MaskOpt)
-      return None;
+      return std::nullopt;
     return *MaskOpt + 1;
   }
-  return None;
+  return std::nullopt;
 }
 
 // Return the mask operand position for this VVP or VEC op.
-Optional<int> getMaskPos(unsigned Opc) {
+std::optional<int> getMaskPos(unsigned Opc) {
 
   // These VP Opcodes do not have a mask in the VP sense and so ISD::getVPMaskIdx
   // would not report it.
@@ -398,7 +398,7 @@ Optional<int> getMaskPos(unsigned Opc) {
   case VEISD::VEC_PACK:
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_SEQ:
-    return None;
+    return std::nullopt;
   case VEISD::VEC_VMV:
     return 2;
   }
@@ -427,7 +427,7 @@ Optional<int> getMaskPos(unsigned Opc) {
     return 3;
   if (isVVPReductionOp(Opc))
     return *getReductionVectorParamPos(Opc) + 1;
-  return None;
+  return std::nullopt;
 }
 
 SDValue getNodeAVL(SDValue Op) {
@@ -453,7 +453,7 @@ PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   case VEISD::VVP_REDUCE_SEQ_FMUL:
     return 0;
   default:
-    return None;
+    return std::nullopt;
   }
 }
 
@@ -479,7 +479,7 @@ PosOpt getReductionStartParamPos(unsigned OPC) {
   case VEISD::VVP_REDUCE_SEQ_FMUL:
     return 0;
   default:
-    return None;
+    return std::nullopt;
   }
 }
 
@@ -517,12 +517,12 @@ PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
   case ISD::VECREDUCE_SEQ_FMUL:
     return 1;
   }
-  return None;
+  return std::nullopt;
 }
 
 PosOpt getVVPReductionVectorParamPos(unsigned VVPOpcode) {
   if (!isVVPReductionOp(VVPOpcode))
-    return None;
+    return std::nullopt;
 
   PosOpt StartPosOpt = getVVPReductionStartParamPos(VVPOpcode);
   if (!StartPosOpt)
@@ -548,7 +548,7 @@ PosOpt getReductionVectorParamPos(unsigned ISD) {
 
 /// } Node Properties
 
-Optional<unsigned> getVVPForVP(unsigned VPOC) {
+std::optional<unsigned> getVVPForVP(unsigned VPOC) {
   switch (VPOC) {
 #define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD)                                    \
   case ISD::VP_ISD:                                                            \
@@ -556,11 +556,11 @@ Optional<unsigned> getVVPForVP(unsigned VPOC) {
 #include "VVPNodes.def"
 
   default:
-    return None;
+    return std::nullopt;
   }
 }
 
-Optional<EVT> getIdiomaticType(SDNode *Op) {
+std::optional<EVT> getIdiomaticType(SDNode *Op) {
   // For reductions -> the reduced vector type
   PosOpt RedVecPos = getReductionVectorParamPos(Op->getOpcode());
   if (RedVecPos)
@@ -581,7 +581,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
     // For memory ops -> the transfered data type
     if (auto MemN = dyn_cast<MemSDNode>(Op))
       return MemN->getMemoryVT();
-    return None;
+    return std::nullopt;
 
   // Standard ISD.
   case ISD::VSELECT: // not aliased with VVP_SELECT
@@ -776,14 +776,14 @@ bool hasDeadMask(unsigned VVPOC) {
   }
 }
 
-Optional<unsigned> peekForNarrow(SDValue Op) {
+std::optional<unsigned> peekForNarrow(SDValue Op) {
   if (!Op.getValueType().isVector())
-    return None;
+    return std::nullopt;
   if (Op->use_size() != 1)
-    return None;
+    return std::nullopt;
   auto OnlyN = *Op->use_begin();
   if (OnlyN->getOpcode() != VEISD::VEC_NARROW)
-    return None;
+    return std::nullopt;
   return cast<ConstantSDNode>(OnlyN->getOperand(1))->getZExtValue();
 }
 
@@ -840,7 +840,7 @@ SDValue VECustomDAG::inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const {
 }
 
 /// Helper class for short hand custom node creation ///
-SDValue VECustomDAG::getSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const {
+SDValue VECustomDAG::getSeq(EVT ResTy, std::optional<SDValue> OpVectorLength) const {
   // Pick VL
   SDValue VectorLen;
   if (OpVectorLength.has_value()) {
@@ -1130,7 +1130,7 @@ SDValue getMemoryPtr(SDValue Op) {
   return SDValue();
 }
 
-Optional<EVT> getIdiomaticVectorType(SDNode *Op) {
+std::optional<EVT> getIdiomaticVectorType(SDNode *Op) {
   unsigned OC = Op->getOpcode();
 
   // For memory ops -> the transfered data type
@@ -1511,12 +1511,12 @@ SDValue VECustomDAG::getIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
   return getNode(VEISD::VVP_SUB, ResVT, {Dividend, Mul, Mask, AVL});
 }
 
-static Optional<unsigned> getNonVVPMaskOp(unsigned VVPOC, EVT ResVT) {
+static std::optional<unsigned> getNonVVPMaskOp(unsigned VVPOC, EVT ResVT) {
   if (!isMaskType(ResVT))
-    return None;
+    return std::nullopt;
   switch (VVPOC) {
   default:
-    return None;
+    return std::nullopt;
 
   case VEISD::VVP_AND:
     return ISD::AND;
@@ -1539,7 +1539,7 @@ SDValue VECustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT,
                                          SDValue A, SDValue B, SDValue Mask,
                                          SDValue AVL, SDNodeFlags Flags) const {
   // Ignore AVL, Mask in mask arithmetic and expand to a standard ISD.
-  if (Optional<unsigned> PlainOpc = getNonVVPMaskOp(VVPOpcode, ResVT))
+  if (std::optional<unsigned> PlainOpc = getNonVVPMaskOp(VVPOpcode, ResVT))
     return getNode(*PlainOpc, ResVT, {A, B});
 
   // Expand S/UREM.

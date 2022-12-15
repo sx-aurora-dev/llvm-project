@@ -350,9 +350,9 @@ BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
   int64_t lastElemValue;
   BlockLength = 16;
 
-  // Optional<int64_t> InnerStrideOpt;
-  // Optional<int64_t> OuterStrideOpt
-  // Optional<unsigned> BlockSizeOpt;
+  // std::optional<int64_t> InnerStrideOpt;
+  // std::optional<int64_t> OuterStrideOpt
+  // std::optional<unsigned> BlockSizeOpt;
 
   for (unsigned i = 0; i < MV.getNumElements(); ++i) {
     auto ES = MV.getSourceElem(i);

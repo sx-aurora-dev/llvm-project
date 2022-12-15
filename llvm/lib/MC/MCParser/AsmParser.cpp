@@ -64,6 +64,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -237,9 +238,11 @@ public:
     AssemblerDialect = i;
   }
 
-  void Note(SMLoc L, const Twine &Msg, SMRange Range = None) override;
-  bool Warning(SMLoc L, const Twine &Msg, SMRange Range = None) override;
-  bool printError(SMLoc L, const Twine &Msg, SMRange Range = None) override;
+  void Note(SMLoc L, const Twine &Msg, SMRange Range = std::nullopt) override;
+  bool Warning(SMLoc L, const Twine &Msg,
+               SMRange Range = std::nullopt) override;
+  bool printError(SMLoc L, const Twine &Msg,
+                  SMRange Range = std::nullopt) override;
 
   const AsmToken &Lex() override;
 
@@ -322,7 +325,7 @@ private:
 
   void printMacroInstantiations();
   void printMessage(SMLoc Loc, SourceMgr::DiagKind Kind, const Twine &Msg,
-                    SMRange Range = None) const {
+                    SMRange Range = std::nullopt) const {
     ArrayRef<SMRange> Ranges(Range);
     SrcMgr.PrintMessage(Loc, Kind, Msg, Ranges);
   }
@@ -539,6 +542,7 @@ private:
     DK_LTO_DISCARD,
     DK_LTO_SET_CONDITIONAL,
     DK_CFI_MTE_TAGGED_FRAME,
+    DK_MEMTAG,
     DK_END
   };
 
@@ -948,10 +952,9 @@ bool AsmParser::enabledGenDwarfForAssembly() {
     // Use the first #line directive for this, if any. It's preprocessed, so
     // there is no checksum, and of course no source directive.
     if (!FirstCppHashFilename.empty())
-      getContext().setMCLineTableRootFile(/*CUID=*/0,
-                                          getContext().getCompilationDir(),
-                                          FirstCppHashFilename,
-                                          /*Cksum=*/None, /*Source=*/None);
+      getContext().setMCLineTableRootFile(
+          /*CUID=*/0, getContext().getCompilationDir(), FirstCppHashFilename,
+          /*Cksum=*/std::nullopt, /*Source=*/std::nullopt);
     const MCDwarfFile &RootFile =
         getContext().getMCDwarfLineTable(/*CUID=*/0).getRootFile();
     getContext().setGenDwarfFileNumber(getStreamer().emitDwarfFileDirective(
@@ -2298,6 +2301,8 @@ bool AsmParser::parseStatement(ParseStatementInfo &Info,
       return parseDirectivePseudoProbe();
     case DK_LTO_DISCARD:
       return parseDirectiveLTODiscard();
+    case DK_MEMTAG:
+      return parseDirectiveSymbolAttribute(MCSA_Memtag);
     }
 
     return Error(IDLoc, "unknown directive");
@@ -3178,7 +3183,7 @@ bool AsmParser::parseDirectiveReloc(SMLoc DirectiveLoc) {
 
   const MCTargetAsmParser &MCT = getTargetParser();
   const MCSubtargetInfo &STI = MCT.getSTI();
-  if (Optional<std::pair<bool, std::string>> Err =
+  if (std::optional<std::pair<bool, std::string>> Err =
           getStreamer().emitRelocDirective(*Offset, Name, Expr, DirectiveLoc,
                                            STI))
     return Error(Err->first ? NameLoc : OffsetLoc, Err->second);
@@ -3534,7 +3539,7 @@ bool AsmParser::parseDirectiveFile(SMLoc DirectiveLoc) {
   uint64_t MD5Hi, MD5Lo;
   bool HasMD5 = false;
 
-  Optional<StringRef> Source;
+  std::optional<StringRef> Source;
   bool HasSource = false;
   std::string SourceString;
 
@@ -3578,7 +3583,7 @@ bool AsmParser::parseDirectiveFile(SMLoc DirectiveLoc) {
       Ctx.setGenDwarfForAssembly(false);
     }
 
-    Optional<MD5::MD5Result> CKMem;
+    std::optional<MD5::MD5Result> CKMem;
     if (HasMD5) {
       MD5::MD5Result Sum;
       for (unsigned i = 0; i != 8; ++i) {
@@ -4984,8 +4989,9 @@ bool AsmParser::parseDirectiveSymbolAttribute(MCSymbolAttr Attr) {
 
     MCSymbol *Sym = getContext().getOrCreateSymbol(Name);
 
-    // Assembler local symbols don't make any sense here. Complain loudly.
-    if (Sym->isTemporary())
+    // Assembler local symbols don't make any sense here, except for directives
+    // that the symbol should be tagged.
+    if (Sym->isTemporary() && Attr != MCSA_Memtag)
       return Error(Loc, "non-local symbol required");
 
     if (!getStreamer().emitSymbolAttribute(Sym, Attr))
@@ -5053,11 +5059,12 @@ bool AsmParser::parseDirectiveComm(bool IsLocal) {
 
   // Create the Symbol as a common or local common with Size and Pow2Alignment
   if (IsLocal) {
-    getStreamer().emitLocalCommonSymbol(Sym, Size, 1 << Pow2Alignment);
+    getStreamer().emitLocalCommonSymbol(Sym, Size,
+                                        Align(1ULL << Pow2Alignment));
     return false;
   }
 
-  getStreamer().emitCommonSymbol(Sym, Size, 1 << Pow2Alignment);
+  getStreamer().emitCommonSymbol(Sym, Size, Align(1ULL << Pow2Alignment));
   return false;
 }
 
@@ -5598,6 +5605,7 @@ void AsmParser::initializeDirectiveKindMap() {
   DirectiveKindMap[".pseudoprobe"] = DK_PSEUDO_PROBE;
   DirectiveKindMap[".lto_discard"] = DK_LTO_DISCARD;
   DirectiveKindMap[".lto_set_conditional"] = DK_LTO_SET_CONDITIONAL;
+  DirectiveKindMap[".memtag"] = DK_MEMTAG;
 }
 
 MCAsmMacro *AsmParser::parseMacroLikeBody(SMLoc DirectiveLoc) {
@@ -5693,7 +5701,8 @@ bool AsmParser::parseDirectiveRept(SMLoc DirectiveLoc, StringRef Dir) {
   raw_svector_ostream OS(Buf);
   while (Count--) {
     // Note that the AtPseudoVariable is disabled for instantiations of .rep(t).
-    if (expandMacro(OS, M->Body, None, None, false, getTok().getLoc()))
+    if (expandMacro(OS, M->Body, std::nullopt, std::nullopt, false,
+                    getTok().getLoc()))
       return true;
   }
   instantiateMacroLikeBody(M, DirectiveLoc, OS);

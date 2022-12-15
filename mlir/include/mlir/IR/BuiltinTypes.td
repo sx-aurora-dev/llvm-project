@@ -421,7 +421,7 @@ def Builtin_MemRef : Builtin_Type<"MemRef", [
     affine form through explicit linearization:
 
     ```mlir
-    affine_map<(d0, ... dN)[offset, stride0, ... strideN] -> 
+    affine_map<(d0, ... dN)[offset, stride0, ... strideN] ->
                 (offset + d0 * stride0 + ... dN * strideN)>
     ```
 
@@ -880,7 +880,7 @@ def Builtin_UnrankedMemRef : Builtin_Type<"UnrankedMemRef", [
     using ShapedType::Trait<UnrankedMemRefType>::getDimSize;
     using ShapedType::Trait<UnrankedMemRefType>::getDynamicDimIndex;
 
-    ArrayRef<int64_t> getShape() const { return llvm::None; }
+    ArrayRef<int64_t> getShape() const { return std::nullopt; }
 
     /// [deprecated] Returns the memory space in old raw integer representation.
     /// New `Attribute getMemorySpace()` method should be used instead.
@@ -933,7 +933,7 @@ def Builtin_UnrankedTensor : Builtin_Type<"UnrankedTensor", [
     using ShapedType::Trait<UnrankedTensorType>::getDimSize;
     using ShapedType::Trait<UnrankedTensorType>::getDynamicDimIndex;
 
-    ArrayRef<int64_t> getShape() const { return llvm::None; }
+    ArrayRef<int64_t> getShape() const { return std::nullopt; }
   }];
   let skipDefaultBuilders = 1;
   let genVerifyDecl = 1;

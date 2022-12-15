@@ -17,12 +17,13 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
+#include <optional>
 
 namespace llvm {
 
 class Loop;
 
-using ConstVF = Optional<size_t>;
+using ConstVF = std::optional<size_t>;
 
 // Iteration dependence descriptor for a given loop.
 // @baziotis: This is the actual interface. Everyting below is just boilerplate

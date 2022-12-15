@@ -311,7 +311,7 @@ public:
       return isSupportedReduction(VPI.getIntrinsicID(), Unordered);
     }
 
-    Optional<unsigned> OpCodeOpt = VPI.getFunctionalOpcode();
+    std::optional<unsigned> OpCodeOpt = VPI.getFunctionalOpcode();
     unsigned OpCode = OpCodeOpt ? *OpCodeOpt : Instruction::Call;
 
     switch (OpCode) {

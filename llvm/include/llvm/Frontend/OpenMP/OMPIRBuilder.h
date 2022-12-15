@@ -1077,7 +1077,7 @@ public:
   /// <critical_section_name> + ".var" for "omp critical" directives; 2)
   /// <mangled_name_for_global_var> + ".cache." for cache for threadprivate
   /// variables.
-  StringMap<AssertingVH<Constant>, BumpPtrAllocator> InternalVars;
+  StringMap<Constant*, BumpPtrAllocator> InternalVars;
 
   /// Create the global variable holding the offload mappings information.
   GlobalVariable *createOffloadMaptypes(SmallVectorImpl<uint64_t> &Mappings,
@@ -1460,6 +1460,40 @@ public:
                           bool RequiresFullRuntime);
 
   ///}
+
+private:
+  // Sets the function attributes expected for the outlined function
+  void setOutlinedTargetRegionFunctionAttributes(Function *OutlinedFn,
+                                                 int32_t NumTeams,
+                                                 int32_t NumThreads);
+
+  // Creates the function ID/Address for the given outlined function.
+  // In the case of an embedded device function the address of the function is
+  // used, in the case of a non-offload function a constant is created.
+  Constant *createOutlinedFunctionID(Function *OutlinedFn,
+                                     StringRef EntryFnIDName);
+
+  // Creates the region entry address for the outlined function
+  Constant *createTargetRegionEntryAddr(Function *OutlinedFunction,
+                                        StringRef EntryFnName);
+
+public:
+  /// Registers the given function and sets up the attribtues of the function
+  /// Returns the FunctionID.
+  ///
+  /// \param InfoManager The info manager keeping track of the offload entries
+  /// \param EntryInfo The entry information about the function
+  /// \param OutlinedFunction Pointer to the outlined function
+  /// \param EntryFnName Name of the outlined function
+  /// \param EntryFnIDName Name of the ID o be created
+  /// \param NumTeams Number default teams
+  /// \param NumThreads Number default threads
+  Constant *registerTargetRegionFunction(OffloadEntriesInfoManager &InfoManager,
+                                         TargetRegionEntryInfo &EntryInfo,
+                                         Function *OutlinedFunction,
+                                         StringRef EntryFnName,
+                                         StringRef EntryFnIDName,
+                                         int32_t NumTeams, int32_t NumThreads);
 
   /// Declarations for LLVM-IR types (simple, array, function and structure) are
   /// generated below. Their names are defined and used in OpenMPKinds.def. Here

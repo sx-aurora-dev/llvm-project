@@ -46,7 +46,7 @@ private:
   /// larger synchronization scope is inclusive of a smaller synchronization
   /// scope.
   ///
-  /// \returns \p SSID's inclusion ordering, or "None" if \p SSID is not
+  /// \returns \p SSID's inclusion ordering, or "std::nullopt" if \p SSID is not
   /// supported by the AMDGPU target.
   Optional<uint8_t> getSyncScopeInclusionOrdering(SyncScope::ID SSID) const {
     if (SSID == SyncScope::SingleThread ||
@@ -65,7 +65,7 @@ private:
              SSID == getSystemOneAddressSpaceSSID())
       return 4;
 
-    return None;
+    return std::nullopt;
   }
 
   /// \returns True if \p SSID is restricted to single address space, false
@@ -126,7 +126,7 @@ public:
     const auto &AIO = getSyncScopeInclusionOrdering(A);
     const auto &BIO = getSyncScopeInclusionOrdering(B);
     if (!AIO || !BIO)
-      return None;
+      return std::nullopt;
 
     bool IsAOneAddressSpace = isOneAddressSpace(A);
     bool IsBOneAddressSpace = isOneAddressSpace(B);

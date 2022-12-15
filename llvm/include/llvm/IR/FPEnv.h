@@ -16,8 +16,8 @@
 #define LLVM_IR_FPENV_H
 
 #include "llvm/ADT/FloatingPointMode.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/IR/FMF.h"
+#include <optional>
 
 namespace llvm {
 class StringRef;
@@ -49,19 +49,19 @@ enum ExceptionBehavior : uint8_t {
 /// Returns a valid RoundingMode enumerator when given a string
 /// that is valid as input in constrained intrinsic rounding mode
 /// metadata.
-Optional<RoundingMode> convertStrToRoundingMode(StringRef);
+std::optional<RoundingMode> convertStrToRoundingMode(StringRef);
 
 /// For any RoundingMode enumerator, returns a string valid as input in
 /// constrained intrinsic rounding mode metadata.
-Optional<StringRef> convertRoundingModeToStr(RoundingMode);
+std::optional<StringRef> convertRoundingModeToStr(RoundingMode);
 
 /// Returns a valid ExceptionBehavior enumerator when given a string
 /// valid as input in constrained intrinsic exception behavior metadata.
-Optional<fp::ExceptionBehavior> convertStrToExceptionBehavior(StringRef);
+std::optional<fp::ExceptionBehavior> convertStrToExceptionBehavior(StringRef);
 
 /// For any ExceptionBehavior enumerator, returns a string valid as
 /// input in constrained intrinsic exception behavior metadata.
-Optional<StringRef> convertExceptionBehaviorToStr(fp::ExceptionBehavior);
+std::optional<StringRef> convertExceptionBehaviorToStr(fp::ExceptionBehavior);
 
 /// Return the IR Value representation of any ExceptionBehavior.
 Value *GetConstrainedFPExcept(LLVMContext &, fp::ExceptionBehavior);

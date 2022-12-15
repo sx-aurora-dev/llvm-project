@@ -17,6 +17,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/SourceMgr.h"
 #include "gtest/gtest.h"
+#include <optional>
 #include <sstream>
 
 using namespace llvm;
@@ -193,6 +194,10 @@ protected:
 
     Str << " declare <8 x i16> @llvm.vp.bswap.v8i16"
         << "(<8 x i16>, <8 x i1>, i32) ";
+    Str << " declare <8 x i16> @llvm.vp.fshl.v8i16"
+        << "(<8 x i16>, <8 x i16>, <8 x i16>, <8 x i1>, i32) ";
+    Str << " declare <8 x i16> @llvm.vp.fshr.v8i16"
+        << "(<8 x i16>, <8 x i16>, <8 x i16>, <8 x i1>, i32) ";
 
     return parseAssemblyString(Str.str(), Err, C);
   }
@@ -200,23 +205,23 @@ protected:
 
 /// Check that the property scopes include/llvm/IR/VPIntrinsics.def are closed.
 TEST_F(VPIntrinsicTest, VPIntrinsicsDefScopes) {
-  Optional<Intrinsic::ID> ScopeVPID;
+  std::optional<Intrinsic::ID> ScopeVPID;
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...)                                 \
   ASSERT_FALSE(ScopeVPID.has_value());                                         \
   ScopeVPID = Intrinsic::VPID;
 #define END_REGISTER_VP_INTRINSIC(VPID)                                        \
   ASSERT_TRUE(ScopeVPID.has_value());                                          \
   ASSERT_EQ(ScopeVPID.value(), Intrinsic::VPID);                               \
-  ScopeVPID = None;
+  ScopeVPID = std::nullopt;
 
-  Optional<ISD::NodeType> ScopeOPC;
+  std::optional<ISD::NodeType> ScopeOPC;
 #define BEGIN_REGISTER_VP_SDNODE(SDOPC, ...)                                   \
   ASSERT_FALSE(ScopeOPC.has_value());                                          \
   ScopeOPC = ISD::SDOPC;
 #define END_REGISTER_VP_SDNODE(SDOPC)                                          \
   ASSERT_TRUE(ScopeOPC.has_value());                                           \
   ASSERT_EQ(ScopeOPC.value(), ISD::SDOPC);                                     \
-  ScopeOPC = None;
+  ScopeOPC = std::nullopt;
 #include "llvm/IR/VPIntrinsics.def"
 
   ASSERT_FALSE(ScopeVPID.has_value());
@@ -310,7 +315,7 @@ TEST_F(VPIntrinsicTest, GetParamPos) {
 
   for (Function &F : *M) {
     ASSERT_TRUE(F.isIntrinsic());
-    Optional<unsigned> MaskParamPos =
+    std::optional<unsigned> MaskParamPos =
         VPIntrinsic::getMaskParamPos(F.getIntrinsicID());
     if (MaskParamPos) {
       Type *MaskParamType = F.getArg(MaskParamPos.value())->getType();
@@ -319,14 +324,14 @@ TEST_F(VPIntrinsicTest, GetParamPos) {
           cast<VectorType>(MaskParamType)->getElementType()->isIntegerTy(1));
     }
 
-    Optional<unsigned> VecLenParamPos =
+    std::optional<unsigned> VecLenParamPos =
         VPIntrinsic::getVectorLengthParamPos(F.getIntrinsicID());
     if (VecLenParamPos) {
       Type *VecLenParamType = F.getArg(VecLenParamPos.value())->getType();
       ASSERT_TRUE(VecLenParamType->isIntegerTy(32));
     }
 
-    Optional<unsigned> MemPtrParamPos =
+    std::optional<unsigned> MemPtrParamPos =
         VPIntrinsic::getMemoryPointerParamPos(F.getIntrinsicID());
     if (MemPtrParamPos) {
       Type *MemPtrParamType = F.getArg(*MemPtrParamPos)->getType();
@@ -353,7 +358,7 @@ TEST_F(VPIntrinsicTest, OpcodeRoundTrip) {
     if (VPID == Intrinsic::not_intrinsic)
       continue;
 
-    Optional<unsigned> RoundTripOC =
+    std::optional<unsigned> RoundTripOC =
         VPIntrinsic::getFunctionalOpcodeForVP(VPID);
     // No equivalent Opcode available.
     if (!RoundTripOC)
@@ -374,7 +379,7 @@ TEST_F(VPIntrinsicTest, IntrinsicIDRoundTrip) {
   unsigned FullTripCounts = 0;
   for (const auto &VPDecl : *M) {
     auto VPID = VPDecl.getIntrinsicID();
-    Optional<unsigned> OC = VPIntrinsic::getFunctionalOpcodeForVP(VPID);
+    std::optional<unsigned> OC = VPIntrinsic::getFunctionalOpcodeForVP(VPID);
 
     // no equivalent Opcode available
     if (!OC)

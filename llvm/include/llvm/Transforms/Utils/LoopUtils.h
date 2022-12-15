@@ -225,7 +225,7 @@ SmallVector<Instruction *, 8> findDefsUsedOutsideOfLoop(Loop *L);
 /// Find a combination of metadata ("llvm.loop.vectorize.width" and
 /// "llvm.loop.vectorize.scalable.enable") for a loop and use it to construct a
 /// ElementCount. If the metadata "llvm.loop.vectorize.width" cannot be found
-/// then None is returned.
+/// then std::nullopt is returned.
 Optional<ElementCount>
 getOptionalElementCountLoopAttribute(const Loop *TheLoop);
 
@@ -244,11 +244,11 @@ getOptionalElementCountLoopAttribute(const Loop *TheLoop);
 ///                    <prefix>; commonly used to remove metadata for the
 ///                    applied transformation.
 /// @param AlwaysNew If true, do not try to reuse OrigLoopID and never return
-///                  None.
+///                  std::nullopt.
 ///
 /// @return The loop ID for the after-transformation loop. The following values
 ///         can be returned:
-///         None         : No followup attribute was found; it is up to the
+///         std::nullopt : No followup attribute was found; it is up to the
 ///                        transformation to choose attributes that make sense.
 ///         @p OrigLoopID: The original identifier can be reused.
 ///         nullptr      : The new loop has no attributes.
@@ -309,8 +309,8 @@ void addStringMetadataToLoop(Loop *TheLoop, const char *MDString,
 /// Returns a loop's estimated trip count based on branch weight metadata.
 /// In addition if \p EstimatedLoopInvocationWeight is not null it is
 /// initialized with weight of loop's latch leading to the exit.
-/// Returns 0 when the count is estimated to be 0, or None when a meaningful
-/// estimate can not be made.
+/// Returns 0 when the count is estimated to be 0, or std::nullopt when a
+/// meaningful estimate can not be made.
 Optional<unsigned>
 getLoopEstimatedTripCount(Loop *L,
                           unsigned *EstimatedLoopInvocationWeight = nullptr);
