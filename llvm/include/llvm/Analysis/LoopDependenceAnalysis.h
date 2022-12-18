@@ -30,7 +30,7 @@ using ConstVF = std::optional<size_t>;
 // to fit things into LLVM's pass framework.
 struct LoopDependence {
   /// The maximum vectorization factor for this loop. That is, how many
-  /// iterations can be run in parallel. Or `None` if
+  /// iterations can be run in parallel. Or `std::nullopt` if
   /// all loop iterations may be run in parallel. A vectorization factor of `1`
   /// indicates that the loop has to be executed sequentially.
   ConstVF VectorizationFactor;
@@ -49,7 +49,7 @@ struct LoopDependence {
 
   static LoopDependence getBestPossible() {
     LoopDependence LD;
-    LD.VectorizationFactor = None;
+    LD.VectorizationFactor = std::nullopt;
     return LD;
   }
 

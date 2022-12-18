@@ -5962,10 +5962,10 @@ void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
         "VP intrinsics only support the default fp environment for now "
         "(round.tonearest; fpexcept.ignore).");
   if (VPI.isConstrainedOp()) {
-    Check(VPI.getExceptionBehavior() != None,
+    Check(VPI.getExceptionBehavior() != std::nullopt,
           "invalid exception behavior argument", &VPI);
-    Check(VPI.getRoundingMode() != None, "invalid rounding mode argument",
-          &VPI);
+    Check(VPI.getRoundingMode() != std::nullopt,
+          "invalid rounding mode argument", &VPI);
   }
 }
 

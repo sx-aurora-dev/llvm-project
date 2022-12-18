@@ -600,20 +600,20 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
 std::optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
   auto Bundle = this->getOperandBundle("cfp-round");
   if (!Bundle)
-    return None;
+    return std::nullopt;
   Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
-    return None;
+    return std::nullopt;
   return convertStrToRoundingMode(cast<MDString>(MD)->getString());
 }
 
 std::optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
   auto Bundle = this->getOperandBundle("cfp-except");
   if (!Bundle)
-    return None;
+    return std::nullopt;
   Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
-    return None;
+    return std::nullopt;
 
   return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
 }
@@ -682,9 +682,9 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
 }
 
 bool VPIntrinsic::isConstrainedOp() const {
-  return (getRoundingMode() != None &&
+  return (getRoundingMode() != std::nullopt &&
           getRoundingMode() != RoundingMode::NearestTiesToEven) ||
-         (getExceptionBehavior() != None &&
+         (getExceptionBehavior() != std::nullopt &&
           getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
 }
 
