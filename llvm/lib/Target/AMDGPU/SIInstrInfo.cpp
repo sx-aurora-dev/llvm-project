@@ -1567,12 +1567,32 @@ static unsigned getAVSpillSaveOpcode(unsigned Size) {
   }
 }
 
-void SIInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
-                                      MachineBasicBlock::iterator MI,
-                                      Register SrcReg, bool isKill,
-                                      int FrameIndex,
-                                      const TargetRegisterClass *RC,
-                                      const TargetRegisterInfo *TRI) const {
+static unsigned getWWMRegSpillSaveOpcode(unsigned Size) {
+  // Currently, there is only 32-bit WWM register spills needed.
+  if (Size != 4)
+    llvm_unreachable("unknown wwm register spill size");
+
+  return AMDGPU::SI_SPILL_WWM_V32_SAVE;
+}
+
+static unsigned getVectorRegSpillSaveOpcode(Register Reg,
+                                            const TargetRegisterClass *RC,
+                                            unsigned Size,
+                                            const SIRegisterInfo &TRI,
+                                            const SIMachineFunctionInfo &MFI) {
+  // Choose the right opcode if spilling a WWM register.
+  if (MFI.checkFlag(Reg, AMDGPU::VirtRegFlag::WWM_REG))
+    return getWWMRegSpillSaveOpcode(Size);
+
+  return TRI.isVectorSuperClass(RC) ? getAVSpillSaveOpcode(Size)
+         : TRI.isAGPRClass(RC)      ? getAGPRSpillSaveOpcode(Size)
+                                    : getVGPRSpillSaveOpcode(Size);
+}
+
+void SIInstrInfo::storeRegToStackSlot(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
+    bool isKill, int FrameIndex, const TargetRegisterClass *RC,
+    const TargetRegisterInfo *TRI, Register VReg) const {
   MachineFunction *MF = MBB.getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
@@ -1613,9 +1633,8 @@ void SIInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     return;
   }
 
-  unsigned Opcode = RI.isVectorSuperClass(RC) ? getAVSpillSaveOpcode(SpillSize)
-                    : RI.isAGPRClass(RC) ? getAGPRSpillSaveOpcode(SpillSize)
-                                         : getVGPRSpillSaveOpcode(SpillSize);
+  unsigned Opcode = getVectorRegSpillSaveOpcode(VReg ? VReg : SrcReg, RC,
+                                                SpillSize, RI, *MFI);
   MFI->setHasSpilledVGPRs();
 
   BuildMI(MBB, MI, DL, get(Opcode))
@@ -1766,11 +1785,33 @@ static unsigned getAVSpillRestoreOpcode(unsigned Size) {
   }
 }
 
+static unsigned getWWMRegSpillRestoreOpcode(unsigned Size) {
+  // Currently, there is only 32-bit WWM register spills needed.
+  if (Size != 4)
+    llvm_unreachable("unknown wwm register spill size");
+
+  return AMDGPU::SI_SPILL_WWM_V32_RESTORE;
+}
+
+static unsigned
+getVectorRegSpillRestoreOpcode(Register Reg, const TargetRegisterClass *RC,
+                               unsigned Size, const SIRegisterInfo &TRI,
+                               const SIMachineFunctionInfo &MFI) {
+  // Choose the right opcode if restoring a WWM register.
+  if (MFI.checkFlag(Reg, AMDGPU::VirtRegFlag::WWM_REG))
+    return getWWMRegSpillRestoreOpcode(Size);
+
+  return TRI.isVectorSuperClass(RC) ? getAVSpillRestoreOpcode(Size)
+         : TRI.isAGPRClass(RC)      ? getAGPRSpillRestoreOpcode(Size)
+                                    : getVGPRSpillRestoreOpcode(Size);
+}
+
 void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MI,
                                        Register DestReg, int FrameIndex,
                                        const TargetRegisterClass *RC,
-                                       const TargetRegisterInfo *TRI) const {
+                                       const TargetRegisterInfo *TRI,
+                                       Register VReg) const {
   MachineFunction *MF = MBB.getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
@@ -1808,10 +1849,9 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     return;
   }
 
-  unsigned Opcode = RI.isVectorSuperClass(RC)
-                        ? getAVSpillRestoreOpcode(SpillSize)
-                    : RI.isAGPRClass(RC) ? getAGPRSpillRestoreOpcode(SpillSize)
-                                         : getVGPRSpillRestoreOpcode(SpillSize);
+  unsigned Opcode = getVectorRegSpillRestoreOpcode(VReg ? VReg : DestReg, RC,
+                                                   SpillSize, RI, *MFI);
+
   BuildMI(MBB, MI, DL, get(Opcode), DestReg)
       .addFrameIndex(FrameIndex)           // vaddr
       .addReg(MFI->getStackPtrOffsetReg()) // scratch_offset
@@ -2278,7 +2318,7 @@ SIInstrInfo::expandMovDPP64(MachineInstr &MI) const {
       AMDGPU::isLegal64BitDPPControl(
         getNamedOperand(MI, AMDGPU::OpName::dpp_ctrl)->getImm())) {
     MI.setDesc(get(AMDGPU::V_MOV_B64_dpp));
-    return std::make_pair(&MI, nullptr);
+    return std::pair(&MI, nullptr);
   }
 
   MachineBasicBlock &MBB = *MI.getParent();
@@ -2331,7 +2371,7 @@ SIInstrInfo::expandMovDPP64(MachineInstr &MI) const {
       .addImm(AMDGPU::sub1);
 
   MI.eraseFromParent();
-  return std::make_pair(Split[0], Split[1]);
+  return std::pair(Split[0], Split[1]);
 }
 
 bool SIInstrInfo::swapSourceModifiers(MachineInstr &MI,
@@ -5815,7 +5855,7 @@ extractRsrcPtr(const SIInstrInfo &TII, MachineInstr &MI, MachineOperand &Rsrc) {
       .addReg(SRsrcFormatHi)
       .addImm(AMDGPU::sub3);
 
-  return std::make_tuple(RsrcPtr, NewSRsrc);
+  return std::tuple(RsrcPtr, NewSRsrc);
 }
 
 MachineBasicBlock *
@@ -6591,10 +6631,10 @@ SIInstrInfo::moveScalarAddSub(SetVectorType &Worklist, MachineInstr &Inst,
     MachineBasicBlock *NewBB = legalizeOperands(Inst, MDT);
 
     addUsersToMoveToVALUWorklist(ResultReg, MRI, Worklist);
-    return std::make_pair(true, NewBB);
+    return std::pair(true, NewBB);
   }
 
-  return std::make_pair(false, nullptr);
+  return std::pair(false, nullptr);
 }
 
 void SIInstrInfo::lowerSelect(SetVectorType &Worklist, MachineInstr &Inst,
@@ -7775,7 +7815,7 @@ SIInstrInfo::CreateTargetMIHazardRecognizer(const InstrItineraryData *II,
 
 std::pair<unsigned, unsigned>
 SIInstrInfo::decomposeMachineOperandsTargetFlags(unsigned TF) const {
-  return std::make_pair(TF & MO_MASK, TF & ~MO_MASK);
+  return std::pair(TF & MO_MASK, TF & ~MO_MASK);
 }
 
 ArrayRef<std::pair<unsigned, const char *>>

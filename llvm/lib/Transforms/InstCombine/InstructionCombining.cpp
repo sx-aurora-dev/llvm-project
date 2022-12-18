@@ -370,14 +370,14 @@ static bool simplifyAssocCastAssoc(BinaryOperator *BinOp1,
 // inttoptr ( ptrtoint (x) ) --> x
 Value *InstCombinerImpl::simplifyIntToPtrRoundTripCast(Value *Val) {
   auto *IntToPtr = dyn_cast<IntToPtrInst>(Val);
-  if (IntToPtr && DL.getPointerTypeSizeInBits(IntToPtr->getDestTy()) ==
+  if (IntToPtr && DL.getTypeSizeInBits(IntToPtr->getDestTy()) ==
                       DL.getTypeSizeInBits(IntToPtr->getSrcTy())) {
     auto *PtrToInt = dyn_cast<PtrToIntInst>(IntToPtr->getOperand(0));
     Type *CastTy = IntToPtr->getDestTy();
     if (PtrToInt &&
         CastTy->getPointerAddressSpace() ==
             PtrToInt->getSrcTy()->getPointerAddressSpace() &&
-        DL.getPointerTypeSizeInBits(PtrToInt->getSrcTy()) ==
+        DL.getTypeSizeInBits(PtrToInt->getSrcTy()) ==
             DL.getTypeSizeInBits(PtrToInt->getDestTy())) {
       return CastInst::CreateBitOrPointerCast(PtrToInt->getOperand(0), CastTy,
                                               "", PtrToInt);
@@ -2213,7 +2213,7 @@ Instruction *InstCombinerImpl::visitGEPOfBitcast(BitCastInst *BCI,
         if (Instruction *I = visitBitCast(*BCI)) {
           if (I != BCI) {
             I->takeName(BCI);
-            BCI->getParent()->getInstList().insert(BCI->getIterator(), I);
+            I->insertInto(BCI->getParent(), BCI->getIterator());
             replaceInstUsesWith(*BCI, I);
           }
           return &GEP;
@@ -2419,10 +2419,8 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
       NewGEP->setOperand(DI, NewPN);
     }
 
-    GEP.getParent()->getInstList().insert(
-        GEP.getParent()->getFirstInsertionPt(), NewGEP);
-    replaceOperand(GEP, 0, NewGEP);
-    PtrOp = NewGEP;
+    NewGEP->insertInto(GEP.getParent(), GEP.getParent()->getFirstInsertionPt());
+    return replaceOperand(GEP, 0, NewGEP);
   }
 
   if (auto *Src = dyn_cast<GEPOperator>(PtrOp))
@@ -2717,7 +2715,7 @@ static bool isAllocSiteRemovable(Instruction *AI,
                                  SmallVectorImpl<WeakTrackingVH> &Users,
                                  const TargetLibraryInfo &TLI) {
   SmallVector<Instruction*, 4> Worklist;
-  const Optional<StringRef> Family = getAllocationFamily(AI, &TLI);
+  const std::optional<StringRef> Family = getAllocationFamily(AI, &TLI);
   Worklist.push_back(AI);
 
   do {
@@ -3802,7 +3800,8 @@ InstCombinerImpl::pushFreezeToPreventPoisonFromPropagating(FreezeInst &OrigFI) {
   // poison.
   Use *MaybePoisonOperand = nullptr;
   for (Use &U : OrigOpInst->operands()) {
-    if (isGuaranteedNotToBeUndefOrPoison(U.get()))
+    if (isa<MetadataAsValue>(U.get()) ||
+        isGuaranteedNotToBeUndefOrPoison(U.get()))
       continue;
     if (!MaybePoisonOperand)
       MaybePoisonOperand = &U;
@@ -4333,7 +4332,7 @@ bool InstCombinerImpl::run() {
             InsertPos = InstParent->getFirstNonPHI()->getIterator();
         }
 
-        InstParent->getInstList().insert(InsertPos, Result);
+        Result->insertInto(InstParent, InsertPos);
 
         // Push the new instruction and any users onto the worklist.
         Worklist.pushUsersToWorkList(*Result);

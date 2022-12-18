@@ -33,7 +33,6 @@
 #include "support/Logger.h"
 #include "support/Path.h"
 #include "support/Trace.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
@@ -116,9 +115,9 @@ struct FragmentCompiler {
     return Result;
   }
 
-  llvm::Optional<std::string> makeAbsolute(Located<std::string> Path,
-                                           llvm::StringLiteral Description,
-                                           llvm::sys::path::Style Style) {
+  std::optional<std::string> makeAbsolute(Located<std::string> Path,
+                                          llvm::StringLiteral Description,
+                                          llvm::sys::path::Style Style) {
     if (llvm::sys::path::is_absolute(*Path))
       return *Path;
     if (FragmentDirectory.empty()) {

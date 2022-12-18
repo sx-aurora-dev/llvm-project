@@ -146,6 +146,9 @@ public:
   /// Return the LLVM type of this SCEV expression.
   Type *getType() const;
 
+  /// Return operands of this SCEV expression.
+  ArrayRef<const SCEV *> operands() const;
+
   /// Return true if the expression is a constant zero.
   bool isZero() const;
 
@@ -567,6 +570,8 @@ public:
   const SCEV *getZeroExtendExprImpl(const SCEV *Op, Type *Ty,
                                     unsigned Depth = 0);
   const SCEV *getSignExtendExpr(const SCEV *Op, Type *Ty, unsigned Depth = 0);
+  const SCEV *getSignExtendExprImpl(const SCEV *Op, Type *Ty,
+                                    unsigned Depth = 0);
   const SCEV *getCastExpr(SCEVTypes Kind, const SCEV *Op, Type *Ty);
   const SCEV *getAnyExtendExpr(const SCEV *Op, Type *Ty);
   const SCEV *getAddExpr(SmallVectorImpl<const SCEV *> &Ops,

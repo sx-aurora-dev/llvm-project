@@ -38,6 +38,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/Error.h"
@@ -321,14 +322,18 @@ getTopologicallySortedBlocks(llvm::Function *func) {
       blocks.insert(traversal.begin(), traversal.end());
     }
   }
-  assert(blocks.size() == func->getBasicBlockList().size() &&
-         "some blocks are not sorted");
+  assert(blocks.size() == func->size() && "some blocks are not sorted");
 
   return blocks;
 }
 
-// Handles importing globals and functions from an LLVM module.
 namespace {
+/// Module import implementation class that provides methods to import globals
+/// and functions from an LLVM module into an MLIR module. It holds mappings
+/// between the original and translated globals, basic blocks, and values used
+/// during the translation. Additionally, it keeps track of the current constant
+/// insertion point since LLVM immediate values translate to MLIR operations
+/// that are introduced at the beginning of the region.
 class Importer {
 public:
   Importer(MLIRContext *context, ModuleOp module)
@@ -422,6 +427,10 @@ private:
     constantInsertionOp = nullptr;
   }
 
+  /// Sets the fastmath flags attribute for the imported operation `op` given
+  /// the original instruction `inst`. Asserts if the operation does not
+  /// implement the fastmath interface.
+  void setFastmathFlagsAttr(llvm::Instruction *inst, Operation *op) const;
   /// Returns personality of `func` as a FlatSymbolRefAttr.
   FlatSymbolRefAttr getPersonalityAsAttr(llvm::Function *func);
   /// Imports `bb` into `block`, which must be initially empty.
@@ -487,6 +496,31 @@ private:
   DebugImporter debugImporter;
 };
 } // namespace
+
+void Importer::setFastmathFlagsAttr(llvm::Instruction *inst,
+                                    Operation *op) const {
+  auto iface = cast<FastmathFlagsInterface>(op);
+
+  // Even if the imported operation implements the fastmath interface, the
+  // original instruction may not have fastmath flags set. Exit if an
+  // instruction, such as a non floating-point function call, does not have
+  // fastmath flags.
+  if (!isa<llvm::FPMathOperator>(inst))
+    return;
+  llvm::FastMathFlags flags = inst->getFastMathFlags();
+
+  // Set the fastmath bits flag-by-flag.
+  FastmathFlags value = {};
+  value = bitEnumSet(value, FastmathFlags::nnan, flags.noNaNs());
+  value = bitEnumSet(value, FastmathFlags::ninf, flags.noInfs());
+  value = bitEnumSet(value, FastmathFlags::nsz, flags.noSignedZeros());
+  value = bitEnumSet(value, FastmathFlags::arcp, flags.allowReciprocal());
+  value = bitEnumSet(value, FastmathFlags::contract, flags.allowContract());
+  value = bitEnumSet(value, FastmathFlags::afn, flags.approxFunc());
+  value = bitEnumSet(value, FastmathFlags::reassoc, flags.allowReassoc());
+  FastmathFlagsAttr attr = FastmathFlagsAttr::get(builder.getContext(), value);
+  iface->setAttr(iface.getFastmathAttrName(), attr);
+}
 
 // We only need integers, floats, doubles, and vectors and tensors thereof for
 // attributes. Scalar and vector types are converted to the standard
@@ -648,7 +682,7 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *globalVar) {
   uint64_t alignment = 0;
   llvm::MaybeAlign maybeAlign = globalVar->getAlign();
   if (maybeAlign.has_value()) {
-    llvm::Align align = maybeAlign.value();
+    llvm::Align align = *maybeAlign;
     alignment = align.value();
   }
 
@@ -668,7 +702,7 @@ GlobalOp Importer::processGlobal(llvm::GlobalVariable *globalVar) {
         convertConstantExpr(globalVar->getInitializer());
     if (failed(initializer))
       return {};
-    builder.create<ReturnOp>(globalOp.getLoc(), initializer.value());
+    builder.create<ReturnOp>(globalOp.getLoc(), *initializer);
   }
   if (globalVar->hasAtLeastLocalUnnamedAddr()) {
     globalOp.setUnnamedAddr(
@@ -689,7 +723,7 @@ Importer::getConstantsToConvert(llvm::Constant *constant) {
   while (!workList.empty()) {
     llvm::Constant *current = workList.pop_back_val();
     // Skip constants that have been converted before and store all other ones.
-    if (valueMapping.count(constant))
+    if (valueMapping.count(current))
       continue;
     orderedList.push_back(current);
     // Add the current constant's dependencies to the work list. Only add
@@ -831,7 +865,7 @@ FailureOr<Value> Importer::convertConstantExpr(llvm::Constant *constant) {
     FailureOr<Value> converted = convertConstant(constantToConvert);
     if (failed(converted))
       return failure();
-    mapValue(constantToConvert, converted.value());
+    mapValue(constantToConvert, *converted);
   }
 
   // Update the constant insertion point and return the converted constant.
@@ -869,7 +903,7 @@ Importer::convertValues(ArrayRef<llvm::Value *> values) {
     FailureOr<Value> converted = convertValue(value);
     if (failed(converted))
       return failure();
-    remapped.push_back(converted.value());
+    remapped.push_back(*converted);
   }
   return remapped;
 }
@@ -878,7 +912,7 @@ IntegerAttr Importer::matchIntegerAttr(llvm::Value *value) {
   IntegerAttr integerAttr;
   FailureOr<Value> converted = convertValue(value);
   bool success = succeeded(converted) &&
-                 matchPattern(converted.value(), m_Constant(&integerAttr));
+                 matchPattern(*converted, m_Constant(&integerAttr));
   assert(success && "expected a constant value");
   (void)success;
   return integerAttr;
@@ -899,7 +933,7 @@ Importer::convertBranchArgs(llvm::Instruction *branch, llvm::BasicBlock *target,
     FailureOr<Value> converted = convertValue(value);
     if (failed(converted))
       return failure();
-    blockArguments.push_back(converted.value());
+    blockArguments.push_back(*converted);
   }
   return success();
 }
@@ -915,13 +949,13 @@ Importer::convertCallTypeAndOperands(llvm::CallBase *callInst,
     FailureOr<Value> called = convertValue(callInst->getCalledOperand());
     if (failed(called))
       return failure();
-    operands.push_back(called.value());
+    operands.push_back(*called);
   }
   SmallVector<llvm::Value *> args(callInst->args());
   FailureOr<SmallVector<Value>> arguments = convertValues(args);
   if (failed(arguments))
     return failure();
-  llvm::append_range(operands, arguments.value());
+  llvm::append_range(operands, *arguments);
   return success();
 }
 
@@ -970,7 +1004,7 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
       FailureOr<Value> condition = convertValue(brInst->getCondition());
       if (failed(condition))
         return failure();
-      builder.create<LLVM::CondBrOp>(loc, condition.value(), succBlocks.front(),
+      builder.create<LLVM::CondBrOp>(loc, *condition, succBlocks.front(),
                                      succBlockArgs.front(), succBlocks.back(),
                                      succBlockArgs.back());
     } else {
@@ -1007,7 +1041,7 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
       caseBlocks[it.index()] = lookupBlock(succBB);
     }
 
-    builder.create<SwitchOp>(loc, condition.value(), lookupBlock(defaultBB),
+    builder.create<SwitchOp>(loc, *condition, lookupBlock(defaultBB),
                              defaultBlockArgs, caseValues, caseBlocks,
                              caseOperandRefs);
     return success();
@@ -1033,6 +1067,7 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
     } else {
       callOp = builder.create<CallOp>(loc, types, operands);
     }
+    setFastmathFlagsAttr(inst, callOp);
     if (!callInst->getType()->isVoidTy())
       mapValue(inst, callOp.getResult());
     return success();
@@ -1046,7 +1081,7 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
       FailureOr<Value> operand = convertConstantExpr(lpInst->getClause(i));
       if (failed(operand))
         return failure();
-      operands.push_back(operand.value());
+      operands.push_back(*operand);
     }
 
     Type type = convertType(lpInst->getType());
@@ -1086,7 +1121,6 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
     return success();
   }
   if (inst->getOpcode() == llvm::Instruction::GetElementPtr) {
-    // FIXME: Support inbounds GEPs.
     auto *gepInst = cast<llvm::GetElementPtrInst>(inst);
     Type sourceElementType = convertType(gepInst->getSourceElementType());
     FailureOr<Value> basePtr = convertValue(gepInst->getOperand(0));
@@ -1102,12 +1136,12 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
       FailureOr<Value> index = convertValue(operand);
       if (failed(index))
         return failure();
-      indices.push_back(index.value());
+      indices.push_back(*index);
     }
 
     Type type = convertType(inst->getType());
-    Value res = builder.create<GEPOp>(loc, type, sourceElementType,
-                                      basePtr.value(), indices);
+    Value res = builder.create<GEPOp>(loc, type, sourceElementType, *basePtr,
+                                      indices, gepInst->isInBounds());
     mapValue(inst, res);
     return success();
   }
@@ -1117,8 +1151,7 @@ LogicalResult Importer::convertOperation(OpBuilder &odsBuilder,
 
 LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
   // FIXME: Support uses of SubtargetData.
-  // FIXME: Add support for inbounds GEPs.
-  // FIXME: Add support for fast-math flags and call / operand attributes.
+  // FIXME: Add support for call / operand attributes.
   // FIXME: Add support for the indirectbr, cleanupret, catchret, catchswitch,
   // callbr, vaarg, landingpad, catchpad, cleanuppad instructions.
 

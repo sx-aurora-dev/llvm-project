@@ -10,6 +10,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/raw_ostream.h"
+#include "MoveOnly.h"
 #include "gtest/gtest-spi.h"
 #include "gtest/gtest.h"
 
@@ -33,9 +34,9 @@ void OptionalWorksInConstexpr() {
                 "Default construction and hasValue() are contexpr");
   constexpr auto y1 = Optional<int>(3);
   constexpr Optional<int> y2{3};
-  static_assert(y1.value() == y2.value() && y1.value() == 3,
+  static_assert(*y1 == *y2 && *y1 == 3,
                 "Construction with value and getValue() are constexpr");
-  static_assert(y1.value() == y2.value() && y1.value() == 3,
+  static_assert(*y1 == *y2 && *y1 == 3,
                 "Construction with value and getValue() are constexpr");
   static_assert(Optional<int>{3} >= 2 && Optional<int>{1} < Optional<int>{2},
                 "Comparisons work in constexpr");
@@ -291,36 +292,6 @@ TEST(OptionalTest, InPlaceConstructionAndEmplaceEquivalentTest) {
   }
   EXPECT_EQ(2u, MultiArgConstructor::Destructions);
 }
-
-struct MoveOnly {
-  static unsigned MoveConstructions;
-  static unsigned Destructions;
-  static unsigned MoveAssignments;
-  int val;
-  explicit MoveOnly(int val) : val(val) {
-  }
-  MoveOnly(MoveOnly&& other) {
-    val = other.val;
-    ++MoveConstructions;
-  }
-  MoveOnly &operator=(MoveOnly&& other) {
-    val = other.val;
-    ++MoveAssignments;
-    return *this;
-  }
-  ~MoveOnly() {
-    ++Destructions;
-  }
-  static void ResetCounts() {
-    MoveConstructions = 0;
-    Destructions = 0;
-    MoveAssignments = 0;
-  }
-};
-
-unsigned MoveOnly::MoveConstructions = 0;
-unsigned MoveOnly::Destructions = 0;
-unsigned MoveOnly::MoveAssignments = 0;
 
 static_assert(!std::is_trivially_copyable_v<Optional<MoveOnly>>,
               "not trivially copyable");
@@ -600,40 +571,6 @@ TEST(OptionalTest, MoveValueOr) {
   EXPECT_EQ(1u, MoveOnly::MoveConstructions);
   EXPECT_EQ(0u, MoveOnly::MoveAssignments);
   EXPECT_EQ(2u, MoveOnly::Destructions);
-}
-
-TEST(OptionalTest, Transform) {
-  Optional<int> A;
-
-  Optional<int> B = A.transform([&](int N) { return N + 1; });
-  EXPECT_FALSE(B.has_value());
-
-  A = 3;
-  Optional<int> C = A.transform([&](int N) { return N + 1; });
-  EXPECT_TRUE(C.has_value());
-  EXPECT_EQ(4, C.value());
-}
-
-TEST(OptionalTest, MoveTransform) {
-  Optional<MoveOnly> A;
-
-  MoveOnly::ResetCounts();
-  Optional<int> B =
-      std::move(A).transform([&](const MoveOnly &M) { return M.val + 2; });
-  EXPECT_FALSE(B.has_value());
-  EXPECT_EQ(0u, MoveOnly::MoveConstructions);
-  EXPECT_EQ(0u, MoveOnly::MoveAssignments);
-  EXPECT_EQ(0u, MoveOnly::Destructions);
-
-  A = MoveOnly(5);
-  MoveOnly::ResetCounts();
-  Optional<int> C =
-      std::move(A).transform([&](const MoveOnly &M) { return M.val + 2; });
-  EXPECT_TRUE(C.has_value());
-  EXPECT_EQ(7, C.value());
-  EXPECT_EQ(0u, MoveOnly::MoveConstructions);
-  EXPECT_EQ(0u, MoveOnly::MoveAssignments);
-  EXPECT_EQ(0u, MoveOnly::Destructions);
 }
 
 struct EqualTo {

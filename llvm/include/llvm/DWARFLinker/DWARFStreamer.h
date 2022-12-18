@@ -96,7 +96,7 @@ public:
   /// original \p Entries.
   void emitRangesEntries(
       int64_t UnitPcOffset, uint64_t OrigLowPc,
-      Optional<std::pair<AddressRange, int64_t>> FuncRange,
+      std::optional<std::pair<AddressRange, int64_t>> FuncRange,
       const std::vector<DWARFDebugRangeList::RangeListEntry> &Entries,
       unsigned AddressSize) override;
 
@@ -137,7 +137,7 @@ public:
   void emitCIE(StringRef CIEBytes) override;
 
   /// Emit an FDE with data \p Bytes.
-  void emitFDE(uint32_t CIEOffset, uint32_t AddreSize, uint32_t Address,
+  void emitFDE(uint32_t CIEOffset, uint32_t AddreSize, uint64_t Address,
                StringRef Bytes) override;
 
   /// Emit DWARF debug names.

@@ -8,6 +8,8 @@ add_header_library(
   bit
   HDRS
     bit.h
+  DEPENDS
+    libc.src.__support.compiler_features
 )
 
 add_header_library(
@@ -94,7 +96,15 @@ add_header_library(
 )
 
 add_header_library(
-  error
+  expected
   HDRS
-    error.h
+    expected.h
+)
+
+add_object_library(
+  new
+  SRCS
+    new.cpp
+  HDRS
+    new.h
 )

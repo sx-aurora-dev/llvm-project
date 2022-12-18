@@ -13,7 +13,6 @@
 #include "llvm/AsmParser/LLParser.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -1471,7 +1470,7 @@ bool LLParser::parseEnumAttribute(Attribute::AttrKind Attr, AttrBuilder &B,
     return false;
   }
   case Attribute::Memory: {
-    Optional<MemoryEffects> ME = parseMemoryAttr();
+    std::optional<MemoryEffects> ME = parseMemoryAttr();
     if (!ME)
       return true;
     B.addMemoryAttr(*ME);
@@ -2263,7 +2262,7 @@ bool LLParser::parseAllocKind(AllocFnKind &Kind) {
   return false;
 }
 
-static Optional<MemoryEffects::Location> keywordToLoc(lltok::Kind Tok) {
+static std::optional<MemoryEffects::Location> keywordToLoc(lltok::Kind Tok) {
   switch (Tok) {
   case lltok::kw_argmem:
     return MemoryEffects::ArgMem;
@@ -2274,7 +2273,7 @@ static Optional<MemoryEffects::Location> keywordToLoc(lltok::Kind Tok) {
   }
 }
 
-static Optional<ModRefInfo> keywordToModRef(lltok::Kind Tok) {
+static std::optional<ModRefInfo> keywordToModRef(lltok::Kind Tok) {
   switch (Tok) {
   case lltok::kw_none:
     return ModRefInfo::NoModRef;
@@ -2289,7 +2288,7 @@ static Optional<ModRefInfo> keywordToModRef(lltok::Kind Tok) {
   }
 }
 
-Optional<MemoryEffects> LLParser::parseMemoryAttr() {
+std::optional<MemoryEffects> LLParser::parseMemoryAttr() {
   MemoryEffects ME = MemoryEffects::none();
 
   // We use syntax like memory(argmem: read), so the colon should not be
@@ -2305,7 +2304,7 @@ Optional<MemoryEffects> LLParser::parseMemoryAttr() {
 
   bool SeenLoc = false;
   do {
-    Optional<MemoryEffects::Location> Loc = keywordToLoc(Lex.getKind());
+    std::optional<MemoryEffects::Location> Loc = keywordToLoc(Lex.getKind());
     if (Loc) {
       Lex.Lex();
       if (!EatIfPresent(lltok::colon)) {
@@ -2314,7 +2313,7 @@ Optional<MemoryEffects> LLParser::parseMemoryAttr() {
       }
     }
 
-    Optional<ModRefInfo> MR = keywordToModRef(Lex.getKind());
+    std::optional<ModRefInfo> MR = keywordToModRef(Lex.getKind());
     if (!MR) {
       if (!Loc)
         tokError("expected memory location (argmem, inaccessiblemem) "
@@ -3327,7 +3326,7 @@ BasicBlock *LLParser::PerFunctionState::defineBB(const std::string &Name,
 
   // Move the block to the end of the function.  Forward ref'd blocks are
   // inserted wherever they happen to be referenced.
-  F.getBasicBlockList().splice(F.end(), F.getBasicBlockList(), BB);
+  F.splice(F.end(), &F, BB->getIterator());
 
   // Remove the block from forward ref sets.
   if (Name.empty()) {
@@ -6167,7 +6166,7 @@ bool LLParser::parseBasicBlock(PerFunctionState &PFS) {
       llvm_unreachable("Unknown parseInstruction result!");
     case InstError: return true;
     case InstNormal:
-      BB->getInstList().push_back(Inst);
+      Inst->insertInto(BB, BB->end());
 
       // With a normal result, we check to see if the instruction is followed by
       // a comma and metadata.
@@ -6176,7 +6175,7 @@ bool LLParser::parseBasicBlock(PerFunctionState &PFS) {
           return true;
       break;
     case InstExtraComma:
-      BB->getInstList().push_back(Inst);
+      Inst->insertInto(BB, BB->end());
 
       // If the instruction parser ate an extra comma at the end of it, it
       // *must* be followed by metadata.
