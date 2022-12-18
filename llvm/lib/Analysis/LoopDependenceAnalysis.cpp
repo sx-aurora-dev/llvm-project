@@ -855,9 +855,11 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
 
 static bool
 handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
-                            const SCEV *AccessExpr, Value *Pointer,
+                            const SCEV *AccessExpr, Instruction* Inst,
+                            Value *Pointer,
                             SmallVectorImpl<const SCEV *> &Subscripts,
                             SmallVectorImpl<const SCEV *> &Sizes) {
+  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
   if (AccessExpr->getSCEVType() != scAddRecExpr) {
     Subscripts.push_back(AccessExpr);
     return true;
@@ -870,7 +872,19 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
   AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
   Type *Ty = Pointer->getType();
   auto &DL = L->getHeader()->getModule()->getDataLayout();
-  uint64_t TypeByteSize = DL.getTypeAllocSize(Ty->getPointerElementType());
+  Type *ElemTy = nullptr;
+  if (Ty->isOpaquePointerTy()) {
+    if (auto *Store = dyn_cast<StoreInst>(Inst)) {
+      ElemTy = Store->getValueOperand()->getType();
+    } else if (auto *Load = dyn_cast<LoadInst>(Inst)) {
+      ElemTy = Load->getType();
+    } else {
+      return false;
+    }
+  } else {
+    ElemTy = Ty->getNonOpaquePointerElementType();
+  }
+  uint64_t TypeByteSize = DL.getTypeAllocSize(ElemTy);
   const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
   const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
   LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
@@ -922,8 +936,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       Subscripts.size() != Sizes.size()) {
     LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
                          "the original SCEV\n";);
-    return handleFailedDelinearization(SE, L, AccessExpr, Pointer, Subscripts,
-                                       Sizes);
+    return handleFailedDelinearization(SE, L, AccessExpr, Inst, Pointer,
+                                       Subscripts, Sizes);
   }
 
   LLVM_DEBUG(
@@ -944,7 +958,8 @@ static void getArraySizes(ScalarEvolution &SE, Value *Obj,
                           SmallVectorImpl<const SCEV *> &Sizes) {
   Type *Ty = Obj->getType();
   assert(Ty->isPointerTy());
-  ArrayType *ArrTy = dyn_cast<ArrayType>(Ty->getPointerElementType());
+  assert(!Ty->isOpaquePointerTy());
+  ArrayType *ArrTy = dyn_cast<ArrayType>(Ty->getNonOpaquePointerElementType());
   assert(ArrTy);
   // Skip the first size; It's not always present.
   ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
@@ -1042,8 +1057,9 @@ delinearizePtrOnGlobalArray(ScalarEvolution &SE, Value *Ptr, Value *Obj,
   }
   auto &DL = NestInfo.AnalyzedLoop->getHeader()->getModule()->getDataLayout();
   assert(Ptr->getType()->isPointerTy());
+  assert(!Ptr->getType()->isOpaquePointerTy());
   uint64_t TypeByteSize =
-      DL.getTypeAllocSize(Ptr->getType()->getPointerElementType());
+      DL.getTypeAllocSize(Ptr->getType()->getNonOpaquePointerElementType());
   const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
   if (!AddRec)
     return false;
@@ -1861,7 +1877,8 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
       Value *LObj = getUnderlyingObject(LPtr);
       Type *LObjTy = LObj->getType();
       if (dyn_cast<GlobalValue>(LObj) && LObjTy->isPointerTy() &&
-          LObjTy->getPointerElementType()->isArrayTy()) {
+          !LObjTy->isOpaquePointerTy() &&
+          LObjTy->getNonOpaquePointerElementType()->isArrayTy()) {
         Value *SObj = getUnderlyingObject(SPtr);
         Type *SObjTy = SObj->getType();
 
@@ -1872,7 +1889,8 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
         // TODO: For now, we don't know global array and pointer
         // combination on aliasing.
         if (!dyn_cast<GlobalValue>(SObj) || !SObjTy->isPointerTy() ||
-            !SObjTy->getPointerElementType()->isArrayTy()) {
+            SObjTy->isOpaquePointerTy() ||
+            !SObjTy->getNonOpaquePointerElementType()->isArrayTy()) {
           return Bail;
         }
         // They can't alias.
