@@ -62,7 +62,9 @@ class VEDAGToDAGISel : public SelectionDAGISel {
   const VESubtarget *Subtarget;
 
 public:
-  explicit VEDAGToDAGISel(VETargetMachine &tm) : SelectionDAGISel(tm) {}
+  static char ID;
+
+  explicit VEDAGToDAGISel(VETargetMachine &tm) : SelectionDAGISel(ID, tm) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     // Reset the subtarget each time through.
@@ -106,6 +108,8 @@ private:
   bool matchADDRri(SDValue N, SDValue &Base, SDValue &Offset);
 };
 } // end anonymous namespace
+
+char VEDAGToDAGISel::ID = 0;
 
 #if 0
 static unsigned

@@ -880,23 +880,23 @@ Type mlir::sparse_tensor::getOverheadType(Builder &builder, OverheadType ot) {
   llvm_unreachable("Unknown OverheadType");
 }
 
-OverheadType mlir::sparse_tensor::pointerOverheadTypeEncoding(
-    const SparseTensorEncodingAttr &enc) {
+OverheadType
+mlir::sparse_tensor::pointerOverheadTypeEncoding(SparseTensorEncodingAttr enc) {
   return overheadTypeEncoding(enc.getPointerBitWidth());
 }
 
-OverheadType mlir::sparse_tensor::indexOverheadTypeEncoding(
-    const SparseTensorEncodingAttr &enc) {
+OverheadType
+mlir::sparse_tensor::indexOverheadTypeEncoding(SparseTensorEncodingAttr enc) {
   return overheadTypeEncoding(enc.getIndexBitWidth());
 }
 
-Type mlir::sparse_tensor::getPointerOverheadType(
-    Builder &builder, const SparseTensorEncodingAttr &enc) {
+Type mlir::sparse_tensor::getPointerOverheadType(Builder &builder,
+                                                 SparseTensorEncodingAttr enc) {
   return getOverheadType(builder, pointerOverheadTypeEncoding(enc));
 }
 
-Type mlir::sparse_tensor::getIndexOverheadType(
-    Builder &builder, const SparseTensorEncodingAttr &enc) {
+Type mlir::sparse_tensor::getIndexOverheadType(Builder &builder,
+                                               SparseTensorEncodingAttr enc) {
   return getOverheadType(builder, indexOverheadTypeEncoding(enc));
 }
 
@@ -1149,6 +1149,18 @@ Value mlir::sparse_tensor::genAlloca(OpBuilder &builder, Location loc, Value sz,
 Value mlir::sparse_tensor::genAllocaScalar(OpBuilder &builder, Location loc,
                                            Type tp) {
   return builder.create<memref::AllocaOp>(loc, MemRefType::get({}, tp));
+}
+
+Value mlir::sparse_tensor::allocaBuffer(OpBuilder &builder, Location loc,
+                                        ValueRange values) {
+  const unsigned sz = values.size();
+  assert(sz >= 1);
+  Value buffer = genAlloca(builder, loc, sz, values[0].getType());
+  for (unsigned i = 0; i < sz; i++) {
+    Value idx = constantIndex(builder, loc, i);
+    builder.create<memref::StoreOp>(loc, values[i], buffer, idx);
+  }
+  return buffer;
 }
 
 Value mlir::sparse_tensor::allocDenseTensor(OpBuilder &builder, Location loc,

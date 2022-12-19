@@ -302,13 +302,13 @@ ConstrainedFPIntrinsic::getExceptionBehavior() const {
 bool ConstrainedFPIntrinsic::isDefaultFPEnvironment() const {
   std::optional<fp::ExceptionBehavior> Except = getExceptionBehavior();
   if (Except) {
-    if (Except.value() != fp::ebIgnore)
+    if (*Except != fp::ebIgnore)
       return false;
   }
 
   std::optional<RoundingMode> Rounding = getRoundingMode();
   if (Rounding) {
-    if (Rounding.value() != RoundingMode::NearestTiesToEven)
+    if (*Rounding != RoundingMode::NearestTiesToEven)
       return false;
   }
 
@@ -445,13 +445,13 @@ MaybeAlign VPIntrinsic::getPointerAlignment() const {
   std::optional<unsigned> PtrParamOpt =
       getMemoryPointerParamPos(getIntrinsicID());
   assert(PtrParamOpt && "no pointer argument!");
-  return getParamAlign(PtrParamOpt.value());
+  return getParamAlign(*PtrParamOpt);
 }
 
 /// \return The pointer operand of this load,store, gather or scatter.
 Value *VPIntrinsic::getMemoryPointerParam() const {
   if (auto PtrParamOpt = getMemoryPointerParamPos(getIntrinsicID()))
-    return getArgOperand(PtrParamOpt.value());
+    return getArgOperand(*PtrParamOpt);
   return nullptr;
 }
 
@@ -473,7 +473,7 @@ Value *VPIntrinsic::getMemoryDataParam() const {
   auto DataParamOpt = getMemoryDataParamPos(getIntrinsicID());
   if (!DataParamOpt)
     return nullptr;
-  return getArgOperand(DataParamOpt.value());
+  return getArgOperand(*DataParamOpt);
 }
 
 std::optional<unsigned> VPIntrinsic::getMemoryDataParamPos(Intrinsic::ID VPID) {
@@ -600,20 +600,20 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
 std::optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
   auto Bundle = this->getOperandBundle("cfp-round");
   if (!Bundle)
-    return None;
+    return std::nullopt;
   Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
-    return None;
+    return std::nullopt;
   return convertStrToRoundingMode(cast<MDString>(MD)->getString());
 }
 
 std::optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
   auto Bundle = this->getOperandBundle("cfp-except");
   if (!Bundle)
-    return None;
+    return std::nullopt;
   Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
-    return None;
+    return std::nullopt;
 
   return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
 }
@@ -682,9 +682,9 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
 }
 
 bool VPIntrinsic::isConstrainedOp() const {
-  return (getRoundingMode() != None &&
+  return (getRoundingMode() != std::nullopt &&
           getRoundingMode() != RoundingMode::NearestTiesToEven) ||
-         (getExceptionBehavior() != None &&
+         (getExceptionBehavior() != std::nullopt &&
           getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
 }
 

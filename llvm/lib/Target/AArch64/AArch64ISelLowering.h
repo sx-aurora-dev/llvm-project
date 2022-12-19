@@ -102,9 +102,13 @@ enum NodeType : unsigned {
   FMINNM_PRED,
   FMUL_PRED,
   FSUB_PRED,
+  HADDS_PRED,
+  HADDU_PRED,
   MUL_PRED,
   MULHS_PRED,
   MULHU_PRED,
+  RHADDS_PRED,
+  RHADDU_PRED,
   SDIV_PRED,
   SHL_PRED,
   SMAX_PRED,
@@ -956,6 +960,7 @@ private:
 
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
 
   bool
   isEligibleForTailCallOptimization(const CallLoweringInfo &CLI) const;

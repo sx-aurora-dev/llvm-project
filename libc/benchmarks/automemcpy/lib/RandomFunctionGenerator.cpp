@@ -8,7 +8,6 @@
 
 #include "automemcpy/RandomFunctionGenerator.h"
 
-#include <llvm/ADT/None.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -167,8 +166,8 @@ static Optional<SizeSpan> AsSizeSpan(size_t Begin, size_t End) {
   return SS;
 }
 
-// Generic method to create a `Region` struct with a Span or None if span is
-// empty.
+// Generic method to create a `Region` struct with a Span or std::nullopt if
+// span is empty.
 template <typename Region>
 static Optional<Region> As(size_t Begin, size_t End) {
   if (auto Span = AsSizeSpan(Begin, End)) {
@@ -179,7 +178,7 @@ static Optional<Region> As(size_t Begin, size_t End) {
   return std::nullopt;
 }
 
-// Returns a Loop struct or None if span is empty.
+// Returns a Loop struct or std::nullopt if span is empty.
 static Optional<Loop> AsLoop(size_t Begin, size_t End, size_t BlockSize) {
   if (auto Span = AsSizeSpan(Begin, End)) {
     Loop Output;
@@ -190,7 +189,7 @@ static Optional<Loop> AsLoop(size_t Begin, size_t End, size_t BlockSize) {
   return std::nullopt;
 }
 
-// Returns an AlignedLoop struct or None if span is empty.
+// Returns an AlignedLoop struct or std::nullopt if span is empty.
 static Optional<AlignedLoop> AsAlignedLoop(size_t Begin, size_t End,
                                            size_t BlockSize, size_t Alignment,
                                            AlignArg AlignTo) {

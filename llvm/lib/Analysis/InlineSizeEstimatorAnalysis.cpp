@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 #include "llvm/Analysis/InlineSizeEstimatorAnalysis.h"
 
-#ifdef LLVM_HAVE_TF_API
+#ifdef LLVM_HAVE_TFLITE
 #include "llvm/Analysis/Utils/TFUtils.h"
 #endif
 #include "llvm/IR/Function.h"
@@ -23,7 +23,7 @@ using namespace llvm;
 
 AnalysisKey InlineSizeEstimatorAnalysis::Key;
 
-#ifdef LLVM_HAVE_TF_API
+#ifdef LLVM_HAVE_TFLITE
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -191,8 +191,7 @@ IRToNativeSizeLearning::getFunctionFeatures(Function &F,
   FF[NamedFeatureIndex::IsLocal] = F.hasLocalLinkage();
   FF[NamedFeatureIndex::IsLinkOnceODR] = F.hasLinkOnceODRLinkage();
   FF[NamedFeatureIndex::IsLinkOnce] = F.hasLinkOnceLinkage();
-  FF[NamedFeatureIndex::Blocks] =
-      std::distance(F.getBasicBlockList().begin(), F.getBasicBlockList().end());
+  FF[NamedFeatureIndex::Blocks] = F.size();
   auto &LI = FAM.getResult<LoopAnalysis>(F);
   FF[NamedFeatureIndex::Loops] = std::distance(LI.begin(), LI.end());
   for (auto &L : LI)

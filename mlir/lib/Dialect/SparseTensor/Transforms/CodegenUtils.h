@@ -48,18 +48,16 @@ OverheadType overheadTypeEncoding(Type tp);
 Type getOverheadType(Builder &builder, OverheadType ot);
 
 /// Returns the OverheadType for pointer overhead storage.
-OverheadType pointerOverheadTypeEncoding(const SparseTensorEncodingAttr &enc);
+OverheadType pointerOverheadTypeEncoding(SparseTensorEncodingAttr enc);
 
 /// Returns the OverheadType for index overhead storage.
-OverheadType indexOverheadTypeEncoding(const SparseTensorEncodingAttr &enc);
+OverheadType indexOverheadTypeEncoding(SparseTensorEncodingAttr enc);
 
 /// Returns the mlir::Type for pointer overhead storage.
-Type getPointerOverheadType(Builder &builder,
-                            const SparseTensorEncodingAttr &enc);
+Type getPointerOverheadType(Builder &builder, SparseTensorEncodingAttr enc);
 
 /// Returns the mlir::Type for index overhead storage.
-Type getIndexOverheadType(Builder &builder,
-                          const SparseTensorEncodingAttr &enc);
+Type getIndexOverheadType(Builder &builder, SparseTensorEncodingAttr enc);
 
 /// Convert OverheadType to its function-name suffix.
 StringRef overheadTypeFunctionSuffix(OverheadType ot);
@@ -137,6 +135,11 @@ Value genAlloca(OpBuilder &builder, Location loc, unsigned sz, Type tp);
 /// Generates an uninitialized temporary buffer with room for one value
 /// of the given type, and returns the `memref<$tp>`.
 Value genAllocaScalar(OpBuilder &builder, Location loc, Type tp);
+
+/// Generates a temporary buffer, initializes it with the given contents,
+/// and returns it as type `memref<? x $tp>` (rather than specifying the
+/// size of the buffer).
+Value allocaBuffer(OpBuilder &builder, Location loc, ValueRange values);
 
 /// Generates code to allocate a buffer of the given type, and zero
 /// initialize it.  If the buffer type has any dynamic sizes, then the
@@ -281,14 +284,14 @@ inline Value constantOverheadTypeEncoding(OpBuilder &builder, Location loc,
 /// Generates a constant of the internal type-encoding for pointer
 /// overhead storage.
 inline Value constantPointerTypeEncoding(OpBuilder &builder, Location loc,
-                                         const SparseTensorEncodingAttr &enc) {
+                                         SparseTensorEncodingAttr enc) {
   return constantOverheadTypeEncoding(builder, loc, enc.getPointerBitWidth());
 }
 
 /// Generates a constant of the internal type-encoding for index overhead
 /// storage.
 inline Value constantIndexTypeEncoding(OpBuilder &builder, Location loc,
-                                       const SparseTensorEncodingAttr &enc) {
+                                       SparseTensorEncodingAttr enc) {
   return constantOverheadTypeEncoding(builder, loc, enc.getIndexBitWidth());
 }
 
