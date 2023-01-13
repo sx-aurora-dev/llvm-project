@@ -40,7 +40,7 @@ public:
   VEMachineFunctionInfo()
       : VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
-  explicit VEMachineFunctionInfo(MachineFunction &MF)
+  VEMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI)
       : VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
 

@@ -12342,7 +12342,7 @@ SITargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI_,
 
   auto Ret = TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
   if (Ret.first)
-    Ret.second = TRI->getPhysRegClass(Ret.first);
+    Ret.second = TRI->getPhysRegBaseClass(Ret.first);
 
   return Ret;
 }
@@ -12588,14 +12588,6 @@ void SITargetLowering::finalizeLowering(MachineFunction &MF) const {
         MRI.setRegClass(Reg, TRI->getRegClass(NewClassID));
     }
   }
-
-  // Reserve the SGPR(s) to save/restore EXEC for WWM spill/copy handling.
-  unsigned MaxNumSGPRs = ST.getMaxNumSGPRs(MF);
-  Register SReg =
-      ST.isWave32()
-          ? AMDGPU::SGPR_32RegClass.getRegister(MaxNumSGPRs - 1)
-          : AMDGPU::SGPR_64RegClass.getRegister((MaxNumSGPRs / 2) - 1);
-  Info->setSGPRForEXECCopy(SReg);
 
   TargetLoweringBase::finalizeLowering(MF);
 }

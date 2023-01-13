@@ -656,9 +656,6 @@ protected:
   /// Dominator Tree.
   DominatorTree *DT;
 
-  /// Alias Analysis.
-  AAResults *AA;
-
   /// Target Library Info.
   const TargetLibraryInfo *TLI;
 
@@ -2209,7 +2206,6 @@ struct LoopVectorize : public FunctionPass {
     auto *BFI = &getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
     auto *TLIP = getAnalysisIfAvailable<TargetLibraryInfoWrapperPass>();
     auto *TLI = TLIP ? &TLIP->getTLI(F) : nullptr;
-    auto *AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
     auto *AC = &getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
     auto &LAIs = getAnalysis<LoopAccessLegacyAnalysis>().getLAIs();
     auto *DB = &getAnalysis<DemandedBitsWrapperPass>().getDemandedBits();
@@ -2217,8 +2213,7 @@ struct LoopVectorize : public FunctionPass {
     auto *PSI = &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
 
     return Impl
-        .runImpl(F, *SE, *LI, *TTI, *DT, *BFI, TLI, *DB, *AA, *AC, LAIs, *ORE,
-                 PSI)
+        .runImpl(F, *SE, *LI, *TTI, *DT, *BFI, TLI, *DB, *AC, LAIs, *ORE, PSI)
         .MadeAnyChange;
   }
 
@@ -2229,7 +2224,6 @@ struct LoopVectorize : public FunctionPass {
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
-    AU.addRequired<AAResultsWrapperPass>();
     AU.addRequired<LoopAccessLegacyAnalysis>();
     AU.addRequired<DemandedBitsWrapperPass>();
     AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
@@ -3283,15 +3277,6 @@ InnerLoopVectorizer::createVectorizedLoopSkeleton() {
       >[ ]     <-- exit block(s).
    ...
    */
-
-  // Workaround!  Compute the trip count of the original loop and cache it
-  // before we start modifying the CFG.  This code has a systemic problem
-  // wherein it tries to run analysis over partially constructed IR; this is
-  // wrong, and not simply for SCEV.  The trip count of the original loop
-  // simply happens to be prone to hitting this in practice.  In theory, we
-  // can hit the same issue for any SCEV, or ValueTracking query done during
-  // mutation.  See PR49900.
-  getOrCreateTripCount(OrigLoop->getLoopPreheader());
 
   // Create an empty vector loop, and prepare basic blocks for the runtime
   // checks.
@@ -5494,14 +5479,6 @@ bool LoopVectorizationCostModel::isCandidateForEpilogueVectorization(
         return false;
   }
 
-  // Induction variables that are widened require special handling that is
-  // currently not supported.
-  if (any_of(Legal->getInductionVars(), [&](auto &Entry) {
-        return !(this->isScalarAfterVectorization(Entry.first, VF) ||
-                 this->isProfitableToScalarize(Entry.first, VF));
-      }))
-    return false;
-
   // Epilogue vectorization code has not been auditted to ensure it handles
   // non-latch exits properly.  It may be fine, but it needs auditted and
   // tested.
@@ -7360,7 +7337,6 @@ static const char lv_name[] = "Loop Vectorization";
 INITIALIZE_PASS_BEGIN(LoopVectorize, LV_NAME, lv_name, false, false)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(BasicAAWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(GlobalsAAWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(BlockFrequencyInfoWrapperPass)
@@ -7637,6 +7613,15 @@ void LoopVectorizationPlanner::executePlan(ElementCount BestVF, unsigned BestUF,
   LLVM_DEBUG(dbgs() << "Executing best plan with VF=" << BestVF << ", UF=" << BestUF
                     << '\n');
 
+  // Workaround!  Compute the trip count of the original loop and cache it
+  // before we start modifying the CFG.  This code has a systemic problem
+  // wherein it tries to run analysis over partially constructed IR; this is
+  // wrong, and not simply for SCEV.  The trip count of the original loop
+  // simply happens to be prone to hitting this in practice.  In theory, we
+  // can hit the same issue for any SCEV, or ValueTracking query done during
+  // mutation.  See PR49900.
+  ILV.getOrCreateTripCount(OrigLoop->getLoopPreheader());
+
   // Perform the actual loop transformation.
 
   // 1. Set up the skeleton for vectorization, including vector pre-header and
@@ -7735,14 +7720,6 @@ Value *InnerLoopUnroller::getBroadcastInstrs(Value *V) { return V; }
 /// depicted in https://llvm.org/docs/Vectorizers.html#epilogue-vectorization.
 std::pair<BasicBlock *, Value *>
 EpilogueVectorizerMainLoop::createEpilogueVectorizedLoopSkeleton() {
-  // Workaround!  Compute the trip count of the original loop and cache it
-  // before we start modifying the CFG.  This code has a systemic problem
-  // wherein it tries to run analysis over partially constructed IR; this is
-  // wrong, and not simply for SCEV.  The trip count of the original loop
-  // simply happens to be prone to hitting this in practice.  In theory, we
-  // can hit the same issue for any SCEV, or ValueTracking query done during
-  // mutation.  See PR49900.
-  getOrCreateTripCount(OrigLoop->getLoopPreheader());
   createVectorLoopSkeleton("");
 
   // Generate the code to check the minimum iteration count of the vector
@@ -7773,9 +7750,9 @@ EpilogueVectorizerMainLoop::createEpilogueVectorizedLoopSkeleton() {
   EPI.VectorTripCount = getOrCreateVectorTripCount(LoopVectorPreHeader);
 
   // Skip induction resume value creation here because they will be created in
-  // the second pass. If we created them here, they wouldn't be used anyway,
-  // because the vplan in the second pass still contains the inductions from the
-  // original loop.
+  // the second pass for the scalar loop. The induction resume values for the
+  // inductions in the epilogue loop are created before executing the plan for
+  // the epilogue loop.
 
   return {completeLoopSkeleton(), nullptr};
 }
@@ -7906,31 +7883,40 @@ EpilogueVectorizerEpilogueLoop::createEpilogueVectorizedLoopSkeleton() {
     DT->changeImmediateDominator(LoopExitBlock,
                                  EPI.EpilogueIterationCountCheck);
 
-  // Keep track of bypass blocks, as they feed start values to the induction
-  // phis in the scalar loop preheader.
+  // Keep track of bypass blocks, as they feed start values to the induction and
+  // reduction phis in the scalar loop preheader.
   if (EPI.SCEVSafetyCheck)
     LoopBypassBlocks.push_back(EPI.SCEVSafetyCheck);
   if (EPI.MemSafetyCheck)
     LoopBypassBlocks.push_back(EPI.MemSafetyCheck);
   LoopBypassBlocks.push_back(EPI.EpilogueIterationCountCheck);
 
-  // The vec.epilog.iter.check block may contain Phi nodes from reductions which
-  // merge control-flow from the latch block and the middle block. Update the
-  // incoming values here and move the Phi into the preheader.
+  // The vec.epilog.iter.check block may contain Phi nodes from inductions or
+  // reductions which merge control-flow from the latch block and the middle
+  // block. Update the incoming values here and move the Phi into the preheader.
   SmallVector<PHINode *, 4> PhisInBlock;
   for (PHINode &Phi : VecEpilogueIterationCountCheck->phis())
     PhisInBlock.push_back(&Phi);
 
   for (PHINode *Phi : PhisInBlock) {
+    Phi->moveBefore(LoopVectorPreHeader->getFirstNonPHI());
     Phi->replaceIncomingBlockWith(
         VecEpilogueIterationCountCheck->getSinglePredecessor(),
         VecEpilogueIterationCountCheck);
+
+    // If the phi doesn't have an incoming value from the
+    // EpilogueIterationCountCheck, we are done. Otherwise remove the incoming
+    // value and also those from other check blocks. This is needed for
+    // reduction phis only.
+    if (none_of(Phi->blocks(), [&](BasicBlock *IncB) {
+          return EPI.EpilogueIterationCountCheck == IncB;
+        }))
+      continue;
     Phi->removeIncomingValue(EPI.EpilogueIterationCountCheck);
     if (EPI.SCEVSafetyCheck)
       Phi->removeIncomingValue(EPI.SCEVSafetyCheck);
     if (EPI.MemSafetyCheck)
       Phi->removeIncomingValue(EPI.MemSafetyCheck);
-    Phi->moveBefore(LoopVectorPreHeader->getFirstNonPHI());
   }
 
   // Generate a resume induction for the vector epilogue and put it in the
@@ -10204,7 +10190,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
 
   // Check if it is legal to vectorize the loop.
   LoopVectorizationRequirements Requirements;
-  LoopVectorizationLegality LVL(L, PSE, DT, TTI, TLI, AA, F, *LAIs, LI, ORE,
+  LoopVectorizationLegality LVL(L, PSE, DT, TTI, TLI, F, *LAIs, LI, ORE,
                                 &Requirements, &Hints, DB, AC, BFI, PSI);
   if (!LVL.canVectorize(EnableVPlanNativePath)) {
     LLVM_DEBUG(dbgs() << "LV: Not vectorizing: Cannot prove legality.\n");
@@ -10497,16 +10483,39 @@ bool LoopVectorizePass::processLoop(Loop *L) {
         VPBasicBlock *Header = VectorLoop->getEntryBasicBlock();
         Header->setName("vec.epilog.vector.body");
 
-        // Ensure that the start values for any VPReductionPHIRecipes are
-        // updated before vectorising the epilogue loop.
+        // Ensure that the start values for any VPWidenIntOrFpInductionRecipe,
+        // VPWidenPointerInductionRecipe and VPReductionPHIRecipes are updated
+        // before vectorizing the epilogue loop.
         for (VPRecipeBase &R : Header->phis()) {
+          if (isa<VPCanonicalIVPHIRecipe>(&R))
+            continue;
+
+          Value *ResumeV = nullptr;
+          // TODO: Move setting of resume values to prepareToExecute.
           if (auto *ReductionPhi = dyn_cast<VPReductionPHIRecipe>(&R)) {
-            Value *Resume = MainILV.getReductionResumeValue(
+            ResumeV = MainILV.getReductionResumeValue(
                 ReductionPhi->getRecurrenceDescriptor());
-            assert(Resume && "Must have a resume value.");
-            VPValue *StartVal = BestEpiPlan.getOrAddExternalDef(Resume);
-            ReductionPhi->setOperand(0, StartVal);
+          } else {
+            // Create induction resume values for both widened pointer and
+            // integer/fp inductions and update the start value of the induction
+            // recipes to use the resume value.
+            PHINode *IndPhi = nullptr;
+            const InductionDescriptor *ID;
+            if (auto *Ind = dyn_cast<VPWidenPointerInductionRecipe>(&R)) {
+              IndPhi = cast<PHINode>(Ind->getUnderlyingValue());
+              ID = &Ind->getInductionDescriptor();
+            } else {
+              auto *WidenInd = cast<VPWidenIntOrFpInductionRecipe>(&R);
+              IndPhi = WidenInd->getPHINode();
+              ID = &WidenInd->getInductionDescriptor();
+            }
+
+            ResumeV = MainILV.createInductionResumeValue(
+                IndPhi, *ID, {EPI.MainLoopIterationCountCheck});
           }
+          assert(ResumeV && "Must have a resume value");
+          VPValue *StartVal = BestEpiPlan.getOrAddExternalDef(ResumeV);
+          cast<VPHeaderPHIRecipe>(&R)->setStartValue(StartVal);
         }
 
         LVP.executePlan(EPI.EpilogueVF, EPI.EpilogueUF, BestEpiPlan, EpilogILV,
@@ -10564,16 +10573,14 @@ bool LoopVectorizePass::processLoop(Loop *L) {
 LoopVectorizeResult LoopVectorizePass::runImpl(
     Function &F, ScalarEvolution &SE_, LoopInfo &LI_, TargetTransformInfo &TTI_,
     DominatorTree &DT_, BlockFrequencyInfo &BFI_, TargetLibraryInfo *TLI_,
-    DemandedBits &DB_, AAResults &AA_, AssumptionCache &AC_,
-    LoopAccessInfoManager &LAIs_, OptimizationRemarkEmitter &ORE_,
-    ProfileSummaryInfo *PSI_) {
+    DemandedBits &DB_, AssumptionCache &AC_, LoopAccessInfoManager &LAIs_,
+    OptimizationRemarkEmitter &ORE_, ProfileSummaryInfo *PSI_) {
   SE = &SE_;
   LI = &LI_;
   TTI = &TTI_;
   DT = &DT_;
   BFI = &BFI_;
   TLI = TLI_;
-  AA = &AA_;
   AC = &AC_;
   LAIs = &LAIs_;
   DB = &DB_;
@@ -10639,7 +10646,6 @@ PreservedAnalyses LoopVectorizePass::run(Function &F,
     auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
     auto &BFI = AM.getResult<BlockFrequencyAnalysis>(F);
     auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
-    auto &AA = AM.getResult<AAManager>(F);
     auto &AC = AM.getResult<AssumptionAnalysis>(F);
     auto &DB = AM.getResult<DemandedBitsAnalysis>(F);
     auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
@@ -10649,7 +10655,7 @@ PreservedAnalyses LoopVectorizePass::run(Function &F,
     ProfileSummaryInfo *PSI =
         MAMProxy.getCachedResult<ProfileSummaryAnalysis>(*F.getParent());
     LoopVectorizeResult Result =
-        runImpl(F, SE, LI, TTI, DT, BFI, &TLI, DB, AA, AC, LAIs, ORE, PSI);
+        runImpl(F, SE, LI, TTI, DT, BFI, &TLI, DB, AC, LAIs, ORE, PSI);
     if (!Result.MadeAnyChange)
       return PreservedAnalyses::all();
     PreservedAnalyses PA;
