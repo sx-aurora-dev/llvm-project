@@ -5,7 +5,7 @@
 ; RUN:     | FileCheck -check-prefix=FAST %s
 
 ; Function Attrs: nounwind
-define fastcc <1 x double> @vec_load_v1f64(<1 x double>* %P) {
+define fastcc <1 x double> @vec_load_v1f64(ptr %P) {
 ; CHECK-LABEL: vec_load_v1f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s0, (, %s0)
@@ -15,12 +15,12 @@ define fastcc <1 x double> @vec_load_v1f64(<1 x double>* %P) {
 ; FAST:       # %bb.0:
 ; FAST-NEXT:    ld %s0, (, %s0)
 ; FAST-NEXT:    b.l.t (, %s10)
-  %r = load <1 x double>, <1 x double>* %P, align 8
+  %r = load <1 x double>, ptr %P, align 8
   ret <1 x double> %r
 }
 
 ; Function Attrs: nounwind
-define fastcc <17 x double> @vec_load_v17f64(<17 x double>* %P) {
+define fastcc <17 x double> @vec_load_v17f64(ptr %P) {
 ; CHECK-LABEL: vec_load_v17f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 17, (0)1
@@ -34,15 +34,15 @@ define fastcc <17 x double> @vec_load_v17f64(<17 x double>* %P) {
 ; FAST-NEXT:    lvl %s1
 ; FAST-NEXT:    vld %v0, 8, %s0
 ; FAST-NEXT:    b.l.t (, %s10)
-  %r = load <17 x double>, <17 x double>* %P, align 8
+  %r = load <17 x double>, ptr %P, align 8
   ret <17 x double> %r
 }
 
-declare <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %0, i32 immarg %1, <256 x i1> %2, <256 x double> %3) #0
-declare <128 x double> @llvm.masked.load.v128f64.p0v128f64(<128 x double>* %0, i32 immarg %1, <128 x i1> %2, <128 x double> %3) #0
+declare <256 x double> @llvm.masked.load.v256f64.p0v256f64(ptr %0, i32 immarg %1, <256 x i1> %2, <256 x double> %3) #0
+declare <128 x double> @llvm.masked.load.v128f64.p0v128f64(ptr %0, i32 immarg %1, <128 x i1> %2, <128 x double> %3) #0
 
 ; Function Attrs: nounwind
-define fastcc <128 x double> @vec_mload_v128f64(<128 x double>* %P, <128 x i1> %M) {
+define fastcc <128 x double> @vec_mload_v128f64(ptr %P, <128 x i1> %M) {
 ; CHECK-LABEL: vec_mload_v128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
@@ -59,12 +59,12 @@ define fastcc <128 x double> @vec_mload_v128f64(<128 x double>* %P, <128 x i1> %
 ; FAST-NEXT:    lvl %s1
 ; FAST-NEXT:    vld %v0, 8, %s0
 ; FAST-NEXT:    b.l.t (, %s10)
-  %r = call <128 x double> @llvm.masked.load.v128f64.p0v128f64(<128 x double>* %P, i32 16, <128 x i1> %M, <128 x double> undef)
+  %r = call <128 x double> @llvm.masked.load.v128f64.p0v128f64(ptr %P, i32 16, <128 x i1> %M, <128 x double> undef)
   ret <128 x double> %r
 }
 
 ; Function Attrs: nounwind
-define fastcc <256 x double> @vec_mload_v256f64(<256 x double>* %P, <256 x i1> %M) {
+define fastcc <256 x double> @vec_mload_v256f64(ptr %P, <256 x i1> %M) {
 ; CHECK-LABEL: vec_mload_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -81,12 +81,12 @@ define fastcc <256 x double> @vec_mload_v256f64(<256 x double>* %P, <256 x i1> %
 ; FAST-NEXT:    lvl %s1
 ; FAST-NEXT:    vld %v0, 8, %s0
 ; FAST-NEXT:    b.l.t (, %s10)
-  %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> undef)
+  %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(ptr %P, i32 16, <256 x i1> %M, <256 x double> undef)
   ret <256 x double> %r
 }
 
 ; Function Attrs: nounwind
-define fastcc <256 x double> @vec_mload_pt_v256f64(<256 x double>* %P, <256 x double> %PT, <256 x i1> %M) {
+define fastcc <256 x double> @vec_mload_pt_v256f64(ptr %P, <256 x double> %PT, <256 x i1> %M) {
 ; CHECK-LABEL: vec_mload_pt_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -105,7 +105,7 @@ define fastcc <256 x double> @vec_mload_pt_v256f64(<256 x double>* %P, <256 x do
 ; FAST-NEXT:    vld %v1, 8, %s0
 ; FAST-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; FAST-NEXT:    b.l.t (, %s10)
-  %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> %PT)
+  %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(ptr %P, i32 16, <256 x i1> %M, <256 x double> %PT)
   ret <256 x double> %r
 }
 

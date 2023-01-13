@@ -511,13 +511,15 @@ template <int KIND>
 struct BinaryOp<Fortran::evaluate::SetLength<KIND>> {
   using Op = Fortran::evaluate::SetLength<KIND>;
   static hlfir::EntityWithAttributes gen(mlir::Location loc,
-                                         fir::FirOpBuilder &, const Op &,
-                                         hlfir::Entity, hlfir::Entity) {
-    TODO(loc, "SetLength lowering to HLFIR");
+                                         fir::FirOpBuilder &builder, const Op &,
+                                         hlfir::Entity string,
+                                         hlfir::Entity length) {
+    return hlfir::EntityWithAttributes{
+        builder.create<hlfir::SetLengthOp>(loc, string, length)};
   }
   static void
-  genResultTypeParams(mlir::Location loc, fir::FirOpBuilder &builder,
-                      hlfir::Entity lhs, hlfir::Entity rhs,
+  genResultTypeParams(mlir::Location, fir::FirOpBuilder &, hlfir::Entity,
+                      hlfir::Entity rhs,
                       llvm::SmallVectorImpl<mlir::Value> &resultTypeParams) {
     resultTypeParams.push_back(rhs);
   }
@@ -883,7 +885,7 @@ HlfirDesignatorBuilder::genSubscript(const Fortran::evaluate::Expr<T> &expr) {
     // IR harder to read: directly use index constants for constant subscripts.
     mlir::Type idxTy = builder.getIndexType();
     if (loweredExpr.getType() != idxTy)
-      if (auto cstIndex = fir::factory::getIntIfConstant(loweredExpr))
+      if (auto cstIndex = fir::getIntIfConstant(loweredExpr))
         return hlfir::EntityWithAttributes{
             builder.createIntegerConstant(getLoc(), idxTy, *cstIndex)};
   }

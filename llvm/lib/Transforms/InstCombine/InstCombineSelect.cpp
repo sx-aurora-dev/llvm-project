@@ -2712,10 +2712,6 @@ static Instruction *foldNestedSelects(SelectInst &OuterSelVal,
   if (match(OuterSel.Cond, m_Not(m_Value(OuterSel.Cond))))
     std::swap(OuterSel.TrueVal, OuterSel.FalseVal);
 
-  auto m_c_LogicalOp = [](auto L, auto R) {
-    return m_CombineOr(m_c_LogicalAnd(L, R), m_c_LogicalOr(L, R));
-  };
-
   // The condition of the outermost select must be an `and`/`or`.
   if (!match(OuterSel.Cond, m_c_LogicalOp(m_Value(), m_Value())))
     return nullptr;
@@ -2741,7 +2737,7 @@ static Instruction *foldNestedSelects(SelectInst &OuterSelVal,
     std::swap(InnerSel.TrueVal, InnerSel.FalseVal);
 
   Value *AltCond = nullptr;
-  auto matchOuterCond = [OuterSel, m_c_LogicalOp, &AltCond](auto m_InnerCond) {
+  auto matchOuterCond = [OuterSel, &AltCond](auto m_InnerCond) {
     return match(OuterSel.Cond, m_c_LogicalOp(m_InnerCond, m_Value(AltCond)));
   };
 
@@ -3436,6 +3432,13 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
 
   if (Instruction *I = foldNestedSelects(SI, Builder))
     return I;
+
+  // Match logical variants of the pattern,
+  // and transform them iff that gets rid of inversions.
+  //   (~x) | y  -->  ~(x & (~y))
+  //   (~x) & y  -->  ~(x | (~y))
+  if (sinkNotIntoOtherHandOfLogicalOp(SI))
+    return &SI;
 
   return nullptr;
 }
