@@ -42,14 +42,14 @@ define <4 x i8> @udiv_by_minus_one(<4 x i8> %x) {
 define <4 x i8> @urem_by_minus_one(<4 x i8> %x) {
 ; CHECK-LABEL: urem_by_minus_one:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lsv %v0(0), %s0
 ; CHECK-NEXT:    lsv %v0(1), %s1
-; CHECK-NEXT:    and %s0, %s2, (32)0
-; CHECK-NEXT:    lsv %v0(2), %s0
-; CHECK-NEXT:    and %s0, %s3, (32)0
-; CHECK-NEXT:    lsv %v0(3), %s0
+; CHECK-NEXT:    lsv %v0(2), %s2
+; CHECK-NEXT:    lsv %v0(3), %s3
 ; CHECK-NEXT:    or %s0, 8, (0)1
 ; CHECK-NEXT:    lea %s1, 255
 ; CHECK-NEXT:    lvl %s0
