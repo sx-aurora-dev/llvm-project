@@ -1020,6 +1020,16 @@ LinkageComputer::getLVForClassMember(const NamedDecl *D,
       explicitSpecSuppressor = MD;
     }
 
+    // OpenMP target declare device functions are not callable from the host so
+    // they should not be exported from the device image. This applies to all
+    // functions as the host-callable kernel functions are emitted at codegen.
+    ASTContext &Context = D->getASTContext();
+    if (Context.getLangOpts().OpenMP && Context.getLangOpts().OpenMPIsDevice &&
+        ((Context.getTargetInfo().getTriple().isAMDGPU() ||
+          Context.getTargetInfo().getTriple().isNVPTX()) ||
+         OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(MD)))
+      LV.mergeVisibility(HiddenVisibility, /*newExplicit=*/false);
+
   } else if (const auto *RD = dyn_cast<CXXRecordDecl>(D)) {
     if (const auto *spec = dyn_cast<ClassTemplateSpecializationDecl>(RD)) {
       mergeTemplateLV(LV, spec, computation);
@@ -3347,6 +3357,8 @@ bool FunctionDecl::isNoReturn() const {
 MultiVersionKind FunctionDecl::getMultiVersionKind() const {
   if (hasAttr<TargetAttr>())
     return MultiVersionKind::Target;
+  if (hasAttr<TargetVersionAttr>())
+    return MultiVersionKind::TargetVersion;
   if (hasAttr<CPUDispatchAttr>())
     return MultiVersionKind::CPUDispatch;
   if (hasAttr<CPUSpecificAttr>())
@@ -3365,7 +3377,8 @@ bool FunctionDecl::isCPUSpecificMultiVersion() const {
 }
 
 bool FunctionDecl::isTargetMultiVersion() const {
-  return isMultiVersion() && hasAttr<TargetAttr>();
+  return isMultiVersion() &&
+         (hasAttr<TargetAttr>() || hasAttr<TargetVersionAttr>());
 }
 
 bool FunctionDecl::isTargetClonesMultiVersion() const {

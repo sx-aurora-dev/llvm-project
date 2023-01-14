@@ -700,6 +700,21 @@ LogicalResult tosa::ReshapeOp::inferReturnTypeComponents(
   return success();
 }
 
+mlir::LogicalResult tosa::ReshapeOp::verify() {
+  ShapedType inputType = getInput1().getType().cast<ShapedType>();
+  ShapedType outputType = getType().cast<ShapedType>();
+
+  if (inputType.hasStaticShape() && outputType.hasStaticShape()) {
+    int64_t inputElementsNum = inputType.getNumElements();
+    int64_t outputElementsNum = outputType.getNumElements();
+    if (inputElementsNum != outputElementsNum) {
+      return emitOpError() << "Cannot reshape " << inputElementsNum
+                           << " elements into " << outputElementsNum;
+    }
+  }
+  return mlir::success();
+}
+
 LogicalResult tosa::TransposeOp::inferReturnTypeComponents(
     MLIRContext *context, ::std::optional<Location> location,
     ValueShapeRange operands, DictionaryAttr attributes, RegionRange regions,
@@ -1293,7 +1308,7 @@ LogicalResult TransposeConv2DOp::inferReturnTypeComponents(
   if (!ShapedType::isDynamic(inputHeight) &&
       !ShapedType::isDynamic(weightHeight)) {
     int64_t calculateSize =
-        (inputHeight - 1) * stride[0] - padding[0] - padding[1] + weightHeight;
+        (inputHeight - 1) * stride[0] + padding[0] + padding[1] + weightHeight;
     outputShape[1] =
         ShapedType::isDynamic(outputShape[1]) ? calculateSize : outputShape[1];
   }
@@ -1301,7 +1316,7 @@ LogicalResult TransposeConv2DOp::inferReturnTypeComponents(
   if (!ShapedType::isDynamic(inputWidth) &&
       !ShapedType::isDynamic(weightWidth)) {
     int64_t calculateSize =
-        (inputWidth - 1) * stride[1] - padding[2] - padding[3] + weightWidth;
+        (inputWidth - 1) * stride[1] + padding[2] + padding[3] + weightWidth;
     outputShape[2] =
         ShapedType::isDynamic(outputShape[2]) ? calculateSize : outputShape[2];
   }

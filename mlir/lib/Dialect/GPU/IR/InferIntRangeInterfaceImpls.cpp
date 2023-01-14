@@ -10,6 +10,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "llvm/ADT/STLForwardCompat.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include <optional>
 
@@ -46,6 +47,7 @@ static Value valueByDim(KernelDim3 dims, Dimension dim) {
   case Dimension::z:
     return dims.z;
   }
+  llvm_unreachable("All dimension enum cases handled above");
 }
 
 static uint64_t zext(uint32_t arg) { return static_cast<uint64_t>(arg); }

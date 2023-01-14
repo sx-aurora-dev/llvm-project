@@ -19,6 +19,11 @@ using namespace llvm;
 /// the divisor not be 0, 1, or -1.  Taken from "Hacker's Delight", Henry S.
 /// Warren, Jr., Chapter 10.
 SignedDivisionByConstantInfo SignedDivisionByConstantInfo::get(const APInt &D) {
+  assert(!D.isZero() && "Precondition violation.");
+
+  // We'd be endlessly stuck in the loop.
+  assert(D.getBitWidth() >= 3 && "Does not work at smaller bitwidths.");
+
   APInt Delta;
   APInt SignedMin = APInt::getSignedMinValue(D.getBitWidth());
   struct SignedDivisionByConstantInfo Retval;
@@ -27,10 +32,11 @@ SignedDivisionByConstantInfo SignedDivisionByConstantInfo::get(const APInt &D) {
   APInt T = SignedMin + (D.lshr(D.getBitWidth() - 1));
   APInt ANC = T - 1 - T.urem(AD);   // absolute value of NC
   unsigned P = D.getBitWidth() - 1; // initialize P
-  APInt Q1 = SignedMin.udiv(ANC);   // initialize Q1 = 2P/abs(NC)
-  APInt R1 = SignedMin - Q1 * ANC;  // initialize R1 = rem(2P,abs(NC))
-  APInt Q2 = SignedMin.udiv(AD);    // initialize Q2 = 2P/abs(D)
-  APInt R2 = SignedMin - Q2 * AD;   // initialize R2 = rem(2P,abs(D))
+  APInt Q1, R1, Q2, R2;
+  // initialize Q1 = 2P/abs(NC); R1 = rem(2P,abs(NC))
+  APInt::udivrem(SignedMin, ANC, Q1, R1);
+  // initialize Q2 = 2P/abs(D); R2 = rem(2P,abs(D))
+  APInt::udivrem(SignedMin, AD, Q2, R2);
   do {
     P = P + 1;
     Q1 <<= 1;      // update Q1 = 2P/abs(NC)
@@ -65,7 +71,11 @@ SignedDivisionByConstantInfo SignedDivisionByConstantInfo::get(const APInt &D) {
 /// LeadingZeros can be used to simplify the calculation if the upper bits
 /// of the divided value are known zero.
 UnsignedDivisionByConstantInfo
-UnsignedDivisionByConstantInfo::get(const APInt &D, unsigned LeadingZeros) {
+UnsignedDivisionByConstantInfo::get(const APInt &D, unsigned LeadingZeros,
+                                    bool AllowEvenDivisorOptimization) {
+  assert(!D.isZero() && "Precondition violation.");
+  assert(D.getBitWidth() > 1 && "Does not work at smaller bitwidths.");
+
   APInt Delta;
   struct UnsignedDivisionByConstantInfo Retval;
   Retval.IsAdd = false; // initialize "add" indicator
@@ -73,12 +83,15 @@ UnsignedDivisionByConstantInfo::get(const APInt &D, unsigned LeadingZeros) {
   APInt SignedMin = APInt::getSignedMinValue(D.getBitWidth());
   APInt SignedMax = APInt::getSignedMaxValue(D.getBitWidth());
 
-  APInt NC = AllOnes - (AllOnes - D).urem(D);
+  // Calculate NC, the largest dividend such that NC.urem(D) == D-1.
+  APInt NC = AllOnes - (AllOnes + 1 - D).urem(D);
+  assert(NC.urem(D) == D - 1 && "Unexpected NC value");
   unsigned P = D.getBitWidth() - 1; // initialize P
-  APInt Q1 = SignedMin.udiv(NC);    // initialize Q1 = 2P/NC
-  APInt R1 = SignedMin - Q1 * NC;   // initialize R1 = rem(2P,NC)
-  APInt Q2 = SignedMax.udiv(D);     // initialize Q2 = (2P-1)/D
-  APInt R2 = SignedMax - Q2 * D;    // initialize R2 = rem((2P-1),D)
+  APInt Q1, R1, Q2, R2;
+  // initialize Q1 = 2P/NC; R1 = rem(2P,NC)
+  APInt::udivrem(SignedMin, NC, Q1, R1);
+  // initialize Q2 = (2P-1)/D; R2 = rem((2P-1),D)
+  APInt::udivrem(SignedMax, D, Q2, R2);
   do {
     P = P + 1;
     if (R1.uge(NC - R1)) {
@@ -117,8 +130,20 @@ UnsignedDivisionByConstantInfo::get(const APInt &D, unsigned LeadingZeros) {
     Delta -= R2;
   } while (P < D.getBitWidth() * 2 &&
            (Q1.ult(Delta) || (Q1 == Delta && R1.isZero())));
+
+  if (Retval.IsAdd && !D[0] && AllowEvenDivisorOptimization) {
+    unsigned PreShift = D.countTrailingZeros();
+    APInt ShiftedD = D.lshr(PreShift);
+    Retval =
+        UnsignedDivisionByConstantInfo::get(ShiftedD, LeadingZeros + PreShift);
+    assert(Retval.IsAdd == 0 && Retval.PreShift == 0);
+    Retval.PreShift = PreShift;
+    return Retval;
+  }
+
   Retval.Magic = std::move(Q2);             // resulting magic number
   ++Retval.Magic;
   Retval.ShiftAmount = P - D.getBitWidth(); // resulting shift
+  Retval.PreShift = 0;
   return Retval;
 }

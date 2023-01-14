@@ -3861,6 +3861,8 @@ def msmall_data_threshold_EQ : Joined <["-"], "msmall-data-threshold=">,
 def msoft_float : Flag<["-"], "msoft-float">, Group<m_Group>, Flags<[CC1Option]>,
   HelpText<"Use software floating point">,
   MarshallingInfoFlag<CodeGenOpts<"SoftFloat">>;
+def mno_fmv : Flag<["-"], "mno-fmv">, Group<f_clang_Group>, Flags<[CC1Option]>,
+  HelpText<"Disable function multiversioning">;
 def moutline_atomics : Flag<["-"], "moutline-atomics">, Group<f_clang_Group>, Flags<[CC1Option]>,
   HelpText<"Generate local calls to out-of-line atomic operations">;
 def mno_outline_atomics : Flag<["-"], "mno-outline-atomics">, Group<f_clang_Group>, Flags<[CC1Option]>,
@@ -5398,9 +5400,9 @@ def massembler_no_warn : Flag<["-"], "massembler-no-warn">,
 def massembler_fatal_warnings : Flag<["-"], "massembler-fatal-warnings">,
   HelpText<"Make assembler warnings fatal">,
   MarshallingInfoFlag<CodeGenOpts<"FatalWarnings">>;
-def mrelax_relocations : Flag<["--"], "mrelax-relocations">,
-    HelpText<"Use relaxable elf relocations">,
-    MarshallingInfoFlag<CodeGenOpts<"RelaxELFRelocations">>;
+def mrelax_relocations_no : Flag<["-"], "mrelax-relocations=no">,
+    HelpText<"Disable x86 relax relocations">,
+    MarshallingInfoNegativeFlag<CodeGenOpts<"RelaxELFRelocations">>;
 def msave_temp_labels : Flag<["-"], "msave-temp-labels">,
   HelpText<"Save temporary labels in the symbol table. "
            "Note this may change .s semantics and shouldn't generally be used "
