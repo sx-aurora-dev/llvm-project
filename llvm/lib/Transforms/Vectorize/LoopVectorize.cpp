@@ -961,6 +961,27 @@ Value *getRuntimeVF(IRBuilderBase &B, Type *Ty, ElementCount VF) {
   return VF.isScalable() ? B.CreateVScale(EC) : EC;
 }
 
+const SCEV *createTripCountSCEV(Type *IdxTy, PredicatedScalarEvolution &PSE) {
+  const SCEV *BackedgeTakenCount = PSE.getBackedgeTakenCount();
+  assert(!isa<SCEVCouldNotCompute>(BackedgeTakenCount) && "Invalid loop count");
+
+  ScalarEvolution &SE = *PSE.getSE();
+
+  // The exit count might have the type of i64 while the phi is i32. This can
+  // happen if we have an induction variable that is sign extended before the
+  // compare. The only way that we get a backedge taken count is that the
+  // induction variable was signed and as such will not overflow. In such a case
+  // truncation is legal.
+  if (SE.getTypeSizeInBits(BackedgeTakenCount->getType()) >
+      IdxTy->getPrimitiveSizeInBits())
+    BackedgeTakenCount = SE.getTruncateOrNoop(BackedgeTakenCount, IdxTy);
+  BackedgeTakenCount = SE.getNoopOrZeroExtend(BackedgeTakenCount, IdxTy);
+
+  // Get the total trip count from the count by adding 1.
+  return SE.getAddExpr(BackedgeTakenCount,
+                       SE.getOne(BackedgeTakenCount->getType()));
+}
+
 static Value *getRuntimeVFAsFloat(IRBuilderBase &B, Type *FTy,
                                   ElementCount VF) {
   assert(FTy->isFloatingPointTy() && "Expected floating point type!");
@@ -2831,33 +2852,15 @@ Value *InnerLoopVectorizer::getOrCreateTripCount(BasicBlock *InsertBlock) {
   assert(InsertBlock);
   IRBuilder<> Builder(InsertBlock->getTerminator());
   // Find the loop boundaries.
-  ScalarEvolution *SE = PSE.getSE();
-  const SCEV *BackedgeTakenCount = PSE.getBackedgeTakenCount();
-  assert(!isa<SCEVCouldNotCompute>(BackedgeTakenCount) &&
-         "Invalid loop count");
-
   Type *IdxTy = Legal->getWidestInductionType();
   assert(IdxTy && "No type for induction");
-
-  // The exit count might have the type of i64 while the phi is i32. This can
-  // happen if we have an induction variable that is sign extended before the
-  // compare. The only way that we get a backedge taken count is that the
-  // induction variable was signed and as such will not overflow. In such a case
-  // truncation is legal.
-  if (SE->getTypeSizeInBits(BackedgeTakenCount->getType()) >
-      IdxTy->getPrimitiveSizeInBits())
-    BackedgeTakenCount = SE->getTruncateOrNoop(BackedgeTakenCount, IdxTy);
-  BackedgeTakenCount = SE->getNoopOrZeroExtend(BackedgeTakenCount, IdxTy);
-
-  // Get the total trip count from the count by adding 1.
-  const SCEV *ExitCount = SE->getAddExpr(
-      BackedgeTakenCount, SE->getOne(BackedgeTakenCount->getType()));
+  const SCEV *ExitCount = createTripCountSCEV(IdxTy, PSE);
 
   const DataLayout &DL = InsertBlock->getModule()->getDataLayout();
 
   // Expand the trip count and place the new instructions in the preheader.
   // Notice that the pre-header does not change, only the loop body.
-  SCEVExpander Exp(*SE, DL, "induction");
+  SCEVExpander Exp(*PSE.getSE(), DL, "induction");
 
   // Count holds the overall loop count (N).
   TripCount = Exp.expandCodeFor(ExitCount, ExitCount->getType(),
@@ -7610,6 +7613,11 @@ void LoopVectorizationPlanner::executePlan(ElementCount BestVF, unsigned BestUF,
                                            InnerLoopVectorizer &ILV,
                                            DominatorTree *DT,
                                            bool IsEpilogueVectorization) {
+  assert(BestVPlan.hasVF(BestVF) &&
+         "Trying to execute plan with unsupported VF");
+  assert(BestVPlan.hasUF(BestUF) &&
+         "Trying to execute plan with unsupported UF");
+
   LLVM_DEBUG(dbgs() << "Executing best plan with VF=" << BestVF << ", UF=" << BestUF
                     << '\n');
 
@@ -9129,18 +9137,10 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
       }
   }
 
-  std::string PlanName;
-  raw_string_ostream RSO(PlanName);
-  ElementCount VF = Range.Start;
-  Plan->addVF(VF);
-  RSO << "Initial VPlan for VF={" << VF;
-  for (VF *= 2; ElementCount::isKnownLT(VF, Range.End); VF *= 2) {
+  for (ElementCount VF = Range.Start; ElementCount::isKnownLT(VF, Range.End);
+       VF *= 2)
     Plan->addVF(VF);
-    RSO << "," << VF;
-  }
-  RSO << "},UF>=1";
-  RSO.flush();
-  Plan->setName(PlanName);
+  Plan->setName("Initial VPlan");
 
   // From this point onwards, VPlan-to-VPlan transformations may change the plan
   // in ways that accessing values using original IR values is incorrect.
