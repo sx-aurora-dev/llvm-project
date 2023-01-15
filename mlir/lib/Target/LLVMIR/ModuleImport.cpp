@@ -48,6 +48,16 @@ static std::string diag(llvm::Value &value) {
   return os.str();
 }
 
+/// Returns the name of the global_ctors global variables.
+static constexpr StringRef getGlobalCtorsVarName() {
+  return "llvm.global_ctors";
+}
+
+/// Returns the name of the global_dtors global variables.
+static constexpr StringRef getGlobalDtorsVarName() {
+  return "llvm.global_dtors";
+}
+
 /// Creates an attribute containing ABI and preferred alignment numbers parsed
 /// a string. The string may be either "abi:preferred" or just "abi". In the
 /// latter case, the preferred alignment is considered equal to ABI alignment.
@@ -319,9 +329,20 @@ ModuleImport::ModuleImport(ModuleOp mlirModule,
 }
 
 LogicalResult ModuleImport::convertGlobals() {
-  for (llvm::GlobalVariable &globalVar : llvmModule->globals())
-    if (!processGlobal(&globalVar))
-      return failure();
+  for (llvm::GlobalVariable &globalVar : llvmModule->globals()) {
+    if (globalVar.getName() == getGlobalCtorsVarName() ||
+        globalVar.getName() == getGlobalDtorsVarName()) {
+      if (failed(convertGlobalCtorsAndDtors(&globalVar))) {
+        return emitError(mlirModule.getLoc())
+               << "unhandled global variable " << diag(globalVar);
+      }
+      continue;
+    }
+    if (failed(convertGlobal(&globalVar))) {
+      return emitError(mlirModule.getLoc())
+             << "unhandled global variable " << diag(globalVar);
+    }
+  }
   return success();
 }
 
@@ -511,17 +532,13 @@ Attribute ModuleImport::getConstantAsAttr(llvm::Constant *value) {
   return nullptr;
 }
 
-GlobalOp ModuleImport::processGlobal(llvm::GlobalVariable *globalVar) {
-  if (globals.count(globalVar))
-    return globals[globalVar];
-
+LogicalResult ModuleImport::convertGlobal(llvm::GlobalVariable *globalVar) {
   // Insert the global after the last one or at the start of the module.
   OpBuilder::InsertionGuard guard(builder);
-  if (!globalInsertionOp) {
+  if (!globalInsertionOp)
     builder.setInsertionPointToStart(mlirModule.getBody());
-  } else {
+  else
     builder.setInsertionPointAfter(globalInsertionOp);
-  }
 
   Attribute valueAttr;
   if (globalVar->hasInitializer())
@@ -536,7 +553,7 @@ GlobalOp ModuleImport::processGlobal(llvm::GlobalVariable *globalVar) {
   }
 
   GlobalOp globalOp = builder.create<GlobalOp>(
-      UnknownLoc::get(context), type, globalVar->isConstant(),
+      mlirModule.getLoc(), type, globalVar->isConstant(),
       convertLinkageFromLLVM(globalVar->getLinkage()), globalVar->getName(),
       valueAttr, alignment, /*addr_space=*/globalVar->getAddressSpace(),
       /*dso_local=*/globalVar->isDSOLocal(),
@@ -550,7 +567,7 @@ GlobalOp ModuleImport::processGlobal(llvm::GlobalVariable *globalVar) {
     FailureOr<Value> initializer =
         convertConstantExpr(globalVar->getInitializer());
     if (failed(initializer))
-      return {};
+      return failure();
     builder.create<ReturnOp>(globalOp.getLoc(), *initializer);
   }
   if (globalVar->hasAtLeastLocalUnnamedAddr()) {
@@ -560,7 +577,55 @@ GlobalOp ModuleImport::processGlobal(llvm::GlobalVariable *globalVar) {
   if (globalVar->hasSection())
     globalOp.setSection(globalVar->getSection());
 
-  return globals[globalVar] = globalOp;
+  return success();
+}
+
+LogicalResult
+ModuleImport::convertGlobalCtorsAndDtors(llvm::GlobalVariable *globalVar) {
+  if (!globalVar->hasInitializer() || !globalVar->hasAppendingLinkage())
+    return failure();
+  auto *initializer =
+      dyn_cast<llvm::ConstantArray>(globalVar->getInitializer());
+  if (!initializer)
+    return failure();
+
+  SmallVector<Attribute> funcs;
+  SmallVector<int32_t> priorities;
+  for (llvm::Value *operand : initializer->operands()) {
+    auto *aggregate = dyn_cast<llvm::ConstantAggregate>(operand);
+    if (!aggregate || aggregate->getNumOperands() != 3)
+      return failure();
+
+    auto *priority = dyn_cast<llvm::ConstantInt>(aggregate->getOperand(0));
+    auto *func = dyn_cast<llvm::Function>(aggregate->getOperand(1));
+    auto *data = dyn_cast<llvm::Constant>(aggregate->getOperand(2));
+    if (!priority || !func || !data)
+      return failure();
+
+    // GlobalCtorsOps and GlobalDtorsOps do not support non-null data fields.
+    if (!data->isNullValue())
+      return failure();
+
+    funcs.push_back(FlatSymbolRefAttr::get(context, func->getName()));
+    priorities.push_back(priority->getValue().getZExtValue());
+  }
+
+  OpBuilder::InsertionGuard guard(builder);
+  if (!globalInsertionOp)
+    builder.setInsertionPointToStart(mlirModule.getBody());
+  else
+    builder.setInsertionPointAfter(globalInsertionOp);
+
+  if (globalVar->getName() == getGlobalCtorsVarName()) {
+    globalInsertionOp = builder.create<LLVM::GlobalCtorsOp>(
+        mlirModule.getLoc(), builder.getArrayAttr(funcs),
+        builder.getI32ArrayAttr(priorities));
+    return success();
+  }
+  globalInsertionOp = builder.create<LLVM::GlobalDtorsOp>(
+      mlirModule.getLoc(), builder.getArrayAttr(funcs),
+      builder.getI32ArrayAttr(priorities));
+  return success();
 }
 
 SetVector<llvm::Constant *>
@@ -627,8 +692,9 @@ FailureOr<Value> ModuleImport::convertConstant(llvm::Constant *constant) {
 
   // Convert global variable accesses.
   if (auto *globalVar = dyn_cast<llvm::GlobalVariable>(constant)) {
-    return builder.create<AddressOfOp>(loc, processGlobal(globalVar))
-        .getResult();
+    Type type = convertType(globalVar->getType());
+    auto symbolRef = FlatSymbolRefAttr::get(context, globalVar->getName());
+    return builder.create<AddressOfOp>(loc, type, symbolRef).getResult();
   }
 
   // Convert constant expressions.
@@ -703,11 +769,10 @@ FailureOr<Value> ModuleImport::convertConstantExpr(llvm::Constant *constant) {
 
   // Insert the constant after the last one or at the start or the entry block.
   OpBuilder::InsertionGuard guard(builder);
-  if (!constantInsertionOp) {
+  if (!constantInsertionOp)
     builder.setInsertionPointToStart(constantInsertionBlock);
-  } else {
+  else
     builder.setInsertionPointAfter(constantInsertionOp);
-  }
 
   // Convert all constants of the expression and add them to `valueMapping`.
   SetVector<llvm::Constant *> constantsToConvert =
