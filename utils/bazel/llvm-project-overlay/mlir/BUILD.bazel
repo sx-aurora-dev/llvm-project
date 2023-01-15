@@ -1201,13 +1201,16 @@ cc_library(
     hdrs = glob(["include/mlir/Dialect/Affine/TransformOps/*.h"]),
     includes = ["include"],
     deps = [
+        ":AffineAnalysis",
         ":AffineDialect",
         ":AffineTransformOpsIncGen",
         ":AffineTransforms",
         ":AffineUtils",
         ":FuncDialect",
         ":IR",
+        ":PDLDialect",
         ":TransformDialect",
+        ":Transforms",
         ":VectorDialect",
     ],
 )
@@ -5095,6 +5098,7 @@ cc_library(
         ":SPIRVDialect",
         ":SPIRVPassIncGen",
         ":SPIRVUtils",
+        ":Support",
         ":Transforms",
         "//llvm:Support",
     ],
@@ -6429,6 +6433,7 @@ cc_library(
         ":IR",
         ":InferIntRangeInterface",
         ":LoopLikeInterface",
+        ":Pass",
         ":SideEffectInterfaces",
         ":Support",
         ":ViewLikeInterface",
@@ -9137,6 +9142,7 @@ cc_library(
         ":TransformDialectEnumsIncGen",
         ":TransformDialectIncGen",
         ":TransformDialectInterfacesIncGen",
+        ":TransformDialectUtils",
         ":TransformOpsIncGen",
         ":TransformTypesIncGen",
         "//llvm:Support",
@@ -9186,14 +9192,13 @@ cc_library(
 
 cc_library(
     name = "TransformDialectUtils",
-    srcs = ["lib/Dialect/Transform/Utils/Utils.cpp"],
-    hdrs = ["include/mlir/Dialect/Transform/Utils/Utils.h"],
+    srcs = glob(["lib/Dialect/Transform/Utils/*cpp"]),
+    hdrs = glob(["include/mlir/Dialect/Transform/Utils/*.h"]),
     includes = ["include"],
     deps = [
         ":DialectUtils",
         ":IR",
         ":Support",
-        ":TransformDialect",
         ":ViewLikeInterface",
         "//llvm:Support",
     ],
@@ -10517,8 +10522,8 @@ cc_library(
         ":Support",
         ":TableGen",
         "//llvm:Support",
-        "//llvm:TargetParser",
         "//llvm:TableGen",
+        "//llvm:TargetParser",
     ],
 )
 

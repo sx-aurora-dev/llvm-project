@@ -31,6 +31,7 @@ def LLVM_Dialect : Dialect {
   let hasRegionArgAttrVerify = 1;
   let hasRegionResultAttrVerify = 1;
   let hasOperationAttrVerify = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 
   let extraClassDeclaration = [{
     /// Name of the data layout attributes.
@@ -52,6 +53,7 @@ def LLVM_Dialect : Dialect {
     static StringRef getNoUndefAttrName() { return "llvm.noundef"; }
     static StringRef getSExtAttrName() { return "llvm.signext"; }
     static StringRef getZExtAttrName() { return "llvm.zeroext"; }
+    static StringRef getTBAAAttrName() { return "llvm.tbaa"; }
 
     /// Verifies if the attribute is a well-formed value for "llvm.struct_attrs"
     static LogicalResult verifyStructAttr(

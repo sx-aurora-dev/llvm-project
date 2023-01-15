@@ -46,6 +46,7 @@ END-SCRIPT
 #include <__algorithm/copy.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/copy.h'}}
 #include <__algorithm/copy_backward.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/copy_backward.h'}}
 #include <__algorithm/copy_if.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/copy_if.h'}}
+#include <__algorithm/copy_move_common.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/copy_move_common.h'}}
 #include <__algorithm/copy_n.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/copy_n.h'}}
 #include <__algorithm/count.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/count.h'}}
 #include <__algorithm/count_if.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/count_if.h'}}
@@ -228,9 +229,19 @@ END-SCRIPT
 #include <__algorithm/upper_bound.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/upper_bound.h'}}
 #include <__availability> // expected-error@*:* {{use of private header from outside its module: '__availability'}}
 #include <__bit/bit_cast.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_cast.h'}}
+#include <__bit/bit_ceil.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_ceil.h'}}
+#include <__bit/bit_floor.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_floor.h'}}
+#include <__bit/bit_log2.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_log2.h'}}
+#include <__bit/bit_width.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_width.h'}}
+#include <__bit/blsr.h> // expected-error@*:* {{use of private header from outside its module: '__bit/blsr.h'}}
 #include <__bit/byteswap.h> // expected-error@*:* {{use of private header from outside its module: '__bit/byteswap.h'}}
+#include <__bit/countl.h> // expected-error@*:* {{use of private header from outside its module: '__bit/countl.h'}}
+#include <__bit/countr.h> // expected-error@*:* {{use of private header from outside its module: '__bit/countr.h'}}
+#include <__bit/endian.h> // expected-error@*:* {{use of private header from outside its module: '__bit/endian.h'}}
+#include <__bit/has_single_bit.h> // expected-error@*:* {{use of private header from outside its module: '__bit/has_single_bit.h'}}
+#include <__bit/popcount.h> // expected-error@*:* {{use of private header from outside its module: '__bit/popcount.h'}}
+#include <__bit/rotate.h> // expected-error@*:* {{use of private header from outside its module: '__bit/rotate.h'}}
 #include <__bit_reference> // expected-error@*:* {{use of private header from outside its module: '__bit_reference'}}
-#include <__bits> // expected-error@*:* {{use of private header from outside its module: '__bits'}}
 #include <__charconv/chars_format.h> // expected-error@*:* {{use of private header from outside its module: '__charconv/chars_format.h'}}
 #include <__charconv/from_chars_result.h> // expected-error@*:* {{use of private header from outside its module: '__charconv/from_chars_result.h'}}
 #include <__charconv/tables.h> // expected-error@*:* {{use of private header from outside its module: '__charconv/tables.h'}}
@@ -590,6 +601,7 @@ END-SCRIPT
 #include <__type_traits/is_abstract.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_abstract.h'}}
 #include <__type_traits/is_aggregate.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_aggregate.h'}}
 #include <__type_traits/is_allocator.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_allocator.h'}}
+#include <__type_traits/is_always_bitcastable.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_always_bitcastable.h'}}
 #include <__type_traits/is_arithmetic.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_arithmetic.h'}}
 #include <__type_traits/is_array.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_array.h'}}
 #include <__type_traits/is_assignable.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_assignable.h'}}

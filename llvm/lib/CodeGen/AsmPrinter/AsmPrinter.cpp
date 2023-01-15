@@ -1132,10 +1132,15 @@ static bool emitDebugValueComment(const MachineInstr *MI, AsmPrinter &AP) {
   OS << " <- ";
 
   const DIExpression *Expr = MI->getDebugExpression();
+  // First convert this to a non-variadic expression if possible, to simplify
+  // the output.
+  if (auto NonVariadicExpr = DIExpression::convertToNonVariadicExpression(Expr))
+    Expr = *NonVariadicExpr;
+  // Then, output the possibly-simplified expression.
   if (Expr->getNumElements()) {
     OS << '[';
     ListSeparator LS;
-    for (auto Op : Expr->expr_ops()) {
+    for (auto &Op : Expr->expr_ops()) {
       OS << LS << dwarf::OperationEncodingString(Op.getOp());
       for (unsigned I = 0; I < Op.getNumArgs(); ++I)
         OS << ' ' << Op.getArg(I);
@@ -1647,6 +1652,9 @@ void AsmPrinter::emitFunctionBody() {
       case TargetOpcode::ARITH_FENCE:
         if (isVerbose())
           OutStreamer->emitRawComment("ARITH_FENCE");
+        break;
+      case TargetOpcode::MEMBARRIER:
+        OutStreamer->emitRawComment("MEMBARRIER");
         break;
       default:
         emitInstruction(&MI);
@@ -2922,8 +2930,8 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV) {
     //
     // If the pointer is larger than the resultant integer, then
     // as with Trunc just depend on the assembler to truncate it.
-    if (DL.getTypeAllocSize(Ty).getFixedSize() <=
-        DL.getTypeAllocSize(Op->getType()).getFixedSize())
+    if (DL.getTypeAllocSize(Ty).getFixedValue() <=
+        DL.getTypeAllocSize(Op->getType()).getFixedValue())
       return OpExpr;
 
     break; // Error

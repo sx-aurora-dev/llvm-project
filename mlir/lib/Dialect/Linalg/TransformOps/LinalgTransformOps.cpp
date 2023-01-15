@@ -26,6 +26,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/TilingInterface.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Debug.h"
 
@@ -65,7 +66,7 @@ static FailureOr<LinalgOp> tryApply(Operation *operation, Args &&...args) {
 
 DiagnosedSilenceableFailure
 transform::DecomposeOp::applyToOne(linalg::LinalgOp target,
-                                   SmallVectorImpl<Operation *> &results,
+                                   transform::ApplyToEachResultList &results,
                                    transform::TransformState &state) {
 #define DOWNSCALE(trans)                                                       \
   {                                                                            \
@@ -383,7 +384,7 @@ static Operation *tileAndFuseFirstExtractUseThroughContainingOpBlockArgument(
     return nullptr;
   }
 
-  BlockAndValueMapping bvm;
+  IRMapping bvm;
   bvm.map(destinationTensors[resultNumber], bbArg);
   auto tileableProducerClone =
       cast<TilingInterface>(rewriter.clone(*tileableProducer, bvm));
@@ -576,7 +577,7 @@ transform::FuseIntoContainingOp::apply(transform::TransformResults &results,
 
 DiagnosedSilenceableFailure
 transform::GeneralizeOp::applyToOne(linalg::LinalgOp target,
-                                    SmallVectorImpl<Operation *> &results,
+                                    transform::ApplyToEachResultList &results,
                                     transform::TransformState &state) {
   // Exit early if no transformation is needed.
   if (isa<GenericOp>(target)) {
@@ -598,7 +599,7 @@ transform::GeneralizeOp::applyToOne(linalg::LinalgOp target,
 
 DiagnosedSilenceableFailure
 transform::InterchangeOp::applyToOne(linalg::GenericOp target,
-                                     SmallVectorImpl<Operation *> &results,
+                                     transform::ApplyToEachResultList &results,
                                      transform::TransformState &state) {
   ArrayRef<int64_t> interchangeVector = getIteratorInterchange();
   // Exit early if no transformation is needed.
@@ -707,7 +708,8 @@ transform::MatchOp::apply(transform::TransformResults &results,
 //===---------------------------------------------------------------------===//
 
 DiagnosedSilenceableFailure transform::MultiTileSizesOp::applyToOne(
-    LinalgOp target, SmallVector<Operation *> &results, TransformState &state) {
+    LinalgOp target, transform::ApplyToEachResultList &results,
+    TransformState &state) {
   OpBuilder builder(target.getContext());
   builder.setInsertionPoint(target);
   OpFoldResult targetSize = builder.getIndexAttr(getTargetSize());
@@ -747,7 +749,7 @@ void transform::MultiTileSizesOp::getEffects(
 
 DiagnosedSilenceableFailure
 transform::PadOp::applyToOne(linalg::LinalgOp target,
-                             SmallVectorImpl<Operation *> &results,
+                             transform::ApplyToEachResultList &results,
                              transform::TransformState &state) {
   // Convert the integer packing flags to booleans.
   SmallVector<bool> packPaddings;
@@ -860,7 +862,7 @@ LogicalResult transform::PadOp::verify() {
 
 DiagnosedSilenceableFailure
 transform::PromoteOp::applyToOne(linalg::LinalgOp target,
-                                 SmallVectorImpl<Operation *> &results,
+                                 transform::ApplyToEachResultList &results,
                                  transform::TransformState &state) {
   LinalgPromotionOptions promotionOptions;
   if (!getOperandsToPromote().empty())
@@ -954,7 +956,7 @@ LogicalResult transform::ReplaceOp::verify() {
 
 DiagnosedSilenceableFailure
 transform::ScalarizeOp::applyToOne(linalg::LinalgOp target,
-                                   SmallVectorImpl<Operation *> &results,
+                                   transform::ApplyToEachResultList &results,
                                    transform::TransformState &state) {
   scf::SCFTilingOptions tilingOptions;
   tilingOptions.setTileSizeComputationFunction([&](OpBuilder &b, Operation *) {
@@ -990,7 +992,10 @@ transform::ScalarizeOp::applyToOne(linalg::LinalgOp target,
     rewriter.replaceOp(target, maybeTilingResult->replacements);
   else
     rewriter.eraseOp(target);
-  results.append(maybeTilingResult->tiledOps);
+
+  results.reserve(maybeTilingResult->tiledOps.size());
+  for (Operation *tiled : maybeTilingResult->tiledOps)
+    results.push_back(tiled);
   return DiagnosedSilenceableFailure::success();
 }
 
@@ -1038,6 +1043,7 @@ DiagnosedSilenceableFailure SplitOp::apply(TransformResults &results,
 
   // Split each target operation.
   SmallVector<Operation *> first, second;
+  Operation *noSecondPart = nullptr;
   for (const auto &pair : llvm::zip(payload, splitPoints)) {
     Operation *target = std::get<0>(pair);
     auto linalgOp = dyn_cast<LinalgOp>(target);
@@ -1062,6 +1068,32 @@ DiagnosedSilenceableFailure SplitOp::apply(TransformResults &results,
     std::tie(first.emplace_back(), second.emplace_back()) = linalg::splitOp(
         rewriter, cast<TilingInterface>(linalgOp.getOperation()),
         getDimension(), std::get<1>(pair));
+
+    // Propagate errors.
+    if (!first.back() && !second.back()) {
+      auto diag = emitDefiniteFailure() << "internal failure in splitting";
+      diag.attachNote(target->getLoc()) << "target op";
+      return diag;
+    }
+
+    // Do not add null second parts.
+    if (!second.back()) {
+      noSecondPart = target;
+      second.pop_back();
+    }
+  }
+
+  if (second.size() != first.size() && !second.empty()) {
+    results.set(getFirst().cast<OpResult>(), {});
+    results.set(getSecond().cast<OpResult>(), {});
+    auto diag =
+        emitSilenceableError()
+        << "splitting does not produce the second part for a subset of targets";
+    diag.attachNote() << "expected splitting to produce the second part of all "
+                         "or none of the targets";
+    diag.attachNote(noSecondPart->getLoc())
+        << "first target with no second part";
+    return diag;
   }
 
   results.set(getFirst().cast<OpResult>(), first);
@@ -1171,10 +1203,9 @@ void transform::SplitReductionOp::build(
   result.addTypes({resultType, resultType, resultType, resultType});
 }
 
-DiagnosedSilenceableFailure
-transform::SplitReductionOp::applyToOne(linalg::LinalgOp target,
-                                        SmallVectorImpl<Operation *> &results,
-                                        transform::TransformState &state) {
+DiagnosedSilenceableFailure transform::SplitReductionOp::applyToOne(
+    linalg::LinalgOp target, transform::ApplyToEachResultList &results,
+    transform::TransformState &state) {
   ControlSplitReductionFn splitFn = [&](LinalgOp) {
     return linalg::SplitReductionOptions{int64_t(getSplitFactor()),
                                          unsigned(getInsertSplitDimension()),
@@ -1218,7 +1249,7 @@ void transform::TileReductionUsingScfOp::build(
 }
 
 DiagnosedSilenceableFailure transform::TileReductionUsingScfOp::applyToOne(
-    linalg::LinalgOp target, SmallVectorImpl<Operation *> &results,
+    linalg::LinalgOp target, transform::ApplyToEachResultList &results,
     transform::TransformState &state) {
   TrivialPatternRewriter rewriter(getContext());
   rewriter.setInsertionPoint(target);
@@ -1262,7 +1293,7 @@ void transform::TileReductionUsingForeachThreadOp::build(
 
 DiagnosedSilenceableFailure
 transform::TileReductionUsingForeachThreadOp::applyToOne(
-    linalg::LinalgOp target, SmallVectorImpl<Operation *> &results,
+    linalg::LinalgOp target, transform::ApplyToEachResultList &results,
     transform::TransformState &state) {
   TrivialPatternRewriter rewriter(getContext());
   rewriter.setInsertionPoint(target);
@@ -1729,6 +1760,8 @@ void transform::TileToForeachThreadOp::getEffects(
   consumesHandle(getTarget(), effects);
   onlyReadsHandle(getTileSizes(), effects);
   onlyReadsHandle(getNumThreads(), effects);
+  onlyReadsHandle(getPackedNumThreads(), effects);
+  onlyReadsHandle(getPackedTileSizes(), effects);
   producesHandle(getResults(), effects);
 }
 
@@ -1951,7 +1984,7 @@ private:
 
 DiagnosedSilenceableFailure
 transform::VectorizeOp::applyToOne(Operation *target,
-                                   SmallVectorImpl<Operation *> &results,
+                                   transform::ApplyToEachResultList &results,
                                    transform::TransformState &state) {
   if (!target->hasTrait<OpTrait::IsIsolatedFromAbove>()) {
     auto diag = this->emitOpError("requires isolated-from-above targets");

@@ -99,7 +99,7 @@ public:
         "pmc0", "pmc1", "pmc2", "pmc3", "pmc4", "pmc5", "pmc6", "pmc7",
         "pmc8", "pmc9", "pmc10", "pmc11", "pmc12", "pmc13", "pmc14",
     };
-    return llvm::makeArrayRef(GCCRegNames);
+    return llvm::ArrayRef(GCCRegNames);
   }
 
   ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override {
@@ -171,7 +171,7 @@ public:
         {{"vix"}, "vixr"},
         {{"usrcc"}, "ucc"},
     };
-    return llvm::makeArrayRef(GCCRegAliases);
+    return llvm::ArrayRef(GCCRegAliases);
   }
 
   bool validateAsmConstraint(const char *&Name,

@@ -1650,6 +1650,8 @@ def err_type_defined_in_condition : Error<
   "%0 cannot be defined in a condition">;
 def err_type_defined_in_enum : Error<
   "%0 cannot be defined in an enumeration">;
+def err_type_defined_in_offsetof : Error<
+  "%0 cannot be defined in '%select{__builtin_offsetof|offsetof}1'">;
 
 def note_pure_virtual_function : Note<
   "unimplemented pure virtual method %0 in %1">;
@@ -2164,6 +2166,9 @@ def err_init_list_bad_dest_type : Error<
 def warn_cxx20_compat_aggregate_init_with_ctors : Warning<
   "aggregate initialization of type %0 with user-declared constructors "
   "is incompatible with C++20">, DefaultIgnore, InGroup<CXX20Compat>;
+def warn_cxx17_compat_aggregate_init_paren_list : Warning<
+  "aggregate initialization of type %0 from a parenthesized list of values "
+  "is a C++20 extension">, DefaultIgnore, InGroup<CXX20>;
 
 def err_reference_bind_to_bitfield : Error<
   "%select{non-const|volatile}0 reference cannot bind to "
@@ -2646,6 +2651,10 @@ def err_invalid_consteval_take_address : Error<
   " of an immediate invocation">;
 def err_invalid_consteval_call : Error<
   "call to consteval function %q0 is not a constant expression">;
+def note_invalid_consteval_initializer : Note<
+  "in the default initalizer of %0">;
+def note_invalid_consteval_initializer_here : Note<
+  "initialized here %0">;
 def err_invalid_consteval_decl_kind : Error<
   "%0 cannot be declared consteval">;
 def err_invalid_constexpr : Error<
@@ -3041,6 +3050,8 @@ def err_attribute_bad_sve_vector_size : Error<
 def err_attribute_arm_feature_sve_bits_unsupported : Error<
   "%0 is only supported when '-msve-vector-bits=<bits>' is specified with a "
   "value of 128, 256, 512, 1024 or 2048.">;
+def err_sve_vector_in_non_sve_target : Error<
+  "SVE vector type %0 cannot be used in a target without sve">;
 def err_attribute_requires_positive_integer : Error<
   "%0 attribute requires a %select{positive|non-negative}1 "
   "integral compile time constant expression">;
@@ -11232,6 +11243,8 @@ def note_not_module_interface_add_export : Note<
   "add 'export' here if this is intended to be a module interface unit">;
 def err_invalid_module_name : Error<
   "%0 is %select{an invalid|a reserved}1 name for a module">;
+def err_extern_def_in_header_unit : Error<
+  "non-inline external definitions are not permitted in C++ header units">;
 
 def ext_equivalent_internal_linkage_decl_in_modules : ExtWarn<
   "ambiguous use of internal linkage declaration %0 defined in multiple modules">,
@@ -11268,8 +11281,8 @@ def err_implied_coroutine_type_not_found : Error<
   "a coroutine; include <experimental/coroutine> if your version "
   "of libcxx is less than 14.0">;
 def warn_deprecated_coroutine_namespace : Warning<
-  "support for std::experimental::%0 will be removed in LLVM 15; "
-  "use std::%0 instead">,
+  "support for 'std::experimental::%0' will be removed in Clang 17; "
+  "use 'std::%0' instead">,
   InGroup<DeprecatedExperimentalCoroutine>;
 def err_mixed_use_std_and_experimental_namespace_for_coroutine : Error<
   "conflicting mixed use of std and std::experimental namespaces for "

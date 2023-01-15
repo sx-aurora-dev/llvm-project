@@ -13,6 +13,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/Support/TypeName.h"
+#include <optional>
 
 namespace mlir {
 
@@ -98,7 +99,7 @@ public:
   /// Return the interface ID used to match the root operation of this pattern.
   /// If the pattern does not use an interface ID for deciding the root match,
   /// this returns std::nullopt.
-  Optional<TypeID> getRootInterfaceID() const {
+  std::optional<TypeID> getRootInterfaceID() const {
     if (rootKind == RootKind::InterfaceID)
       return TypeID::getFromOpaquePointer(rootValue);
     return std::nullopt;
@@ -107,7 +108,7 @@ public:
   /// Return the trait ID used to match the root operation of this pattern.
   /// If the pattern does not use a trait ID for deciding the root match, this
   /// returns std::nullopt.
-  Optional<TypeID> getRootTraitID() const {
+  std::optional<TypeID> getRootTraitID() const {
     if (rootKind == RootKind::TraitID)
       return TypeID::getFromOpaquePointer(rootValue);
     return std::nullopt;
@@ -410,8 +411,7 @@ public:
   /// responsible for creating or updating the operation transferring flow of
   /// control to the region and passing it the correct block arguments.
   virtual void cloneRegionBefore(Region &region, Region &parent,
-                                 Region::iterator before,
-                                 BlockAndValueMapping &mapping);
+                                 Region::iterator before, IRMapping &mapping);
   void cloneRegionBefore(Region &region, Region &parent,
                          Region::iterator before);
   void cloneRegionBefore(Region &region, Block *before);
@@ -655,7 +655,7 @@ public:
   /// value is not an instance of `T`.
   template <typename T,
             typename ResultT = std::conditional_t<
-                std::is_convertible<T, bool>::value, T, Optional<T>>>
+                std::is_convertible<T, bool>::value, T, std::optional<T>>>
   ResultT dyn_cast() const {
     return isa<T>() ? castImpl<T>() : ResultT();
   }

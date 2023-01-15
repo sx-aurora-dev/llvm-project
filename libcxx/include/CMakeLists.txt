@@ -9,6 +9,7 @@ set(files
   __algorithm/copy.h
   __algorithm/copy_backward.h
   __algorithm/copy_if.h
+  __algorithm/copy_move_common.h
   __algorithm/copy_n.h
   __algorithm/count.h
   __algorithm/count_if.h
@@ -192,9 +193,19 @@ set(files
   __assert
   __availability
   __bit/bit_cast.h
+  __bit/bit_ceil.h
+  __bit/bit_floor.h
+  __bit/bit_log2.h
+  __bit/bit_width.h
+  __bit/blsr.h
   __bit/byteswap.h
+  __bit/countl.h
+  __bit/countr.h
+  __bit/endian.h
+  __bit/has_single_bit.h
+  __bit/popcount.h
+  __bit/rotate.h
   __bit_reference
-  __bits
   __bsd_locale_defaults.h
   __bsd_locale_fallbacks.h
   __charconv/chars_format.h
@@ -577,6 +588,7 @@ set(files
   __type_traits/is_abstract.h
   __type_traits/is_aggregate.h
   __type_traits/is_allocator.h
+  __type_traits/is_always_bitcastable.h
   __type_traits/is_arithmetic.h
   __type_traits/is_array.h
   __type_traits/is_assignable.h
@@ -814,6 +826,7 @@ set(files
   set
   setjmp.h
   shared_mutex
+  source_location
   span
   sstream
   stack

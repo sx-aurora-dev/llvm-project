@@ -339,6 +339,14 @@ TEST_F(TokenAnnotatorTest, UnderstandsTemplatesInMacros) {
   EXPECT_TOKEN(Tokens[19], tok::greater, TT_TemplateCloser);
 }
 
+TEST_F(TokenAnnotatorTest, UnderstandsGreaterAfterTemplateCloser) {
+  auto Tokens = annotate("if (std::tuple_size_v<T> > 0)");
+  ASSERT_EQ(Tokens.size(), 12u) << Tokens;
+  EXPECT_TOKEN(Tokens[5], tok::less, TT_TemplateOpener);
+  EXPECT_TOKEN(Tokens[7], tok::greater, TT_TemplateCloser);
+  EXPECT_TOKEN(Tokens[8], tok::greater, TT_BinaryOperator);
+}
+
 TEST_F(TokenAnnotatorTest, UnderstandsWhitespaceSensitiveMacros) {
   FormatStyle Style = getLLVMStyle();
   Style.WhitespaceSensitiveMacros.push_back("FOO");
@@ -1142,6 +1150,14 @@ TEST_F(TokenAnnotatorTest, UnderstandsFunctionDeclarationNames) {
   Tokens = annotate("void f [[noreturn]] () {}");
   ASSERT_EQ(Tokens.size(), 12u) << Tokens;
   EXPECT_TOKEN(Tokens[1], tok::identifier, TT_FunctionDeclarationName);
+}
+
+TEST_F(TokenAnnotatorTest, UnderstandsC11GenericSelection) {
+  auto Tokens = annotate("_Generic(x, int: 1, default: 0)");
+  ASSERT_EQ(Tokens.size(), 13u) << Tokens;
+  EXPECT_TOKEN(Tokens[0], tok::kw__Generic, TT_Unknown);
+  EXPECT_TOKEN(Tokens[5], tok::colon, TT_GenericSelectionColon);
+  EXPECT_TOKEN(Tokens[9], tok::colon, TT_GenericSelectionColon);
 }
 
 TEST_F(TokenAnnotatorTest, UnderstandsVerilogOperators) {

@@ -5317,8 +5317,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     break;
   case Intrinsic::localescape: {
     BasicBlock *BB = Call.getParent();
-    Check(BB == &BB->getParent()->front(),
-          "llvm.localescape used outside of entry block", Call);
+    Check(BB->isEntryBlock(), "llvm.localescape used outside of entry block",
+          Call);
     Check(!SawFrameEscape, "multiple calls to llvm.localescape in one function",
           Call);
     for (Value *Arg : Call.args()) {
@@ -6137,9 +6137,12 @@ void Verifier::visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII) {
     CheckDI(isa<DIAssignID>(DAI->getRawAssignID()),
             "invalid llvm.dbg.assign intrinsic DIAssignID", &DII,
             DAI->getRawAssignID());
-    CheckDI(isa<ValueAsMetadata>(DAI->getRawAddress()),
-            "invalid llvm.dbg.assign intrinsic address)", &DII,
-            DAI->getRawAddress());
+    const auto *RawAddr = DAI->getRawAddress();
+    CheckDI(
+        isa<ValueAsMetadata>(RawAddr) ||
+            (isa<MDNode>(RawAddr) && !cast<MDNode>(RawAddr)->getNumOperands()),
+        "invalid llvm.dbg.assign intrinsic address", &DII,
+        DAI->getRawAddress());
     CheckDI(isa<DIExpression>(DAI->getRawAddressExpression()),
             "invalid llvm.dbg.assign intrinsic address expression", &DII,
             DAI->getRawAddressExpression());

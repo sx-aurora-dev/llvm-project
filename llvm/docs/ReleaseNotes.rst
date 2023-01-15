@@ -114,11 +114,21 @@ Changes to building LLVM
 Changes to TableGen
 -------------------
 
+Changes to Interprocedural Optimizations
+----------------------------------------
+
+* Function Specialization has been integrated into IPSCCP.
+* Specialization of functions has been enabled by default at all
+  optimization levels except Os, Oz. This has exposed a mis-compilation
+  in SPEC/CINT2017rate/502.gcc_r when built via the LLVM Test Suite with
+  both LTO and PGO enabled, but without the option -fno-strict-aliasing.
+
 Changes to the AArch64 Backend
 ------------------------------
 
 * Added support for the Cortex-A715 CPU.
 * Added support for the Cortex-X3 CPU.
+* Added support for the Neoverse V2 CPU.
 * Added support for assembly for RME MEC (Memory Encryption Contexts).
 
 Changes to the AMDGPU Backend
@@ -175,6 +185,14 @@ Changes to the Windows Target
   with hidden visibility, omitting them from automatic export of all symbols.
   This roughly makes hidden visibility work like it does for other object
   file formats.
+
+* When using multi-threaded LLVM tools (such as LLD) on a Windows host with a
+  large number of processors or CPU sockets, previously the LLVM ThreadPool
+  would span out threads to use all processors.
+  Starting with Windows Server 2022 and Windows 11, the behavior has changed,
+  the OS now spans out threads automatically to all processors. This also fixes
+  an affinity mask issue.
+  (`D138747 <https://reviews.llvm.org/D138747>`_)
 
 Changes to the X86 Backend
 --------------------------

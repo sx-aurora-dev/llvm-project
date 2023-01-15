@@ -485,6 +485,7 @@ public:
   bool parsePredicateOperand(MachineOperand &Dest);
   bool parseShuffleMaskOperand(MachineOperand &Dest);
   bool parseTargetIndexOperand(MachineOperand &Dest);
+  bool parseDbgInstrRefOperand(MachineOperand &Dest);
   bool parseCustomRegisterMaskOperand(MachineOperand &Dest);
   bool parseLiveoutRegisterMaskOperand(MachineOperand &Dest);
   bool parseMachineOperand(const unsigned OpCode, const unsigned OpIdx,
@@ -1370,7 +1371,7 @@ static const char *printImplicitRegisterFlag(const MachineOperand &MO) {
 
 static std::string getRegisterName(const TargetRegisterInfo *TRI,
                                    Register Reg) {
-  assert(Register::isPhysicalRegister(Reg) && "expected phys reg");
+  assert(Reg.isPhysical() && "expected phys reg");
   return StringRef(TRI->getName(Reg)).lower();
 }
 
@@ -1700,11 +1701,11 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
   if (Token.is(MIToken::dot)) {
     if (parseSubRegisterIndex(SubReg))
       return true;
-    if (!Register::isVirtualRegister(Reg))
+    if (!Reg.isVirtual())
       return error("subregister index expects a virtual register");
   }
   if (Token.is(MIToken::colon)) {
-    if (!Register::isVirtualRegister(Reg))
+    if (!Reg.isVirtual())
       return error("register class specification expects a virtual register");
     lex();
     if (parseRegisterClassOrBank(*RegInfo))
@@ -1734,7 +1735,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
     }
   } else if (consumeIfPresent(MIToken::lparen)) {
     // Virtual registers may have a tpe with GlobalISel.
-    if (!Register::isVirtualRegister(Reg))
+    if (!Reg.isVirtual())
       return error("unexpected type on physical register");
 
     LLT Ty;
@@ -1749,7 +1750,7 @@ bool MIParser::parseRegisterOperand(MachineOperand &Dest,
 
     MRI.setRegClassOrRegBank(Reg, static_cast<RegisterBank *>(nullptr));
     MRI.setType(Reg, Ty);
-  } else if (Register::isVirtualRegister(Reg)) {
+  } else if (Reg.isVirtual()) {
     // Generic virtual registers must have a type.
     // If we end up here this means the type hasn't been specified and
     // this is bad!
@@ -2715,6 +2716,37 @@ bool MIParser::parseShuffleMaskOperand(MachineOperand &Dest) {
   return false;
 }
 
+bool MIParser::parseDbgInstrRefOperand(MachineOperand &Dest) {
+  assert(Token.is(MIToken::kw_dbg_instr_ref));
+
+  lex();
+  if (expectAndConsume(MIToken::lparen))
+    return error("expected syntax dbg-instr-ref(<unsigned>, <unsigned>)");
+
+  if (Token.isNot(MIToken::IntegerLiteral) || Token.integerValue().isNegative())
+    return error("expected unsigned integer for instruction index");
+  uint64_t InstrIdx = Token.integerValue().getZExtValue();
+  assert(InstrIdx <= std::numeric_limits<unsigned>::max() &&
+         "Instruction reference's instruction index is too large");
+  lex();
+
+  if (expectAndConsume(MIToken::comma))
+    return error("expected syntax dbg-instr-ref(<unsigned>, <unsigned>)");
+
+  if (Token.isNot(MIToken::IntegerLiteral) || Token.integerValue().isNegative())
+    return error("expected unsigned integer for operand index");
+  uint64_t OpIdx = Token.integerValue().getZExtValue();
+  assert(OpIdx <= std::numeric_limits<unsigned>::max() &&
+         "Instruction reference's operand index is too large");
+  lex();
+
+  if (expectAndConsume(MIToken::rparen))
+    return error("expected syntax dbg-instr-ref(<unsigned>, <unsigned>)");
+
+  Dest = MachineOperand::CreateDbgInstrRef(InstrIdx, OpIdx);
+  return false;
+}
+
 bool MIParser::parseTargetIndexOperand(MachineOperand &Dest) {
   assert(Token.is(MIToken::kw_target_index));
   lex();
@@ -2866,6 +2898,8 @@ bool MIParser::parseMachineOperand(const unsigned OpCode, const unsigned OpIdx,
     return parsePredicateOperand(Dest);
   case MIToken::kw_shufflemask:
     return parseShuffleMaskOperand(Dest);
+  case MIToken::kw_dbg_instr_ref:
+    return parseDbgInstrRefOperand(Dest);
   case MIToken::Error:
     return true;
   case MIToken::Identifier:

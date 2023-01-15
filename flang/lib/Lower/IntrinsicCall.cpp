@@ -25,6 +25,7 @@
 #include "flang/Optimizer/Builder/MutableBox.h"
 #include "flang/Optimizer/Builder/Runtime/Character.h"
 #include "flang/Optimizer/Builder/Runtime/Command.h"
+#include "flang/Optimizer/Builder/Runtime/Derived.h"
 #include "flang/Optimizer/Builder/Runtime/Inquiry.h"
 #include "flang/Optimizer/Builder/Runtime/Numeric.h"
 #include "flang/Optimizer/Builder/Runtime/RTBuilder.h"
@@ -40,6 +41,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include <optional>
 
 #define DEBUG_TYPE "flang-lower-intrinsic"
 
@@ -421,7 +423,7 @@ struct IntrinsicLibrary {
   /// Generate FIR for call to Fortran intrinsic \p name with arguments \p arg
   /// and expected result type \p resultType.
   fir::ExtendedValue genIntrinsicCall(llvm::StringRef name,
-                                      llvm::Optional<mlir::Type> resultType,
+                                      std::optional<mlir::Type> resultType,
                                       llvm::ArrayRef<fir::ExtendedValue> arg);
 
   /// Search a runtime function that is associated to the generic intrinsic name
@@ -499,6 +501,8 @@ struct IntrinsicLibrary {
   fir::ExtendedValue genEoshift(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
   void genExit(llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genExponent(mlir::Type, llvm::ArrayRef<mlir::Value>);
+  fir::ExtendedValue genExtendsTypeOf(mlir::Type,
+                                      llvm::ArrayRef<fir::ExtendedValue>);
   template <Extremum, ExtremumBehavior>
   mlir::Value genExtremum(mlir::Type, llvm::ArrayRef<mlir::Value>);
   mlir::Value genFloor(mlir::Type, llvm::ArrayRef<mlir::Value>);
@@ -525,6 +529,8 @@ struct IntrinsicLibrary {
   fir::ExtendedValue genIndex(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genIor(mlir::Type, llvm::ArrayRef<mlir::Value>);
   fir::ExtendedValue genIparity(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
+  fir::ExtendedValue genIsContiguous(mlir::Type,
+                                     llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genIshft(mlir::Type, llvm::ArrayRef<mlir::Value>);
   mlir::Value genIshftc(mlir::Type, llvm::ArrayRef<mlir::Value>);
   fir::ExtendedValue genLbound(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
@@ -563,6 +569,8 @@ struct IntrinsicLibrary {
   fir::ExtendedValue genReshape(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genRRSpacing(mlir::Type resultType,
                            llvm::ArrayRef<mlir::Value> args);
+  fir::ExtendedValue genSameTypeAs(mlir::Type,
+                                   llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genScale(mlir::Type, llvm::ArrayRef<mlir::Value>);
   fir::ExtendedValue genScan(mlir::Type, llvm::ArrayRef<fir::ExtendedValue>);
   mlir::Value genSelectedIntKind(mlir::Type, llvm::ArrayRef<mlir::Value>);
@@ -614,7 +622,7 @@ struct IntrinsicLibrary {
   template <typename GeneratorType>
   fir::ExtendedValue
   outlineInExtendedWrapper(GeneratorType, llvm::StringRef name,
-                           llvm::Optional<mlir::Type> resultType,
+                           std::optional<mlir::Type> resultType,
                            llvm::ArrayRef<fir::ExtendedValue> args);
 
   template <typename GeneratorType>
@@ -811,6 +819,10 @@ static constexpr IntrinsicHandler handlers[]{
      {{{"status", asValue, handleDynamicOptional}}},
      /*isElemental=*/false},
     {"exponent", &I::genExponent},
+    {"extends_type_of",
+     &I::genExtendsTypeOf,
+     {{{"a", asBox}, {"mold", asBox}}},
+     /*isElemental=*/false},
     {"findloc",
      &I::genFindloc,
      {{{"array", asBox},
@@ -882,6 +894,10 @@ static constexpr IntrinsicHandler handlers[]{
      {{{"array", asBox},
        {"dim", asValue},
        {"mask", asBox, handleDynamicOptional}}},
+     /*isElemental=*/false},
+    {"is_contiguous",
+     &I::genIsContiguous,
+     {{{"array", asBox}}},
      /*isElemental=*/false},
     {"ishft", &I::genIshft},
     {"ishftc", &I::genIshftc},
@@ -1012,6 +1028,10 @@ static constexpr IntrinsicHandler handlers[]{
        {"order", asBox, handleDynamicOptional}}},
      /*isElemental=*/false},
     {"rrspacing", &I::genRRSpacing},
+    {"same_type_as",
+     &I::genSameTypeAs,
+     {{{"a", asBox}, {"b", asBox}}},
+     /*isElemental=*/false},
     {"scale",
      &I::genScale,
      {{{"x", asValue}, {"i", asValue}}},
@@ -1769,7 +1789,7 @@ static void checkPrecisionLoss(llvm::StringRef name,
 }
 
 /// Helpers to get function type from arguments and result type.
-static mlir::FunctionType getFunctionType(llvm::Optional<mlir::Type> resultType,
+static mlir::FunctionType getFunctionType(std::optional<mlir::Type> resultType,
                                           llvm::ArrayRef<mlir::Value> arguments,
                                           fir::FirOpBuilder &builder) {
   llvm::SmallVector<mlir::Type> argTypes;
@@ -1920,7 +1940,7 @@ IntrinsicLibrary::genElementalCall<IntrinsicLibrary::SubroutineGenerator>(
 static fir::ExtendedValue
 invokeHandler(IntrinsicLibrary::ElementalGenerator generator,
               const IntrinsicHandler &handler,
-              llvm::Optional<mlir::Type> resultType,
+              std::optional<mlir::Type> resultType,
               llvm::ArrayRef<fir::ExtendedValue> args, bool outline,
               IntrinsicLibrary &lib) {
   assert(resultType && "expect elemental intrinsic to be functions");
@@ -1931,7 +1951,7 @@ invokeHandler(IntrinsicLibrary::ElementalGenerator generator,
 static fir::ExtendedValue
 invokeHandler(IntrinsicLibrary::ExtendedGenerator generator,
               const IntrinsicHandler &handler,
-              llvm::Optional<mlir::Type> resultType,
+              std::optional<mlir::Type> resultType,
               llvm::ArrayRef<fir::ExtendedValue> args, bool outline,
               IntrinsicLibrary &lib) {
   assert(resultType && "expect intrinsic function");
@@ -1947,7 +1967,7 @@ invokeHandler(IntrinsicLibrary::ExtendedGenerator generator,
 static fir::ExtendedValue
 invokeHandler(IntrinsicLibrary::SubroutineGenerator generator,
               const IntrinsicHandler &handler,
-              llvm::Optional<mlir::Type> resultType,
+              std::optional<mlir::Type> resultType,
               llvm::ArrayRef<fir::ExtendedValue> args, bool outline,
               IntrinsicLibrary &lib) {
   if (handler.isElemental)
@@ -1962,7 +1982,7 @@ invokeHandler(IntrinsicLibrary::SubroutineGenerator generator,
 
 fir::ExtendedValue
 IntrinsicLibrary::genIntrinsicCall(llvm::StringRef specificName,
-                                   llvm::Optional<mlir::Type> resultType,
+                                   std::optional<mlir::Type> resultType,
                                    llvm::ArrayRef<fir::ExtendedValue> args) {
   llvm::StringRef name = genericName(specificName);
   if (const IntrinsicHandler *handler = findIntrinsicHandler(name)) {
@@ -2132,7 +2152,7 @@ IntrinsicLibrary::outlineInWrapper(GeneratorType generator,
 template <typename GeneratorType>
 fir::ExtendedValue IntrinsicLibrary::outlineInExtendedWrapper(
     GeneratorType generator, llvm::StringRef name,
-    llvm::Optional<mlir::Type> resultType,
+    std::optional<mlir::Type> resultType,
     llvm::ArrayRef<fir::ExtendedValue> args) {
   if (hasAbsentOptional(args))
     TODO(loc, "cannot outline call to intrinsic " + llvm::Twine(name) +
@@ -3107,7 +3127,7 @@ IntrinsicLibrary::genCshift(mlir::Type resultType,
 // DATE_AND_TIME
 void IntrinsicLibrary::genDateAndTime(llvm::ArrayRef<fir::ExtendedValue> args) {
   assert(args.size() == 4 && "date_and_time has 4 args");
-  llvm::SmallVector<llvm::Optional<fir::CharBoxValue>> charArgs(3);
+  llvm::SmallVector<std::optional<fir::CharBoxValue>> charArgs(3);
   for (unsigned i = 0; i < 3; ++i)
     if (const fir::CharBoxValue *charBox = args[i].getCharBox())
       charArgs[i] = *charBox;
@@ -3282,6 +3302,18 @@ mlir::Value IntrinsicLibrary::genExponent(mlir::Type resultType,
       loc, resultType,
       fir::runtime::genExponent(builder, loc, resultType,
                                 fir::getBase(args[0])));
+}
+
+// EXTENDS_TYPE_OF
+fir::ExtendedValue
+IntrinsicLibrary::genExtendsTypeOf(mlir::Type resultType,
+                                   llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 2);
+
+  return builder.createConvert(
+      loc, resultType,
+      fir::runtime::genExtendsTypeOf(builder, loc, fir::getBase(args[0]),
+                                     fir::getBase(args[1])));
 }
 
 // FINDLOC
@@ -3808,6 +3840,20 @@ IntrinsicLibrary::genIparity(mlir::Type resultType,
   return genReduction(fir::runtime::genIParity, fir::runtime::genIParityDim,
                       resultType, builder, loc, stmtCtx,
                       "unexpected result for IPARITY", args);
+}
+
+// IS_CONTIGUOUS
+fir::ExtendedValue
+IntrinsicLibrary::genIsContiguous(mlir::Type resultType,
+                                  llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 1);
+  if (const auto *boxValue = args[0].getBoxOf<fir::BoxValue>())
+    if (boxValue->hasAssumedRank())
+      TODO(loc, "intrinsic: is_contiguous with assumed rank argument");
+
+  return builder.createConvert(
+      loc, resultType,
+      fir::runtime::genIsContiguous(builder, loc, fir::getBase(args[0])));
 }
 
 // ISHFT
@@ -4488,6 +4534,18 @@ mlir::Value IntrinsicLibrary::genRRSpacing(mlir::Type resultType,
   return builder.createConvert(
       loc, resultType,
       fir::runtime::genRRSpacing(builder, loc, fir::getBase(args[0])));
+}
+
+// SAME_TYPE_AS
+fir::ExtendedValue
+IntrinsicLibrary::genSameTypeAs(mlir::Type resultType,
+                                llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 2);
+
+  return builder.createConvert(
+      loc, resultType,
+      fir::runtime::genSameTypeAs(builder, loc, fir::getBase(args[0]),
+                                  fir::getBase(args[1])));
 }
 
 // SCALE
@@ -5322,7 +5380,7 @@ Fortran::lower::ArgLoweringRule Fortran::lower::lowerIntrinsicArgumentAs(
 fir::ExtendedValue
 Fortran::lower::genIntrinsicCall(fir::FirOpBuilder &builder, mlir::Location loc,
                                  llvm::StringRef name,
-                                 llvm::Optional<mlir::Type> resultType,
+                                 std::optional<mlir::Type> resultType,
                                  llvm::ArrayRef<fir::ExtendedValue> args,
                                  Fortran::lower::StatementContext &stmtCtx) {
   return IntrinsicLibrary{builder, loc, &stmtCtx}.genIntrinsicCall(

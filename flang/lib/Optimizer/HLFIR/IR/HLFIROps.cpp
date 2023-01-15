@@ -19,6 +19,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <tuple>
+#include <optional>
 
 //===----------------------------------------------------------------------===//
 // DeclareOp
@@ -362,7 +363,7 @@ static unsigned getCharacterKind(mlir::Type t) {
   return hlfir::getFortranElementType(t).cast<fir::CharacterType>().getFKind();
 }
 
-static llvm::Optional<fir::CharacterType::LenType>
+static std::optional<fir::CharacterType::LenType>
 getCharacterLengthIfStatic(mlir::Type t) {
   if (auto charType =
           hlfir::getFortranElementType(t).dyn_cast<fir::CharacterType>())
@@ -501,6 +502,16 @@ void hlfir::ApplyOp::build(mlir::OpBuilder &builder,
   if (auto exprType = resultType.dyn_cast<hlfir::ExprType>())
     resultType = exprType.getElementExprType();
   build(builder, odsState, resultType, expr, indices, typeparams);
+}
+
+//===----------------------------------------------------------------------===//
+// NullOp
+//===----------------------------------------------------------------------===//
+
+void hlfir::NullOp::build(mlir::OpBuilder &builder,
+                          mlir::OperationState &odsState) {
+  return build(builder, odsState,
+               fir::ReferenceType::get(builder.getNoneType()));
 }
 
 #define GET_OP_CLASSES

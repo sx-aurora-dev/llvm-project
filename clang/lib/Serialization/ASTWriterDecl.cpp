@@ -23,6 +23,7 @@
 #include "clang/Serialization/ASTRecordWriter.h"
 #include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <optional>
 using namespace clang;
 using namespace serialization;
 
@@ -223,7 +224,7 @@ namespace clang {
 
       ArrayRef<DeclID> LazySpecializations;
       if (auto *LS = Common->LazySpecializations)
-        LazySpecializations = llvm::makeArrayRef(LS + 1, LS[0]);
+        LazySpecializations = llvm::ArrayRef(LS + 1, LS[0]);
 
       // Add a slot to the record for the number of specializations.
       unsigned I = Record.size();
@@ -907,7 +908,7 @@ void ASTDeclWriter::VisitObjCImplementationDecl(ObjCImplementationDecl *D) {
   Record.push_back(D->NumIvarInitializers);
   if (D->NumIvarInitializers)
     Record.AddCXXCtorInitializers(
-        llvm::makeArrayRef(D->init_begin(), D->init_end()));
+        llvm::ArrayRef(D->init_begin(), D->init_end()));
   Code = serialization::DECL_OBJC_IMPLEMENTATION;
 }
 
@@ -2492,7 +2493,7 @@ void ASTRecordWriter::AddFunctionDefinition(const FunctionDecl *FD) {
   assert(FD->doesThisDeclarationHaveABody());
   bool ModulesCodegen = false;
   if (!FD->isDependentContext()) {
-    Optional<GVALinkage> Linkage;
+    std::optional<GVALinkage> Linkage;
     if (Writer->WritingModule &&
         Writer->WritingModule->isInterfaceOrPartition()) {
       // When building a C++20 module interface unit or a partition unit, a
@@ -2522,8 +2523,7 @@ void ASTRecordWriter::AddFunctionDefinition(const FunctionDecl *FD) {
   if (auto *CD = dyn_cast<CXXConstructorDecl>(FD)) {
     Record->push_back(CD->getNumCtorInitializers());
     if (CD->getNumCtorInitializers())
-      AddCXXCtorInitializers(
-          llvm::makeArrayRef(CD->init_begin(), CD->init_end()));
+      AddCXXCtorInitializers(llvm::ArrayRef(CD->init_begin(), CD->init_end()));
   }
   AddStmt(FD->getBody());
 }

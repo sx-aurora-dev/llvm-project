@@ -165,6 +165,7 @@ static unsigned offsetToDisp(MachineInstr &MI) {
   return OffDisp;
 }
 
+namespace {
 struct LVLInfo {
   Register VLReg;
   unsigned SuperReg; // ???
@@ -268,6 +269,7 @@ public:
   void processMI(MachineInstr &MI, Register FrameReg, int64_t Offset,
                  int FIOperandNum);
 };
+} // namespace
 
 // Prepare the frame index if it doesn't fit in the immediate field.  Use
 // clobber register to hold calculated address.

@@ -515,6 +515,24 @@ isFixedVectorShuffle(ArrayRef<Value *> VL, SmallVectorImpl<int> &Mask) {
               : TargetTransformInfo::SK_PermuteSingleSrc;
 }
 
+/// \returns True if Extract{Value,Element} instruction extracts element Idx.
+static std::optional<unsigned> getExtractIndex(Instruction *E) {
+  unsigned Opcode = E->getOpcode();
+  assert((Opcode == Instruction::ExtractElement ||
+          Opcode == Instruction::ExtractValue) &&
+         "Expected extractelement or extractvalue instruction.");
+  if (Opcode == Instruction::ExtractElement) {
+    auto *CI = dyn_cast<ConstantInt>(E->getOperand(1));
+    if (!CI)
+      return std::nullopt;
+    return CI->getZExtValue();
+  }
+  auto *EI = cast<ExtractValueInst>(E);
+  if (EI->getNumIndices() != 1)
+    return std::nullopt;
+  return *EI->idx_begin();
+}
+
 namespace {
 
 /// Main data required for vectorization of instructions.
@@ -762,24 +780,6 @@ static bool allSameType(ArrayRef<Value *> VL) {
   return true;
 }
 
-/// \returns True if Extract{Value,Element} instruction extracts element Idx.
-static std::optional<unsigned> getExtractIndex(Instruction *E) {
-  unsigned Opcode = E->getOpcode();
-  assert((Opcode == Instruction::ExtractElement ||
-          Opcode == Instruction::ExtractValue) &&
-         "Expected extractelement or extractvalue instruction.");
-  if (Opcode == Instruction::ExtractElement) {
-    auto *CI = dyn_cast<ConstantInt>(E->getOperand(1));
-    if (!CI)
-      return std::nullopt;
-    return CI->getZExtValue();
-  }
-  ExtractValueInst *EI = cast<ExtractValueInst>(E);
-  if (EI->getNumIndices() != 1)
-    return std::nullopt;
-  return *EI->idx_begin();
-}
-
 /// \returns True if in-tree use also needs extract. This refers to
 /// possible scalar operand in vectorized instruction.
 static bool InTreeUserNeedToExtract(Value *Scalar, Instruction *UserInst,
@@ -991,7 +991,7 @@ public:
     else
       MaxVecRegSize =
           TTI->getRegisterBitWidth(TargetTransformInfo::RGK_FixedWidthVector)
-              .getFixedSize();
+              .getFixedValue();
 
     if (MinVectorRegSizeOption.getNumOccurrences())
       MinVecRegSize = MinVectorRegSizeOption;
@@ -1035,6 +1035,12 @@ public:
   Instruction *getFirstNodeMainOp() const {
     assert(!VectorizableTree.empty() && "No tree to get the first node from");
     return VectorizableTree.front()->getMainOp();
+  }
+
+  /// Returns whether the root node has in-tree uses.
+  bool doesRootHaveInTreeUses() const {
+    return !VectorizableTree.empty() &&
+           !VectorizableTree.front()->UserTreeIndices.empty();
   }
 
   /// Builds external uses of the vectorized scalars, i.e. the list of
@@ -4083,7 +4089,10 @@ void BoUpSLP::reorderNodeWithReuses(TreeEntry &TE, ArrayRef<int> Mask) const {
   // Clear reorder since it is going to be applied to the new mask.
   TE.ReorderIndices.clear();
   // Try to improve gathered nodes with clustered reuses, if possible.
-  reorderScalars(TE.Scalars, ArrayRef(NewMask).slice(0, Sz));
+  ArrayRef<int> Slice = ArrayRef(NewMask).slice(0, Sz);
+  SmallVector<unsigned> NewOrder(Slice.begin(), Slice.end());
+  inversePermutation(NewOrder, NewMask);
+  reorderScalars(TE.Scalars, NewMask);
   // Fill the reuses mask with the identity submasks.
   for (auto *It = TE.ReuseShuffleIndices.begin(),
             *End = TE.ReuseShuffleIndices.end();
@@ -6421,7 +6430,7 @@ protected:
               .all();
       if (!IsOp1Undef && !IsOp2Undef) {
         // Update mask and mark undef elems.
-        for (auto [Idx, I] : enumerate(Mask)) {
+        for (int &I : Mask) {
           if (I == UndefMaskElem)
             continue;
           if (SV->getMaskValue(I % SV->getShuffleMask().size()) ==
@@ -6745,9 +6754,24 @@ InstructionCost BoUpSLP::getEntryCost(const TreeEntry *E,
       // broadcast.
       assert(VecTy == FinalVecTy &&
              "No reused scalars expected for broadcast.");
-      return TTI->getShuffleCost(TargetTransformInfo::SK_Broadcast, VecTy,
-                                 /*Mask=*/std::nullopt, CostKind, /*Index=*/0,
-                                 /*SubTp=*/nullptr, /*Args=*/VL[0]);
+      const auto *It =
+          find_if(VL, [](Value *V) { return !isa<UndefValue>(V); });
+      // If all values are undefs - consider cost free.
+      if (It == VL.end())
+        return TTI::TCC_Free;
+      // Add broadcast for non-identity shuffle only.
+      bool NeedShuffle =
+          VL.front() != *It || !all_of(VL.drop_front(), UndefValue::classof);
+      InstructionCost InsertCost =
+          TTI->getVectorInstrCost(Instruction::InsertElement, VecTy,
+                                  /*Index=*/0, PoisonValue::get(VecTy), *It);
+      return InsertCost + (NeedShuffle
+                               ? TTI->getShuffleCost(
+                                     TargetTransformInfo::SK_Broadcast, VecTy,
+                                     /*Mask=*/std::nullopt, CostKind,
+                                     /*Index=*/0,
+                                     /*SubTp=*/nullptr, /*Args=*/VL[0])
+                               : TTI::TCC_Free);
     }
     InstructionCost ReuseShuffleCost = 0;
     if (NeedToShuffleReuses)
@@ -11469,7 +11493,9 @@ bool SLPVectorizerPass::tryToVectorizeList(ArrayRef<Value *> VL, BoUpSLP &R,
       if (R.isTreeTinyAndNotFullyVectorizable())
         continue;
       R.reorderTopToBottom();
-      R.reorderBottomToTop(!isa<InsertElementInst>(Ops.front()));
+      R.reorderBottomToTop(
+          /*IgnoreReorder=*/!isa<InsertElementInst>(Ops.front()) &&
+          !R.doesRootHaveInTreeUses());
       R.buildExternalUses();
 
       R.computeMinimumValueSizes();
