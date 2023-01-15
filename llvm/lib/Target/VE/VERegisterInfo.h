@@ -18,11 +18,9 @@
 #define GET_REGINFO_HEADER
 #include "VEGenRegisterInfo.inc"
 
-struct MIBuilder;
-class EliminateFrameIndex;
-
 namespace llvm {
 struct VERegisterInfo : public VEGenRegisterInfo {
+public:
   VERegisterInfo();
 
   /// Code Generation virtual methods...
