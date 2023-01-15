@@ -1646,6 +1646,9 @@
 // RUN: %clang -march=sapphirerapids -m32 -E -dM %s -o - 2>&1 \
 // RUN:     -target i386-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SPR_M32
+// RUN: %clang -march=emeraldrapids -m32 -E -dM %s -o - 2>&1 \
+// RUN:     -target i386-unknown-linux \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SPR_M32
 // CHECK_SPR_M32: #define __AES__ 1
 // CHECK_SPR_M32: #define __AMXBF16__ 1
 // CHECK_SPR_M32: #define __AMXINT8__ 1
@@ -1716,6 +1719,9 @@
 // CHECK_SPR_M32: #define i386 1
 
 // RUN: %clang -march=sapphirerapids -m64 -E -dM %s -o - 2>&1 \
+// RUN:     -target i386-unknown-linux \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SPR_M64
+// RUN: %clang -march=emeraldrapids -m64 -E -dM %s -o - 2>&1 \
 // RUN:     -target i386-unknown-linux \
 // RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_SPR_M64
 // CHECK_SPR_M64: #define __AES__ 1
@@ -4366,3 +4372,20 @@
 // CHECK_WASM_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_2 1
 // CHECK_WASM_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 1
 // CHECK_WASM_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8 1
+
+// Begin LoongArch tests ----------------
+
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     --target=loongarch32-unknown-linux-gnu \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_LA32_ATOMICS
+// CHECK_LA32_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1 1
+// CHECK_LA32_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_2 1
+// CHECK_LA32_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 1
+
+// RUN: %clang -E -dM %s -o - 2>&1 \
+// RUN:     --target=loongarch64-unknown-linux-gnu \
+// RUN:   | FileCheck -match-full-lines %s -check-prefix=CHECK_LA64_ATOMICS
+// CHECK_LA64_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1 1
+// CHECK_LA64_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_2 1
+// CHECK_LA64_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 1
+// CHECK_LA64_ATOMICS: #define __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8 1
