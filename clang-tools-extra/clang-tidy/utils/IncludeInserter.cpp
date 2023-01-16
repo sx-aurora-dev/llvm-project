@@ -12,9 +12,7 @@
 #include "clang/Lex/Token.h"
 #include <optional>
 
-namespace clang {
-namespace tidy {
-namespace utils {
+namespace clang::tidy::utils {
 
 class IncludeInserterCallback : public PPCallbacks {
 public:
@@ -25,7 +23,7 @@ public:
   void InclusionDirective(SourceLocation HashLocation,
                           const Token &IncludeToken, StringRef FileNameRef,
                           bool IsAngled, CharSourceRange FileNameRange,
-                          std::optional<FileEntryRef> /*IncludedFile*/,
+                          OptionalFileEntryRef /*IncludedFile*/,
                           StringRef /*SearchPath*/, StringRef /*RelativePath*/,
                           const Module * /*ImportedModule*/,
                           SrcMgr::CharacteristicKind /*FileType*/) override {
@@ -68,7 +66,7 @@ IncludeSorter &IncludeInserter::getOrCreate(FileID FileID) {
   return *Entry;
 }
 
-llvm::Optional<FixItHint>
+std::optional<FixItHint>
 IncludeInserter::createIncludeInsertion(FileID FileID, llvm::StringRef Header) {
   bool IsAngled = Header.consume_front("<");
   if (IsAngled != Header.consume_back(">"))
@@ -83,7 +81,7 @@ IncludeInserter::createIncludeInsertion(FileID FileID, llvm::StringRef Header) {
   return getOrCreate(FileID).createIncludeInsertion(Header, IsAngled);
 }
 
-llvm::Optional<FixItHint>
+std::optional<FixItHint>
 IncludeInserter::createMainFileIncludeInsertion(StringRef Header) {
   assert(SourceMgr && "SourceMgr shouldn't be null; did you remember to call "
                       "registerPreprocessor()?");
@@ -99,6 +97,4 @@ void IncludeInserter::addInclude(StringRef FileName, bool IsAngled,
   getOrCreate(FileID).addInclude(FileName, IsAngled, HashLocation, EndLocation);
 }
 
-} // namespace utils
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::utils

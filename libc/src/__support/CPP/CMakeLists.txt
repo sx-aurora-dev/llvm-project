@@ -82,14 +82,6 @@ add_header_library(
 )
 
 add_header_library(
-  vector
-  HDRS
-    vector.h
-  DEPENDS
-    libc.include.stdlib
-)
-
-add_header_library(
   atomic
   HDRS
     atomic.h
@@ -107,4 +99,6 @@ add_object_library(
     new.cpp
   HDRS
     new.h
+  DEPENDS
+    libc.include.stdlib
 )

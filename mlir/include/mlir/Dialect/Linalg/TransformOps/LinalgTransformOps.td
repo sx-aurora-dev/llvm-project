@@ -47,7 +47,7 @@ def DecomposeOp : Op<Transform_Dialect, "structured.decompose",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -160,7 +160,7 @@ def GeneralizeOp : Op<Transform_Dialect, "structured.generalize",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -202,7 +202,7 @@ def InterchangeOp : Op<Transform_Dialect, "structured.interchange",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::GenericOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -336,7 +336,7 @@ def MultiTileSizesOp : Op<Transform_Dialect, "structured.multitile_sizes",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVector<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         TransformState &state);
   }];
 }
@@ -380,7 +380,7 @@ def PadOp : Op<Transform_Dialect, "structured.pad",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -423,7 +423,7 @@ def PromoteOp : Op<Transform_Dialect, "structured.promote",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -492,7 +492,7 @@ def ScalarizeOp : Op<Transform_Dialect, "structured.scalarize",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -700,7 +700,7 @@ def SplitReductionOp : Op<Transform_Dialect, "structured.split_reduction",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -803,7 +803,7 @@ def TileReductionUsingScfOp : Op<Transform_Dialect, "structured.tile_reduction_u
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }
@@ -911,7 +911,7 @@ def TileReductionUsingForeachThreadOp :
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::linalg::LinalgOp target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 
@@ -968,6 +968,14 @@ def TileOp : Op<Transform_Dialect, "structured.tile",
                    DefaultValuedOptionalAttr<DenseI64ArrayAttr, "{}">:$interchange);
   let results = (outs PDL_Operation:$tiled_linalg_op,
                       Variadic<PDL_Operation>:$loops);
+  let builders = [
+    OpBuilder<(ins "Value":$target,
+                   "ArrayRef<int64_t>":$staticTileSizes,
+                   CArg<"ArrayRef<int64_t>", "{}">:$interchange)>,
+    OpBuilder<(ins "Value":$target,
+                   "ArrayRef<OpFoldResult>":$mixedTileSizes,
+                   CArg<"ArrayRef<int64_t>", "{}">:$interchange)>
+  ];
 
   let hasCustomAssemblyFormat = 1;
 
@@ -1046,6 +1054,8 @@ def TileToForeachThreadOp :
   let arguments = (ins PDL_Operation:$target,
                    Variadic<PDL_Operation>:$num_threads,
                    Variadic<PDL_Operation>:$tile_sizes,
+                   Optional<PDL_Operation>:$packed_num_threads,
+                   Optional<PDL_Operation>:$packed_tile_sizes,
                    DefaultValuedOptionalAttr<DenseI64ArrayAttr, "{}">:$static_num_threads,
                    DefaultValuedOptionalAttr<DenseI64ArrayAttr, "{}">:$static_tile_sizes,
                    OptionalAttr<DeviceMappingArrayAttr>:$mapping);
@@ -1077,10 +1087,12 @@ def TileToForeachThreadOp :
 
   let assemblyFormat = [{
     $target oilist(
-        `num_threads` custom<DynamicIndexList>($num_threads,
-                                               $static_num_threads) |
-         `tile_sizes` custom<DynamicIndexList>($tile_sizes,
-                                               $static_tile_sizes))
+        `num_threads` custom<PackedOrDynamicIndexList>($packed_num_threads,
+                                                       $num_threads,
+                                                       $static_num_threads) |
+         `tile_sizes` custom<PackedOrDynamicIndexList>($packed_tile_sizes,
+                                                       $tile_sizes,
+                                                       $static_tile_sizes))
     (`(` `mapping` `=` $mapping^ `)`)? attr-dict
   }];
   let hasVerifier = 1;
@@ -1216,7 +1228,7 @@ def VectorizeOp : Op<Transform_Dialect, "structured.vectorize",
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
         ::mlir::Operation *target,
-        ::llvm::SmallVectorImpl<::mlir::Operation *> &results,
+        ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
   }];
 }

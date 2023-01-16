@@ -10,10 +10,10 @@
 
 #include "lldb/Host/Config.h"
 
-
 #include <chrono>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <thread>
 
 #include "GDBRemoteCommunicationServerLLGS.h"
@@ -639,7 +639,7 @@ static void WriteRegisterValueInHexFixedWidth(
   }
 }
 
-static llvm::Optional<json::Object>
+static std::optional<json::Object>
 GetRegistersAsJSON(NativeThreadProtocol &thread) {
   Log *log = GetLog(LLDBLog::Thread);
 
@@ -753,7 +753,7 @@ GetJSONThreadsInfo(NativeProcessProtocol &process, bool abridged) {
     json::Object thread_obj;
 
     if (!abridged) {
-      if (llvm::Optional<json::Object> registers = GetRegistersAsJSON(thread))
+      if (std::optional<json::Object> registers = GetRegistersAsJSON(thread))
         thread_obj.try_emplace("registers", std::move(*registers));
     }
 
@@ -1501,7 +1501,7 @@ GDBRemoteCommunicationServerLLGS::Handle_qGetWorkingDir(
   FileSpec working_dir{m_process_launch_info.GetWorkingDirectory()};
   if (working_dir) {
     StreamString response;
-    response.PutStringAsRawHex8(working_dir.GetPath());
+    response.PutStringAsRawHex8(working_dir.GetPath().c_str());
     return SendPacketNoLock(response.GetString());
   }
 
@@ -2307,7 +2307,7 @@ GDBRemoteCommunicationServerLLGS::Handle_P(StringExtractorGDBRemote &packet) {
   // Build the reginfos response.
   StreamGDBRemote response;
 
-  RegisterValue reg_value(makeArrayRef(reg_bytes, reg_size),
+  RegisterValue reg_value(ArrayRef(reg_bytes, reg_size),
                           m_current_process->GetArchitecture().GetByteOrder());
   Status error = reg_context.WriteRegister(reg_info, reg_value);
   if (error.Fail()) {
@@ -3197,7 +3197,7 @@ GDBRemoteCommunicationServerLLGS::ReadXferObject(llvm::StringRef object,
     response.Printf("<library-list-svr4 version=\"1.0\">");
     for (auto const &library : *library_list) {
       response.Printf("<library name=\"%s\" ",
-                      XMLEncodeAttributeValue(library.name).c_str());
+                      XMLEncodeAttributeValue(library.name.c_str()).c_str());
       response.Printf("lm=\"0x%" PRIx64 "\" ", library.link_map);
       response.Printf("l_addr=\"0x%" PRIx64 "\" ", library.base_addr);
       response.Printf("l_ld=\"0x%" PRIx64 "\" />", library.ld_addr);
@@ -4279,7 +4279,7 @@ std::string
 lldb_private::process_gdb_remote::LLGSArgToURL(llvm::StringRef url_arg,
                                                bool reverse_connect) {
   // Try parsing the argument as URL.
-  if (llvm::Optional<URI> url = URI::Parse(url_arg)) {
+  if (std::optional<URI> url = URI::Parse(url_arg)) {
     if (reverse_connect)
       return url_arg.str();
 

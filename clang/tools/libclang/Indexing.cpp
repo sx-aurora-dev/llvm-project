@@ -31,7 +31,6 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include <cstdio>
 #include <mutex>
-#include <optional>
 #include <utility>
 
 using namespace clang;
@@ -263,9 +262,8 @@ public:
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange,
-                          std::optional<FileEntryRef> File,
-                          StringRef SearchPath, StringRef RelativePath,
-                          const Module *Imported,
+                          OptionalFileEntryRef File, StringRef SearchPath,
+                          StringRef RelativePath, const Module *Imported,
                           SrcMgr::CharacteristicKind FileType) override {
     bool isImport = (IncludeTok.is(tok::identifier) &&
             IncludeTok.getIdentifierInfo()->getPPKeywordID() == tok::pp_import);
@@ -905,9 +903,8 @@ int clang_indexSourceFileFullArgv(
     result = clang_indexSourceFile_Impl(
         idxAction, client_data, index_callbacks, index_callbacks_size,
         index_options, source_filename, command_line_args,
-        num_command_line_args,
-        llvm::makeArrayRef(unsaved_files, num_unsaved_files), out_TU,
-        TU_options);
+        num_command_line_args, llvm::ArrayRef(unsaved_files, num_unsaved_files),
+        out_TU, TU_options);
   };
 
   llvm::CrashRecoveryContext CRC;

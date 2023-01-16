@@ -33,6 +33,7 @@
 
 #include "Plugins/Process/Utility/GDBRemoteSignals.h"
 #include "Plugins/Process/gdb-remote/ProcessGDBRemote.h"
+#include <optional>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -87,7 +88,7 @@ llvm::StringRef PlatformRemoteGDBServer::GetDescription() {
   }
 
   if (!m_platform_description.empty())
-    return m_platform_description;
+    return m_platform_description.c_str();
   return GetDescriptionStatic();
 }
 
@@ -151,13 +152,13 @@ bool PlatformRemoteGDBServer::GetRemoteOSVersion() {
   return !m_os_version.empty();
 }
 
-llvm::Optional<std::string> PlatformRemoteGDBServer::GetRemoteOSBuildString() {
+std::optional<std::string> PlatformRemoteGDBServer::GetRemoteOSBuildString() {
   if (!m_gdb_client_up)
     return std::nullopt;
   return m_gdb_client_up->GetOSBuildString();
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::GetRemoteOSKernelDescription() {
   if (!m_gdb_client_up)
     return std::nullopt;
@@ -226,7 +227,7 @@ Status PlatformRemoteGDBServer::ConnectRemote(Args &args) {
   if (!url)
     return Status("URL is null.");
 
-  llvm::Optional<URI> parsed_url = URI::Parse(url);
+  std::optional<URI> parsed_url = URI::Parse(url);
   if (!parsed_url)
     return Status("Invalid URL: %s", url);
 
@@ -283,7 +284,7 @@ const char *PlatformRemoteGDBServer::GetHostname() {
   return m_hostname.c_str();
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::DoGetUserName(UserIDResolver::id_t uid) {
   std::string name;
   if (m_gdb_client_up && m_gdb_client_up->GetUserName(uid, name))
@@ -291,7 +292,7 @@ PlatformRemoteGDBServer::DoGetUserName(UserIDResolver::id_t uid) {
   return std::nullopt;
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::DoGetGroupName(UserIDResolver::id_t gid) {
   std::string name;
   if (m_gdb_client_up && m_gdb_client_up->GetGroupName(gid, name))
@@ -423,10 +424,10 @@ PlatformRemoteGDBServer::DebugProcess(ProcessLaunchInfo &launch_info,
         if (process_sp) {
           process_sp->HijackProcessEvents(launch_info.GetHijackListener());
 
-          error = process_sp->ConnectRemote(connect_url);
+          error = process_sp->ConnectRemote(connect_url.c_str());
           // Retry the connect remote one time...
           if (error.Fail())
-            error = process_sp->ConnectRemote(connect_url);
+            error = process_sp->ConnectRemote(connect_url.c_str());
           if (error.Success())
             error = process_sp->Launch(launch_info);
           else if (debugserver_pid != LLDB_INVALID_PROCESS_ID) {
@@ -509,7 +510,7 @@ lldb::ProcessSP PlatformRemoteGDBServer::Attach(
               target->CreateProcess(attach_info.GetListenerForProcess(debugger),
                                     "gdb-remote", nullptr, true);
           if (process_sp) {
-            error = process_sp->ConnectRemote(connect_url);
+            error = process_sp->ConnectRemote(connect_url.c_str());
             if (error.Success()) {
               ListenerSP listener_sp = attach_info.GetHijackListener();
               if (listener_sp)
@@ -794,7 +795,7 @@ size_t PlatformRemoteGDBServer::ConnectToWaitingProcesses(Debugger &debugger,
   GetPendingGdbServerList(connection_urls);
 
   for (size_t i = 0; i < connection_urls.size(); ++i) {
-    ConnectProcess(connection_urls[i], "gdb-remote", debugger, nullptr, error);
+    ConnectProcess(connection_urls[i].c_str(), "gdb-remote", debugger, nullptr, error);
     if (error.Fail())
       return i; // We already connected to i process successfully
   }

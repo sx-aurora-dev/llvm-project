@@ -238,7 +238,7 @@ void ModuleDepCollector::applyDiscoveredDependencies(CompilerInvocation &CI) {
   if (llvm::any_of(CI.getFrontendOpts().Inputs, needsModules)) {
     Preprocessor &PP = ScanInstance.getPreprocessor();
     if (Module *CurrentModule = PP.getCurrentModuleImplementation())
-      if (std::optional<FileEntryRef> CurrentModuleMap =
+      if (OptionalFileEntryRef CurrentModuleMap =
               PP.getHeaderSearchInfo()
                   .getModuleMap()
                   .getModuleMapFileForUniquing(CurrentModule))
@@ -328,16 +328,15 @@ void ModuleDepCollectorPP::FileChanged(SourceLocation Loc,
   // Dependency generation really does want to go all the way to the
   // file entry for a source location to find out what is depended on.
   // We do not want #line markers to affect dependency generation!
-  if (Optional<StringRef> Filename =
+  if (std::optional<StringRef> Filename =
           SM.getNonBuiltinFilenameForID(SM.getFileID(SM.getExpansionLoc(Loc))))
     MDC.addFileDep(llvm::sys::path::remove_leading_dotslash(*Filename));
 }
 
 void ModuleDepCollectorPP::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
-    bool IsAngled, CharSourceRange FilenameRange,
-    std::optional<FileEntryRef> File, StringRef SearchPath,
-    StringRef RelativePath, const Module *Imported,
+    bool IsAngled, CharSourceRange FilenameRange, OptionalFileEntryRef File,
+    StringRef SearchPath, StringRef RelativePath, const Module *Imported,
     SrcMgr::CharacteristicKind FileType) {
   if (!File && !Imported) {
     // This is a non-modular include that HeaderSearch failed to find. Add it
@@ -421,8 +420,7 @@ ModuleID ModuleDepCollectorPP::handleTopLevelModule(const Module *M) {
   ModuleMap &ModMapInfo =
       MDC.ScanInstance.getPreprocessor().getHeaderSearchInfo().getModuleMap();
 
-  std::optional<FileEntryRef> ModuleMap =
-      ModMapInfo.getModuleMapFileForUniquing(M);
+  OptionalFileEntryRef ModuleMap = ModMapInfo.getModuleMapFileForUniquing(M);
 
   if (ModuleMap) {
     SmallString<128> Path = ModuleMap->getNameAsRequested();

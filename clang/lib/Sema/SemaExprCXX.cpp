@@ -44,6 +44,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TypeSize.h"
+#include <optional>
 using namespace clang;
 using namespace sema;
 
@@ -1849,7 +1850,7 @@ Sema::ActOnCXXNew(SourceLocation StartLoc, bool UseGlobal,
                   SourceLocation PlacementLParen, MultiExprArg PlacementArgs,
                   SourceLocation PlacementRParen, SourceRange TypeIdParens,
                   Declarator &D, Expr *Initializer) {
-  Optional<Expr *> ArraySize;
+  std::optional<Expr *> ArraySize;
   // If the specified type is an array, unwrap it and save the expression.
   if (D.getNumTypeObjects() > 0 &&
       D.getTypeObject(0).Kind == DeclaratorChunk::Array) {
@@ -1941,7 +1942,7 @@ Sema::isUnavailableAlignedAllocationFunction(const FunctionDecl &FD) const {
     return false;
   if (FD.isDefined())
     return false;
-  Optional<unsigned> AlignmentParam;
+  std::optional<unsigned> AlignmentParam;
   if (FD.isReplaceableGlobalAllocationFunction(&AlignmentParam) &&
       AlignmentParam)
     return true;
@@ -1967,17 +1968,14 @@ void Sema::diagnoseUnavailableAlignedAllocation(const FunctionDecl &FD,
   }
 }
 
-ExprResult
-Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
-                  SourceLocation PlacementLParen,
-                  MultiExprArg PlacementArgs,
-                  SourceLocation PlacementRParen,
-                  SourceRange TypeIdParens,
-                  QualType AllocType,
-                  TypeSourceInfo *AllocTypeInfo,
-                  Optional<Expr *> ArraySize,
-                  SourceRange DirectInitRange,
-                  Expr *Initializer) {
+ExprResult Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
+                             SourceLocation PlacementLParen,
+                             MultiExprArg PlacementArgs,
+                             SourceLocation PlacementRParen,
+                             SourceRange TypeIdParens, QualType AllocType,
+                             TypeSourceInfo *AllocTypeInfo,
+                             std::optional<Expr *> ArraySize,
+                             SourceRange DirectInitRange, Expr *Initializer) {
   SourceRange TypeRange = AllocTypeInfo->getTypeLoc().getSourceRange();
   SourceLocation StartLoc = Range.getBegin();
 
@@ -2120,7 +2118,7 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
   //   conversion function to integral or unscoped enumeration type exists.
   // C++1y [expr.new]p6: The expression [...] is implicitly converted to
   //   std::size_t.
-  llvm::Optional<uint64_t> KnownArraySize;
+  std::optional<uint64_t> KnownArraySize;
   if (ArraySize && *ArraySize && !(*ArraySize)->isTypeDependent()) {
     ExprResult ConvertedSize;
     if (getLangOpts().CPlusPlus14) {
@@ -2214,7 +2212,7 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     // FIXME: Per CWG1464, we are required to check the value prior to
     // converting to size_t. This will never find a negative array size in
     // C++14 onwards, because Value is always unsigned here!
-    if (Optional<llvm::APSInt> Value =
+    if (std::optional<llvm::APSInt> Value =
             (*ArraySize)->getIntegerConstantExpr(Context)) {
       if (Value->isSigned() && Value->isNegative()) {
         return ExprError(Diag((*ArraySize)->getBeginLoc(),
@@ -2301,7 +2299,7 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
         SizeTyWidth, Context.getTypeSizeInChars(AllocType).getQuantity());
 
     // How many bytes do we want to allocate here?
-    llvm::Optional<llvm::APInt> AllocationSize;
+    std::optional<llvm::APInt> AllocationSize;
     if (!ArraySize && !AllocType->isDependentType()) {
       // For non-array operator new, we only want to allocate one element.
       AllocationSize = SingleEltSize;
@@ -3120,7 +3118,7 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
         for (auto *P : Func->parameters())
           FuncParams.push_back(
               Context.getCanonicalType(P->getType().getUnqualifiedType()));
-        if (llvm::makeArrayRef(FuncParams) == Params) {
+        if (llvm::ArrayRef(FuncParams) == Params) {
           // Make the function visible to name lookup, even if we found it in
           // an unimported module. It either is an implicitly-declared global
           // allocation function, or is suppressing that function.
@@ -3143,7 +3141,7 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
       BadAllocType = Context.getTypeDeclType(getStdBadAlloc());
       assert(StdBadAlloc && "Must have std::bad_alloc declared");
       EPI.ExceptionSpec.Type = EST_Dynamic;
-      EPI.ExceptionSpec.Exceptions = llvm::makeArrayRef(BadAllocType);
+      EPI.ExceptionSpec.Exceptions = llvm::ArrayRef(BadAllocType);
     }
     if (getLangOpts().NewInfallible) {
       EPI.ExceptionSpec.Type = EST_DynamicNone;
@@ -7337,8 +7335,8 @@ Expr *Sema::MaybeCreateExprWithCleanups(Expr *SubExpr) {
   if (!Cleanup.exprNeedsCleanups())
     return SubExpr;
 
-  auto Cleanups = llvm::makeArrayRef(ExprCleanupObjects.begin() + FirstCleanup,
-                                     ExprCleanupObjects.size() - FirstCleanup);
+  auto Cleanups = llvm::ArrayRef(ExprCleanupObjects.begin() + FirstCleanup,
+                                 ExprCleanupObjects.size() - FirstCleanup);
 
   auto *E = ExprWithCleanups::Create(
       Context, SubExpr, Cleanup.cleanupsHaveSideEffects(), Cleanups);
@@ -8283,7 +8281,7 @@ static void CheckIfAnyEnclosingLambdasMustCaptureAnyPotentialCaptures(
   // All the potentially captureable variables in the current nested
   // lambda (within a generic outer lambda), must be captured by an
   // outer lambda that is enclosed within a non-dependent context.
-  CurrentLSI->visitPotentialCaptures([&] (VarDecl *Var, Expr *VarExpr) {
+  CurrentLSI->visitPotentialCaptures([&](ValueDecl *Var, Expr *VarExpr) {
     // If the variable is clearly identified as non-odr-used and the full
     // expression is not instantiation dependent, only then do we not
     // need to check enclosing lambda's for speculative captures.
@@ -8299,14 +8297,18 @@ static void CheckIfAnyEnclosingLambdasMustCaptureAnyPotentialCaptures(
         !IsFullExprInstantiationDependent)
       return;
 
+    VarDecl *UnderlyingVar = Var->getPotentiallyDecomposedVarDecl();
+    if (!UnderlyingVar)
+      return;
+
     // If we have a capture-capable lambda for the variable, go ahead and
     // capture the variable in that lambda (and all its enclosing lambdas).
-    if (const Optional<unsigned> Index =
+    if (const std::optional<unsigned> Index =
             getStackIndexOfNearestEnclosingCaptureCapableLambda(
                 S.FunctionScopes, Var, S))
       S.MarkCaptureUsedInEnclosingContext(Var, VarExpr->getExprLoc(), *Index);
     const bool IsVarNeverAConstantExpression =
-        VariableCanNeverBeAConstantExpression(Var, S.Context);
+        VariableCanNeverBeAConstantExpression(UnderlyingVar, S.Context);
     if (!IsFullExprInstantiationDependent || IsVarNeverAConstantExpression) {
       // This full expression is not instantiation dependent or the variable
       // can not be used in a constant expression - which means
@@ -8334,7 +8336,7 @@ static void CheckIfAnyEnclosingLambdasMustCaptureAnyPotentialCaptures(
   if (CurrentLSI->hasPotentialThisCapture()) {
     // If we have a capture-capable lambda for 'this', go ahead and capture
     // 'this' in that lambda (and all its enclosing lambdas).
-    if (const Optional<unsigned> Index =
+    if (const std::optional<unsigned> Index =
             getStackIndexOfNearestEnclosingCaptureCapableLambda(
                 S.FunctionScopes, /*0 is 'this'*/ nullptr, S)) {
       const unsigned FunctionScopeIndexOfCapturableLambda = *Index;
@@ -9086,9 +9088,11 @@ Sema::BuildNestedRequirement(Expr *Constraint) {
 }
 
 concepts::NestedRequirement *
-Sema::BuildNestedRequirement(
-    concepts::Requirement::SubstitutionDiagnostic *SubstDiag) {
-  return new (Context) concepts::NestedRequirement(SubstDiag);
+Sema::BuildNestedRequirement(StringRef InvalidConstraintEntity,
+                       const ASTConstraintSatisfaction &Satisfaction) {
+  return new (Context) concepts::NestedRequirement(
+      InvalidConstraintEntity,
+      ASTConstraintSatisfaction::Rebuild(Context, Satisfaction));
 }
 
 RequiresExprBodyDecl *

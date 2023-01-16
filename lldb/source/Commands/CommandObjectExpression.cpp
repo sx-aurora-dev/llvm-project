@@ -172,7 +172,7 @@ void CommandObjectExpression::CommandOptions::OptionParsingStarting(
 
 llvm::ArrayRef<OptionDefinition>
 CommandObjectExpression::CommandOptions::GetDefinitions() {
-  return llvm::makeArrayRef(g_expression_options);
+  return llvm::ArrayRef(g_expression_options);
 }
 
 CommandObjectExpression::CommandObjectExpression(
@@ -477,7 +477,7 @@ void CommandObjectExpression::IOHandlerInputComplete(IOHandler &io_handler,
 
   CommandReturnObject return_obj(
       GetCommandInterpreter().GetDebugger().GetUseColor());
-  EvaluateExpression(line, *output_sp, *error_sp, return_obj);
+  EvaluateExpression(line.c_str(), *output_sp, *error_sp, return_obj);
   if (output_sp)
     output_sp->Flush();
   if (error_sp)

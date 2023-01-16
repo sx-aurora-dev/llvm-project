@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
+#include "flang/Optimizer/Dialect/FIROpsSupport.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -18,6 +19,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include <tuple>
+#include <optional>
 
 //===----------------------------------------------------------------------===//
 // DeclareOp
@@ -361,7 +363,7 @@ static unsigned getCharacterKind(mlir::Type t) {
   return hlfir::getFortranElementType(t).cast<fir::CharacterType>().getFKind();
 }
 
-static llvm::Optional<fir::CharacterType::LenType>
+static std::optional<fir::CharacterType::LenType>
 getCharacterLengthIfStatic(mlir::Type t) {
   if (auto charType =
           hlfir::getFortranElementType(t).dyn_cast<fir::CharacterType>())
@@ -398,6 +400,24 @@ void hlfir::ConcatOp::build(mlir::OpBuilder &builder,
       fir::CharacterType::get(builder.getContext(), kind, resultTypeLen),
       false);
   build(builder, result, resultType, strings, len);
+}
+
+//===----------------------------------------------------------------------===//
+// SetLengthOp
+//===----------------------------------------------------------------------===//
+
+void hlfir::SetLengthOp::build(mlir::OpBuilder &builder,
+                               mlir::OperationState &result, mlir::Value string,
+                               mlir::Value len) {
+  fir::CharacterType::LenType resultTypeLen = fir::CharacterType::unknownLen();
+  if (auto cstLen = fir::getIntIfConstant(len))
+    resultTypeLen = *cstLen;
+  unsigned kind = getCharacterKind(string.getType());
+  auto resultType = hlfir::ExprType::get(
+      builder.getContext(), hlfir::ExprType::Shape{},
+      fir::CharacterType::get(builder.getContext(), kind, resultTypeLen),
+      false);
+  build(builder, result, resultType, string, len);
 }
 
 //===----------------------------------------------------------------------===//
@@ -482,6 +502,16 @@ void hlfir::ApplyOp::build(mlir::OpBuilder &builder,
   if (auto exprType = resultType.dyn_cast<hlfir::ExprType>())
     resultType = exprType.getElementExprType();
   build(builder, odsState, resultType, expr, indices, typeparams);
+}
+
+//===----------------------------------------------------------------------===//
+// NullOp
+//===----------------------------------------------------------------------===//
+
+void hlfir::NullOp::build(mlir::OpBuilder &builder,
+                          mlir::OperationState &odsState) {
+  return build(builder, odsState,
+               fir::ReferenceType::get(builder.getNoneType()));
 }
 
 #define GET_OP_CLASSES

@@ -685,7 +685,7 @@ __assoc_state<_Rp>::move()
     unique_lock<mutex> __lk(this->__mut_);
     this->__sub_wait(__lk);
     if (this->__exception_ != nullptr)
-        rethrow_exception(this->__exception_);
+        std::rethrow_exception(this->__exception_);
     return _VSTD::move(*reinterpret_cast<_Rp*>(&__value_));
 }
 
@@ -696,7 +696,7 @@ __assoc_state<_Rp>::copy()
     unique_lock<mutex> __lk(this->__mut_);
     this->__sub_wait(__lk);
     if (this->__exception_ != nullptr)
-        rethrow_exception(this->__exception_);
+        std::rethrow_exception(this->__exception_);
     return *reinterpret_cast<_Rp*>(&__value_);
 }
 
@@ -756,7 +756,7 @@ __assoc_state<_Rp&>::copy()
     unique_lock<mutex> __lk(this->__mut_);
     this->__sub_wait(__lk);
     if (this->__exception_ != nullptr)
-        rethrow_exception(this->__exception_);
+        std::rethrow_exception(this->__exception_);
     return *__value_;
 }
 
@@ -1626,7 +1626,7 @@ class _LIBCPP_AVAILABILITY_FUTURE __packaged_task_base<_Rp(_ArgTypes...)>
 public:
     _LIBCPP_INLINE_VISIBILITY
     __packaged_task_base() {}
-    _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_HIDE_FROM_ABI_VIRTUAL
     virtual ~__packaged_task_base() {}
     virtual void __move_to(__packaged_task_base*) _NOEXCEPT = 0;
     virtual void destroy() = 0;

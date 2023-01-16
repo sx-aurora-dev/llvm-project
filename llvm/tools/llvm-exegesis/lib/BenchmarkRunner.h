@@ -36,7 +36,7 @@ class BenchmarkRunner {
 public:
   explicit BenchmarkRunner(const LLVMState &State,
                            InstructionBenchmark::ModeE Mode,
-                           bool BenchmarkSkipMeasurements);
+                           BenchmarkPhaseSelectorE BenchmarkPhaseSelector);
 
   virtual ~BenchmarkRunner();
 
@@ -61,11 +61,10 @@ public:
   Expected<RunnableConfiguration>
   getRunnableConfiguration(const BenchmarkCode &Configuration,
                            unsigned NumRepetitions, unsigned LoopUnrollFactor,
-                           const SnippetRepetitor &Repetitor,
-                           bool DumpObjectToDisk) const;
+                           const SnippetRepetitor &Repetitor) const;
 
-  Expected<InstructionBenchmark>
-  runConfiguration(RunnableConfiguration &&RC) const;
+  Expected<InstructionBenchmark> runConfiguration(RunnableConfiguration &&RC,
+                                                  bool DumpObjectToDisk) const;
 
   // Scratch space to run instructions that touch memory.
   struct ScratchSpace {
@@ -99,7 +98,7 @@ public:
 protected:
   const LLVMState &State;
   const InstructionBenchmark::ModeE Mode;
-  const bool BenchmarkSkipMeasurements;
+  const BenchmarkPhaseSelectorE BenchmarkPhaseSelector;
 
 private:
   virtual Expected<std::vector<BenchmarkMeasure>>

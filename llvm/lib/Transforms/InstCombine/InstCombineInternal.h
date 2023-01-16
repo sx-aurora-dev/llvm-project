@@ -106,7 +106,8 @@ public:
   Value *simplifyRangeCheck(ICmpInst *Cmp0, ICmpInst *Cmp1, bool Inverted);
   Instruction *visitAnd(BinaryOperator &I);
   Instruction *visitOr(BinaryOperator &I);
-  bool sinkNotIntoOtherHandOfAndOrOr(BinaryOperator &I);
+  bool sinkNotIntoLogicalOp(Instruction &I);
+  bool sinkNotIntoOtherHandOfLogicalOp(Instruction &I);
   Instruction *visitXor(BinaryOperator &I);
   Instruction *visitShl(BinaryOperator &I);
   Value *reassociateShiftAmtsOfTwoSameDirectionShifts(
@@ -330,7 +331,7 @@ private:
   Instruction *matchSAddSubSat(IntrinsicInst &MinMax1);
   Instruction *foldNot(BinaryOperator &I);
 
-  void freelyInvertAllUsersOf(Value *V);
+  void freelyInvertAllUsersOf(Value *V, Value *IgnoredUser = nullptr);
 
   /// Determine if a pair of casts can be replaced by a single cast.
   ///
@@ -364,12 +365,17 @@ private:
   Instruction *foldLogicOfIsFPClass(BinaryOperator &Operator, Value *LHS,
                                     Value *RHS);
 
+  Instruction *
+  canonicalizeConditionalNegationViaMathToSelect(BinaryOperator &i);
+
   Value *foldAndOrOfICmpsOfAndWithPow2(ICmpInst *LHS, ICmpInst *RHS,
                                        Instruction *CxtI, bool IsAnd,
                                        bool IsLogical = false);
-  Value *matchSelectFromAndOr(Value *A, Value *B, Value *C, Value *D);
-  Value *getSelectCondition(Value *A, Value *B);
+  Value *matchSelectFromAndOr(Value *A, Value *B, Value *C, Value *D,
+                              bool InvertFalseVal = false);
+  Value *getSelectCondition(Value *A, Value *B, bool ABIsTheSame);
 
+  Instruction *foldLShrOverflowBit(BinaryOperator &I);
   Instruction *foldExtractOfOverflowIntrinsic(ExtractValueInst &EV);
   Instruction *foldIntrinsicWithOverflowCommon(IntrinsicInst *II);
   Instruction *foldFPSignBitOps(BinaryOperator &I);

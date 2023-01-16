@@ -859,12 +859,11 @@ enum NodeType {
   ///  3 Round to -inf
   ///  4 Round to nearest, ties to zero
   /// Result is rounding mode and chain. Input is a chain.
-  /// TODO: Rename this node to GET_ROUNDING.
-  FLT_ROUNDS_,
+  GET_ROUNDING,
 
   /// Set rounding mode.
   /// The first operand is a chain pointer. The second specifies the required
-  /// rounding mode, encoded in the same way as used in '``FLT_ROUNDS_``'.
+  /// rounding mode, encoded in the same way as used in '``GET_ROUNDING``'.
   SET_ROUNDING,
 
   /// X = FP_EXTEND(Y) - Extend a smaller FP type into a larger FP type.
@@ -1148,6 +1147,9 @@ enum NodeType {
   /// ARITH_FENCE - This corresponds to a arithmetic fence intrinsic. Both its
   /// operand and output are the same floating type.
   ARITH_FENCE,
+
+  /// MEMBARRIER - Compiler barrier only; generate a no-op.
+  MEMBARRIER,
 
   /// OUTCHAIN = ATOMIC_FENCE(INCHAIN, ordering, scope)
   /// This corresponds to the fence instruction. It takes an input chain, and

@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <optional>
 
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/Config.h"
@@ -266,12 +267,12 @@ GDBRemoteCommunicationServerCommon::Handle_qHostInfo(
   }
 #endif
 
-  if (llvm::Optional<std::string> s = HostInfo::GetOSBuildString()) {
+  if (std::optional<std::string> s = HostInfo::GetOSBuildString()) {
     response.PutCString("os_build:");
     response.PutStringAsRawHex8(*s);
     response.PutChar(';');
   }
-  if (llvm::Optional<std::string> s = HostInfo::GetOSKernelDescription()) {
+  if (std::optional<std::string> s = HostInfo::GetOSKernelDescription()) {
     response.PutCString("os_kernel:");
     response.PutStringAsRawHex8(*s);
     response.PutChar(';');
@@ -432,7 +433,7 @@ GDBRemoteCommunicationServerCommon::Handle_qUserName(
   packet.SetFilePos(::strlen("qUserName:"));
   uint32_t uid = packet.GetU32(UINT32_MAX);
   if (uid != UINT32_MAX) {
-    if (llvm::Optional<llvm::StringRef> name =
+    if (std::optional<llvm::StringRef> name =
             HostInfo::GetUserIDResolver().GetUserName(uid)) {
       StreamString response;
       response.PutStringAsRawHex8(*name);
@@ -452,7 +453,7 @@ GDBRemoteCommunicationServerCommon::Handle_qGroupName(
   packet.SetFilePos(::strlen("qGroupName:"));
   uint32_t gid = packet.GetU32(UINT32_MAX);
   if (gid != UINT32_MAX) {
-    if (llvm::Optional<llvm::StringRef> name =
+    if (std::optional<llvm::StringRef> name =
             HostInfo::GetUserIDResolver().GetGroupName(gid)) {
       StreamString response;
       response.PutStringAsRawHex8(*name);
@@ -747,8 +748,9 @@ GDBRemoteCommunicationServerCommon::Handle_qPlatform_shell(
       std::string output;
       FileSpec working_spec(working_dir);
       FileSystem::Instance().Resolve(working_spec);
-      Status err = Host::RunShellCommand(path, working_spec, &status, &signo,
-                                         &output, std::chrono::seconds(10));
+      Status err =
+          Host::RunShellCommand(path.c_str(), working_spec, &status, &signo,
+                                &output, std::chrono::seconds(10));
       StreamGDBRemote response;
       if (err.Fail()) {
         response.PutCString("F,");
@@ -1135,7 +1137,8 @@ GDBRemoteCommunicationServerCommon::Handle_qModuleInfo(
   response.PutChar(';');
 
   response.PutCString("file_path:");
-  response.PutStringAsRawHex8(matched_module_spec.GetFileSpec().GetPath());
+  response.PutStringAsRawHex8(
+        matched_module_spec.GetFileSpec().GetPath().c_str());
   response.PutChar(';');
   response.PutCString("file_offset:");
   response.PutHex64(file_offset);
@@ -1210,7 +1213,7 @@ void GDBRemoteCommunicationServerCommon::CreateProcessInfoResponse(
       proc_info.GetUserID(), proc_info.GetGroupID(),
       proc_info.GetEffectiveUserID(), proc_info.GetEffectiveGroupID());
   response.PutCString("name:");
-  response.PutStringAsRawHex8(proc_info.GetExecutableFile().GetPath());
+  response.PutStringAsRawHex8(proc_info.GetExecutableFile().GetPath().c_str());
 
   response.PutChar(';');
   response.PutCString("args:");

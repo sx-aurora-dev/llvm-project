@@ -1,6 +1,4 @@
-// RUN: mlir-opt %s -pass-pipeline='builtin.module(func.func(canonicalize))' -split-input-file -allow-unregistered-dialect | FileCheck %s
-
-// -----
+// RUN: mlir-opt %s -canonicalize="test-convergence" -split-input-file -allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: create_vector_mask_to_constant_mask
 func.func @create_vector_mask_to_constant_mask() -> (vector<4x3xi1>) {
@@ -2094,4 +2092,16 @@ func.func @extract_strided_slice_of_constant_mask() -> vector<5x7xi1>{
   %mask = vector.create_mask %c10, %c4 : vector<12x7xi1>
   %res = vector.extract_strided_slice %mask {offsets = [3], sizes = [5], strides = [1]} : vector<12x7xi1> to vector<5x7xi1>
   return %res : vector<5x7xi1>
+}
+
+// -----
+
+// CHECK-LABEL: func.func @fold_extractelement_of_broadcast(
+//  CHECK-SAME:     %[[f:.*]]: f32
+//       CHECK:   return %[[f]]
+func.func @fold_extractelement_of_broadcast(%f: f32) -> f32 {
+  %0 = vector.broadcast %f : f32 to vector<15xf32>
+  %c5 = arith.constant 5 : index
+  %1 = vector.extractelement %0 [%c5 : index] : vector<15xf32>
+  return %1 : f32
 }

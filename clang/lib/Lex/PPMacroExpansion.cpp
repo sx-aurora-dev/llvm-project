@@ -37,7 +37,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FoldingSet.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -1250,7 +1249,7 @@ static bool EvaluateHasIncludeCommon(Token &Tok, IdentifierInfo *II,
     return false;
 
   // Search include directories.
-  std::optional<FileEntryRef> File =
+  OptionalFileEntryRef File =
       PP.LookupFile(FilenameLoc, Filename, isAngled, LookupFrom, LookupFromFile,
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -1302,7 +1301,7 @@ static void EvaluateFeatureLikeBuiltinMacro(llvm::raw_svector_ostream& OS,
 
   unsigned ParenDepth = 1;
   SourceLocation LParenLoc = Tok.getLocation();
-  llvm::Optional<int> Result;
+  std::optional<int> Result;
 
   Token ResultTok;
   bool SuppressDiagnostic = false;

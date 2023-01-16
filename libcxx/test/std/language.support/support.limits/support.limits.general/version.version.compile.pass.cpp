@@ -2705,17 +2705,11 @@
 #   error "__cpp_lib_constexpr_cmath should not be defined before c++2b"
 # endif
 
-# if !defined(_LIBCPP_VERSION)
-#   ifndef __cpp_lib_constexpr_complex
-#     error "__cpp_lib_constexpr_complex should be defined in c++20"
-#   endif
-#   if __cpp_lib_constexpr_complex != 201711L
-#     error "__cpp_lib_constexpr_complex should have the value 201711L in c++20"
-#   endif
-# else // _LIBCPP_VERSION
-#   ifdef __cpp_lib_constexpr_complex
-#     error "__cpp_lib_constexpr_complex should not be defined because it is unimplemented in libc++!"
-#   endif
+# ifndef __cpp_lib_constexpr_complex
+#   error "__cpp_lib_constexpr_complex should be defined in c++20"
+# endif
+# if __cpp_lib_constexpr_complex != 201711L
+#   error "__cpp_lib_constexpr_complex should have the value 201711L in c++20"
 # endif
 
 # ifndef __cpp_lib_constexpr_dynamic_alloc
@@ -3397,16 +3391,16 @@
 #   endif
 # endif
 
-# if !defined(_LIBCPP_VERSION)
+# if __has_builtin(__builtin_source_location)
 #   ifndef __cpp_lib_source_location
 #     error "__cpp_lib_source_location should be defined in c++20"
 #   endif
 #   if __cpp_lib_source_location != 201907L
 #     error "__cpp_lib_source_location should have the value 201907L in c++20"
 #   endif
-# else // _LIBCPP_VERSION
+# else
 #   ifdef __cpp_lib_source_location
-#     error "__cpp_lib_source_location should not be defined because it is unimplemented in libc++!"
+#     error "__cpp_lib_source_location should not be defined when the requirement '__has_builtin(__builtin_source_location)' is not met!"
 #   endif
 # endif
 
@@ -3931,17 +3925,11 @@
 #   endif
 # endif
 
-# if !defined(_LIBCPP_VERSION)
-#   ifndef __cpp_lib_constexpr_complex
-#     error "__cpp_lib_constexpr_complex should be defined in c++2b"
-#   endif
-#   if __cpp_lib_constexpr_complex != 201711L
-#     error "__cpp_lib_constexpr_complex should have the value 201711L in c++2b"
-#   endif
-# else // _LIBCPP_VERSION
-#   ifdef __cpp_lib_constexpr_complex
-#     error "__cpp_lib_constexpr_complex should not be defined because it is unimplemented in libc++!"
-#   endif
+# ifndef __cpp_lib_constexpr_complex
+#   error "__cpp_lib_constexpr_complex should be defined in c++2b"
+# endif
+# if __cpp_lib_constexpr_complex != 201711L
+#   error "__cpp_lib_constexpr_complex should have the value 201711L in c++2b"
 # endif
 
 # ifndef __cpp_lib_constexpr_dynamic_alloc
@@ -4749,16 +4737,16 @@
 #   endif
 # endif
 
-# if !defined(_LIBCPP_VERSION)
+# if __has_builtin(__builtin_source_location)
 #   ifndef __cpp_lib_source_location
 #     error "__cpp_lib_source_location should be defined in c++2b"
 #   endif
 #   if __cpp_lib_source_location != 201907L
 #     error "__cpp_lib_source_location should have the value 201907L in c++2b"
 #   endif
-# else // _LIBCPP_VERSION
+# else
 #   ifdef __cpp_lib_source_location
-#     error "__cpp_lib_source_location should not be defined because it is unimplemented in libc++!"
+#     error "__cpp_lib_source_location should not be defined when the requirement '__has_builtin(__builtin_source_location)' is not met!"
 #   endif
 # endif
 

@@ -15,17 +15,13 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Path.h"
 #include <cstring>
-#include <optional>
 
-namespace clang {
-namespace tidy {
-namespace portability {
+namespace clang::tidy::portability {
 
 void RestrictedIncludesPPCallbacks::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
-    bool IsAngled, CharSourceRange FilenameRange,
-    std::optional<FileEntryRef> File, StringRef SearchPath,
-    StringRef RelativePath, const Module *Imported,
+    bool IsAngled, CharSourceRange FilenameRange, OptionalFileEntryRef File,
+    StringRef SearchPath, StringRef RelativePath, const Module *Imported,
     SrcMgr::CharacteristicKind FileType) {
   if (!Check.contains(FileName) && SrcMgr::isSystem(FileType)) {
     SmallString<256> FullPath;
@@ -77,6 +73,4 @@ void RestrictSystemIncludesCheck::storeOptions(
   Options.store(Opts, "Includes", AllowedIncludes);
 }
 
-} // namespace portability
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::portability

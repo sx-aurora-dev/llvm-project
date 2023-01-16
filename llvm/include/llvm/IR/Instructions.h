@@ -106,6 +106,10 @@ public:
     return getType()->getAddressSpace();
   }
 
+  /// Get allocation size in bytes. Returns std::nullopt if size can't be
+  /// determined, e.g. in case of a VLA.
+  std::optional<TypeSize> getAllocationSize(const DataLayout &DL) const;
+
   /// Get allocation size in bits. Returns std::nullopt if size can't be
   /// determined, e.g. in case of a VLA.
   std::optional<TypeSize> getAllocationSizeInBits(const DataLayout &DL) const;
@@ -3612,7 +3616,7 @@ public:
 /// their prof branch_weights metadata.
 class SwitchInstProfUpdateWrapper {
   SwitchInst &SI;
-  std::optional<SmallVector<uint32_t, 8>> Weights = std::nullopt;
+  std::optional<SmallVector<uint32_t, 8>> Weights;
   bool Changed = false;
 
 protected:

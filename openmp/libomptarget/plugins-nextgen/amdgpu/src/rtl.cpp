@@ -17,8 +17,8 @@
 #include <hsa.h>
 #include <hsa_ext_amd.h>
 #include <mutex>
-#include <shared_mutex>
 #include <string>
+#include <system_error>
 #include <unistd.h>
 #include <unordered_map>
 
@@ -29,10 +29,17 @@
 #include "Utilities.h"
 #include "UtilitiesRTL.h"
 
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Program.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 namespace omp {
@@ -120,6 +127,8 @@ struct AMDGPUResourceRef : public GenericDeviceResourceRef {
 
   /// Create a reference to an existing resource.
   AMDGPUResourceRef(ResourceTy *Resource) : Resource(Resource) {}
+
+  virtual ~AMDGPUResourceRef() {}
 
   /// Create a new resource and save the reference. The reference must be empty
   /// before calling to this function.
@@ -398,6 +407,10 @@ struct AMDGPUKernelTy : public GenericKernelTy {
         return Err;
     }
 
+    // Account for user requested dynamic shared memory.
+    // TODO: This should be read from a per-kernel state flag.
+    GroupSize += Device.getDynamicMemorySize();
+
     // Make sure it is a kernel symbol.
     if (SymbolType != HSA_SYMBOL_KIND_KERNEL)
       return Plugin::error("Symbol %s is not a kernel function");
@@ -539,6 +552,10 @@ struct AMDGPUQueueTy {
     // the addition of other packets to the queue. The following piece of code
     // should be lightweight; do not block the thread, allocate memory, etc.
     std::lock_guard<std::mutex> Lock(Mutex);
+
+    // Avoid defining the input dependency if already satisfied.
+    if (InputSignal && !InputSignal->load())
+      InputSignal = nullptr;
 
     // Add a barrier packet before the kernel packet in case there is a pending
     // preceding operation. The barrier packet will delay the processing of
@@ -786,8 +803,18 @@ private:
         return Plugin::success();
 
       // Perform the action.
-      if (auto Err = (*ActionFunction)(&ActionArgs))
-        return Err;
+      if (ActionFunction == memcpyAction) {
+        if (auto Err = memcpyAction(&ActionArgs))
+          return Err;
+      } else if (ActionFunction == releaseBufferAction) {
+        if (auto Err = releaseBufferAction(&ActionArgs))
+          return Err;
+      } else if (ActionFunction == releaseSignalAction) {
+        if (auto Err = releaseSignalAction(&ActionArgs))
+          return Err;
+      } else {
+        return Plugin::error("Unknown action function!");
+      }
 
       // Invalidate the action.
       ActionFunction = nullptr;
@@ -989,10 +1016,6 @@ public:
 
     // Consume stream slot and compute dependencies.
     auto [Curr, InputSignal] = consume(OutputSignal);
-
-    // Avoid defining the input dependency if already satisfied.
-    if (InputSignal && !InputSignal->load())
-      InputSignal = nullptr;
 
     // Setup the post action to release the kernel args buffer.
     if (auto Err = Slots[Curr].schedReleaseBuffer(KernelArgs, MemoryManager))
@@ -1485,8 +1508,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   AMDGPUDeviceTy(int32_t DeviceId, int32_t NumDevices,
                  AMDHostDeviceTy &HostDevice, hsa_agent_t Agent)
       : GenericDeviceTy(DeviceId, NumDevices, {0}), AMDGenericDeviceTy(),
-        OMPX_NumQueues("LIBOMPTARGET_AMDGPU_NUM_HSA_QUEUES", 8),
-        OMPX_QueueSize("LIBOMPTARGET_AMDGPU_HSA_QUEUE_SIZE", 1024),
+        OMPX_NumQueues("LIBOMPTARGET_AMDGPU_NUM_HSA_QUEUES", 4),
+        OMPX_QueueSize("LIBOMPTARGET_AMDGPU_HSA_QUEUE_SIZE", 512),
+        OMPX_DefaultTeamsPerCU("LIBOMPTARGET_AMDGPU_TEAMS_PER_CU", 4),
         OMPX_MaxAsyncCopyBytes("LIBOMPTARGET_AMDGPU_MAX_ASYNC_COPY_BYTES",
                                1 * 1024 * 1024), // 1MB
         OMPX_InitialNumSignals("LIBOMPTARGET_AMDGPU_NUM_INITIAL_HSA_SIGNALS",
@@ -1502,6 +1526,11 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     // First setup all the memory pools.
     if (auto Err = initMemoryPools())
       return Err;
+
+    char GPUName[64];
+    if (auto Err = getDeviceAttr(HSA_AGENT_INFO_NAME, GPUName))
+      return Err;
+    Arch = GPUName;
 
     // Get the wavefront size.
     uint32_t WavefrontSize = 0;
@@ -1528,9 +1557,17 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     hsa_dim3_t GridMaxDim;
     if (auto Err = getDeviceAttr(HSA_AGENT_INFO_GRID_MAX_DIM, GridMaxDim))
       return Err;
+
     GridValues.GV_Max_Teams = GridMaxDim.x / GridValues.GV_Max_WG_Size;
     if (GridValues.GV_Max_Teams == 0)
       return Plugin::error("Maximum number of teams cannot be zero");
+
+    // Compute the default number of teams.
+    uint32_t ComputeUnits = 0;
+    if (auto Err =
+            getDeviceAttr(HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT, ComputeUnits))
+      return Err;
+    GridValues.GV_Default_Num_Teams = ComputeUnits * OMPX_DefaultTeamsPerCU;
 
     // Get maximum size of any device queues and maximum number of queues.
     uint32_t MaxQueueSize;
@@ -1602,35 +1639,74 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     return Plugin::success();
   }
 
+  Expected<std::unique_ptr<MemoryBuffer>>
+  doJITPostProcessing(std::unique_ptr<MemoryBuffer> MB) const override {
+
+    // TODO: We should try to avoid materialization but there seems to be no
+    // good linker interface w/o file i/o.
+    SmallString<128> LinkerOutputFilePath;
+    std::error_code EC = sys::fs::createTemporaryFile(
+        "amdgpu-pre-link-jit", ".out", LinkerOutputFilePath);
+    if (EC)
+      return createStringError(EC,
+                               "Failed to create temporary file for linker");
+
+    SmallString<128> LinkerInputFilePath = LinkerOutputFilePath;
+    LinkerInputFilePath.pop_back_n(2);
+
+    auto FD = raw_fd_ostream(LinkerInputFilePath.data(), EC);
+    if (EC)
+      return createStringError(EC, "Failed to open temporary file for linker");
+    FD.write(MB->getBufferStart(), MB->getBufferSize());
+    FD.close();
+
+    const auto &ErrorOrPath = sys::findProgramByName("lld");
+    if (!ErrorOrPath)
+      return createStringError(inconvertibleErrorCode(),
+                               "Failed to find `lld` on the PATH.");
+
+    std::string LLDPath = ErrorOrPath.get();
+    INFO(OMP_INFOTYPE_PLUGIN_KERNEL, getDeviceId(),
+         "Using `%s` to link JITed amdgcn ouput.", LLDPath.c_str());
+
+    std::string MCPU = "-plugin-opt=mcpu=" + getArch();
+
+    StringRef Args[] = {LLDPath,
+                        "-flavor",
+                        "gnu",
+                        "--no-undefined",
+                        "-shared",
+                        MCPU,
+                        "-o",
+                        LinkerOutputFilePath.data(),
+                        LinkerInputFilePath.data()};
+
+    std::string Error;
+    int RC = sys::ExecuteAndWait(LLDPath, Args, std::nullopt, {}, 0, 0, &Error);
+    if (RC)
+      return createStringError(inconvertibleErrorCode(),
+                               "Linking optimized bitcode failed: %s",
+                               Error.c_str());
+
+    return std::move(
+        MemoryBuffer::getFileOrSTDIN(LinkerOutputFilePath.data()).get());
+  }
+
+  std::string getArch() const override { return Arch; }
+
   /// Allocate and construct an AMDGPU kernel.
   Expected<GenericKernelTy *>
   constructKernelEntry(const __tgt_offload_entry &KernelEntry,
                        DeviceImageTy &Image) override {
-    // Create a metadata object for the exec mode global (auto-generated).
-    StaticGlobalTy<llvm::omp::OMPTgtExecModeFlags> ExecModeGlobal(
-        KernelEntry.name, "_exec_mode");
 
-    // Retrieve execution mode for the kernel. This may fail since some kernels
-    // may not have a execution mode.
-    GenericGlobalHandlerTy &GHandler = Plugin::get().getGlobalHandler();
-    if (auto Err = GHandler.readGlobalFromImage(*this, Image, ExecModeGlobal)) {
-      DP("Failed to read execution mode for '%s': %s\n"
-         "Using default GENERIC (1) execution mode\n",
-         KernelEntry.name, toString(std::move(Err)).data());
-      // Consume the error since it is acceptable to fail.
-      consumeError(std::move(Err));
-      // In some cases the execution mode is not included, so use the default.
-      ExecModeGlobal.setValue(llvm::omp::OMP_TGT_EXEC_MODE_GENERIC);
-    }
-
-    // Check that the retrieved execution mode is valid.
-    if (!GenericKernelTy::isValidExecutionMode(ExecModeGlobal.getValue()))
-      return Plugin::error("Invalid execution mode %d for '%s'",
-                           ExecModeGlobal.getValue(), KernelEntry.name);
+    Expected<OMPTgtExecModeFlags> ExecModeOrErr =
+        getExecutionModeForKernel(KernelEntry.name, Image);
+    if (!ExecModeOrErr)
+      return ExecModeOrErr.takeError();
 
     // Allocate and initialize the AMDGPU kernel.
     AMDGPUKernelTy *AMDKernel = Plugin::get().allocate<AMDGPUKernelTy>();
-    new (AMDKernel) AMDGPUKernelTy(KernelEntry.name, ExecModeGlobal.getValue());
+    new (AMDKernel) AMDGPUKernelTy(KernelEntry.name, ExecModeOrErr.get());
 
     return AMDKernel;
   }
@@ -1696,15 +1772,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return OFFLOAD_FAIL;
     }
 
-    if (Kind == TARGET_ALLOC_HOST) {
-      std::lock_guard<std::shared_mutex> Lock(HostAllocationsMutex);
-      size_t Erased = HostAllocations.erase(TgtPtr);
-      if (!Erased) {
-        REPORT("Cannot find a host allocation in the map\n");
-        return OFFLOAD_FAIL;
-      }
-    }
-
     return OFFLOAD_SUCCESS;
   }
 
@@ -1754,7 +1821,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
 
     // Use one-step asynchronous operation when host memory is already pinned.
-    if (isHostPinnedMemory(HstPtr)) {
+    if (isHostPinnedMemoryBuffer(HstPtr)) {
       AMDGPUStreamTy &Stream = getStream(AsyncInfoWrapper);
       return Stream.pushPinnedMemoryCopyAsync(TgtPtr, HstPtr, Size);
     }
@@ -1808,7 +1875,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
                          AsyncInfoWrapperTy &AsyncInfoWrapper) override {
-    if (isHostPinnedMemory(HstPtr)) {
+
+    // Use one-step asynchronous operation when host memory is already pinned.
+    if (isHostPinnedMemoryBuffer(HstPtr)) {
       // Use one-step asynchronous operation when host memory is already pinned.
       AMDGPUStreamTy &Stream = getStream(AsyncInfoWrapper);
       return Stream.pushPinnedMemoryCopyAsync(HstPtr, TgtPtr, Size);
@@ -1980,23 +2049,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     return Queues[Current % Queues.size()];
   }
 
-  /// Check whether a buffer is a host pinned buffer.
-  bool isHostPinnedMemory(const void *Ptr) const {
-    bool Found = false;
-    HostAllocationsMutex.lock_shared();
-    if (!HostAllocations.empty()) {
-      auto It = HostAllocations.lower_bound((const void *)Ptr);
-      if (It != HostAllocations.end() && It->first == Ptr) {
-        Found = true;
-      } else if (It != HostAllocations.begin()) {
-        --It;
-        Found = ((const char *)It->first + It->second > (const char *)Ptr);
-      }
-    }
-    HostAllocationsMutex.unlock_shared();
-    return Found;
-  }
-
 private:
   using AMDGPUStreamRef = AMDGPUResourceRef<AMDGPUStreamTy>;
   using AMDGPUEventRef = AMDGPUResourceRef<AMDGPUEventTy>;
@@ -2013,6 +2065,11 @@ private:
   /// packets that can be pushed into each queue without waiting the driver to
   /// process them.
   UInt32Envar OMPX_QueueSize;
+
+  /// Envar for controlling the default number of teams relative to the number
+  /// of compute units (CUs) the device has:
+  ///   #default_teams = OMPX_DefaultTeamsPerCU * #CUs.
+  UInt32Envar OMPX_DefaultTeamsPerCU;
 
   /// Envar specifying the maximum size in bytes where the memory copies are
   /// asynchronous operations. Up to this transfer size, the memory copies are
@@ -2038,17 +2095,14 @@ private:
   /// The agent handler corresponding to the device.
   hsa_agent_t Agent;
 
+  /// The GPU architecture.
+  std::string Arch;
+
   /// Reference to the host device.
   AMDHostDeviceTy &HostDevice;
 
   /// List of device packet queues.
   std::vector<AMDGPUQueueTy> Queues;
-
-  /// Map of host pinned allocations. We track these pinned allocations so that
-  /// memory transfers involving these allocations do not need a two-step copy
-  /// with an intermediate pinned buffer.
-  std::map<const void *, size_t> HostAllocations;
-  mutable std::shared_mutex HostAllocationsMutex;
 };
 
 Error AMDGPUDeviceImageTy::loadExecutable(const AMDGPUDeviceTy &Device) {
@@ -2226,9 +2280,9 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
       // Classify the agents into kernel (GPU) and host (CPU) kernels.
       if (DeviceType == HSA_DEVICE_TYPE_GPU) {
         // Ensure that the GPU agent supports kernel dispatch packets.
-        hsa_agent_feature_t features;
-        Status = hsa_agent_get_info(Agent, HSA_AGENT_INFO_FEATURE, &features);
-        if (features & HSA_AGENT_FEATURE_KERNEL_DISPATCH)
+        hsa_agent_feature_t Features;
+        Status = hsa_agent_get_info(Agent, HSA_AGENT_INFO_FEATURE, &Features);
+        if (Features & HSA_AGENT_FEATURE_KERNEL_DISPATCH)
           KernelAgents.push_back(Agent);
       } else if (DeviceType == HSA_DEVICE_TYPE_CPU) {
         HostAgents.push_back(Agent);
@@ -2271,6 +2325,8 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
     hsa_status_t Status = hsa_shut_down();
     return Plugin::check(Status, "Error in hsa_shut_down: %s");
   }
+
+  Triple::ArchType getTripleArch() const override { return Triple::amdgcn; }
 
   /// Get the ELF code for recognizing the compatible image binary.
   uint16_t getMagicElfBits() const override { return ELF::EM_AMDGPU; }
@@ -2337,26 +2393,33 @@ private:
     std::string Reasons;
     uint32_t ReasonsMask = Event->memory_fault.fault_reason_mask;
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_PAGE_NOT_PRESENT)
-      Reasons += "HSA_AMD_MEMORY_FAULT_PAGE_NOT_PRESENT\n";
+      Reasons += "HSA_AMD_MEMORY_FAULT_PAGE_NOT_PRESENT, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_READ_ONLY)
-      Reasons += " HSA_AMD_MEMORY_FAULT_READ_ONLY\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_READ_ONLY, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_NX)
-      Reasons += " HSA_AMD_MEMORY_FAULT_NX\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_NX, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_HOST_ONLY)
-      Reasons += " HSA_AMD_MEMORY_FAULT_HOST_ONLY\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_HOST_ONLY, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_DRAMECC)
-      Reasons += " HSA_AMD_MEMORY_FAULT_DRAMECC\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_DRAMECC, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_IMPRECISE)
-      Reasons += " HSA_AMD_MEMORY_FAULT_IMPRECISE\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_IMPRECISE, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_SRAMECC)
-      Reasons += " HSA_AMD_MEMORY_FAULT_SRAMECC\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_SRAMECC, ";
     if (ReasonsMask & HSA_AMD_MEMORY_FAULT_HANG)
-      Reasons += " HSA_AMD_MEMORY_FAULT_HANG\n";
+      Reasons += " HSA_AMD_MEMORY_FAULT_HANG, ";
+
+    // If we do not know the reason, say so, otherwise remove the trailing comma
+    // and space.
+    if (Reasons.empty())
+      Reasons = "Unknown (Mask: " + std::to_string(ReasonsMask) + ")";
+    else
+      Reasons.resize(Reasons.size() - /* ', ' */ 2);
 
     // Abort the execution since we do not recover from this error.
     FATAL_MESSAGE(1,
                   "Found HSA_AMD_GPU_MEMORY_FAULT_EVENT in agent %" PRIu64
-                  " at virtual address %p and reasons:\n %s",
+                  " at virtual address %p and reasons: %s",
                   Event->memory_fault.agent.handle,
                   (void *)Event->memory_fault.virtual_address, Reasons.data());
 
@@ -2405,11 +2468,11 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   std::memset(ImplArgs, 0, ImplicitArgsSize);
 
   // Copy the explicit arguments.
-  for (int32_t ArgId = 0; ArgId < NumKernelArgs; ++ArgId) {
-    void *Dst = (char *)AllArgs + sizeof(void *) * ArgId;
-    void *Src = *((void **)KernelArgs + ArgId);
-    std::memcpy(Dst, Src, sizeof(void *));
-  }
+  // TODO: We should expose the args memory manager alloc to the common part as
+  // 	   alternative to copying them twice.
+  if (NumKernelArgs)
+    std::memcpy(AllArgs, *static_cast<void **>(KernelArgs),
+                sizeof(void *) * NumKernelArgs);
 
   AMDGPUDeviceTy &AMDGPUDevice = static_cast<AMDGPUDeviceTy &>(GenericDevice);
   AMDGPUStreamTy &Stream = AMDGPUDevice.getStream(AsyncInfoWrapper);
@@ -2505,11 +2568,8 @@ void *AMDGPUDeviceTy::allocate(size_t Size, void *, TargetAllocTy Kind) {
     // Enable all kernel agents to access the host pinned buffer.
     if (auto Err = MemoryPool->enableAccess(Alloc, Size, KernelAgents)) {
       REPORT("%s\n", toString(std::move(Err)).data());
+      return nullptr;
     }
-
-    // Keep track of the host pinned allocations for optimizations in transfers.
-    std::lock_guard<std::shared_mutex> Lock(HostAllocationsMutex);
-    HostAllocations.insert({Alloc, Size});
   }
 
   return Alloc;

@@ -36,7 +36,7 @@ public:
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           llvm::StringRef FileName, bool IsAngled,
                           CharSourceRange /*FilenameRange*/,
-                          std::optional<FileEntryRef> File,
+                          OptionalFileEntryRef File,
                           llvm::StringRef /*SearchPath*/,
                           llvm::StringRef /*RelativePath*/,
                           const clang::Module * /*Imported*/,
@@ -235,7 +235,7 @@ void IncludeStructure::collect(const CompilerInstance &CI) {
   CI.getPreprocessor().addPPCallbacks(std::move(Collector));
 }
 
-llvm::Optional<IncludeStructure::HeaderID>
+std::optional<IncludeStructure::HeaderID>
 IncludeStructure::getID(const FileEntry *Entry) const {
   // HeaderID of the main file is always 0;
   if (Entry == MainFileEntry) {
@@ -315,7 +315,7 @@ bool IncludeInserter::shouldInsertInclude(
   return !Included(DeclaringHeader) && !Included(InsertedHeader.File);
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 IncludeInserter::calculateIncludePath(const HeaderFile &InsertedHeader,
                                       llvm::StringRef IncludingFile) const {
   assert(InsertedHeader.valid());
@@ -345,10 +345,10 @@ IncludeInserter::calculateIncludePath(const HeaderFile &InsertedHeader,
   return Suggested;
 }
 
-llvm::Optional<TextEdit>
+std::optional<TextEdit>
 IncludeInserter::insert(llvm::StringRef VerbatimHeader,
                         tooling::IncludeDirective Directive) const {
-  llvm::Optional<TextEdit> Edit;
+  std::optional<TextEdit> Edit;
   if (auto Insertion =
           Inserter.insert(VerbatimHeader.trim("\"<>"),
                           VerbatimHeader.startswith("<"), Directive))

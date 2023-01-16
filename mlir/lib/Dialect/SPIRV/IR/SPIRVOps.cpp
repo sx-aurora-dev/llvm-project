@@ -1005,28 +1005,6 @@ static LogicalResult verifyShiftOp(Operation *op) {
   return success();
 }
 
-static void buildLogicalBinaryOp(OpBuilder &builder, OperationState &state,
-                                 Value lhs, Value rhs) {
-  assert(lhs.getType() == rhs.getType());
-
-  Type boolType = builder.getI1Type();
-  if (auto vecType = lhs.getType().dyn_cast<VectorType>())
-    boolType = VectorType::get(vecType.getShape(), boolType);
-  state.addTypes(boolType);
-
-  state.addOperands({lhs, rhs});
-}
-
-static void buildLogicalUnaryOp(OpBuilder &builder, OperationState &state,
-                                Value value) {
-  Type boolType = builder.getI1Type();
-  if (auto vecType = value.getType().dyn_cast<VectorType>())
-    boolType = VectorType::get(vecType.getShape(), boolType);
-  state.addTypes(boolType);
-
-  state.addOperands(value);
-}
-
 //===----------------------------------------------------------------------===//
 // spirv.AccessChainOp
 //===----------------------------------------------------------------------===//
@@ -1129,7 +1107,7 @@ ParseResult spirv::AccessChainOp::parse(OpAsmParser &parser,
     return failure();
 
   auto resultType = getElementPtrType(
-      type, llvm::makeArrayRef(result.operands).drop_front(), result.location);
+      type, llvm::ArrayRef(result.operands).drop_front(), result.location);
   if (!resultType) {
     return failure();
   }
@@ -4677,7 +4655,7 @@ static ParseResult parsePtrAccessChainOpImpl(StringRef opName,
     return failure();
 
   auto resultType = getElementPtrType(
-      type, llvm::makeArrayRef(state.operands).drop_front(2), state.location);
+      type, llvm::ArrayRef(state.operands).drop_front(2), state.location);
   if (!resultType)
     return failure();
 
@@ -4851,11 +4829,11 @@ static LogicalResult verifyIntegerDotProduct(Operation *op) {
   return success();
 }
 
-static Optional<spirv::Version> getIntegerDotProductMinVersion() {
+static std::optional<spirv::Version> getIntegerDotProductMinVersion() {
   return spirv::Version::V_1_0; // Available in SPIR-V >= 1.0.
 }
 
-static Optional<spirv::Version> getIntegerDotProductMaxVersion() {
+static std::optional<spirv::Version> getIntegerDotProductMaxVersion() {
   return spirv::Version::V_1_6; // Available in SPIR-V <= 1.6.
 }
 
@@ -4910,10 +4888,10 @@ getIntegerDotProductCapabilities(Operation *op) {
   SmallVector<ArrayRef<spirv::Capability>, 1> OpName::getCapabilities() {      \
     return getIntegerDotProductCapabilities(*this);                            \
   }                                                                            \
-  Optional<spirv::Version> OpName::getMinVersion() {                           \
+  std::optional<spirv::Version> OpName::getMinVersion() {                      \
     return getIntegerDotProductMinVersion();                                   \
   }                                                                            \
-  Optional<spirv::Version> OpName::getMaxVersion() {                           \
+  std::optional<spirv::Version> OpName::getMaxVersion() {                      \
     return getIntegerDotProductMaxVersion();                                   \
   }
 

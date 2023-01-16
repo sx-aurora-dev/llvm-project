@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -1501,7 +1502,8 @@ CommandObject *CommandInterpreter::GetCommandObjectForCommand(
       else if (cmd_obj->IsMultiwordObject()) {
         // Our current object is a multi-word object; see if the cmd_word is a
         // valid sub-command for our object.
-        CommandObject *sub_cmd_obj = cmd_obj->GetSubcommandObject(cmd_word);
+        CommandObject *sub_cmd_obj =
+            cmd_obj->GetSubcommandObject(cmd_word.c_str());
         if (sub_cmd_obj)
           cmd_obj = sub_cmd_obj;
         else // cmd_word was not a valid sub-command word, so we are done
@@ -1765,8 +1767,9 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
     options.SetTryAllThreads(true);
     options.SetTimeout(std::nullopt);
 
-    ExpressionResults expr_result = target.EvaluateExpression(
-        expr_str, exe_ctx.GetFramePtr(), expr_result_valobj_sp, options);
+    ExpressionResults expr_result =
+        target.EvaluateExpression(expr_str.c_str(), exe_ctx.GetFramePtr(),
+                                  expr_result_valobj_sp, options);
 
     if (expr_result == eExpressionCompleted) {
       Scalar scalar;
@@ -2004,7 +2007,7 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
     // repeat command, even though we don't add repeat commands to the history.
     if (add_to_history || empty_command) {
       Args command_args(command_string);
-      llvm::Optional<std::string> repeat_command =
+      std::optional<std::string> repeat_command =
           cmd_obj->GetRepeatCommand(command_args, 0);
       if (repeat_command)
         m_repeat_command.assign(*repeat_command);
@@ -2108,7 +2111,7 @@ void CommandInterpreter::HandleCompletion(CompletionRequest &request) {
   HandleCompletionMatches(request);
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 CommandInterpreter::GetAutoSuggestionForCommand(llvm::StringRef line) {
   if (line.empty())
     return std::nullopt;
@@ -3408,7 +3411,8 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
       }
     } else {
       if (cmd_obj->IsMultiwordObject()) {
-        CommandObject *sub_cmd_obj = cmd_obj->GetSubcommandObject(next_word);
+        CommandObject *sub_cmd_obj =
+            cmd_obj->GetSubcommandObject(next_word.c_str());
         if (sub_cmd_obj) {
           // The subcommand's name includes the parent command's name, so
           // restart rather than append to the revised_command_line.

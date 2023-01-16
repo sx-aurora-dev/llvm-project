@@ -147,14 +147,6 @@ STATISTIC(EmittedInsts, "Number of machine instrs printed");
 
 char AsmPrinter::ID = 0;
 
-using gcp_map_type = DenseMap<GCStrategy *, std::unique_ptr<GCMetadataPrinter>>;
-
-static gcp_map_type &getGCMap(void *&P) {
-  if (!P)
-    P = new gcp_map_type();
-  return *(gcp_map_type*)P;
-}
-
 namespace {
 class AddrLabelMapCallbackPtr final : CallbackVH {
   AddrLabelMap *Map = nullptr;
@@ -363,13 +355,6 @@ AsmPrinter::AsmPrinter(TargetMachine &tm, std::unique_ptr<MCStreamer> Streamer)
 AsmPrinter::~AsmPrinter() {
   assert(!DD && Handlers.size() == NumUserHandlers &&
          "Debug/EH info didn't get finalized");
-
-  if (GCMetadataPrinters) {
-    gcp_map_type &GCMap = getGCMap(GCMetadataPrinters);
-
-    delete &GCMap;
-    GCMetadataPrinters = nullptr;
-  }
 }
 
 bool AsmPrinter::isPositionIndependent() const {
@@ -491,7 +476,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   GCModuleInfo *MI = getAnalysisIfAvailable<GCModuleInfo>();
   assert(MI && "AsmPrinter didn't require GCModuleInfo?");
   for (const auto &I : *MI)
-    if (GCMetadataPrinter *MP = GetOrCreateGCPrinter(*I))
+    if (GCMetadataPrinter *MP = getOrCreateGCPrinter(*I))
       MP->beginAssembly(M, *MI, *this);
 
   // Emit module-level inline asm if it exists.
@@ -1147,10 +1132,15 @@ static bool emitDebugValueComment(const MachineInstr *MI, AsmPrinter &AP) {
   OS << " <- ";
 
   const DIExpression *Expr = MI->getDebugExpression();
+  // First convert this to a non-variadic expression if possible, to simplify
+  // the output.
+  if (auto NonVariadicExpr = DIExpression::convertToNonVariadicExpression(Expr))
+    Expr = *NonVariadicExpr;
+  // Then, output the possibly-simplified expression.
   if (Expr->getNumElements()) {
     OS << '[';
     ListSeparator LS;
-    for (auto Op : Expr->expr_ops()) {
+    for (auto &Op : Expr->expr_ops()) {
       OS << LS << dwarf::OperationEncodingString(Op.getOp());
       for (unsigned I = 0; I < Op.getNumArgs(); ++I)
         OS << ' ' << Op.getArg(I);
@@ -1662,6 +1652,9 @@ void AsmPrinter::emitFunctionBody() {
       case TargetOpcode::ARITH_FENCE:
         if (isVerbose())
           OutStreamer->emitRawComment("ARITH_FENCE");
+        break;
+      case TargetOpcode::MEMBARRIER:
+        OutStreamer->emitRawComment("MEMBARRIER");
         break;
       default:
         emitInstruction(&MI);
@@ -2248,7 +2241,7 @@ bool AsmPrinter::doFinalization(Module &M) {
   GCModuleInfo *MI = getAnalysisIfAvailable<GCModuleInfo>();
   assert(MI && "AsmPrinter didn't require GCModuleInfo?");
   for (GCModuleInfo::iterator I = MI->end(), E = MI->begin(); I != E; )
-    if (GCMetadataPrinter *MP = GetOrCreateGCPrinter(**--I))
+    if (GCMetadataPrinter *MP = getOrCreateGCPrinter(**--I))
       MP->finishAssembly(M, *MI, *this);
 
   // Emit llvm.ident metadata in an '.ident' directive.
@@ -2937,8 +2930,8 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV) {
     //
     // If the pointer is larger than the resultant integer, then
     // as with Trunc just depend on the assembler to truncate it.
-    if (DL.getTypeAllocSize(Ty).getFixedSize() <=
-        DL.getTypeAllocSize(Op->getType()).getFixedSize())
+    if (DL.getTypeAllocSize(Ty).getFixedValue() <=
+        DL.getTypeAllocSize(Op->getType()).getFixedValue())
       return OpExpr;
 
     break; // Error
@@ -3830,13 +3823,12 @@ isBlockOnlyReachableByFallthrough(const MachineBasicBlock *MBB) const {
   return true;
 }
 
-GCMetadataPrinter *AsmPrinter::GetOrCreateGCPrinter(GCStrategy &S) {
+GCMetadataPrinter *AsmPrinter::getOrCreateGCPrinter(GCStrategy &S) {
   if (!S.usesMetadata())
     return nullptr;
 
-  gcp_map_type &GCMap = getGCMap(GCMetadataPrinters);
-  gcp_map_type::iterator GCPI = GCMap.find(&S);
-  if (GCPI != GCMap.end())
+  auto [GCPI, Inserted] = GCMetadataPrinters.insert({&S, nullptr});
+  if (!Inserted)
     return GCPI->second.get();
 
   auto Name = S.getName();
@@ -3846,8 +3838,8 @@ GCMetadataPrinter *AsmPrinter::GetOrCreateGCPrinter(GCStrategy &S) {
     if (Name == GCMetaPrinter.getName()) {
       std::unique_ptr<GCMetadataPrinter> GMP = GCMetaPrinter.instantiate();
       GMP->S = &S;
-      auto IterBool = GCMap.insert(std::make_pair(&S, std::move(GMP)));
-      return IterBool.first->second.get();
+      GCPI->second = std::move(GMP);
+      return GCPI->second.get();
     }
 
   report_fatal_error("no GCMetadataPrinter registered for GC: " + Twine(Name));
@@ -3862,7 +3854,7 @@ void AsmPrinter::emitStackMaps() {
     NeedsDefault = true;
   else
     for (const auto &I : *MI) {
-      if (GCMetadataPrinter *MP = GetOrCreateGCPrinter(*I))
+      if (GCMetadataPrinter *MP = getOrCreateGCPrinter(*I))
         if (MP->emitStackMaps(SM, *this))
           continue;
       // The strategy doesn't have printer or doesn't emit custom stack maps.

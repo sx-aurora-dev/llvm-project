@@ -731,6 +731,9 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
                        GV.getName() == "llvm.global_dtors")) {
     Check(!GV.hasInitializer() || GV.hasAppendingLinkage(),
           "invalid linkage for intrinsic global variable", &GV);
+    Check(GV.materialized_use_empty(),
+          "invalid uses of intrinsic global variable", &GV);
+
     // Don't worry about emitting an error for it not being an array,
     // visitGlobalValue will complain on appending non-array.
     if (ArrayType *ATy = dyn_cast<ArrayType>(GV.getValueType())) {
@@ -757,6 +760,9 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
                        GV.getName() == "llvm.compiler.used")) {
     Check(!GV.hasInitializer() || GV.hasAppendingLinkage(),
           "invalid linkage for intrinsic global variable", &GV);
+    Check(GV.materialized_use_empty(),
+          "invalid uses of intrinsic global variable", &GV);
+
     Type *GVType = GV.getValueType();
     if (ArrayType *ATy = dyn_cast<ArrayType>(GVType)) {
       PointerType *PTy = dyn_cast<PointerType>(ATy->getElementType());
@@ -799,6 +805,13 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
   if (auto *STy = dyn_cast<StructType>(GV.getValueType()))
     Check(!STy->containsScalableVectorType(),
           "Globals cannot contain scalable vectors", &GV);
+
+  // Check if it's a target extension type that disallows being used as a
+  // global.
+  if (auto *TTy = dyn_cast<TargetExtType>(GV.getValueType()))
+    Check(TTy->hasProperty(TargetExtType::CanBeGlobal),
+          "Global @" + GV.getName() + " has illegal target extension type",
+          TTy);
 
   if (!GV.hasInitializer()) {
     visitGlobalValue(GV);
@@ -5304,8 +5317,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     break;
   case Intrinsic::localescape: {
     BasicBlock *BB = Call.getParent();
-    Check(BB == &BB->getParent()->front(),
-          "llvm.localescape used outside of entry block", Call);
+    Check(BB->isEntryBlock(), "llvm.localescape used outside of entry block",
+          Call);
     Check(!SawFrameEscape, "multiple calls to llvm.localescape in one function",
           Call);
     for (Value *Arg : Call.args()) {
@@ -6124,9 +6137,12 @@ void Verifier::visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII) {
     CheckDI(isa<DIAssignID>(DAI->getRawAssignID()),
             "invalid llvm.dbg.assign intrinsic DIAssignID", &DII,
             DAI->getRawAssignID());
-    CheckDI(isa<ValueAsMetadata>(DAI->getRawAddress()),
-            "invalid llvm.dbg.assign intrinsic address)", &DII,
-            DAI->getRawAddress());
+    const auto *RawAddr = DAI->getRawAddress();
+    CheckDI(
+        isa<ValueAsMetadata>(RawAddr) ||
+            (isa<MDNode>(RawAddr) && !cast<MDNode>(RawAddr)->getNumOperands()),
+        "invalid llvm.dbg.assign intrinsic address", &DII,
+        DAI->getRawAddress());
     CheckDI(isa<DIExpression>(DAI->getRawAddressExpression()),
             "invalid llvm.dbg.assign intrinsic address expression", &DII,
             DAI->getRawAddressExpression());
@@ -6299,7 +6315,7 @@ void Verifier::verifyDeoptimizeCallingConvs() {
     return;
 
   const Function *First = DeoptimizeDeclarations[0];
-  for (const auto *F : makeArrayRef(DeoptimizeDeclarations).slice(1)) {
+  for (const auto *F : ArrayRef(DeoptimizeDeclarations).slice(1)) {
     Check(First->getCallingConv() == F->getCallingConv(),
           "All llvm.experimental.deoptimize declarations must have the same "
           "calling convention",

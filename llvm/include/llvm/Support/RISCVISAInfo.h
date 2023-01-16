@@ -1,4 +1,4 @@
-//===-- RISCVISAInfo.h - RISCV ISA Information ------*- C++ -*-===//
+//===-- RISCVISAInfo.h - RISCV ISA Information ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -56,7 +56,8 @@ public:
 
   /// Convert RISCV ISA info to a feature vector.
   void toFeatures(std::vector<StringRef> &Features,
-                  std::function<StringRef(const Twine &)> StrAlloc) const;
+                  llvm::function_ref<StringRef(const Twine &)> StrAlloc,
+                  bool AddAllExtensions) const;
 
   const OrderedExtensionMap &getExtensions() const { return Exts; };
 

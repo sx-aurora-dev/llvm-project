@@ -12,11 +12,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include <memory>
-#include <optional>
 
-namespace clang {
-namespace tidy {
-namespace readability {
+namespace clang::tidy::readability {
 
 static SourceLocation advanceBeyondCurrentLine(const SourceManager &SM,
                                                SourceLocation Start,
@@ -49,9 +46,8 @@ public:
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange,
-                          std::optional<FileEntryRef> File,
-                          StringRef SearchPath, StringRef RelativePath,
-                          const Module *Imported,
+                          OptionalFileEntryRef File, StringRef SearchPath,
+                          StringRef RelativePath, const Module *Imported,
                           SrcMgr::CharacteristicKind FileType) override;
 
   void MacroDefined(const Token &MacroNameTok,
@@ -79,9 +75,8 @@ void DuplicateIncludeCallbacks::FileChanged(SourceLocation Loc,
 
 void DuplicateIncludeCallbacks::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
-    bool IsAngled, CharSourceRange FilenameRange,
-    std::optional<FileEntryRef> File, StringRef SearchPath,
-    StringRef RelativePath, const Module *Imported,
+    bool IsAngled, CharSourceRange FilenameRange, OptionalFileEntryRef File,
+    StringRef SearchPath, StringRef RelativePath, const Module *Imported,
     SrcMgr::CharacteristicKind FileType) {
   if (llvm::is_contained(Files.back(), FileName)) {
     // We want to delete the entire line, so make sure that [Start,End] covers
@@ -114,6 +109,4 @@ void DuplicateIncludeCheck::registerPPCallbacks(
   PP->addPPCallbacks(std::make_unique<DuplicateIncludeCallbacks>(*this, SM));
 }
 
-} // namespace readability
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::readability

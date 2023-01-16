@@ -20,7 +20,6 @@
 #include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/Token.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Capacity.h"
@@ -43,7 +42,7 @@ ExternalPreprocessingRecordSource::~ExternalPreprocessingRecordSource() =
 InclusionDirective::InclusionDirective(PreprocessingRecord &PPRec,
                                        InclusionKind Kind, StringRef FileName,
                                        bool InQuotes, bool ImportedModule,
-                                       std::optional<FileEntryRef> File,
+                                       OptionalFileEntryRef File,
                                        SourceRange Range)
     : PreprocessingDirective(InclusionDirectiveKind, Range), InQuotes(InQuotes),
       Kind(Kind), ImportedModule(ImportedModule), File(File) {
@@ -113,7 +112,7 @@ bool PreprocessingRecord::isEntityInFileID(iterator PPEI, FileID FID) {
 
     // See if the external source can see if the entity is in the file without
     // deserializing it.
-    if (Optional<bool> IsInFile =
+    if (std::optional<bool> IsInFile =
             ExternalSource->isPreprocessedEntityInFileID(LoadedIndex, FID))
       return *IsInFile;
 
@@ -477,9 +476,8 @@ void PreprocessingRecord::MacroUndefined(const Token &Id,
 
 void PreprocessingRecord::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
-    bool IsAngled, CharSourceRange FilenameRange,
-    std::optional<FileEntryRef> File, StringRef SearchPath,
-    StringRef RelativePath, const Module *Imported,
+    bool IsAngled, CharSourceRange FilenameRange, OptionalFileEntryRef File,
+    StringRef SearchPath, StringRef RelativePath, const Module *Imported,
     SrcMgr::CharacteristicKind FileType) {
   InclusionDirective::InclusionKind Kind = InclusionDirective::Include;
 

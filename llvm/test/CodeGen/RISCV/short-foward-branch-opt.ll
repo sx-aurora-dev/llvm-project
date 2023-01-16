@@ -171,8 +171,8 @@ define signext i32 @test7(i32 signext %x, i32 signext %z) {
 define i16 @select_xor_1(i16 %A, i8 %cond) {
 ; NOSFB-LABEL: select_xor_1:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a1, a1, 1
-; NOSFB-NEXT:    negw a1, a1
+; NOSFB-NEXT:    slli a1, a1, 63
+; NOSFB-NEXT:    srai a1, a1, 63
 ; NOSFB-NEXT:    andi a1, a1, 43
 ; NOSFB-NEXT:    xor a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -199,8 +199,8 @@ entry:
 define i16 @select_xor_1b(i16 %A, i8 %cond) {
 ; NOSFB-LABEL: select_xor_1b:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a1, a1, 1
-; NOSFB-NEXT:    negw a1, a1
+; NOSFB-NEXT:    slli a1, a1, 63
+; NOSFB-NEXT:    srai a1, a1, 63
 ; NOSFB-NEXT:    andi a1, a1, 43
 ; NOSFB-NEXT:    xor a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -225,8 +225,8 @@ entry:
 define i32 @select_xor_2(i32 %A, i32 %B, i8 %cond) {
 ; NOSFB-LABEL: select_xor_2:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    xor a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -252,8 +252,8 @@ entry:
 define i32 @select_xor_2b(i32 %A, i32 %B, i8 %cond) {
 ; NOSFB-LABEL: select_xor_2b:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    xor a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -277,8 +277,8 @@ entry:
 define i32 @select_or(i32 %A, i32 %B, i8 %cond) {
 ; NOSFB-LABEL: select_or:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    or a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -304,8 +304,8 @@ entry:
 define i32 @select_or_b(i32 %A, i32 %B, i8 %cond) {
 ; NOSFB-LABEL: select_or_b:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    or a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -329,8 +329,8 @@ entry:
 define i32 @select_or_1(i32 %A, i32 %B, i32 %cond) {
 ; NOSFB-LABEL: select_or_1:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    or a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -356,8 +356,8 @@ entry:
 define i32 @select_or_1b(i32 %A, i32 %B, i32 %cond) {
 ; NOSFB-LABEL: select_or_1b:
 ; NOSFB:       # %bb.0: # %entry
-; NOSFB-NEXT:    andi a2, a2, 1
-; NOSFB-NEXT:    neg a2, a2
+; NOSFB-NEXT:    slli a2, a2, 63
+; NOSFB-NEXT:    srai a2, a2, 63
 ; NOSFB-NEXT:    and a1, a1, a2
 ; NOSFB-NEXT:    or a0, a0, a1
 ; NOSFB-NEXT:    ret
@@ -376,4 +376,137 @@ entry:
  %0 = or i32 %B, %A
  %1 = select i1 %cmp10, i32 %A, i32 %0
  ret i32 %1
+}
+
+define void @sextw_removal_ccor(i1 %c, i32 signext %arg, i32 signext %arg1, i32 signext %arg2) nounwind {
+; NOSFB-LABEL: sextw_removal_ccor:
+; NOSFB:       # %bb.0: # %bb
+; NOSFB-NEXT:    addi sp, sp, -32
+; NOSFB-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    mv s0, a2
+; NOSFB-NEXT:    slli a0, a0, 63
+; NOSFB-NEXT:    srai a0, a0, 63
+; NOSFB-NEXT:    and a0, a0, a1
+; NOSFB-NEXT:    or s1, a0, a3
+; NOSFB-NEXT:  .LBB15_1: # %bb2
+; NOSFB-NEXT:    # =>This Inner Loop Header: Depth=1
+; NOSFB-NEXT:    mv a0, s1
+; NOSFB-NEXT:    call bar@plt
+; NOSFB-NEXT:    sllw s1, s1, s0
+; NOSFB-NEXT:    bnez a0, .LBB15_1
+; NOSFB-NEXT:  # %bb.2: # %bb7
+; NOSFB-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    addi sp, sp, 32
+; NOSFB-NEXT:    ret
+;
+; SFB-LABEL: sextw_removal_ccor:
+; SFB:       # %bb.0: # %bb
+; SFB-NEXT:    addi sp, sp, -32
+; SFB-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; SFB-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; SFB-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; SFB-NEXT:    mv s0, a3
+; SFB-NEXT:    andi a0, a0, 1
+; SFB-NEXT:    mv s1, a2
+; SFB-NEXT:    beqz a0, .LBB15_4
+; SFB-NEXT:  # %bb.3: # %bb
+; SFB-NEXT:    or s0, a3, a1
+; SFB-NEXT:  .LBB15_4: # %bb
+; SFB-NEXT:  .LBB15_1: # %bb2
+; SFB-NEXT:    # =>This Inner Loop Header: Depth=1
+; SFB-NEXT:    mv a0, s0
+; SFB-NEXT:    call bar@plt
+; SFB-NEXT:    sllw s0, s0, s1
+; SFB-NEXT:    bnez a0, .LBB15_1
+; SFB-NEXT:  # %bb.2: # %bb7
+; SFB-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; SFB-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; SFB-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; SFB-NEXT:    addi sp, sp, 32
+; SFB-NEXT:    ret
+bb:
+  %sel = select i1 %c, i32 %arg, i32 0
+  %or = or i32 %sel, %arg2
+  br label %bb2
+
+bb2:                                              ; preds = %bb2, %bb
+  %i3 = phi i32 [ %or, %bb ], [ %i5, %bb2 ]
+  %i4 = tail call signext i32 @bar(i32 signext %i3)
+  %i5 = shl i32 %i3, %arg1
+  %i6 = icmp eq i32 %i4, 0
+  br i1 %i6, label %bb7, label %bb2
+
+bb7:                                              ; preds = %bb2
+  ret void
+}
+declare signext i32 @bar(i32 signext)
+
+define void @sextw_removal_ccaddw(i1 %c, i32 signext %arg, i32 signext %arg1, i32 %arg2) nounwind {
+; NOSFB-LABEL: sextw_removal_ccaddw:
+; NOSFB:       # %bb.0: # %bb
+; NOSFB-NEXT:    addi sp, sp, -32
+; NOSFB-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NOSFB-NEXT:    mv s0, a2
+; NOSFB-NEXT:    slli a0, a0, 63
+; NOSFB-NEXT:    srai a0, a0, 63
+; NOSFB-NEXT:    and a0, a0, a3
+; NOSFB-NEXT:    addw s1, a0, a1
+; NOSFB-NEXT:  .LBB16_1: # %bb2
+; NOSFB-NEXT:    # =>This Inner Loop Header: Depth=1
+; NOSFB-NEXT:    mv a0, s1
+; NOSFB-NEXT:    call bar@plt
+; NOSFB-NEXT:    sllw s1, s1, s0
+; NOSFB-NEXT:    bnez a0, .LBB16_1
+; NOSFB-NEXT:  # %bb.2: # %bb7
+; NOSFB-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NOSFB-NEXT:    addi sp, sp, 32
+; NOSFB-NEXT:    ret
+;
+; SFB-LABEL: sextw_removal_ccaddw:
+; SFB:       # %bb.0: # %bb
+; SFB-NEXT:    addi sp, sp, -32
+; SFB-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; SFB-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; SFB-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; SFB-NEXT:    mv s0, a1
+; SFB-NEXT:    andi a0, a0, 1
+; SFB-NEXT:    mv s1, a2
+; SFB-NEXT:    beqz a0, .LBB16_4
+; SFB-NEXT:  # %bb.3: # %bb
+; SFB-NEXT:    addw s0, a1, a3
+; SFB-NEXT:  .LBB16_4: # %bb
+; SFB-NEXT:  .LBB16_1: # %bb2
+; SFB-NEXT:    # =>This Inner Loop Header: Depth=1
+; SFB-NEXT:    mv a0, s0
+; SFB-NEXT:    call bar@plt
+; SFB-NEXT:    sllw s0, s0, s1
+; SFB-NEXT:    bnez a0, .LBB16_1
+; SFB-NEXT:  # %bb.2: # %bb7
+; SFB-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; SFB-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; SFB-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; SFB-NEXT:    addi sp, sp, 32
+; SFB-NEXT:    ret
+bb:
+  %sel = select i1 %c, i32 %arg2, i32 0
+  %or = add i32 %sel, %arg
+  br label %bb2
+
+bb2:                                              ; preds = %bb2, %bb
+  %i3 = phi i32 [ %or, %bb ], [ %i5, %bb2 ]
+  %i4 = tail call signext i32 @bar(i32 signext %i3)
+  %i5 = shl i32 %i3, %arg1
+  %i6 = icmp eq i32 %i4, 0
+  br i1 %i6, label %bb7, label %bb2
+
+bb7:                                              ; preds = %bb2
+  ret void
 }

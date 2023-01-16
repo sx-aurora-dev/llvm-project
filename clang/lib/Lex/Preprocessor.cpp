@@ -400,7 +400,7 @@ bool Preprocessor::SetCodeCompletionPoint(const FileEntry *File,
   assert(!CodeCompletionFile && "Already set");
 
   // Load the actual file's contents.
-  Optional<llvm::MemoryBufferRef> Buffer =
+  std::optional<llvm::MemoryBufferRef> Buffer =
       SourceMgr.getMemoryBufferForFileOrNone(File);
   if (!Buffer)
     return true;
@@ -581,7 +581,7 @@ void Preprocessor::EnterMainSourceFile() {
   if (!PPOpts->PCHThroughHeader.empty()) {
     // Lookup and save the FileID for the through header. If it isn't found
     // in the search path, it's a fatal error.
-    std::optional<FileEntryRef> File = LookupFile(
+    OptionalFileEntryRef File = LookupFile(
         SourceLocation(), PPOpts->PCHThroughHeader,
         /*isAngled=*/false, /*FromDir=*/nullptr, /*FromFile=*/nullptr,
         /*CurDir=*/nullptr, /*SearchPath=*/nullptr, /*RelativePath=*/nullptr,

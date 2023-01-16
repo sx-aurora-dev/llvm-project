@@ -16,12 +16,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
-#include <optional>
 #include <string>
 
-namespace clang {
-namespace tidy {
-namespace modernize {
+namespace clang::tidy::modernize {
 
 static bool hasOnlyComments(SourceLocation Loc, const LangOptions &Options,
                             StringRef Text) {
@@ -120,9 +117,8 @@ public:
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange,
-                          std::optional<FileEntryRef> File,
-                          StringRef SearchPath, StringRef RelativePath,
-                          const Module *Imported,
+                          OptionalFileEntryRef File, StringRef SearchPath,
+                          StringRef RelativePath, const Module *Imported,
                           SrcMgr::CharacteristicKind FileType) override {
     clearCurrentEnum(HashLoc);
   }
@@ -558,6 +554,4 @@ void MacroToEnumCheck::check(
     PPCallback->invalidateRange(Range);
 }
 
-} // namespace modernize
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::modernize

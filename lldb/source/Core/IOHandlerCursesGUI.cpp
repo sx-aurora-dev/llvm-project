@@ -75,6 +75,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <type_traits>
 
 using namespace lldb;
@@ -3838,7 +3839,7 @@ public:
 
   void UpdateMatches(const std::string &text) override {
     CompletionResult result;
-    CompletionRequest request(text, text.size(), result);
+    CompletionRequest request(text.c_str(), text.size(), result);
     CommandCompletions::InvokeCommonCompletionCallbacks(
         m_debugger.GetCommandInterpreter(), m_completion_mask, request,
         nullptr);
@@ -7024,7 +7025,7 @@ public:
 
           StreamString lineStream;
 
-          llvm::Optional<size_t> column;
+          std::optional<size_t> column;
           if (is_pc_line && m_sc.line_entry.IsValid() && m_sc.line_entry.column)
             column = m_sc.line_entry.column - 1;
           m_file_sp->DisplaySourceLines(curr_line + 1, column, 0, 0,
