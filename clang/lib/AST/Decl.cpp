@@ -4711,6 +4711,7 @@ RecordDecl::RecordDecl(Kind DK, TagKind TK, const ASTContext &C,
   setParamDestroyedInCallee(false);
   setArgPassingRestrictions(APK_CanPassInRegs);
   setIsRandomized(false);
+  setODRHash(0);
 }
 
 RecordDecl *RecordDecl::Create(const ASTContext &C, TagKind TK, DeclContext *DC,
@@ -4769,7 +4770,10 @@ bool RecordDecl::isOrContainsUnion() const {
 RecordDecl::field_iterator RecordDecl::field_begin() const {
   if (hasExternalLexicalStorage() && !hasLoadedFieldsFromExternalStorage())
     LoadFieldsFromExternalStorage();
-
+  // This is necessary for correctness for C++ with modules.
+  // FIXME: Come up with a test case that breaks without definition.
+  if (RecordDecl *D = getDefinition(); D && D != this)
+    return D->field_begin();
   return field_iterator(decl_iterator(FirstDecl));
 }
 
@@ -4883,6 +4887,19 @@ const FieldDecl *RecordDecl::findFirstNamedDataMember() const {
 
   // We didn't find a named data member.
   return nullptr;
+}
+
+unsigned RecordDecl::getODRHash() {
+  if (hasODRHash())
+    return RecordDeclBits.ODRHash;
+
+  // Only calculate hash on first call of getODRHash per record.
+  ODRHash Hash;
+  Hash.AddRecordDecl(this);
+  // For RecordDecl the ODRHash is stored in the remaining 26
+  // bit of RecordDeclBits, adjust the hash to accomodate.
+  setODRHash(Hash.CalculateHash() >> 6);
+  return RecordDeclBits.ODRHash;
 }
 
 //===----------------------------------------------------------------------===//

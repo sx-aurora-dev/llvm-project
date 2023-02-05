@@ -2009,7 +2009,10 @@ static void disassembleObject(ObjectFile *Obj, bool InlineRelocs) {
   const Target *TheTarget = getTarget(Obj);
 
   // Package up features to be passed to target/subtarget
-  SubtargetFeatures Features = Obj->getFeatures();
+  Expected<SubtargetFeatures> FeaturesValue = Obj->getFeatures();
+  if (!FeaturesValue)
+    reportError(FeaturesValue.takeError(), Obj->getFileName());
+  SubtargetFeatures Features = *FeaturesValue;
   if (!MAttrs.empty()) {
     for (unsigned I = 0; I != MAttrs.size(); ++I)
       Features.AddFeature(MAttrs[I]);
@@ -3195,9 +3198,7 @@ int main(int argc, char **argv) {
 
   // Initialize debuginfod.
   const bool ShouldUseDebuginfodByDefault =
-      InputArgs.hasArg(OBJDUMP_build_id) ||
-      (HTTPClient::isAvailable() &&
-       !ExitOnErr(getDefaultDebuginfodUrls()).empty());
+      InputArgs.hasArg(OBJDUMP_build_id) || canUseDebuginfod();
   std::vector<std::string> DebugFileDirectories =
       InputArgs.getAllArgValues(OBJDUMP_debug_file_directory);
   if (InputArgs.hasFlag(OBJDUMP_debuginfod, OBJDUMP_no_debuginfod,

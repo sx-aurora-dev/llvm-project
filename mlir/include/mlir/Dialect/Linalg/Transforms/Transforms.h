@@ -21,6 +21,7 @@
 #include "mlir/Dialect/X86Vector/Transforms.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/TilingInterface.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallSet.h"
@@ -54,6 +55,10 @@ void populatePadTensorTilingPatterns(RewritePatternSet &patterns,
 /// to false only for testing purposes.
 void populateDecomposeLinalgOpsPattern(RewritePatternSet &patterns,
                                        bool removeDeadArgsAndResults = true);
+
+/// Populate patterns that convert non-destination-style ops to destination
+/// style ops.
+void populateConvertToDestinationStylePatterns(RewritePatternSet &patterns);
 
 /// Populate patterns for vectorizing low-D convolution ops. This is a step in
 /// progressive lowering for convolution ops, it assume high-D convolution ops
@@ -157,8 +162,12 @@ bool areElementwiseOpsFusable(OpOperand *fusedOperand);
 /// Fuse two `linalg.generic` operations that have a producer-consumer
 /// relationship captured through `fusedOperand`. The method expects
 /// that `areElementwiseOpsFusable` returns true for the given `fusedOperand`.
-FailureOr<Operation *> fuseElementwiseOps(RewriterBase &rewriter,
-                                          OpOperand *fusedOperand);
+struct ElementwiseOpFusionResult {
+  Operation *fusedOp;
+  llvm::DenseMap<Value, Value> replacements;
+};
+FailureOr<ElementwiseOpFusionResult>
+fuseElementwiseOps(RewriterBase &rewriter, OpOperand *fusedOperand);
 
 /// Split the given `op` into two parts along the given iteration space
 /// `dimension` at the specified `splitPoint`, and return the two parts.
@@ -215,7 +224,7 @@ struct TiledLinalgOp {
 FailureOr<TiledLinalgOp> tileLinalgOp(RewriterBase &b, LinalgOp op,
                                       const LinalgTilingOptions &options);
 
-/// Try to peel anad canonicalize loop `op` and return the new result.
+/// Try to peel and canonicalize loop `op` and return the new result.
 // TODO: Add support for scf.parallel and affine.for loops.
 SmallVector<Value> peelLoop(RewriterBase &rewriter, Operation *op);
 /// Peel and canonicalize 'loops'.
@@ -416,15 +425,23 @@ makeTiledLoopRanges(RewriterBase &b, Location loc, AffineMap map,
                     ArrayRef<OpFoldResult> allShapeSizes,
                     ArrayRef<OpFoldResult> allTileSizes);
 
+namespace detail {
+template <typename T>
+struct MultiSizeSpecificationBase {
+  /// Tile sizes.
+  T lowTileSize, highTileSize;
+  /// Number of tiles associated with each size.
+  T lowTripCount, highTripCount;
+};
+} // namespace detail
+
 /// A description of a multi-size tiling comprising tile sizes and numbers of
 /// tiles, expressed as Values which may or may not be constant. Multi-size
 /// currently means two-size.
-struct MultiSizeSpecification {
-  /// Tile sizes.
-  Value lowTileSize, highTileSize;
-  /// Number of tiles associated with each size.
-  Value lowTripCount, highTripCount;
-};
+struct MultiSizeSpecification
+    : public detail::MultiSizeSpecificationBase<Value> {};
+struct StaticMultiSizeSpecification
+    : public detail::MultiSizeSpecificationBase<int64_t> {};
 
 /// Emits the IR computing the multi-sized tiling specification with two tile
 /// sizes not exceeding `targetSize`, each divisible by `sizeDivisor`, such
@@ -457,6 +474,9 @@ FailureOr<MultiSizeSpecification>
 computeMultiTileSizes(OpBuilder &builder, LinalgOp op, unsigned dimension,
                       OpFoldResult targetSize, OpFoldResult divisor,
                       bool emitAssertions = true);
+FailureOr<StaticMultiSizeSpecification>
+computeStaticMultiTileSizes(LinalgOp op, unsigned dimension, int64_t targetSize,
+                            int64_t divisor);
 
 /// Rewrite a TilingInterface `op` to a tiled `scf.foreach_thread`, applying
 /// tiling by `numThreads`.
@@ -1125,6 +1145,37 @@ splitReductionByScaling(PatternRewriter &b, LinalgOp op,
 FailureOr<SmallVector<Value>> collapseGenericOpIterationDims(
     GenericOp genericOp, ArrayRef<ReassociationIndices> foldedIterationDims,
     RewriterBase &rewriter);
+
+/// Struct to hold the result of a `pack` call.
+struct PackResult {
+  SmallVector<tensor::PackOp> packOps;
+  linalg::LinalgOp packedLinalgOp;
+  SmallVector<tensor::UnPackOp> unPackOps;
+};
+/// Implement packing of a single LinalgOp by `packedSizes`.
+/// There must be one packedSizes entry per `linalgOp` iterator.
+/// Return the packed Linalg op on success, failure otherwise.
+FailureOr<PackResult> pack(RewriterBase &rewriter, linalg::LinalgOp linalgOp,
+                           ArrayRef<OpFoldResult> packedSizes);
+
+/// Struct to hold the result of a `packTranspose` call.
+struct PackTransposeResult {
+  tensor::PackOp transposedPackOp;
+  linalg::LinalgOp transposedLinalgOp;
+  tensor::UnPackOp transposedUnPackOp;
+};
+/// Transpose a single PackOp -> LinalgOp -> UnPackOp chain and return the
+/// transposed PackOp -> LinalgOp -> UnPackOp chain after replacements.
+/// Return failure if either:
+///   1. the `packOp` does not have the `linalgOp` as its unique use.
+///   2. the `maybeUnPackOp`, if specified must be a consumer of the result tied
+///      to the unique `packOp` use.
+///   3. `outerPerm` (resp. `innerPerm`) must be valid permutations of
+///      `packOp.getOuterDimsPerm` (resp. `packOp.getInnerDimsPerm`) or empty.
+FailureOr<PackTransposeResult>
+packTranspose(RewriterBase &rewriter, tensor::PackOp packOp,
+              linalg::LinalgOp linalgOp, tensor::UnPackOp maybeUnPackOp,
+              ArrayRef<int64_t> outerPerm, ArrayRef<int64_t> innerPerm);
 
 } // namespace linalg
 } // namespace mlir
