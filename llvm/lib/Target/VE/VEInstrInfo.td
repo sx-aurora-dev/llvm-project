@@ -1078,17 +1078,17 @@ multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC, bit MoveImm = 0> {
     let isMoveImm = MoveImm;
   }
   let isCodeGenOnly = 1 in
-  def rri64 : RM<opc, (outs RC:$dest), (ins MEMrri64:$addr),
-                 !strconcat(opcStr, " $dest, $addr"), []>;
+  def rri64 : RM<opc, (outs RC:$sx), (ins (MEMrri64 $sz, $sy, $imm32):$addr),
+                 !strconcat(opcStr, " $sx, $addr"), []>;
   let cy = 0, isCodeGenOnly = 1 in
-  def rii64 : RM<opc, (outs RC:$dest), (ins MEMrii64:$addr),
-                 !strconcat(opcStr, " $dest, $addr"), []>;
+  def rii64 : RM<opc, (outs RC:$sx), (ins (MEMrii64 $sz, $sy, $imm32):$addr),
+                 !strconcat(opcStr, " $sx, $addr"), []>;
   let cz = 0, isCodeGenOnly = 1 in
-  def zri64 : RM<opc, (outs RC:$dest), (ins MEMzri64:$addr),
-                 !strconcat(opcStr, " $dest, $addr"), []>;
+  def zri64 : RM<opc, (outs RC:$sx), (ins (MEMzri64 $sz, $sy, $imm32):$addr),
+                 !strconcat(opcStr, " $sx, $addr"), []>;
   let cy = 0, cz = 0, isCodeGenOnly = 1 in
-  def zii64 : RM<opc, (outs RC:$dest), (ins MEMzii64:$addr),
-                 !strconcat(opcStr, " $dest, $addr"), []> {
+  def zii64 : RM<opc, (outs RC:$sx), (ins (MEMzii64 $sz, $sy, $imm32):$addr),
+                 !strconcat(opcStr, " $sx, $addr"), []> {
     // VE uses LEAzii and LEASLzii as a move immediate instruction, so declare
     // it here.  An instruction declared as MoveImm will be optimized in
     // FoldImmediate later.
