@@ -138,9 +138,12 @@ define i8 @atomicrmw_udec_wrap_i8(ptr %ptr, i8 %val) {
 ; CHECK-NEXT:    srl %s5, %s5, %s0
 ; CHECK-NEXT:    and %s7, %s5, (56)0
 ; CHECK-NEXT:    adds.w.sx %s5, -1, %s5
-; CHECK-NEXT:    cmpu.w %s34, %s7, %s4
-; CHECK-NEXT:    cmov.w.gt %s5, %s1, %s34
-; CHECK-NEXT:    cmov.w.eq %s5, %s1, %s7
+; CHECK-NEXT:    ldz %s34, %s7
+; CHECK-NEXT:    srl %s34, %s34, 6
+; CHECK-NEXT:    cmpu.w %s7, %s4, %s7
+; CHECK-NEXT:    srl %s7, %s7, 31
+; CHECK-NEXT:    or %s7, %s34, %s7
+; CHECK-NEXT:    cmov.w.ne %s5, %s1, %s7
 ; CHECK-NEXT:    and %s5, %s5, (56)0
 ; CHECK-NEXT:    sla.w.sx %s5, %s5, %s0
 ; CHECK-NEXT:    and %s7, %s6, %s3
@@ -176,9 +179,12 @@ define i16 @atomicrmw_udec_wrap_i16(ptr %ptr, i16 %val) {
 ; CHECK-NEXT:    srl %s5, %s5, %s0
 ; CHECK-NEXT:    and %s7, %s5, (48)0
 ; CHECK-NEXT:    adds.w.sx %s5, -1, %s5
-; CHECK-NEXT:    cmpu.w %s34, %s7, %s4
-; CHECK-NEXT:    cmov.w.gt %s5, %s1, %s34
-; CHECK-NEXT:    cmov.w.eq %s5, %s1, %s7
+; CHECK-NEXT:    ldz %s34, %s7
+; CHECK-NEXT:    srl %s34, %s34, 6
+; CHECK-NEXT:    cmpu.w %s7, %s4, %s7
+; CHECK-NEXT:    srl %s7, %s7, 31
+; CHECK-NEXT:    or %s7, %s34, %s7
+; CHECK-NEXT:    cmov.w.ne %s5, %s1, %s7
 ; CHECK-NEXT:    and %s5, %s5, (48)0
 ; CHECK-NEXT:    sla.w.sx %s5, %s5, %s0
 ; CHECK-NEXT:    and %s7, %s6, %s3
@@ -204,9 +210,12 @@ define i32 @atomicrmw_udec_wrap_i32(ptr %ptr, i32 %val) {
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s3, 0, %s2
 ; CHECK-NEXT:    adds.w.sx %s2, -1, %s2
-; CHECK-NEXT:    cmpu.w %s4, %s3, %s1
-; CHECK-NEXT:    cmov.w.gt %s2, %s1, %s4
-; CHECK-NEXT:    cmov.w.eq %s2, %s1, %s3
+; CHECK-NEXT:    ldz %s4, %s3
+; CHECK-NEXT:    srl %s4, %s4, 6
+; CHECK-NEXT:    cmpu.w %s5, %s1, %s3
+; CHECK-NEXT:    srl %s5, %s5, 31
+; CHECK-NEXT:    or %s4, %s4, %s5
+; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s4
 ; CHECK-NEXT:    cas.w %s2, (%s0), %s3
 ; CHECK-NEXT:    brne.w %s2, %s3, .LBB6_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
@@ -226,9 +235,12 @@ define i64 @atomicrmw_udec_wrap_i64(ptr %ptr, i64 %val) {
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s3, 0, %s2
 ; CHECK-NEXT:    lea %s2, -1(, %s2)
-; CHECK-NEXT:    cmpu.l %s4, %s3, %s1
-; CHECK-NEXT:    cmov.l.gt %s2, %s1, %s4
-; CHECK-NEXT:    cmov.l.eq %s2, %s1, %s3
+; CHECK-NEXT:    ldz %s4, %s3
+; CHECK-NEXT:    srl %s4, %s4, 6
+; CHECK-NEXT:    cmpu.l %s5, %s1, %s3
+; CHECK-NEXT:    srl %s5, %s5, 63
+; CHECK-NEXT:    or %s4, %s4, %s5
+; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s4
 ; CHECK-NEXT:    cas.l %s2, (%s0), %s3
 ; CHECK-NEXT:    brne.l %s2, %s3, .LBB7_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
