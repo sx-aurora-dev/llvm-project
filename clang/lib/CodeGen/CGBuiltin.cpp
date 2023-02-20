@@ -53,10 +53,10 @@
 #include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/MatrixBuilder.h"
-#include "llvm/Support/AArch64TargetParser.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/X86TargetParser.h"
+#include "llvm/TargetParser/AArch64TargetParser.h"
 #include <optional>
 #include <sstream>
 
@@ -3061,6 +3061,15 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     return RValue::get(V);
   }
 
+  case Builtin::BI__builtin_nondeterministic_value: {
+    llvm::Type *Ty = ConvertType(E->getArg(0)->getType());
+
+    Value *Result = PoisonValue::get(Ty);
+    Result = Builder.CreateFreeze(Result);
+
+    return RValue::get(Result);
+  }
+
   case Builtin::BI__builtin_elementwise_abs: {
     Value *Result;
     QualType QT = E->getArg(0)->getType();
@@ -3080,6 +3089,9 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_elementwise_ceil:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::ceil, "elt.ceil"));
+  case Builtin::BI__builtin_elementwise_log:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::log, "elt.log"));
   case Builtin::BI__builtin_elementwise_cos:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::cos, "elt.cos"));
@@ -4675,6 +4687,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BImove:
   case Builtin::BImove_if_noexcept:
   case Builtin::BIforward:
+  case Builtin::BIforward_like:
   case Builtin::BIas_const:
     return RValue::get(EmitLValue(E->getArg(0)).getPointer(*this));
   case Builtin::BI__GetExceptionInfo: {
@@ -4923,7 +4936,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       auto Info =
           CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(3));
       llvm::Value *Kernel =
-          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+          Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
       llvm::Value *Block =
           Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
 
@@ -4977,7 +4990,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       auto Info =
           CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(3));
       llvm::Value *Kernel =
-          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+          Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
       auto *Block = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
       llvm::Value *ElemPtr, *TmpSize, *TmpPtr;
       std::tie(ElemPtr, TmpSize, TmpPtr) = CreateArrayForSizeVar(4);
@@ -5034,7 +5047,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       auto Info =
           CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(6));
       llvm::Value *Kernel =
-          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+          Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
       llvm::Value *Block =
           Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
 
@@ -5084,7 +5097,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         getContext().getTargetAddressSpace(LangAS::opencl_generic));
     auto Info =
         CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
-    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Kernel =
+        Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
     Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     return RValue::get(EmitRuntimeCall(
         CGM.CreateRuntimeFunction(
@@ -5098,7 +5112,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         getContext().getTargetAddressSpace(LangAS::opencl_generic));
     auto Info =
         CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
-    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Kernel =
+        Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
     Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     return RValue::get(EmitRuntimeCall(
         CGM.CreateRuntimeFunction(
@@ -5115,7 +5130,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     llvm::Value *NDRange = NDRangeL.getAddress(*this).getPointer();
     auto Info =
         CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(1));
-    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Kernel =
+        Builder.CreatePointerCast(Info.KernelHandle, GenericVoidPtrTy);
     Value *Block = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     const char *Name =
         BuiltinID == Builtin::BIget_kernel_max_sub_group_size_for_ndrange
@@ -8997,8 +9013,7 @@ Value *CodeGenFunction::EmitSVEGatherLoad(const SVETypeFlags &TypeFlags,
   if (!TypeFlags.isByteIndexed() && Ops[1]->getType()->isVectorTy()) {
     unsigned BytesPerElt =
         OverloadedTy->getElementType()->getScalarSizeInBits() / 8;
-    Value *Scale = ConstantInt::get(Int64Ty, BytesPerElt);
-    Ops[2] = Builder.CreateMul(Ops[2], Scale);
+    Ops[2] = Builder.CreateShl(Ops[2], Log2_32(BytesPerElt));
   }
 
   Value *Call = Builder.CreateCall(F, Ops);
@@ -9057,8 +9072,7 @@ Value *CodeGenFunction::EmitSVEScatterStore(const SVETypeFlags &TypeFlags,
   if (!TypeFlags.isByteIndexed() && Ops[2]->getType()->isVectorTy()) {
     unsigned BytesPerElt =
         OverloadedTy->getElementType()->getScalarSizeInBits() / 8;
-    Value *Scale = ConstantInt::get(Int64Ty, BytesPerElt);
-    Ops[3] = Builder.CreateMul(Ops[3], Scale);
+    Ops[3] = Builder.CreateShl(Ops[3], Log2_32(BytesPerElt));
   }
 
   return Builder.CreateCall(F, Ops);
@@ -9088,8 +9102,8 @@ Value *CodeGenFunction::EmitSVEGatherPrefetch(const SVETypeFlags &TypeFlags,
       // Index needs to be passed as scaled offset.
       llvm::Type *MemEltTy = SVEBuiltinMemEltTy(TypeFlags);
       unsigned BytesPerElt = MemEltTy->getPrimitiveSizeInBits() / 8;
-      Value *Scale = ConstantInt::get(Int64Ty, BytesPerElt);
-      Ops[2] = Builder.CreateMul(Ops[2], Scale);
+      if (BytesPerElt > 1)
+        Ops[2] = Builder.CreateShl(Ops[2], Log2_32(BytesPerElt));
     }
   }
 
@@ -9123,8 +9137,11 @@ Value *CodeGenFunction::EmitSVEStructLoad(const SVETypeFlags &TypeFlags,
 
 	Value *Predicate = EmitSVEPredicateCast(Ops[0], VTy);
   Value *BasePtr= Builder.CreateBitCast(Ops[1], VecPtrTy);
-  Value *Offset = Ops.size() > 2 ? Ops[2] : Builder.getInt32(0);
-  BasePtr = Builder.CreateGEP(VTy, BasePtr, Offset);
+
+  // Does the load have an offset?
+  if (Ops.size() > 2)
+    BasePtr = Builder.CreateGEP(VTy, BasePtr, Ops[2]);
+
   BasePtr = Builder.CreateBitCast(BasePtr, EltPtrTy);
   Function *F = CGM.getIntrinsic(IntID, {VTy});
   Value *Call = Builder.CreateCall(F, {Predicate, BasePtr});
@@ -9162,10 +9179,13 @@ Value *CodeGenFunction::EmitSVEStructStore(const SVETypeFlags &TypeFlags,
 
   Value *Predicate = EmitSVEPredicateCast(Ops[0], VTy);
   Value *BasePtr = Builder.CreateBitCast(Ops[1], VecPtrTy);
-  Value *Offset = Ops.size() > 3 ? Ops[2] : Builder.getInt32(0);
-  Value *Val = Ops.back();
-  BasePtr = Builder.CreateGEP(VTy, BasePtr, Offset);
+
+  // Does the store have an offset?
+  if (Ops.size() > 3)
+    BasePtr = Builder.CreateGEP(VTy, BasePtr, Ops[2]);
+
   BasePtr = Builder.CreateBitCast(BasePtr, EltPtrTy);
+  Value *Val = Ops.back();
 
   // The llvm.aarch64.sve.st2/3/4 intrinsics take legal part vectors, so we
   // need to break up the tuple vector.
@@ -9249,8 +9269,10 @@ Value *CodeGenFunction::EmitSVEMaskedLoad(const CallExpr *E,
 
   Value *Predicate = EmitSVEPredicateCast(Ops[0], MemoryTy);
   Value *BasePtr = Builder.CreateBitCast(Ops[1], MemoryTy->getPointerTo());
-  Value *Offset = Ops.size() > 2 ? Ops[2] : Builder.getInt32(0);
-  BasePtr = Builder.CreateGEP(MemoryTy, BasePtr, Offset);
+
+  // Does the load have an offset?
+  if (Ops.size() > 2)
+    BasePtr = Builder.CreateGEP(MemoryTy, BasePtr, Ops[2]);
 
   BasePtr = Builder.CreateBitCast(BasePtr, MemEltTy->getPointerTo());
   Function *F = CGM.getIntrinsic(BuiltinID, MemoryTy);
@@ -9277,8 +9299,10 @@ Value *CodeGenFunction::EmitSVEMaskedStore(const CallExpr *E,
 
   Value *Predicate = EmitSVEPredicateCast(Ops[0], MemoryTy);
   Value *BasePtr = Builder.CreateBitCast(Ops[1], MemoryTy->getPointerTo());
-  Value *Offset = Ops.size() == 4 ? Ops[2] : Builder.getInt32(0);
-  BasePtr = Builder.CreateGEP(MemoryTy, BasePtr, Offset);
+
+  // Does the store have an offset?
+  if (Ops.size() == 4)
+    BasePtr = Builder.CreateGEP(MemoryTy, BasePtr, Ops[2]);
 
   // Last value is always the data
   llvm::Value *Val = Builder.CreateTrunc(Ops.back(), MemoryTy);
@@ -9295,8 +9319,8 @@ Value *CodeGenFunction::EmitSVEMaskedStore(const CallExpr *E,
 // Limit the usage of scalable llvm IR generated by the ACLE by using the
 // sve dup.x intrinsic instead of IRBuilder::CreateVectorSplat.
 Value *CodeGenFunction::EmitSVEDupX(Value *Scalar, llvm::Type *Ty) {
-  auto F = CGM.getIntrinsic(Intrinsic::aarch64_sve_dup_x, Ty);
-  return Builder.CreateCall(F, Scalar);
+  return Builder.CreateVectorSplat(
+      cast<llvm::VectorType>(Ty)->getElementCount(), Scalar);
 }
 
 Value *CodeGenFunction::EmitSVEDupX(Value* Scalar) {
@@ -9476,8 +9500,7 @@ Value *CodeGenFunction::EmitAArch64SVEBuiltinExpr(unsigned BuiltinID,
     if (TypeFlags.getMergeType() == SVETypeFlags::MergeZero) {
       llvm::Type *OpndTy = Ops[1]->getType();
       auto *SplatZero = Constant::getNullValue(OpndTy);
-      Function *Sel = CGM.getIntrinsic(Intrinsic::aarch64_sve_sel, OpndTy);
-      Ops[1] = Builder.CreateCall(Sel, {Ops[0], Ops[1], SplatZero});
+      Ops[1] = Builder.CreateSelect(Ops[0], Ops[1], SplatZero);
     }
 
     Function *F = CGM.getIntrinsic(Builtin->LLVMIntrinsic,
@@ -9590,9 +9613,6 @@ Value *CodeGenFunction::EmitAArch64SVEBuiltinExpr(unsigned BuiltinID,
         VecOps.push_back(Builder.CreateZExt(Ops[I], EltTy));
     Value *Vec = BuildVector(VecOps);
 
-    SVETypeFlags TypeFlags(Builtin->TypeModifier);
-    Value *Pred = EmitSVEAllTruePred(TypeFlags);
-
     llvm::Type *OverloadedTy = getSVEVectorForElementType(EltTy);
     Value *InsertSubVec = Builder.CreateInsertVector(
         OverloadedTy, PoisonValue::get(OverloadedTy), Vec, Builder.getInt64(0));
@@ -9604,6 +9624,9 @@ Value *CodeGenFunction::EmitAArch64SVEBuiltinExpr(unsigned BuiltinID,
 
     if (!IsBoolTy)
       return DupQLane;
+
+    SVETypeFlags TypeFlags(Builtin->TypeModifier);
+    Value *Pred = EmitSVEAllTruePred(TypeFlags);
 
     // For svdupq_n_b* we need to add an additional 'cmpne' with '0'.
     F = CGM.getIntrinsic(NumOpnds == 2 ? Intrinsic::aarch64_sve_cmpne
@@ -12356,7 +12379,7 @@ BuildVector(ArrayRef<llvm::Value*> Ops) {
       llvm::FixedVectorType::get(Ops[0]->getType(), Ops.size()));
 
   for (unsigned i = 0, e = Ops.size(); i != e; ++i)
-    Result = Builder.CreateInsertElement(Result, Ops[i], Builder.getInt32(i));
+    Result = Builder.CreateInsertElement(Result, Ops[i], Builder.getInt64(i));
 
   return Result;
 }
@@ -18817,6 +18840,10 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(IntNo, ConvertType(E->getType()));
     return Builder.CreateCall(Callee, Value);
   }
+  case WebAssembly::BI__builtin_wasm_ref_null_extern: {
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_ref_null_extern);
+    return Builder.CreateCall(Callee);
+  }
   case WebAssembly::BI__builtin_wasm_swizzle_i8x16: {
     Value *Src = EmitScalarExpr(E->getArg(0));
     Value *Indices = EmitScalarExpr(E->getArg(1));
@@ -19474,10 +19501,11 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
 
   Intrinsic::ID ID = Intrinsic::not_intrinsic;
   unsigned NF = 1;
-  constexpr unsigned TAIL_UNDISTURBED = 0;
-  constexpr unsigned TAIL_AGNOSTIC = 1;
-  constexpr unsigned TAIL_AGNOSTIC_MASK_AGNOSTIC = 3;
-  int PolicyAttrs = TAIL_UNDISTURBED;
+  // The 0th bit simulates the `vta` of RVV
+  // The 1st bit simulates the `vma` of RVV
+  constexpr unsigned RVV_VTA = 0x1;
+  constexpr unsigned RVV_VMA = 0x2;
+  int PolicyAttrs = 0;
   bool IsMasked = false;
 
   // Required for overloaded intrinsics.

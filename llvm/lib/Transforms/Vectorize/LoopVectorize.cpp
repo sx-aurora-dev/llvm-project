@@ -1078,8 +1078,7 @@ void InnerLoopVectorizer::collectPoisonGeneratingRecipes(
   // Traverse all the recipes in the VPlan and collect the poison-generating
   // recipes in the backward slice starting at the address of a VPWidenRecipe or
   // VPInterleaveRecipe.
-  auto Iter = depth_first(
-      VPBlockRecursiveTraversalWrapper<VPBlockBase *>(State.Plan->getEntry()));
+  auto Iter = vp_depth_first_deep(State.Plan->getEntry());
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(Iter)) {
     for (VPRecipeBase &Recipe : *VPBB) {
       if (auto *WidenRec = dyn_cast<VPWidenMemoryInstructionRecipe>(&Recipe)) {
@@ -1539,14 +1538,23 @@ public:
     return ScalarEpilogueStatus == CM_ScalarEpilogueAllowed;
   }
 
+  /// Returns the TailFoldingStyle that is best for the current loop.
+  TailFoldingStyle getTailFoldingStyle() const {
+    if (!CanFoldTailByMasking)
+      return TailFoldingStyle::None;
+
+    return TTI.getPreferredTailFoldingStyle();
+  }
+
   /// Returns true if all loop blocks should be masked to fold tail loop.
-  bool foldTailByMasking() const { return FoldTailByMasking; }
+  bool foldTailByMasking() const {
+    return getTailFoldingStyle() != TailFoldingStyle::None;
+  }
 
   /// Returns true if were tail-folding and want to use the active lane mask
   /// for vector loop control flow.
   bool useActiveLaneMaskForControlFlow() const {
-    return FoldTailByMasking &&
-           TTI.emitGetActiveLaneMask() == PredicationStyle::DataAndControlFlow;
+    return getTailFoldingStyle() == TailFoldingStyle::DataAndControlFlow;
   }
 
   /// Returns true if the instructions in this block requires predication
@@ -1684,8 +1692,8 @@ private:
 
   /// Estimate the overhead of scalarizing an instruction. This is a
   /// convenience wrapper for the type-based getScalarizationOverhead API.
-  InstructionCost getScalarizationOverhead(Instruction *I,
-                                           ElementCount VF) const;
+  InstructionCost getScalarizationOverhead(Instruction *I, ElementCount VF,
+                                           TTI::TargetCostKind CostKind) const;
 
   /// Returns true if an artificially high cost for emulated masked memrefs
   /// should be used.
@@ -1716,7 +1724,7 @@ private:
   ScalarEpilogueLowering ScalarEpilogueStatus = CM_ScalarEpilogueAllowed;
 
   /// All blocks of loop are to be masked to fold tail of scalar iterations.
-  bool FoldTailByMasking = false;
+  bool CanFoldTailByMasking = false;
 
   /// A map holding scalar costs for different vectorization factors. The
   /// presence of a cost for an instruction in the mapping indicates that the
@@ -3445,8 +3453,9 @@ LoopVectorizationCostModel::getVectorCallCost(CallInst *CI, ElementCount VF,
   // to be vectors, so we need to extract individual elements from there,
   // execute VF scalar calls, and then gather the result into the vector return
   // value.
+  TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
   InstructionCost ScalarCallCost =
-      TTI.getCallInstrCost(F, ScalarRetTy, ScalarTys, TTI::TCK_RecipThroughput);
+      TTI.getCallInstrCost(F, ScalarRetTy, ScalarTys, CostKind);
   if (VF.isScalar())
     return ScalarCallCost;
 
@@ -3457,7 +3466,8 @@ LoopVectorizationCostModel::getVectorCallCost(CallInst *CI, ElementCount VF,
 
   // Compute costs of unpacking argument values for the scalar calls and
   // packing the return values to a vector.
-  InstructionCost ScalarizationCost = getScalarizationOverhead(CI, VF);
+  InstructionCost ScalarizationCost =
+      getScalarizationOverhead(CI, VF, CostKind);
 
   InstructionCost Cost =
       ScalarCallCost * VF.getKnownMinValue() + ScalarizationCost;
@@ -3473,7 +3483,7 @@ LoopVectorizationCostModel::getVectorCallCost(CallInst *CI, ElementCount VF,
 
   // If the corresponding vector cost is cheaper, return its cost.
   InstructionCost VectorCallCost =
-      TTI.getCallInstrCost(nullptr, RetTy, Tys, TTI::TCK_RecipThroughput);
+      TTI.getCallInstrCost(nullptr, RetTy, Tys, CostKind);
   if (VectorCallCost < Cost) {
     NeedToScalarize = false;
     Cost = VectorCallCost;
@@ -4162,8 +4172,7 @@ void InnerLoopVectorizer::sinkScalarOperands(Instruction *PredInst) {
 
 void InnerLoopVectorizer::fixNonInductionPHIs(VPlan &Plan,
                                               VPTransformState &State) {
-  auto Iter = depth_first(
-      VPBlockRecursiveTraversalWrapper<VPBlockBase *>(Plan.getEntry()));
+  auto Iter = vp_depth_first_deep(Plan.getEntry());
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(Iter)) {
     for (VPRecipeBase &P : VPBB->phis()) {
       VPWidenPHIRecipe *VPPhi = dyn_cast<VPWidenPHIRecipe>(&P);
@@ -4481,7 +4490,7 @@ LoopVectorizationCostModel::getDivRemSpeculationCost(Instruction *I,
 
     // The cost of insertelement and extractelement instructions needed for
     // scalarization.
-    ScalarizationCost += getScalarizationOverhead(I, VF);
+    ScalarizationCost += getScalarizationOverhead(I, VF, CostKind);
 
     // Scale the cost by the probability of executing the predicated blocks.
     // This assumes the predicated block for each vector lane is equally
@@ -4933,7 +4942,7 @@ FixedScalableVFPair LoopVectorizationCostModel::computeFeasibleMaxVF(
   // the memory accesses that is most restrictive (involved in the smallest
   // dependence distance).
   unsigned MaxSafeElements =
-      PowerOf2Floor(Legal->getMaxSafeVectorWidthInBits() / WidestType);
+      llvm::bit_floor(Legal->getMaxSafeVectorWidthInBits() / WidestType);
 
   auto MaxSafeFixedVF = ElementCount::getFixed(MaxSafeElements);
   auto MaxSafeScalableVF = getMaxLegalScalableVF(MaxSafeElements);
@@ -5135,7 +5144,7 @@ LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
   // by masking.
   // FIXME: look for a smaller MaxVF that does divide TC rather than masking.
   if (Legal->prepareToFoldTailByMasking()) {
-    FoldTailByMasking = true;
+    CanFoldTailByMasking = true;
     return MaxFactors;
   }
 
@@ -5188,7 +5197,7 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
   // Ensure MaxVF is a power of 2; the dependence distance bound may not be.
   // Note that both WidestRegister and WidestType may not be a powers of 2.
   auto MaxVectorElementCount = ElementCount::get(
-      PowerOf2Floor(WidestRegister.getKnownMinValue() / WidestType),
+      llvm::bit_floor(WidestRegister.getKnownMinValue() / WidestType),
       ComputeScalableMaxVF);
   MaxVectorElementCount = MinVF(MaxVectorElementCount, MaxSafeVF);
   LLVM_DEBUG(dbgs() << "LV: The Widest register safe to use is: "
@@ -5215,7 +5224,7 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
     // power of two which doesn't exceed TC.
     // If MaxVectorElementCount is scalable, we only fall back on a fixed VF
     // when the TC is less than or equal to the known number of lanes.
-    auto ClampedConstTripCount = PowerOf2Floor(ConstTripCount);
+    auto ClampedConstTripCount = llvm::bit_floor(ConstTripCount);
     LLVM_DEBUG(dbgs() << "LV: Clamping the MaxVF to maximum power of two not "
                          "exceeding the constant trip count: "
                       << ClampedConstTripCount << "\n");
@@ -5229,7 +5238,7 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
   if (MaximizeBandwidth || (MaximizeBandwidth.getNumOccurrences() == 0 &&
                             TTI.shouldMaximizeVectorBandwidth(RegKind))) {
     auto MaxVectorElementCountMaxBW = ElementCount::get(
-        PowerOf2Floor(WidestRegister.getKnownMinValue() / SmallestType),
+        llvm::bit_floor(WidestRegister.getKnownMinValue() / SmallestType),
         ComputeScalableMaxVF);
     MaxVectorElementCountMaxBW = MinVF(MaxVectorElementCountMaxBW, MaxSafeVF);
 
@@ -5293,7 +5302,7 @@ bool LoopVectorizationCostModel::isMoreProfitable(
 
   unsigned MaxTripCount = PSE.getSE()->getSmallConstantMaxTripCount(TheLoop);
 
-  if (!A.Width.isScalable() && !B.Width.isScalable() && FoldTailByMasking &&
+  if (!A.Width.isScalable() && !B.Width.isScalable() && foldTailByMasking() &&
       MaxTripCount) {
     // If we are folding the tail and the trip count is a known (possibly small)
     // constant, the trip count will be rounded up to an integer number of
@@ -5751,12 +5760,12 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     if (R.LoopInvariantRegs.find(pair.first) != R.LoopInvariantRegs.end())
       LoopInvariantRegs = R.LoopInvariantRegs[pair.first];
 
-    unsigned TmpIC = PowerOf2Floor((TargetNumRegisters - LoopInvariantRegs) / MaxLocalUsers);
+    unsigned TmpIC = llvm::bit_floor((TargetNumRegisters - LoopInvariantRegs) /
+                                     MaxLocalUsers);
     // Don't count the induction variable as interleaved.
     if (EnableIndVarRegisterHeur) {
-      TmpIC =
-          PowerOf2Floor((TargetNumRegisters - LoopInvariantRegs - 1) /
-                        std::max(1U, (MaxLocalUsers - 1)));
+      TmpIC = llvm::bit_floor((TargetNumRegisters - LoopInvariantRegs - 1) /
+                              std::max(1U, (MaxLocalUsers - 1)));
     }
 
     IC = std::min(IC, TmpIC);
@@ -5836,8 +5845,8 @@ LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
     // We assume that the cost overhead is 1 and we use the cost model
     // to estimate the cost of the loop and interleave until the cost of the
     // loop overhead is about 5% of the cost of the loop.
-    unsigned SmallIC = std::min(
-        IC, (unsigned)PowerOf2Floor(SmallLoopCost / *LoopCost.getValue()));
+    unsigned SmallIC = std::min(IC, (unsigned)llvm::bit_floor<uint64_t>(
+                                        SmallLoopCost / *LoopCost.getValue()));
 
     // Interleave until store/load ports (estimated by max interleave count) are
     // saturated.
@@ -6243,13 +6252,14 @@ InstructionCost LoopVectorizationCostModel::computePredInstDiscount(
 
     // Compute the scalarization overhead of needed insertelement instructions
     // and phi nodes.
+    TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
     if (isScalarWithPredication(I, VF) && !I->getType()->isVoidTy()) {
       ScalarCost += TTI.getScalarizationOverhead(
           cast<VectorType>(ToVectorTy(I->getType(), VF)),
-          APInt::getAllOnes(VF.getFixedValue()), true, false);
+          APInt::getAllOnes(VF.getFixedValue()), /*Insert*/ true,
+          /*Extract*/ false, CostKind);
       ScalarCost +=
-          VF.getFixedValue() *
-          TTI.getCFInstrCost(Instruction::PHI, TTI::TCK_RecipThroughput);
+          VF.getFixedValue() * TTI.getCFInstrCost(Instruction::PHI, CostKind);
     }
 
     // Compute the scalarization overhead of needed extractelement
@@ -6265,7 +6275,8 @@ InstructionCost LoopVectorizationCostModel::computePredInstDiscount(
         else if (needsExtract(J, VF)) {
           ScalarCost += TTI.getScalarizationOverhead(
               cast<VectorType>(ToVectorTy(J->getType(), VF)),
-              APInt::getAllOnes(VF.getFixedValue()), false, true);
+              APInt::getAllOnes(VF.getFixedValue()), /*Insert*/ false,
+              /*Extract*/ true, CostKind);
         }
       }
 
@@ -6394,14 +6405,15 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
 
   // Don't pass *I here, since it is scalar but will actually be part of a
   // vectorized loop where the user of it is a vectorized instruction.
+  TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
   const Align Alignment = getLoadStoreAlignment(I);
-  Cost += VF.getKnownMinValue() *
-          TTI.getMemoryOpCost(I->getOpcode(), ValTy->getScalarType(), Alignment,
-                              AS, TTI::TCK_RecipThroughput);
+  Cost += VF.getKnownMinValue() * TTI.getMemoryOpCost(I->getOpcode(),
+                                                      ValTy->getScalarType(),
+                                                      Alignment, AS, CostKind);
 
   // Get the overhead of the extractelement and insertelement instructions
   // we might create due to scalarization.
-  Cost += getScalarizationOverhead(I, VF);
+  Cost += getScalarizationOverhead(I, VF, CostKind);
 
   // If we have a predicated load/store, it will need extra i1 extracts and
   // conditional branches, but may not be executed for each vector lane. Scale
@@ -6414,8 +6426,8 @@ LoopVectorizationCostModel::getMemInstScalarizationCost(Instruction *I,
         VectorType::get(IntegerType::getInt1Ty(ValTy->getContext()), VF);
     Cost += TTI.getScalarizationOverhead(
         Vec_i1Ty, APInt::getAllOnes(VF.getKnownMinValue()),
-        /*Insert=*/false, /*Extract=*/true);
-    Cost += TTI.getCFInstrCost(Instruction::Br, TTI::TCK_RecipThroughput);
+        /*Insert=*/false, /*Extract=*/true, CostKind);
+    Cost += TTI.getCFInstrCost(Instruction::Br, CostKind);
 
     if (useEmulatedMaskMemRefHack(I, VF))
       // Artificially setting to a high enough value to practically disable
@@ -6481,7 +6493,7 @@ LoopVectorizationCostModel::getUniformMemOpCost(Instruction *I,
          (isLoopInvariantStoreValue
               ? 0
               : TTI.getVectorInstrCost(Instruction::ExtractElement, VectorTy,
-                                       VF.getKnownMinValue() - 1));
+                                       CostKind, VF.getKnownMinValue() - 1));
 }
 
 InstructionCost
@@ -6776,9 +6788,8 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I,
   return VectorizationCostTy(C, TypeNotScalarized);
 }
 
-InstructionCost
-LoopVectorizationCostModel::getScalarizationOverhead(Instruction *I,
-                                                     ElementCount VF) const {
+InstructionCost LoopVectorizationCostModel::getScalarizationOverhead(
+    Instruction *I, ElementCount VF, TTI::TargetCostKind CostKind) const {
 
   // There is no mechanism yet to create a scalable scalarization loop,
   // so this is currently Invalid.
@@ -6793,8 +6804,9 @@ LoopVectorizationCostModel::getScalarizationOverhead(Instruction *I,
   if (!RetTy->isVoidTy() &&
       (!isa<LoadInst>(I) || !TTI.supportsEfficientVectorElementLoadStore()))
     Cost += TTI.getScalarizationOverhead(
-        cast<VectorType>(RetTy), APInt::getAllOnes(VF.getKnownMinValue()), true,
-        false);
+        cast<VectorType>(RetTy), APInt::getAllOnes(VF.getKnownMinValue()),
+        /*Insert*/ true,
+        /*Extract*/ false, CostKind);
 
   // Some targets keep addresses scalar.
   if (isa<LoadInst>(I) && !TTI.prefersVectorizedAddressing())
@@ -6814,7 +6826,7 @@ LoopVectorizationCostModel::getScalarizationOverhead(Instruction *I,
   for (auto *V : filterExtractingOperands(Ops, VF))
     Tys.push_back(MaybeVectorizeType(V->getType(), VF));
   return Cost + TTI.getOperandsScalarizationOverhead(
-                    filterExtractingOperands(Ops, VF), Tys);
+                    filterExtractingOperands(Ops, VF), Tys, CostKind);
 }
 
 void LoopVectorizationCostModel::setCostBasedWideningDecision(ElementCount VF) {
@@ -7071,7 +7083,8 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
           VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
       return (
           TTI.getScalarizationOverhead(
-              Vec_i1Ty, APInt::getAllOnes(VF.getFixedValue()), false, true) +
+              Vec_i1Ty, APInt::getAllOnes(VF.getFixedValue()),
+              /*Insert*/ false, /*Extract*/ true, CostKind) +
           (TTI.getCFInstrCost(Instruction::Br, CostKind) * VF.getFixedValue()));
     } else if (I->getParent() == TheLoop->getLoopLatch() || VF.isScalar())
       // The back-edge branch will remain, as will all scalar branches.
@@ -8096,8 +8109,8 @@ VPValue *VPRecipeBuilder::createBlockInMask(BasicBlock *BB, VPlanPtr &Plan) {
 
     // If we're using the active lane mask for control flow, then we get the
     // mask from the active lane mask PHI that is cached in the VPlan.
-    PredicationStyle EmitGetActiveLaneMask = CM.TTI.emitGetActiveLaneMask();
-    if (EmitGetActiveLaneMask == PredicationStyle::DataAndControlFlow)
+    TailFoldingStyle Style = CM.getTailFoldingStyle();
+    if (Style == TailFoldingStyle::DataAndControlFlow)
       return BlockMaskCache[BB] = Plan->getActiveLaneMaskPhi();
 
     // Introduce the early-exit compare IV <= BTC to form header block mask.
@@ -8113,7 +8126,8 @@ VPValue *VPRecipeBuilder::createBlockInMask(BasicBlock *BB, VPlanPtr &Plan) {
 
     VPBuilder::InsertPointGuard Guard(Builder);
     Builder.setInsertPoint(HeaderVPBB, NewInsertionPoint);
-    if (EmitGetActiveLaneMask != PredicationStyle::None) {
+    if (Style != TailFoldingStyle::None &&
+        Style != TailFoldingStyle::DataWithoutLaneMask) {
       VPValue *TC = Plan->getOrCreateTripCount();
       BlockMask = Builder.createNaryOp(VPInstruction::ActiveLaneMask, {IV, TC},
                                        nullptr, "active.lane.mask");
@@ -8710,8 +8724,7 @@ void LoopVectorizationPlanner::buildVPlansWithVPRecipes(ElementCount MinVF,
 // Add the necessary canonical IV and branch recipes required to control the
 // loop.
 static void addCanonicalIVRecipes(VPlan &Plan, Type *IdxTy, DebugLoc DL,
-                                  bool HasNUW,
-                                  bool UseLaneMaskForLoopControlFlow) {
+                                  TailFoldingStyle Style) {
   Value *StartIdx = ConstantInt::get(IdxTy, 0);
   auto *StartV = Plan.getOrAddVPValue(StartIdx);
 
@@ -8723,6 +8736,7 @@ static void addCanonicalIVRecipes(VPlan &Plan, Type *IdxTy, DebugLoc DL,
 
   // Add a CanonicalIVIncrement{NUW} VPInstruction to increment the scalar
   // IV by VF * UF.
+  bool HasNUW = Style == TailFoldingStyle::None;
   auto *CanonicalIVIncrement =
       new VPInstruction(HasNUW ? VPInstruction::CanonicalIVIncrementNUW
                                : VPInstruction::CanonicalIVIncrement,
@@ -8732,7 +8746,7 @@ static void addCanonicalIVRecipes(VPlan &Plan, Type *IdxTy, DebugLoc DL,
   VPBasicBlock *EB = TopRegion->getExitingBasicBlock();
   EB->appendRecipe(CanonicalIVIncrement);
 
-  if (UseLaneMaskForLoopControlFlow) {
+  if (Style == TailFoldingStyle::DataAndControlFlow) {
     // Create the active lane mask instruction in the vplan preheader.
     VPBasicBlock *Preheader = Plan.getEntry()->getEntryBasicBlock();
 
@@ -8885,8 +8899,7 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
       getDebugLocFromInstOrOperands(Legal->getPrimaryInduction());
   addCanonicalIVRecipes(*Plan, Legal->getWidestInductionType(),
                         DLInst ? DLInst->getDebugLoc() : DebugLoc(),
-                        !CM.foldTailByMasking(),
-                        CM.useActiveLaneMaskForControlFlow());
+                        CM.getTailFoldingStyle());
 
   // Scan the body of the loop in a topological order to visit each basic block
   // after having visited its predecessor basic blocks.
@@ -9196,7 +9209,7 @@ VPlanPtr LoopVectorizationPlanner::buildVPlan(VFRange &Range) {
   Term->eraseFromParent();
 
   addCanonicalIVRecipes(*Plan, Legal->getWidestInductionType(), DebugLoc(),
-                        true, CM.useActiveLaneMaskForControlFlow());
+                        CM.getTailFoldingStyle());
   return Plan;
 }
 

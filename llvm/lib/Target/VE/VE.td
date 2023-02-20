@@ -39,9 +39,7 @@ include "VECallingConv.td"
 include "VESchedule.td"
 include "VEInstrInfo.td"
 
-def VEInstrInfo : InstrInfo {
-  let useDeprecatedPositionallyEncodedOperands = 1;
-}
+def VEInstrInfo : InstrInfo {}
 
 def VEAsmParser : AsmParser {
   // Use both VE register name matcher to accept "S0~S63" register names

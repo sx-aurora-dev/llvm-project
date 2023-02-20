@@ -900,6 +900,7 @@ public:
 
   /// FIXME: Remove this function once transition to Align is over.
   /// Use getDestAlign() instead.
+  LLVM_DEPRECATED("Use getDestAlign() instead", "getDestAlign")
   unsigned getDestAlignment() const {
     if (auto MA = getParamAlign(ARG_DEST))
       return MA->value();
@@ -960,6 +961,7 @@ public:
 
   /// FIXME: Remove this function once transition to Align is over.
   /// Use getSourceAlign() instead.
+  LLVM_DEPRECATED("Use getSourceAlign() instead", "getSourceAlign")
   unsigned getSourceAlignment() const {
     if (auto MA = BaseCL::getParamAlign(ARG_SOURCE))
       return MA->value();
@@ -976,17 +978,13 @@ public:
     BaseCL::setArgOperand(ARG_SOURCE, Ptr);
   }
 
-  /// FIXME: Remove this function once transition to Align is over.
-  /// Use the version that takes MaybeAlign instead of this one.
-  void setSourceAlignment(unsigned Alignment) {
-    setSourceAlignment(MaybeAlign(Alignment));
-  }
   void setSourceAlignment(MaybeAlign Alignment) {
     BaseCL::removeParamAttr(ARG_SOURCE, Attribute::Alignment);
     if (Alignment)
       BaseCL::addParamAttr(ARG_SOURCE, Attribute::getWithAlignment(
                                            BaseCL::getContext(), *Alignment));
   }
+
   void setSourceAlignment(Align Alignment) {
     BaseCL::removeParamAttr(ARG_SOURCE, Attribute::Alignment);
     BaseCL::addParamAttr(ARG_SOURCE, Attribute::getWithAlignment(
@@ -1419,7 +1417,8 @@ public:
 class InstrProfIncrementInst : public InstrProfInstBase {
 public:
   static bool classof(const IntrinsicInst *I) {
-    return I->getIntrinsicID() == Intrinsic::instrprof_increment;
+    return I->getIntrinsicID() == Intrinsic::instrprof_increment ||
+           I->getIntrinsicID() == Intrinsic::instrprof_increment_step;
   }
   static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
@@ -1576,9 +1575,20 @@ public:
   }
 };
 
+/// This represents intrinsics that guard a condition
+class CondGuardInst : public IntrinsicInst {
+public:
+  static bool classof(const IntrinsicInst *I) {
+    return I->getIntrinsicID() == Intrinsic::assume ||
+           I->getIntrinsicID() == Intrinsic::experimental_guard;
+  }
+  static bool classof(const Value *V) {
+    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+  }
+};
 
 /// This represents the llvm.assume intrinsic.
-class AssumeInst : public IntrinsicInst {
+class AssumeInst : public CondGuardInst {
 public:
   static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::assume;

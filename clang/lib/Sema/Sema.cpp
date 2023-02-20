@@ -444,6 +444,13 @@ void Sema::Initialize() {
 #include "clang/Basic/RISCVVTypes.def"
   }
 
+  if (Context.getTargetInfo().getTriple().isWasm() &&
+      Context.getTargetInfo().hasFeature("reference-types")) {
+#define WASM_TYPE(Name, Id, SingletonId)                                       \
+  addImplicitTypedef(Name, Context.SingletonId);
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
+  }
+
   if (Context.getTargetInfo().hasBuiltinMSVaList()) {
     DeclarationName MSVaList = &Context.Idents.get("__builtin_ms_va_list");
     if (IdResolver.begin(MSVaList) == IdResolver.end())
@@ -1975,6 +1982,8 @@ void Sema::checkTypeSupport(QualType Ty, SourceLocation Loc, ValueDecl *D) {
         (Ty->isIbm128Type() && !Context.getTargetInfo().hasIbm128Type()) ||
         (Ty->isIntegerType() && Context.getTypeSize(Ty) == 128 &&
          !Context.getTargetInfo().hasInt128Type()) ||
+        (Ty->isBFloat16Type() && !Context.getTargetInfo().hasBFloat16Type() &&
+         !LangOpts.CUDAIsDevice) ||
         LongDoubleMismatched) {
       PartialDiagnostic PD = PDiag(diag::err_target_unsupported_type);
       if (D)

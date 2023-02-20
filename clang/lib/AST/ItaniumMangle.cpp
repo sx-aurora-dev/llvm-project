@@ -3051,7 +3051,11 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     break;
   }
   case BuiltinType::BFloat16: {
-    const TargetInfo *TI = &getASTContext().getTargetInfo();
+    const TargetInfo *TI = ((getASTContext().getLangOpts().OpenMP &&
+                             getASTContext().getLangOpts().OpenMPIsDevice) ||
+                            getASTContext().getLangOpts().SYCLIsDevice)
+                               ? getASTContext().getAuxTargetInfo()
+                               : &getASTContext().getTargetInfo();
     Out << TI->getBFloat16Mangling();
     break;
   }
@@ -3138,6 +3142,12 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     Out << 'u' << type_name.size() << type_name;                               \
     break;
 #include "clang/Basic/RISCVVTypes.def"
+#define WASM_REF_TYPE(InternalName, MangledName, Id, SingletonId, AS)          \
+  case BuiltinType::Id:                                                        \
+    type_name = MangledName;                                                   \
+    Out << 'u' << type_name.size() << type_name;                               \
+    break;
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
   }
 }
 

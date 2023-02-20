@@ -2628,7 +2628,8 @@ bool SelectionDAG::isSplatValue(SDValue V, const APInt &DemandedElts,
   default:
     if (Opcode >= ISD::BUILTIN_OP_END || Opcode == ISD::INTRINSIC_WO_CHAIN ||
         Opcode == ISD::INTRINSIC_W_CHAIN || Opcode == ISD::INTRINSIC_VOID)
-      return TLI->isSplatValueForTargetNode(V, DemandedElts, UndefElts, Depth);
+      return TLI->isSplatValueForTargetNode(V, DemandedElts, UndefElts, *this,
+                                            Depth);
     break;
 }
 
@@ -3408,7 +3409,7 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
     Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
     // If we have a known 1, its position is our upper bound.
     unsigned PossibleTZ = Known2.countMaxTrailingZeros();
-    unsigned LowBits = Log2_32(PossibleTZ) + 1;
+    unsigned LowBits = llvm::bit_width(PossibleTZ);
     Known.Zero.setBitsFrom(LowBits);
     break;
   }
@@ -3417,7 +3418,7 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
     Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
     // If we have a known 1, its position is our upper bound.
     unsigned PossibleLZ = Known2.countMaxLeadingZeros();
-    unsigned LowBits = Log2_32(PossibleLZ) + 1;
+    unsigned LowBits = llvm::bit_width(PossibleLZ);
     Known.Zero.setBitsFrom(LowBits);
     break;
   }
@@ -3425,7 +3426,7 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
     Known2 = computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
     // If we know some of the bits are zero, they can't be one.
     unsigned PossibleOnes = Known2.countMaxPopulation();
-    Known.Zero.setBitsFrom(Log2_32(PossibleOnes) + 1);
+    Known.Zero.setBitsFrom(llvm::bit_width(PossibleOnes));
     break;
   }
   case ISD::PARITY: {
@@ -6215,6 +6216,12 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
         return getNode(ISD::AND, DL, VT, N1, getNOT(DL, N2, VT));
     }
     break;
+  case ISD::ABDS:
+  case ISD::ABDU:
+    assert(VT.isInteger() && "This operator does not apply to FP types!");
+    assert(N1.getValueType() == N2.getValueType() &&
+           N1.getValueType() == VT && "Binary operator types must match!");
+    break;
   case ISD::SMIN:
   case ISD::UMAX:
     assert(VT.isInteger() && "This operator does not apply to FP types!");
@@ -6704,6 +6711,8 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
            "Dest and insert subvector source types must match!");
     assert(VT.isVector() && N2VT.isVector() &&
            "Insert subvector VTs must be vectors!");
+    assert(VT.getVectorElementType() == N2VT.getVectorElementType() &&
+           "Insert subvector VTs must have the same element type!");
     assert((VT.isScalableVector() || N2VT.isFixedLengthVector()) &&
            "Cannot insert a scalable vector into a fixed length vector!");
     assert((VT.isScalableVector() != N2VT.isScalableVector() ||
@@ -7802,6 +7811,8 @@ SDValue SelectionDAG::getAtomic(unsigned Opcode, const SDLoc &dl, EVT MemVT,
           Opcode == ISD::ATOMIC_LOAD_FSUB ||
           Opcode == ISD::ATOMIC_LOAD_FMAX ||
           Opcode == ISD::ATOMIC_LOAD_FMIN ||
+          Opcode == ISD::ATOMIC_LOAD_UINC_WRAP ||
+          Opcode == ISD::ATOMIC_LOAD_UDEC_WRAP ||
           Opcode == ISD::ATOMIC_SWAP ||
           Opcode == ISD::ATOMIC_STORE) &&
          "Invalid Atomic Op");
