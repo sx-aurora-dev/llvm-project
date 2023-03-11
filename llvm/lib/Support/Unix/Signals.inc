@@ -464,9 +464,9 @@ void llvm::sys::AddSignalHandler(sys::SignalHandlerCallback FnPtr,
   RegisterHandlers();
 }
 
-#if defined(HAVE_BACKTRACE) && ENABLE_BACKTRACES
-#if HAVE_LINK_H && (defined(__linux__) || defined(__FreeBSD__) ||              \
-    defined(__FreeBSD_kernel__) || defined(__NetBSD__))
+#if ENABLE_BACKTRACES && defined(HAVE_BACKTRACE) && HAVE_LINK_H &&             \
+    (defined(__linux__) || defined(__FreeBSD__) ||                             \
+     defined(__FreeBSD_kernel__) || defined(__NetBSD__))
 struct DlIteratePhdrData {
   void **StackTrace;
   int depth;
@@ -510,7 +510,7 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
   dl_iterate_phdr(dl_iterate_phdr_cb, &data);
   return true;
 }
-#elif defined(__APPLE__) && defined(__LP64__)
+#elif ENABLE_BACKTRACES && defined(__APPLE__) && defined(__LP64__)
 static bool findModulesAndOffsets(void **StackTrace, int Depth,
                                   const char **Modules, intptr_t *Offsets,
                                   const char *MainExecutableName,
@@ -545,15 +545,15 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
   return true;
 }
 #else
-/// We don't yet know how to find all loaded DSOs on this platform.
+/// Backtraces are not enabled or we don't yet know how to find all loaded DSOs
+/// on this platform.
 static bool findModulesAndOffsets(void **StackTrace, int Depth,
                                   const char **Modules, intptr_t *Offsets,
                                   const char *MainExecutableName,
                                   StringSaver &StrPool) {
   return false;
 }
-#endif // per-platform findModulesAndOffsets implementations
-#endif // defined(HAVE_BACKTRACE) && ENABLE_BACKTRACES
+#endif // ENABLE_BACKTRACES && ... (findModulesAndOffsets variants)
 
 #if ENABLE_BACKTRACES && defined(HAVE__UNWIND_BACKTRACE)
 static int unwindBacktrace(void **StackTrace, int MaxEntries) {

@@ -59,10 +59,16 @@ Deprecations and Removals
   includes are removed based on the language version used. Incidental transitive
   inclusions of the following headers have been removed:
 
-  - C++2b: ``bit``, ``cstring``, ``type_traits``
+  - C++2b: ``atomic``, ``bit``, ``cstring``, ``type_traits``
 
 - The headers ``<experimental/algorithm>`` and ``<experimental/functional>`` have been removed, since all the contents
   have been implemented in namespace ``std`` for at least two releases.
+
+- The formatter specialization ``template<size_t N> struct formatter<const charT[N], charT>``
+  has been removed. Since libc++'s format library was marked experimental there
+  is no backwards compatibility option. This specialization has been removed
+  from the Standard since it was never used, the proper specialization to use
+  instead is ``template<size_t N> struct formatter<charT[N], charT>``.
 
 Upcoming Deprecations and Removals
 ----------------------------------
@@ -85,3 +91,7 @@ ABI Affecting Changes
 
 Build System Changes
 --------------------
+
+- Building libc++ and libc++abi for Apple platforms now requires targeting macOS 10.13 and later.
+  This is relevant for vendors building the libc++ shared library and for folks statically linking
+  libc++ into an application that has back-deployment requirements on Apple platforms.

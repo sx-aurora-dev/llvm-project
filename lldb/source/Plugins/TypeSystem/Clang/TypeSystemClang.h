@@ -579,13 +579,12 @@ public:
 
   ConstString DeclContextGetScopeQualifiedName(void *opaque_decl_ctx) override;
 
-  bool DeclContextIsClassMethod(void *opaque_decl_ctx,
-                                lldb::LanguageType *language_ptr,
-                                bool *is_instance_method_ptr,
-                                ConstString *language_object_name_ptr) override;
+  bool DeclContextIsClassMethod(void *opaque_decl_ctx) override;
 
   bool DeclContextIsContainedInLookup(void *opaque_decl_ctx,
                                       void *other_opaque_decl_ctx) override;
+
+  lldb::LanguageType DeclContextGetLanguage(void *opaque_decl_ctx) override;
 
   // Clang specific clang::DeclContext functions
 
@@ -658,6 +657,8 @@ public:
 
   bool IsFunctionPointerType(lldb::opaque_compiler_type_t type) override;
 
+  bool IsMemberFunctionPointerType(lldb::opaque_compiler_type_t type) override;
+
   bool IsBlockPointerType(lldb::opaque_compiler_type_t type,
                           CompilerType *function_pointer_type_ptr) override;
 
@@ -709,6 +710,8 @@ public:
   bool CanPassInRegisters(const CompilerType &type) override;
 
   bool SupportsLanguage(lldb::LanguageType language) override;
+
+  ConstString GetInstanceVariableName(lldb::LanguageType language) override;
 
   static std::optional<std::string> GetCXXClassName(const CompilerType &type);
 
@@ -1146,6 +1149,9 @@ private:
 
   const clang::ClassTemplateSpecializationDecl *
   GetAsTemplateSpecialization(lldb::opaque_compiler_type_t type);
+
+  bool IsTypeImpl(lldb::opaque_compiler_type_t type,
+                  llvm::function_ref<bool(clang::QualType)> predicate) const;
 
   // Classes that inherit from TypeSystemClang can see and modify these
   std::string m_target_triple;

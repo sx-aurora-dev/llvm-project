@@ -31,43 +31,64 @@ multiclass LMULSchedReadsImpl<string name, list<string> MxList> {
     def name # "_" # mx : SchedRead;
   }
 }
-multiclass LMULWriteResImpl<string name, list<string> MxList,
-                            list<ProcResourceKind> resources> {
-  foreach mx = MxList in {
-    def : WriteRes<!cast<SchedWrite>(name # "_" # mx), resources>;
+multiclass LMULWriteResImpl<string name, list<ProcResourceKind> resources> {
+  foreach mx = SchedMxList in {
+    if !exists<SchedWrite>(name # "_" # mx) then
+      def : WriteRes<!cast<SchedWrite>(name # "_" # mx), resources>;
   }
 }
-multiclass LMULReadAdvanceImpl<string name, list<string> MxList, int val,
+multiclass LMULReadAdvanceImpl<string name, int val,
                                list<SchedWrite> writes = []> {
-  foreach mx = MxList in {
-    def : ReadAdvance<!cast<SchedRead>(name # "_" # mx), val, writes>;
+  foreach mx = SchedMxList in {
+    if !exists<SchedRead>(name # "_" # mx) then
+      def : ReadAdvance<!cast<SchedRead>(name # "_" # mx), val, writes>;
   }
+}
+
+// Define classes to define list containing all SchedWrites for each (name, LMUL)
+// pair for each LMUL in each of the SchedMxList variants above and name in
+// argument `names`. These classes can be used to construct a list of existing
+// definitions of writes corresponding to each (name, LMUL) pair, that are needed
+// by the ReadAdvance. For example:
+// ```
+//   defm "" : LMULReadAdvance<"ReadVIALUX", 1,
+//                             LMULSchedWriteList<["WriteVIMovVX"]>.value>;
+// ```
+class LMULSchedWriteListImpl<list<string> names, list<string> MxList> {
+  list<SchedWrite> value = !foldl([]<SchedWrite>,
+                                  !foreach(name, names,
+                                    !foreach(mx, MxList, !cast<SchedWrite>(name # "_" # mx))),
+                                  all, writes, !listconcat(all, writes));
 }
 
 multiclass LMULSchedWrites<string name> : LMULSchedWritesImpl<name, SchedMxList>;
 multiclass LMULSchedReads<string name> : LMULSchedReadsImpl<name, SchedMxList>;
 multiclass LMULWriteRes<string name, list<ProcResourceKind> resources>
-  : LMULWriteResImpl<name, SchedMxList, resources>;
+  : LMULWriteResImpl<name, resources>;
 multiclass LMULReadAdvance<string name, int val, list<SchedWrite> writes = []>
-  : LMULReadAdvanceImpl<name, SchedMxList, val, writes>;
+  : LMULReadAdvanceImpl<name, val, writes>;
+class LMULSchedWriteList<list<string> names> : LMULSchedWriteListImpl<names, SchedMxList>;
 
 multiclass LMULSchedWritesW<string name> : LMULSchedWritesImpl<name, SchedMxListW>;
 multiclass LMULSchedReadsW<string name> : LMULSchedReadsImpl<name, SchedMxListW>;
 multiclass LMULWriteResW<string name, list<ProcResourceKind> resources>
-  : LMULWriteResImpl<name, SchedMxListW, resources>;
+  : LMULWriteResImpl<name, resources>;
 multiclass LMULReadAdvanceW<string name, int val, list<SchedWrite> writes = []>
-  : LMULReadAdvanceImpl<name, SchedMxListW, val, writes>;
+  : LMULReadAdvanceImpl<name, val, writes>;
+class LMULSchedWriteListW<list<string> names> : LMULSchedWriteListImpl<names, SchedMxListW>;
 
 multiclass LMULSchedWritesFW<string name> : LMULSchedWritesImpl<name, SchedMxListFW>;
 multiclass LMULSchedReadsFW<string name> : LMULSchedReadsImpl<name, SchedMxListFW>;
 multiclass LMULWriteResFW<string name, list<ProcResourceKind> resources>
-  : LMULWriteResImpl<name, SchedMxListFW, resources>;
+  : LMULWriteResImpl<name, resources>;
 multiclass LMULReadAdvanceFW<string name, int val, list<SchedWrite> writes = []>
-  : LMULReadAdvanceImpl<name, SchedMxListFW, val, writes>;
+  : LMULReadAdvanceImpl<name, val, writes>;
+class LMULSchedWriteListFW<list<string> names> : LMULSchedWriteListImpl<names, SchedMxListFW>;
 
 multiclass LMULSchedWritesFWRed<string name> : LMULSchedWritesImpl<name, SchedMxListFWRed>;
 multiclass LMULWriteResFWRed<string name, list<ProcResourceKind> resources>
-  : LMULWriteResImpl<name, SchedMxListFWRed, resources>;
+  : LMULWriteResImpl<name, resources>;
+class LMULSchedWriteListFWRed<list<string> names> : LMULSchedWriteListImpl<names, SchedMxListFWRed>;
 
 
 // 3.6 Vector Byte Length vlenb

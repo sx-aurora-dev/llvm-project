@@ -692,19 +692,19 @@ struct AddressSanitizer {
                      const DataLayout &DL);
   void instrumentPointerComparisonOrSubtraction(Instruction *I);
   void instrumentAddress(Instruction *OrigIns, Instruction *InsertBefore,
-                         Value *Addr, uint32_t TypeSize, bool IsWrite,
+                         Value *Addr, uint32_t TypeStoreSize, bool IsWrite,
                          Value *SizeArgument, bool UseCalls, uint32_t Exp);
   Instruction *instrumentAMDGPUAddress(Instruction *OrigIns,
                                        Instruction *InsertBefore, Value *Addr,
-                                       uint32_t TypeSize, bool IsWrite,
+                                       uint32_t TypeStoreSize, bool IsWrite,
                                        Value *SizeArgument);
   void instrumentUnusualSizeOrAlignment(Instruction *I,
                                         Instruction *InsertBefore, Value *Addr,
-                                        uint32_t TypeSize, bool IsWrite,
+                                        TypeSize TypeStoreSize, bool IsWrite,
                                         Value *SizeArgument, bool UseCalls,
                                         uint32_t Exp);
   Value *createSlowPathCmp(IRBuilder<> &IRB, Value *AddrLong,
-                           Value *ShadowValue, uint32_t TypeSize);
+                           Value *ShadowValue, uint32_t TypeStoreSize);
   Instruction *generateCrashCode(Instruction *InsertBefore, Value *Addr,
                                  bool IsWrite, size_t AccessSizeIndex,
                                  Value *SizeArgument, uint32_t Exp);
@@ -724,7 +724,7 @@ private:
   bool LooksLikeCodeInBug11395(Instruction *I);
   bool GlobalIsLinkerInitialized(GlobalVariable *G);
   bool isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis, Value *Addr,
-                    uint64_t TypeSize) const;
+                    TypeSize TypeStoreSize) const;
 
   /// Helper to cleanup per-function state.
   struct FunctionStateRAII {
@@ -1176,7 +1176,7 @@ PreservedAnalyses AddressSanitizerPass::run(Module &M,
   return PA;
 }
 
-static size_t TypeSizeToSizeIndex(uint32_t TypeSize) {
+static size_t TypeStoreSizeToSizeIndex(uint32_t TypeSize) {
   size_t Res = llvm::countr_zero(TypeSize / 8);
   assert(Res < kNumberOfAccessSizes);
   return Res;
@@ -1416,19 +1416,59 @@ void AddressSanitizer::instrumentPointerComparisonOrSubtraction(
 static void doInstrumentAddress(AddressSanitizer *Pass, Instruction *I,
                                 Instruction *InsertBefore, Value *Addr,
                                 MaybeAlign Alignment, unsigned Granularity,
-                                uint32_t TypeSize, bool IsWrite,
+                                TypeSize TypeStoreSize, bool IsWrite,
                                 Value *SizeArgument, bool UseCalls,
                                 uint32_t Exp) {
   // Instrument a 1-, 2-, 4-, 8-, or 16- byte access with one check
   // if the data is properly aligned.
-  if ((TypeSize == 8 || TypeSize == 16 || TypeSize == 32 || TypeSize == 64 ||
-       TypeSize == 128) &&
-      (!Alignment || *Alignment >= Granularity || *Alignment >= TypeSize / 8))
-    return Pass->instrumentAddress(I, InsertBefore, Addr, TypeSize, IsWrite,
-                                   nullptr, UseCalls, Exp);
-  Pass->instrumentUnusualSizeOrAlignment(I, InsertBefore, Addr, TypeSize,
+  if (!TypeStoreSize.isScalable()) {
+    const auto FixedSize = TypeStoreSize.getFixedValue();
+    switch (FixedSize) {
+    case 8:
+    case 16:
+    case 32:
+    case 64:
+    case 128:
+      if (!Alignment || *Alignment >= Granularity ||
+          *Alignment >= FixedSize / 8)
+        return Pass->instrumentAddress(I, InsertBefore, Addr, FixedSize,
+                                       IsWrite, nullptr, UseCalls, Exp);
+    }
+  }
+  Pass->instrumentUnusualSizeOrAlignment(I, InsertBefore, Addr, TypeStoreSize,
                                          IsWrite, nullptr, UseCalls, Exp);
 }
+
+static void SplitBlockAndInsertSimpleForLoop(Value *End,
+                                             Instruction *SplitBefore,
+                                             Instruction *&BodyIP,
+                                             Value *&Index) {
+  BasicBlock *LoopPred = SplitBefore->getParent();
+  BasicBlock *LoopBody = SplitBlock(SplitBefore->getParent(), SplitBefore);
+  BasicBlock *LoopExit = SplitBlock(SplitBefore->getParent(), SplitBefore);
+
+  auto *Ty = End->getType();
+  auto &DL = SplitBefore->getModule()->getDataLayout();
+  const unsigned Bitwidth = DL.getTypeSizeInBits(Ty);
+
+  IRBuilder<> Builder(LoopBody->getTerminator());
+  auto *IV = Builder.CreatePHI(Ty, 2, "iv");
+  auto *IVNext =
+    Builder.CreateAdd(IV, ConstantInt::get(Ty, 1), IV->getName() + ".next",
+                      /*HasNUW=*/true, /*HasNSW=*/Bitwidth != 2);
+  auto *IVCheck = Builder.CreateICmpEQ(IVNext, End,
+                                       IV->getName() + ".check");
+  Builder.CreateCondBr(IVCheck, LoopExit, LoopBody);
+  LoopBody->getTerminator()->eraseFromParent();
+
+  // Populate the IV PHI.
+  IV->addIncoming(ConstantInt::get(Ty, 0), LoopPred);
+  IV->addIncoming(IVNext, LoopBody);
+
+  BodyIP = LoopBody->getFirstNonPHI();
+  Index = IV;
+}
+
 
 static void instrumentMaskedLoadOrStore(AddressSanitizer *Pass,
                                         const DataLayout &DL, Type *IntptrTy,
@@ -1437,36 +1477,65 @@ static void instrumentMaskedLoadOrStore(AddressSanitizer *Pass,
                                         unsigned Granularity, Type *OpType,
                                         bool IsWrite, Value *SizeArgument,
                                         bool UseCalls, uint32_t Exp) {
-  auto *VTy = cast<FixedVectorType>(OpType);
-  uint64_t ElemTypeSize = DL.getTypeStoreSizeInBits(VTy->getScalarType());
-  unsigned Num = VTy->getNumElements();
-  auto Zero = ConstantInt::get(IntptrTy, 0);
-  for (unsigned Idx = 0; Idx < Num; ++Idx) {
-    Value *InstrumentedAddress = nullptr;
-    Instruction *InsertBefore = I;
-    if (auto *Vector = dyn_cast<ConstantVector>(Mask)) {
-      // dyn_cast as we might get UndefValue
-      if (auto *Masked = dyn_cast<ConstantInt>(Vector->getOperand(Idx))) {
-        if (Masked->isZero())
-          // Mask is constant false, so no instrumentation needed.
-          continue;
-        // If we have a true or undef value, fall through to doInstrumentAddress
-        // with InsertBefore == I
-      }
-    } else {
-      IRBuilder<> IRB(I);
-      Value *MaskElem = IRB.CreateExtractElement(Mask, Idx);
-      Instruction *ThenTerm = SplitBlockAndInsertIfThen(MaskElem, I, false);
-      InsertBefore = ThenTerm;
-    }
+  auto *VTy = cast<VectorType>(OpType);
 
-    IRBuilder<> IRB(InsertBefore);
-    InstrumentedAddress =
+  TypeSize ElemTypeSize = DL.getTypeStoreSizeInBits(VTy->getScalarType());
+  auto Zero = ConstantInt::get(IntptrTy, 0);
+
+  // For fixed length vectors, it's legal to fallthrough into the generic loop
+  // lowering below, but we chose to unroll and specialize instead.  We might want
+  // to revisit this heuristic decision.
+  if (auto *FVTy = dyn_cast<FixedVectorType>(VTy)) {
+    unsigned Num = FVTy->getNumElements();
+    for (unsigned Idx = 0; Idx < Num; ++Idx) {
+      Value *InstrumentedAddress = nullptr;
+      Instruction *InsertBefore = I;
+      if (auto *Vector = dyn_cast<ConstantVector>(Mask)) {
+        // dyn_cast as we might get UndefValue
+        if (auto *Masked = dyn_cast<ConstantInt>(Vector->getOperand(Idx))) {
+          if (Masked->isZero())
+            // Mask is constant false, so no instrumentation needed.
+            continue;
+          // If we have a true or undef value, fall through to doInstrumentAddress
+          // with InsertBefore == I
+        }
+      } else {
+        IRBuilder<> IRB(I);
+        Value *MaskElem = IRB.CreateExtractElement(Mask, Idx);
+        Instruction *ThenTerm = SplitBlockAndInsertIfThen(MaskElem, I, false);
+        InsertBefore = ThenTerm;
+      }
+
+      IRBuilder<> IRB(InsertBefore);
+      InstrumentedAddress =
         IRB.CreateGEP(VTy, Addr, {Zero, ConstantInt::get(IntptrTy, Idx)});
-    doInstrumentAddress(Pass, I, InsertBefore, InstrumentedAddress, Alignment,
-                        Granularity, ElemTypeSize, IsWrite, SizeArgument,
-                        UseCalls, Exp);
+      doInstrumentAddress(Pass, I, InsertBefore, InstrumentedAddress, Alignment,
+                          Granularity, ElemTypeSize, IsWrite,
+                          SizeArgument, UseCalls, Exp);
+    }
+    return;
   }
+
+
+  IRBuilder<> IRB(I);
+  Constant *MinNumElem =
+    ConstantInt::get(IntptrTy, VTy->getElementCount().getKnownMinValue());
+  assert(isa<ScalableVectorType>(VTy) && "generalize if reused for fixed length");
+  Value *NumElements = IRB.CreateVScale(MinNumElem);
+
+  Instruction *BodyIP;
+  Value *Index;
+  SplitBlockAndInsertSimpleForLoop(NumElements, I, BodyIP, Index);
+
+  IRB.SetInsertPoint(BodyIP);
+  Value *MaskElem = IRB.CreateExtractElement(Mask, Index);
+  Instruction *ThenTerm = SplitBlockAndInsertIfThen(MaskElem, BodyIP, false);
+  IRB.SetInsertPoint(ThenTerm);
+
+  Value *InstrumentedAddress = IRB.CreateGEP(VTy, Addr, {Zero, Index});
+  doInstrumentAddress(Pass, I, &*IRB.GetInsertPoint(), InstrumentedAddress, Alignment,
+                      Granularity, ElemTypeSize, IsWrite, SizeArgument,
+                      UseCalls, Exp);
 }
 
 void AddressSanitizer::instrumentMop(ObjectSizeOffsetVisitor &ObjSizeVis,
@@ -1492,7 +1561,7 @@ void AddressSanitizer::instrumentMop(ObjectSizeOffsetVisitor &ObjSizeVis,
     // dynamically initialized global is always valid.
     GlobalVariable *G = dyn_cast<GlobalVariable>(getUnderlyingObject(Addr));
     if (G && (!ClInitializers || GlobalIsLinkerInitialized(G)) &&
-        isSafeAccess(ObjSizeVis, Addr, O.TypeSize)) {
+        isSafeAccess(ObjSizeVis, Addr, O.TypeStoreSize)) {
       NumOptimizedAccessesToGlobalVar++;
       return;
     }
@@ -1501,7 +1570,7 @@ void AddressSanitizer::instrumentMop(ObjectSizeOffsetVisitor &ObjSizeVis,
   if (ClOpt && ClOptStack) {
     // A direct inbounds access to a stack variable is always valid.
     if (isa<AllocaInst>(getUnderlyingObject(Addr)) &&
-        isSafeAccess(ObjSizeVis, Addr, O.TypeSize)) {
+        isSafeAccess(ObjSizeVis, Addr, O.TypeStoreSize)) {
       NumOptimizedAccessesToStackVar++;
       return;
     }
@@ -1519,7 +1588,7 @@ void AddressSanitizer::instrumentMop(ObjectSizeOffsetVisitor &ObjSizeVis,
                                 O.IsWrite, nullptr, UseCalls, Exp);
   } else {
     doInstrumentAddress(this, O.getInsn(), O.getInsn(), Addr, O.Alignment,
-                        Granularity, O.TypeSize, O.IsWrite, nullptr, UseCalls,
+                        Granularity, O.TypeStoreSize, O.IsWrite, nullptr, UseCalls,
                         Exp);
   }
 }
@@ -1554,15 +1623,15 @@ Instruction *AddressSanitizer::generateCrashCode(Instruction *InsertBefore,
 
 Value *AddressSanitizer::createSlowPathCmp(IRBuilder<> &IRB, Value *AddrLong,
                                            Value *ShadowValue,
-                                           uint32_t TypeSize) {
+                                           uint32_t TypeStoreSize) {
   size_t Granularity = static_cast<size_t>(1) << Mapping.Scale;
   // Addr & (Granularity - 1)
   Value *LastAccessedByte =
       IRB.CreateAnd(AddrLong, ConstantInt::get(IntptrTy, Granularity - 1));
   // (Addr & (Granularity - 1)) + size - 1
-  if (TypeSize / 8 > 1)
+  if (TypeStoreSize / 8 > 1)
     LastAccessedByte = IRB.CreateAdd(
-        LastAccessedByte, ConstantInt::get(IntptrTy, TypeSize / 8 - 1));
+        LastAccessedByte, ConstantInt::get(IntptrTy, TypeStoreSize / 8 - 1));
   // (uint8_t) ((Addr & (Granularity-1)) + size - 1)
   LastAccessedByte =
       IRB.CreateIntCast(LastAccessedByte, ShadowValue->getType(), false);
@@ -1572,7 +1641,7 @@ Value *AddressSanitizer::createSlowPathCmp(IRBuilder<> &IRB, Value *AddrLong,
 
 Instruction *AddressSanitizer::instrumentAMDGPUAddress(
     Instruction *OrigIns, Instruction *InsertBefore, Value *Addr,
-    uint32_t TypeSize, bool IsWrite, Value *SizeArgument) {
+    uint32_t TypeStoreSize, bool IsWrite, Value *SizeArgument) {
   // Do not instrument unsupported addrspaces.
   if (isUnsupportedAMDGPUAddrspace(Addr))
     return nullptr;
@@ -1595,18 +1664,18 @@ Instruction *AddressSanitizer::instrumentAMDGPUAddress(
 
 void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
                                          Instruction *InsertBefore, Value *Addr,
-                                         uint32_t TypeSize, bool IsWrite,
+                                         uint32_t TypeStoreSize, bool IsWrite,
                                          Value *SizeArgument, bool UseCalls,
                                          uint32_t Exp) {
   if (TargetTriple.isAMDGPU()) {
     InsertBefore = instrumentAMDGPUAddress(OrigIns, InsertBefore, Addr,
-                                           TypeSize, IsWrite, SizeArgument);
+                                           TypeStoreSize, IsWrite, SizeArgument);
     if (!InsertBefore)
       return;
   }
 
   IRBuilder<> IRB(InsertBefore);
-  size_t AccessSizeIndex = TypeSizeToSizeIndex(TypeSize);
+  size_t AccessSizeIndex = TypeStoreSizeToSizeIndex(TypeStoreSize);
   const ASanAccessInfo AccessInfo(IsWrite, CompileKernel, AccessSizeIndex);
 
   if (UseCalls && ClOptimizeCallbacks) {
@@ -1631,7 +1700,7 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
   }
 
   Type *ShadowTy =
-      IntegerType::get(*C, std::max(8U, TypeSize >> Mapping.Scale));
+      IntegerType::get(*C, std::max(8U, TypeStoreSize >> Mapping.Scale));
   Type *ShadowPtrTy = PointerType::get(ShadowTy, 0);
   Value *ShadowPtr = memToShadow(AddrLong, IRB);
   Value *ShadowValue =
@@ -1641,7 +1710,7 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
   size_t Granularity = 1ULL << Mapping.Scale;
   Instruction *CrashTerm = nullptr;
 
-  if (ClAlwaysSlowPath || (TypeSize < 8 * Granularity)) {
+  if (ClAlwaysSlowPath || (TypeStoreSize < 8 * Granularity)) {
     // We use branch weights for the slow path check, to indicate that the slow
     // path is rarely taken. This seems to be the case for SPEC benchmarks.
     Instruction *CheckTerm = SplitBlockAndInsertIfThen(
@@ -1649,7 +1718,7 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
     assert(cast<BranchInst>(CheckTerm)->isUnconditional());
     BasicBlock *NextBB = CheckTerm->getSuccessor(0);
     IRB.SetInsertPoint(CheckTerm);
-    Value *Cmp2 = createSlowPathCmp(IRB, AddrLong, ShadowValue, TypeSize);
+    Value *Cmp2 = createSlowPathCmp(IRB, AddrLong, ShadowValue, TypeStoreSize);
     if (Recover) {
       CrashTerm = SplitBlockAndInsertIfThen(Cmp2, CheckTerm, false);
     } else {
@@ -1673,10 +1742,15 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
 // and the last bytes. We call __asan_report_*_n(addr, real_size) to be able
 // to report the actual access size.
 void AddressSanitizer::instrumentUnusualSizeOrAlignment(
-    Instruction *I, Instruction *InsertBefore, Value *Addr, uint32_t TypeSize,
+    Instruction *I, Instruction *InsertBefore, Value *Addr, TypeSize TypeStoreSize,
     bool IsWrite, Value *SizeArgument, bool UseCalls, uint32_t Exp) {
   IRBuilder<> IRB(InsertBefore);
-  Value *Size = ConstantInt::get(IntptrTy, TypeSize / 8);
+  Constant *MinBits =
+    ConstantInt::get(IntptrTy, TypeStoreSize.getKnownMinValue());
+  Value *NumBits =
+    !TypeStoreSize.isScalable() ? MinBits : IRB.CreateVScale(MinBits);
+  Value *Size = IRB.CreateLShr(NumBits, ConstantInt::get(IntptrTy, 3));
+
   Value *AddrLong = IRB.CreatePointerCast(Addr, IntptrTy);
   if (UseCalls) {
     if (Exp == 0)
@@ -1686,8 +1760,9 @@ void AddressSanitizer::instrumentUnusualSizeOrAlignment(
       IRB.CreateCall(AsanMemoryAccessCallbackSized[IsWrite][1],
                      {AddrLong, Size, ConstantInt::get(IRB.getInt32Ty(), Exp)});
   } else {
+    Value *SizeMinusOne = IRB.CreateSub(Size, ConstantInt::get(IntptrTy, 1));
     Value *LastByte = IRB.CreateIntToPtr(
-        IRB.CreateAdd(AddrLong, ConstantInt::get(IntptrTy, TypeSize / 8 - 1)),
+        IRB.CreateAdd(AddrLong, SizeMinusOne),
         Addr->getType());
     instrumentAddress(I, InsertBefore, Addr, 8, IsWrite, Size, false, Exp);
     instrumentAddress(I, InsertBefore, LastByte, 8, IsWrite, Size, false, Exp);
@@ -3485,7 +3560,7 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
 // base object. For example, it is a field access or an array access with
 // constant inbounds index.
 bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
-                                    Value *Addr, uint64_t TypeSize) const {
+                                    Value *Addr, TypeSize TypeStoreSize) const {
   SizeOffsetType SizeOffset = ObjSizeVis.compute(Addr);
   if (!ObjSizeVis.bothKnown(SizeOffset)) return false;
   uint64_t Size = SizeOffset.first.getZExtValue();
@@ -3495,5 +3570,5 @@ bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
   // . Size >= Offset  (unsigned)
   // . Size - Offset >= NeededSize  (unsigned)
   return Offset >= 0 && Size >= uint64_t(Offset) &&
-         Size - uint64_t(Offset) >= TypeSize / 8;
+         Size - uint64_t(Offset) >= TypeStoreSize / 8;
 }

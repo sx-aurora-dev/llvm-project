@@ -539,19 +539,16 @@ Block *SymbolContext::GetFunctionBlock() {
   return nullptr;
 }
 
-bool SymbolContext::GetFunctionMethodInfo(lldb::LanguageType &language,
-                                          bool &is_instance_method,
-                                          ConstString &language_object_name)
+ConstString SymbolContext::GetInstanceVariableName() {
+  if (Block *function_block = GetFunctionBlock())
+    if (CompilerDeclContext decl_ctx = function_block->GetDeclContext()) {
+      auto language = decl_ctx.GetLanguage();
+      if (language == eLanguageTypeUnknown)
+        language = GetLanguage();
+      return decl_ctx.GetInstanceVariableName(language);
+    }
 
-{
-  Block *function_block = GetFunctionBlock();
-  if (function_block) {
-    CompilerDeclContext decl_ctx = function_block->GetDeclContext();
-    if (decl_ctx)
-      return decl_ctx.IsClassMethod(&language, &is_instance_method,
-                                    &language_object_name);
-  }
-  return false;
+  return {};
 }
 
 void SymbolContext::SortTypeList(TypeMap &type_map, TypeList &type_list) const {

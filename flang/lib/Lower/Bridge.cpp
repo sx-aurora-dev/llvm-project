@@ -41,8 +41,8 @@
 #include "flang/Optimizer/Dialect/FIRAttr.h"
 #include "flang/Optimizer/Dialect/FIRDialect.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
+#include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
-#include "flang/Optimizer/Support/FIRContext.h"
 #include "flang/Optimizer/Support/FatalError.h"
 #include "flang/Optimizer/Support/InternalNames.h"
 #include "flang/Optimizer/Transforms/Passes.h"
@@ -3038,7 +3038,12 @@ private:
                   lhs = fir::getBase(genExprBox(loc, assign.lhs, stmtCtx));
                 mlir::Value rhs =
                     fir::getBase(genExprBox(loc, assign.rhs, stmtCtx));
-                fir::runtime::genAssign(*builder, loc, lhs, rhs);
+                if ((lhsType->IsPolymorphic() ||
+                     lhsType->IsUnlimitedPolymorphic()) &&
+                    Fortran::lower::isWholeAllocatable(assign.lhs))
+                  fir::runtime::genAssignPolymorphic(*builder, loc, lhs, rhs);
+                else
+                  fir::runtime::genAssign(*builder, loc, lhs, rhs);
                 return;
               }
 

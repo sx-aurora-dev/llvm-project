@@ -32,6 +32,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/DebugCounter.h"
+#include "llvm/Support/KnownBits.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
@@ -369,10 +370,17 @@ static Decomposition decompose(Value *V,
     return MergeResults(Op0, CI, true);
   }
 
+  // Decompose or as an add if there are no common bits between the operands.
+  if (match(V, m_Or(m_Value(Op0), m_ConstantInt(CI))) &&
+      haveNoCommonBitsSet(Op0, CI, DL)) {
+    return MergeResults(Op0, CI, IsSigned);
+  }
+
   if (match(V, m_NUWShl(m_Value(Op1), m_ConstantInt(CI))) && canUseSExt(CI)) {
-    int64_t Mult = int64_t(std::pow(int64_t(2), CI->getSExtValue()));
+    if (CI->getSExtValue() < 0 || CI->getSExtValue() >= 64)
+      return {V, IsKnownNonNegative};
     auto Result = decompose(Op1, Preconditions, IsSigned, DL);
-    Result.mul(Mult);
+    Result.mul(int64_t{1} << CI->getSExtValue());
     return Result;
   }
 
@@ -975,7 +983,7 @@ void ConstraintInfo::addFact(CmpInst::Predicate Pred, Value *A, Value *B,
   if (!R.isValid(*this))
     return;
 
-  LLVM_DEBUG(dbgs() << "Adding '" << CmpInst::getPredicateName(Pred) << " ";
+  LLVM_DEBUG(dbgs() << "Adding '" << Pred << " ";
              A->printAsOperand(dbgs(), false); dbgs() << ", ";
              B->printAsOperand(dbgs(), false); dbgs() << "'\n");
   bool Added = false;

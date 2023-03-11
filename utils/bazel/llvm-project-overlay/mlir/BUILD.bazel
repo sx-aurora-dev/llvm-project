@@ -2223,6 +2223,7 @@ cc_library(
     deps = [
         ":AffineDialect",
         ":ArithDialect",
+        ":ArithUtils",
         ":BufferizationDialect",
         ":BufferizationTransforms",
         ":ComplexDialect",
@@ -3557,6 +3558,21 @@ cc_library(
 )
 
 cc_library(
+    name = "Debug",
+    srcs = glob([
+        "lib/Debug/*.cpp",
+        "lib/Debug/*.h",
+    ]),
+    hdrs = glob(["include/mlir/Debug/*.h"]),
+    includes = ["include"],
+    deps = [
+        ":Support",
+        ":IR",
+        "//llvm:Support",
+    ],
+)
+
+cc_library(
     name = "MlirLspServerSupportLib",
     srcs = glob(
         [
@@ -4248,9 +4264,11 @@ cc_library(
     ]),
     includes = ["include"],
     deps = [
+        ":ArithDialect",
         ":ConversionPassIncGen",
         ":IR",
         ":Pass",
+        ":Support",
         ":SPIRVConversion",
         ":SPIRVDialect",
         ":Transforms",
@@ -6836,6 +6854,7 @@ cc_library(
     deps = [
         ":BytecodeReader",
         ":BytecodeWriter",
+        ":Debug",
         ":IR",
         ":Parser",
         ":Pass",
@@ -7061,6 +7080,7 @@ cc_binary(
         "//mlir/test:TestTransforms",
         "//mlir/test:TestTypeDialect",
         "//mlir/test:TestVector",
+        "//mlir/test:TestVectorToSPIRV",
     ],
 )
 
@@ -8764,6 +8784,7 @@ cc_library(
         ":Support",
         ":Transforms",
         ":VectorDialect",
+        ":VectorTransforms",
         ":VectorUtils",
         "//llvm:Core",
         "//llvm:Support",

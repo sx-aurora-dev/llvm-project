@@ -531,10 +531,10 @@ FailureOr<LinalgOp> promoteSubViews(OpBuilder &b, LinalgOp op,
                                     const LinalgPromotionOptions &options);
 
 /// Allocate the subview in the GPU workgroup memory.
-Optional<Value> allocateWorkgroupMemory(OpBuilder &builder,
-                                        memref::SubViewOp subview,
-                                        ArrayRef<Value> sizeBounds,
-                                        DataLayout &);
+std::optional<Value> allocateWorkgroupMemory(OpBuilder &builder,
+                                             memref::SubViewOp subview,
+                                             ArrayRef<Value> sizeBounds,
+                                             DataLayout &);
 
 /// In case of GPU group memory there is no need to deallocate.
 LogicalResult deallocateWorkgroupMemory(OpBuilder &, Value /*buffer*/);
@@ -544,10 +544,10 @@ LogicalResult deallocateWorkgroupMemory(OpBuilder &, Value /*buffer*/);
 LogicalResult copyToWorkgroupMemory(OpBuilder &b, Value src, Value dst);
 
 /// Allocate the subview in the GPU private memory.
-Optional<Value> allocateGPUPrivateMemory(OpBuilder &builder,
-                                         memref::SubViewOp subview,
-                                         ArrayRef<Value> sizeBounds,
-                                         DataLayout &);
+std::optional<Value> allocateGPUPrivateMemory(OpBuilder &builder,
+                                              memref::SubViewOp subview,
+                                              ArrayRef<Value> sizeBounds,
+                                              DataLayout &);
 
 /// Normal copy to between src and dst.
 LogicalResult copyToGPUPrivateMemory(OpBuilder &b, Value src, Value dst);
@@ -1036,6 +1036,19 @@ struct DownscaleDepthwiseConv2DNhwcHwcOp final
                            PatternRewriter &rewriter) const;
 
   LogicalResult matchAndRewrite(DepthwiseConv2DNhwcHwcOp convOp,
+                                PatternRewriter &rewriter) const override {
+    return returningMatchAndRewrite(convOp, rewriter);
+  }
+};
+
+struct DownscaleConv2DOp final : public OpRewritePattern<Conv2DOp> {
+  DownscaleConv2DOp(MLIRContext *context, PatternBenefit benefit = 1)
+      : OpRewritePattern<Conv2DOp>(context, benefit) {}
+
+  FailureOr<Conv1DOp> returningMatchAndRewrite(Conv2DOp convOp,
+                                               PatternRewriter &rewriter) const;
+
+  LogicalResult matchAndRewrite(Conv2DOp convOp,
                                 PatternRewriter &rewriter) const override {
     return returningMatchAndRewrite(convOp, rewriter);
   }

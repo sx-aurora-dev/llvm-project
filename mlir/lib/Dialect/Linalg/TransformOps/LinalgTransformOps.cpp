@@ -266,6 +266,7 @@ transform::DecomposeOp::applyToOne(LinalgOp target,
   DOWNSCALE_NORMAL(PoolingNhwcMinUnsignedOp, PoolingNwcMinUnsignedOp)
   DOWNSCALE_NORMAL(PoolingNchwMaxOp, PoolingNcwMaxOp)
   DOWNSCALE(DownscaleDepthwiseConv2DNhwcHwcOp)
+  DOWNSCALE(DownscaleConv2DOp)
 #undef DOWNSCALE_NORMAL
 #undef DOWNSCALE_CALL
 #undef DOWNSCALE
@@ -1693,7 +1694,8 @@ transform::PadOp::applyToOne(LinalgOp target,
     // Try to parse string attributes to obtain an attribute of element type.
     if (auto stringAttr = attr.dyn_cast<StringAttr>()) {
       auto parsedAttr = dyn_cast_if_present<TypedAttr>(
-          parseAttribute(stringAttr, getContext(), elementType));
+          parseAttribute(stringAttr, getContext(), elementType,
+                         /*numRead=*/nullptr, /*isKnownNullTerminated=*/true));
       if (!parsedAttr || parsedAttr.getType() != elementType) {
         auto diag = this->emitOpError("expects a padding that parses to ")
                     << elementType << ", got " << std::get<0>(it);

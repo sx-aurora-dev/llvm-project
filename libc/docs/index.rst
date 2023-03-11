@@ -71,7 +71,7 @@ stages there is no ABI stability in any form.
 
    compiler_support
    build_and_test
-   developer_guides
+   dev/index.rst
    porting
    contributing
 
@@ -83,5 +83,6 @@ stages there is no ABI stability in any form.
    Source Code <https://github.com/llvm/llvm-project/tree/main/libc>
    Bug Reports <https://github.com/llvm/llvm-project/labels/libc>
    Discourse <https://discourse.llvm.org/c/runtimes/libc>
+   Join the Discord <https://discord.gg/xS7Z362>
    Discord Channel <https://discord.com/channels/636084430946959380/636732994891284500>
    Buildbot <https://lab.llvm.org/buildbot/#/builders?tags=libc>

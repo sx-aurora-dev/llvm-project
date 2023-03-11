@@ -839,35 +839,31 @@ Error RISCVISAInfo::checkDependency() {
         errc::invalid_argument,
         "standard user-level extension 'e' requires 'rv32'");
 
-  // It's illegal to specify the 'd' (double-precision floating point)
-  // extension without also specifying the 'f' (single precision
-  // floating-point) extension.
-  // TODO: This has been removed in later specs, which specify that D implies F
-  if (HasD && !HasF)
+  if (HasF && HasZfinx)
     return createStringError(errc::invalid_argument,
-                             "d requires f extension to also be specified");
+                             "'f' and 'zfinx' extensions are incompatible");
 
   if (HasZve32f && !HasF && !HasZfinx)
     return createStringError(
         errc::invalid_argument,
-        "zve32f requires f or zfinx extension to also be specified");
+        "'zve32f' requires 'f' or 'zfinx' extension to also be specified");
 
   if (HasZve64d && !HasD && !HasZdinx)
     return createStringError(
         errc::invalid_argument,
-        "zve64d requires d or zdinx extension to also be specified");
+        "'zve64d' requires 'd' or 'zdinx' extension to also be specified");
 
   if (Exts.count("zvfh") && !Exts.count("zfh") && !Exts.count("zfhmin") &&
       !Exts.count("zhinx") && !Exts.count("zhinxmin"))
     return createStringError(
         errc::invalid_argument,
-        "zvfh requires zfh, zfhmin, zhinx or zhinxmin extension to also be "
-        "specified");
+        "'zvfh' requires 'zfh', 'zfhmin', 'zhinx' or 'zhinxmin' extension to "
+        "also be specified");
 
   if (HasZvl && !HasVector)
     return createStringError(
         errc::invalid_argument,
-        "zvl*b requires v or zve* extension to also be specified");
+        "'zvl*b' requires 'v' or 'zve*' extension to also be specified");
 
   // Additional dependency checks.
   // TODO: The 'q' extension requires rv64.
@@ -876,6 +872,7 @@ Error RISCVISAInfo::checkDependency() {
   return Error::success();
 }
 
+static const char *ImpliedExtsD[] = {"f"};
 static const char *ImpliedExtsV[] = {"zvl128b", "zve64d", "f", "d"};
 static const char *ImpliedExtsZfhmin[] = {"f"};
 static const char *ImpliedExtsZfh[] = {"f"};
@@ -920,6 +917,7 @@ struct ImpliedExtsEntry {
 
 // Note: The table needs to be sorted by name.
 static constexpr ImpliedExtsEntry ImpliedExts[] = {
+    {{"d"}, {ImpliedExtsD}},
     {{"v"}, {ImpliedExtsV}},
     {{"xtheadvdot"}, {ImpliedExtsXTHeadVdot}},
     {{"zcb"}, {ImpliedExtsZcb}},
