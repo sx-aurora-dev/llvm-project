@@ -211,7 +211,7 @@ public:
   /// \return The maximum interleave factor that any transform should try to
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
-  unsigned getMaxInterleaveFactor(unsigned VF) const {
+  unsigned getMaxInterleaveFactor(ElementCount VF) const {
     // FIXME: Values > 1 trigger miscompiles (invalid BC generated)
     return 1;
   }

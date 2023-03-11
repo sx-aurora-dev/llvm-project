@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Interfaces/LoopLikeInterface.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "llvm/ADT/DenseSet.h"
 
 using namespace mlir;
@@ -24,11 +24,10 @@ bool LoopLikeOpInterface::blockIsInLoop(Block *block) {
     return true;
 
   // This block might be nested inside another block, which is in a loop
-  if (!isa<FunctionOpInterface>(parent)) {
-    if (blockIsInLoop(parent->getBlock())) {
-      return true;
-    }
-  }
+  if (!isa<FunctionOpInterface>(parent))
+    if (mlir::Block *parentBlock = parent->getBlock())
+      if (blockIsInLoop(parentBlock))
+        return true;
 
   // Or the block could be inside a control flow graph loop:
   // A block is in a control flow graph loop if it can reach itself in a graph

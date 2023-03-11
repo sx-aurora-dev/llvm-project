@@ -722,6 +722,8 @@ transform::TransformState::applyTransform(TransformOpInterface transform) {
 
       if (opResult.getType().isa<TransformParamTypeInterface>())
         results.setParams(opResult, {});
+      else if (opResult.getType().isa<TransformValueHandleTypeInterface>())
+        results.setValues(opResult, {});
       else
         results.set(opResult, {});
     }
@@ -831,7 +833,7 @@ void transform::TransformResults::setParams(
 void transform::TransformResults::setValues(OpResult handle,
                                             ValueRange values) {
   int64_t position = handle.getResultNumber();
-  assert(position < static_cast<int64_t>(values.size()) &&
+  assert(position < static_cast<int64_t>(this->values.size()) &&
          "setting values for a non-existent handle");
   assert(this->values[position].data() == nullptr && "values already set");
   assert(operations[position].data() == nullptr &&
@@ -861,8 +863,8 @@ transform::TransformResults::getParams(unsigned resultNumber) const {
 
 ArrayRef<Value>
 transform::TransformResults::getValues(unsigned resultNumber) const {
-  assert(resultNumber < params.size() &&
-         "querying params for a non-existent handle");
+  assert(resultNumber < values.size() &&
+         "querying values for a non-existent handle");
   assert(values[resultNumber].data() != nullptr &&
          "querying unset values (ops or params expected?)");
   return values[resultNumber];
@@ -921,48 +923,60 @@ transform::detail::checkApplyToOne(Operation *transformOp,
   // Check that the right kind of value was produced.
   for (const auto &[ptr, res] :
        llvm::zip(partialResult, transformOp->getResults())) {
-    if (ptr.isNull()) {
-      return emitDiag() << "null result #" << res.getResultNumber()
-                        << " produced";
+    if (ptr.isNull())
+      continue;
+    if (res.getType().template isa<TransformHandleTypeInterface>() &&
+        !ptr.is<Operation *>()) {
+      return emitDiag() << "application of " << transformOpName
+                        << " expected to produce an Operation * for result #"
+                        << res.getResultNumber();
     }
-    if (ptr.is<Operation *>() &&
-        !res.getType().template isa<TransformHandleTypeInterface>()) {
+    if (res.getType().template isa<TransformParamTypeInterface>() &&
+        !ptr.is<Attribute>()) {
       return emitDiag() << "application of " << transformOpName
                         << " expected to produce an Attribute for result #"
                         << res.getResultNumber();
     }
-    if (ptr.is<Attribute>() &&
-        !res.getType().template isa<TransformParamTypeInterface>()) {
+    if (res.getType().template isa<TransformValueHandleTypeInterface>() &&
+        !ptr.is<Value>()) {
       return emitDiag() << "application of " << transformOpName
-                        << " expected to produce an Operation * for result #"
+                        << " expected to produce a Value for result #"
                         << res.getResultNumber();
     }
   }
   return success();
 }
 
+template <typename T>
+static SmallVector<T> castVector(ArrayRef<transform::MappedValue> range) {
+  return llvm::to_vector(llvm::map_range(
+      range, [](transform::MappedValue value) { return value.get<T>(); }));
+}
+
 void transform::detail::setApplyToOneResults(
     Operation *transformOp, TransformResults &transformResults,
     ArrayRef<ApplyToEachResultList> results) {
+  SmallVector<SmallVector<MappedValue>> transposed;
+  transposed.resize(transformOp->getNumResults());
+  for (const ApplyToEachResultList &partialResults : results) {
+    if (llvm::any_of(partialResults,
+                     [](MappedValue value) { return value.isNull(); }))
+      continue;
+    assert(transformOp->getNumResults() == partialResults.size() &&
+           "expected as many partial results as op as results");
+    for (auto &[i, value] : llvm::enumerate(partialResults))
+      transposed[i].push_back(value);
+  }
+
   for (OpResult r : transformOp->getResults()) {
+    unsigned position = r.getResultNumber();
     if (r.getType().isa<TransformParamTypeInterface>()) {
-      auto params = llvm::to_vector(
-          llvm::map_range(results, [r](const ApplyToEachResultList &oneResult) {
-            return oneResult[r.getResultNumber()].get<Attribute>();
-          }));
-      transformResults.setParams(r, params);
+      transformResults.setParams(r,
+                                 castVector<Attribute>(transposed[position]));
     } else if (r.getType().isa<TransformValueHandleTypeInterface>()) {
-      auto values = llvm::to_vector(
-          llvm::map_range(results, [r](const ApplyToEachResultList &oneResult) {
-            return oneResult[r.getResultNumber()].get<Value>();
-          }));
-      transformResults.setValues(r, values);
+      transformResults.setValues(r, castVector<Value>(transposed[position]));
     } else {
-      auto payloads = llvm::to_vector(
-          llvm::map_range(results, [r](const ApplyToEachResultList &oneResult) {
-            return oneResult[r.getResultNumber()].get<Operation *>();
-          }));
-      transformResults.set(r, payloads);
+      transformResults.set(r, castVector<Operation *>(transposed[position]));
     }
   }
 }

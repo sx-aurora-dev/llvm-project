@@ -129,11 +129,19 @@ AST_MATCHER_P(CastExpr, castSubExpr, internal::Matcher<Expr>, innerMatcher) {
 
 // Returns a matcher that matches any expression 'e' such that `innerMatcher`
 // matches 'e' and 'e' is in an Unspecified Lvalue Context.
-static internal::Matcher<Stmt>
-isInUnspecifiedLvalueContext(internal::Matcher<Expr> innerMatcher) {
-  return implicitCastExpr(hasCastKind(CastKind::CK_LValueToRValue),
-                          castSubExpr(innerMatcher));
-  // FIXME: add assignmentTo context...
+static auto isInUnspecifiedLvalueContext(internal::Matcher<Expr> innerMatcher) {
+// clang-format off
+  return
+    expr(anyOf(
+      implicitCastExpr(
+        hasCastKind(CastKind::CK_LValueToRValue),
+        castSubExpr(innerMatcher)),
+      binaryOperator(
+        hasAnyOperatorName("="),
+        hasLHS(innerMatcher)
+      )
+    ));
+// clang-format off
 }
 } // namespace clang::ast_matchers
 
@@ -1008,7 +1016,8 @@ getNaiveStrategy(const llvm::SmallVectorImpl<const VarDecl *> &UnsafeVars) {
 }
 
 void clang::checkUnsafeBufferUsage(const Decl *D,
-                                   UnsafeBufferUsageHandler &Handler) {
+                                   UnsafeBufferUsageHandler &Handler,
+                                   bool EmitFixits) {
   assert(D && D->getBody());
 
   WarningGadgetSets UnsafeOps;
@@ -1022,34 +1031,38 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
     Tracker = std::move(TrackerRes);
   }
 
-  // Filter out non-local vars and vars with unclaimed DeclRefExpr-s.
-  for (auto it = FixablesForUnsafeVars.byVar.cbegin();
-       it != FixablesForUnsafeVars.byVar.cend();) {
-    // FIXME: Support ParmVarDecl as well.
-    if (!it->first->isLocalVarDecl() || Tracker.hasUnclaimedUses(it->first)) {
-      it = FixablesForUnsafeVars.byVar.erase(it);
-    } else {
-      ++it;
+  std::map<const VarDecl *, FixItList> FixItsForVariable;
+
+  if (EmitFixits) {
+    // Filter out non-local vars and vars with unclaimed DeclRefExpr-s.
+    for (auto it = FixablesForUnsafeVars.byVar.cbegin();
+         it != FixablesForUnsafeVars.byVar.cend();) {
+      // FIXME: Support ParmVarDecl as well.
+      if (!it->first->isLocalVarDecl() || Tracker.hasUnclaimedUses(it->first)) {
+        it = FixablesForUnsafeVars.byVar.erase(it);
+      } else {
+        ++it;
+      }
     }
+
+    llvm::SmallVector<const VarDecl *, 16> UnsafeVars;
+    for (const auto &[VD, ignore] : FixablesForUnsafeVars.byVar)
+      UnsafeVars.push_back(VD);
+
+    Strategy NaiveStrategy = getNaiveStrategy(UnsafeVars);
+    FixItsForVariable = getFixIts(FixablesForUnsafeVars, NaiveStrategy, Tracker,
+                                  D->getASTContext(), Handler);
+
+    // FIXME Detect overlapping FixIts.
   }
-
-  llvm::SmallVector<const VarDecl *, 16> UnsafeVars;
-  for (const auto &[VD, ignore] : FixablesForUnsafeVars.byVar)
-    UnsafeVars.push_back(VD);
-
-  Strategy NaiveStrategy = getNaiveStrategy(UnsafeVars);
-  std::map<const VarDecl *, FixItList> FixItsForVariable =
-      getFixIts(FixablesForUnsafeVars, NaiveStrategy, Tracker,
-                D->getASTContext(), Handler);
-
-  // FIXME Detect overlapping FixIts.
 
   for (const auto &G : UnsafeOps.noVar) {
     Handler.handleUnsafeOperation(G->getBaseStmt(), /*IsRelatedToDecl=*/false);
   }
 
   for (const auto &[VD, WarningGadgets] : UnsafeOps.byVar) {
-    auto FixItsIt = FixItsForVariable.find(VD);
+    auto FixItsIt =
+        EmitFixits ? FixItsForVariable.find(VD) : FixItsForVariable.end();
     Handler.handleFixableVariable(VD, FixItsIt != FixItsForVariable.end()
                                           ? std::move(FixItsIt->second)
                                           : FixItList{});

@@ -19,6 +19,7 @@
 #include "flang/Optimizer/Builder/BoxValue.h"
 #include "flang/Optimizer/Builder/Character.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
+#include "flang/Optimizer/Builder/HLFIRTools.h"
 #include "flang/Optimizer/Builder/IntrinsicCall.h"
 #include "flang/Optimizer/Builder/LowLevelIntrinsics.h"
 #include "flang/Optimizer/Builder/MutableBox.h"
@@ -26,10 +27,15 @@
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/FIROpsSupport.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include <optional>
 
 #define DEBUG_TYPE "flang-lower-expr"
+
+static llvm::cl::opt<bool> useHlfirIntrinsicOps(
+    "use-hlfir-intrinsic-ops", llvm::cl::init(true),
+    llvm::cl::desc("Lower via HLFIR transformational intrinsic operations such as hlfir.sum"));
 
 /// Helper to package a Value and its properties into an ExtendedValue.
 static fir::ExtendedValue toExtendedValue(mlir::Location loc, mlir::Value base,
@@ -98,6 +104,44 @@ Fortran::lower::argumentHostAssocs(Fortran::lower::AbstractConverter &converter,
         return converter.hostAssocTupleValue();
   }
   return {};
+}
+
+static bool mustCastFuncOpToCopeWithImplicitInterfaceMismatch(
+    mlir::Location loc, Fortran::lower::AbstractConverter &converter,
+    mlir::FunctionType callSiteType, mlir::FunctionType funcOpType) {
+  // Deal with argument number mismatch by making a function pointer so
+  // that function type cast can be inserted. Do not emit a warning here
+  // because this can happen in legal program if the function is not
+  // defined here and it was first passed as an argument without any more
+  // information.
+  if (callSiteType.getNumResults() != funcOpType.getNumResults() ||
+      callSiteType.getNumInputs() != funcOpType.getNumInputs())
+    return true;
+
+  // Implicit interface result type mismatch are not standard Fortran, but
+  // some compilers are not complaining about it.  The front end is not
+  // protecting lowering from this currently. Support this with a
+  // discouraging warning.
+  // Cast the actual function to the current caller implicit type because
+  // that is the behavior we would get if we could not see the definition.
+  if (callSiteType.getResults() != funcOpType.getResults()) {
+    LLVM_DEBUG(mlir::emitWarning(
+        loc, "a return type mismatch is not standard compliant and may "
+             "lead to undefined behavior."));
+    return true;
+  }
+
+  // In HLFIR, there is little attempt to cope with implicit interface
+  // mismatch on the arguments. The argument are always prepared according
+  // to the implicit interface. Cast the actual function if any of the
+  // argument mismatch cannot be dealt with a simple fir.convert.
+  if (converter.getLoweringOptions().getLowerToHighLevelFIR())
+    for (auto [actualType, dummyType] :
+         llvm::zip(callSiteType.getInputs(), funcOpType.getInputs()))
+      if (actualType != dummyType &&
+          !fir::ConvertOp::canBeConverted(actualType, dummyType))
+        return true;
+  return false;
 }
 
 fir::ExtendedValue Fortran::lower::genCallOpAndResult(
@@ -244,29 +288,16 @@ fir::ExtendedValue Fortran::lower::genCallOpAndResult(
              converter.hostAssocTupleValue().getType());
       addHostAssociations = true;
     }
+    // When this is not a call to an internal procedure (where there is a
+    // mismatch due to the extra argument, but the interface is otherwise
+    // explicit and safe), handle interface mismatch due to F77 implicit
+    // interface "abuse" with a function address cast if needed.
     if (!addHostAssociations &&
-        (callSiteType.getNumResults() != funcOpType.getNumResults() ||
-         callSiteType.getNumInputs() != funcOpType.getNumInputs())) {
-      // Deal with argument number mismatch by making a function pointer so
-      // that function type cast can be inserted. Do not emit a warning here
-      // because this can happen in legal program if the function is not
-      // defined here and it was first passed as an argument without any more
-      // information.
+        mustCastFuncOpToCopeWithImplicitInterfaceMismatch(
+            loc, converter, callSiteType, funcOpType))
       funcPointer = builder.create<fir::AddrOfOp>(loc, funcOpType, symbolAttr);
-    } else if (callSiteType.getResults() != funcOpType.getResults()) {
-      // Implicit interface result type mismatch are not standard Fortran, but
-      // some compilers are not complaining about it.  The front end is not
-      // protecting lowering from this currently. Support this with a
-      // discouraging warning.
-      LLVM_DEBUG(mlir::emitWarning(
-          loc, "a return type mismatch is not standard compliant and may "
-               "lead to undefined behavior."));
-      // Cast the actual function to the current caller implicit type because
-      // that is the behavior we would get if we could not see the definition.
-      funcPointer = builder.create<fir::AddrOfOp>(loc, funcOpType, symbolAttr);
-    } else {
+    else
       funcSymbolAttr = symbolAttr;
-    }
   }
 
   mlir::FunctionType funcType =
@@ -606,7 +637,8 @@ extendedValueToHlfirEntity(mlir::Location loc, fir::FirOpBuilder &builder,
                            const fir::ExtendedValue &exv,
                            llvm::StringRef name) {
   mlir::Value firBase = fir::getBase(exv);
-  if (fir::isa_trivial(firBase.getType()))
+  mlir::Type firBaseTy = firBase.getType();
+  if (fir::isa_trivial(firBaseTy))
     return hlfir::EntityWithAttributes{firBase};
   if (auto charTy = firBase.getType().dyn_cast<fir::CharacterType>()) {
     // CHAR() intrinsic and BIND(C) procedures returning CHARACTER(1)
@@ -761,6 +793,33 @@ struct ConditionallyPreparedDummy {
 };
 } // namespace
 
+/// Fix-up the fact that it is supported to pass a character procedure
+/// designator to a non character procedure dummy procedure and vice-versa, even
+/// in case of explicit interface. Uglier cases where an object is passed as
+/// procedure designator or vice versa are handled only for implicit interfaces
+/// (refused by semantics with explicit interface), and handled with a funcOp
+/// cast like other implicit interface mismatches.
+static hlfir::Entity fixProcedureDummyMismatch(mlir::Location loc,
+                                               fir::FirOpBuilder &builder,
+                                               hlfir::Entity actual,
+                                               mlir::Type dummyType) {
+  if (actual.getType().isa<fir::BoxProcType>() &&
+      fir::isCharacterProcedureTuple(dummyType)) {
+    mlir::Value length =
+        builder.create<fir::UndefOp>(loc, builder.getCharacterLengthType());
+    mlir::Value tuple = fir::factory::createCharacterProcedureTuple(
+        builder, loc, dummyType, actual, length);
+    return hlfir::Entity{tuple};
+  }
+  assert(fir::isCharacterProcedureTuple(actual.getType()) &&
+         dummyType.isa<fir::BoxProcType>() &&
+         "unsupported dummy procedure mismatch with the actual argument");
+  mlir::Value boxProc = fir::factory::extractCharacterProcedureTuple(
+                            builder, loc, actual, /*openBoxProc=*/false)
+                            .first;
+  return hlfir::Entity{boxProc};
+}
+
 /// When dummy is not ALLOCATABLE, POINTER and is not passed in register,
 /// prepare the actual argument according to the interface. Do as needed:
 /// - address element if this is an array argument in an elemental call.
@@ -784,8 +843,11 @@ static PreparedDummyArgument preparePresentUserCallActualArgument(
 
   // Do nothing if this is a procedure argument. It is already a
   // fir.boxproc/fir.tuple<fir.boxproc, len> as it should.
-  if (actual.isProcedure())
+  if (actual.isProcedure()) {
+    if (actual.getType() != dummyType)
+      actual = fixProcedureDummyMismatch(loc, builder, actual, dummyType);
     return PreparedDummyArgument{actual, std::nullopt};
+  }
 
   const bool passingPolymorphicToNonPolymorphic =
       actual.isPolymorphic() && !fir::isPolymorphicType(dummyType);
@@ -1019,8 +1081,8 @@ genUserCall(PreparedActualArguments &loweredActuals,
       break;
     case PassBy::CharProcTuple: {
       hlfir::Entity actual = preparedActual->getActual(loc, builder);
-      assert(fir::isCharacterProcedureTuple(actual.getType()) &&
-             "character dummy procedure was not prepared as expected");
+      if (!fir::isCharacterProcedureTuple(actual.getType()))
+        actual = fixProcedureDummyMismatch(loc, builder, actual, argTy);
       caller.placeInput(arg, actual);
     } break;
     case PassBy::MutableBox: {
@@ -1175,6 +1237,110 @@ genIntrinsicRefCore(PreparedActualArguments &loweredActuals,
     resultEntity = hlfir::EntityWithAttributes{asExpr.getResult()};
   }
   return resultEntity;
+}
+
+/// Lower calls to intrinsic procedures with actual arguments that have been
+/// pre-lowered but have not yet been prepared according to the interface.
+static std::optional<hlfir::EntityWithAttributes>
+genHLFIRIntrinsicRefCore(PreparedActualArguments &loweredActuals,
+                         const Fortran::evaluate::SpecificIntrinsic &intrinsic,
+                         const fir::IntrinsicArgumentLoweringRules *argLowering,
+                         CallContext &callContext) {
+  if (!useHlfirIntrinsicOps)
+    return genIntrinsicRefCore(loweredActuals, intrinsic, argLowering, callContext);
+
+  fir::FirOpBuilder &builder = callContext.getBuilder();
+  mlir::Location loc = callContext.loc;
+
+  auto getOperandVector = [&](PreparedActualArguments &loweredActuals) {
+    llvm::SmallVector<mlir::Value> operands;
+    operands.reserve(loweredActuals.size());
+
+    for (size_t i = 0; i < loweredActuals.size(); ++i) {
+      std::optional<PreparedActualArgument> arg = loweredActuals[i];
+      if (!arg) {
+        operands.emplace_back();
+        continue;
+      }
+      hlfir::Entity actual = arg->getOriginalActual();
+      mlir::Value valArg;
+
+      fir::ArgLoweringRule argRules =
+          fir::lowerIntrinsicArgumentAs(*argLowering, i);
+      if (!argRules.handleDynamicOptional &&
+          argRules.lowerAs != fir::LowerIntrinsicArgAs::Inquired)
+        valArg = hlfir::derefPointersAndAllocatables(loc, builder, actual);
+      else
+        valArg = actual.getBase();
+
+      operands.emplace_back(valArg);
+    }
+    return operands;
+  };
+
+  auto computeResultType = [&](mlir::Value argArray,
+                               mlir::Type stmtResultType) -> mlir::Type {
+    hlfir::ExprType::Shape resultShape;
+    mlir::Type normalisedResult =
+        hlfir::getFortranElementOrSequenceType(stmtResultType);
+    mlir::Type elementType;
+    if (auto array = normalisedResult.dyn_cast<fir::SequenceType>()) {
+      resultShape = hlfir::ExprType::Shape{array.getShape()};
+      elementType = array.getEleTy();
+    } else {
+      elementType = normalisedResult;
+    }
+    return hlfir::ExprType::get(builder.getContext(), resultShape, elementType,
+                                /*polymorphic=*/false);
+  };
+
+  if (intrinsic.name == "sum") {
+    llvm::SmallVector<mlir::Value> operands = getOperandVector(loweredActuals);
+    assert(operands.size() == 3);
+    mlir::Value array = operands[0];
+    mlir::Value dim = operands[1];
+    if (dim)
+      dim = hlfir::loadTrivialScalar(loc, builder, hlfir::Entity{dim});
+    mlir::Value mask = operands[2];
+    mlir::Type resultTy = computeResultType(array, *callContext.resultType);
+    // dim, mask can be NULL if these arguments were not given
+    hlfir::SumOp sumOp =
+        builder.create<hlfir::SumOp>(loc, resultTy, array, dim, mask);
+    return {hlfir::EntityWithAttributes{sumOp.getResult()}};
+  }
+  if (intrinsic.name == "matmul") {
+    llvm::SmallVector<mlir::Value> operands = getOperandVector(loweredActuals);
+    mlir::Type resultTy =
+        computeResultType(operands[0], *callContext.resultType);
+    hlfir::MatmulOp matmulOp = builder.create<hlfir::MatmulOp>(
+        loc, resultTy, operands[0], operands[1]);
+
+    return {hlfir::EntityWithAttributes{matmulOp.getResult()}};
+  }
+  if (intrinsic.name == "transpose") {
+    llvm::SmallVector<mlir::Value> operands = getOperandVector(loweredActuals);
+    hlfir::ExprType::Shape resultShape;
+    mlir::Type normalisedResult =
+        hlfir::getFortranElementOrSequenceType(*callContext.resultType);
+    auto array = normalisedResult.cast<fir::SequenceType>();
+    llvm::ArrayRef<int64_t> arrayShape = array.getShape();
+    assert(arrayShape.size() == 2 && "arguments to transpose have a rank of 2");
+    mlir::Type elementType = array.getEleTy();
+    resultShape.push_back(arrayShape[0]);
+    resultShape.push_back(arrayShape[1]);
+    mlir::Type resultTy = hlfir::ExprType::get(
+        builder.getContext(), resultShape, elementType, /*polymorphic=*/false);
+    hlfir::TransposeOp transposeOp =
+        builder.create<hlfir::TransposeOp>(loc, resultTy, operands[0]);
+
+    return {hlfir::EntityWithAttributes{transposeOp.getResult()}};
+  }
+
+  // TODO add hlfir operations for other transformational intrinsics here
+
+  // fallback to calling the intrinsic via fir.call
+  return genIntrinsicRefCore(loweredActuals, intrinsic, argLowering,
+                             callContext);
 }
 
 namespace {
@@ -1350,8 +1516,8 @@ public:
   std::optional<hlfir::Entity>
   genElementalKernel(PreparedActualArguments &loweredActuals,
                      CallContext &callContext) {
-    return genIntrinsicRefCore(loweredActuals, intrinsic, argLowering,
-                               callContext);
+    return genHLFIRIntrinsicRefCore(loweredActuals, intrinsic, argLowering,
+                                    callContext);
   }
   // Elemental intrinsic functions cannot modify their arguments.
   bool argMayBeModifiedByCall(int) const { return !isFunction; }
@@ -1457,8 +1623,8 @@ genIntrinsicRef(const Fortran::evaluate::SpecificIntrinsic &intrinsic,
         .genElementalCall(loweredActuals, /*isImpure=*/!isFunction, callContext)
         .value();
   }
-  std::optional<hlfir::EntityWithAttributes> result =
-      genIntrinsicRefCore(loweredActuals, intrinsic, argLowering, callContext);
+  std::optional<hlfir::EntityWithAttributes> result = genHLFIRIntrinsicRefCore(
+      loweredActuals, intrinsic, argLowering, callContext);
   if (result && result->getType().isa<hlfir::ExprType>()) {
     fir::FirOpBuilder *bldr = &callContext.getBuilder();
     callContext.stmtCtx.attachCleanup(

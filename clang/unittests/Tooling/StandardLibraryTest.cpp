@@ -58,15 +58,45 @@ TEST(StdlibTest, All) {
   EXPECT_EQ(Vector->header(), *VectorH);
   EXPECT_THAT(Vector->headers(), ElementsAre(*VectorH));
 
+  EXPECT_TRUE(stdlib::Symbol::named("std::", "get"));
+  EXPECT_FALSE(stdlib::Symbol::named("std::", "get")->header());
+
   EXPECT_THAT(stdlib::Symbol::named("std::", "basic_iostream")->headers(),
               ElementsAre(stdlib::Header::named("<istream>"),
                           stdlib::Header::named("<iostream>"),
                           stdlib::Header::named("<iosfwd>")));
+  EXPECT_THAT(stdlib::Symbol::named("std::", "size_t")->headers(),
+              ElementsAre(stdlib::Header::named("<cstddef>"),
+                          stdlib::Header::named("<cstdlib>"),
+                          stdlib::Header::named("<cstring>"),
+                          stdlib::Header::named("<cwchar>"),
+                          stdlib::Header::named("<cuchar>"),
+                          stdlib::Header::named("<ctime>"),
+                          stdlib::Header::named("<cstdio>")));
+  EXPECT_EQ(stdlib::Symbol::named("std::", "size_t")->header(),
+            stdlib::Header::named("<cstddef>"));
 
   EXPECT_THAT(stdlib::Header::all(), Contains(*VectorH));
   EXPECT_THAT(stdlib::Symbol::all(), Contains(*Vector));
   EXPECT_TRUE(stdlib::Header::named("<stdint.h>", stdlib::Lang::CXX));
   EXPECT_FALSE(stdlib::Header::named("<ios646.h>", stdlib::Lang::CXX));
+}
+
+TEST(StdlibTest, Experimental) {
+  EXPECT_FALSE(
+      stdlib::Header::named("<experimental/filesystem>", stdlib::Lang::C));
+  EXPECT_TRUE(
+      stdlib::Header::named("<experimental/filesystem>", stdlib::Lang::CXX));
+
+  auto Symbol = stdlib::Symbol::named("std::experimental::filesystem::",
+                                      "system_complete");
+  EXPECT_TRUE(Symbol);
+  EXPECT_EQ(Symbol->scope(), "std::experimental::filesystem::");
+  EXPECT_EQ(Symbol->name(), "system_complete");
+  EXPECT_EQ(Symbol->header(),
+            stdlib::Header::named("<experimental/filesystem>"));
+  EXPECT_EQ(Symbol->qualifiedName(),
+            "std::experimental::filesystem::system_complete");
 }
 
 TEST(StdlibTest, CCompat) {

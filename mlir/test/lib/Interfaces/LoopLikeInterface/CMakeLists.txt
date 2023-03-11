@@ -6,4 +6,5 @@ add_mlir_library(MLIRLoopLikeInterfaceTestPasses
   LINK_LIBS PUBLIC
   MLIRPass
   MLIRLoopLikeInterface
+  MLIRFuncDialect
   )

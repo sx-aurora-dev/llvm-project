@@ -495,8 +495,9 @@ transform.with_pdl_patterns {
 
 // -----
 
+// This should not fail.
+
 func.func @foo() {
-  // expected-note @below {{when applied to this op}}
   "op" () : () -> ()
   return
 }
@@ -513,7 +514,6 @@ transform.with_pdl_patterns {
   transform.sequence %arg0 : !pdl.operation failures(propagate) {
   ^bb0(%arg1: !pdl.operation):
     %0 = pdl_match @some in %arg1 : (!pdl.operation) -> !pdl.operation
-    // expected-error @below {{null result #0 produced}}
     transform.test_mixed_null_and_non_null_results %0
   }
 }
@@ -1053,11 +1053,11 @@ module {
 
 // -----
 
-// expected-note @below {{when applied to this op}}
+// Should not fail.
+
 module {
   transform.sequence failures(propagate) {
   ^bb0(%arg0: !transform.any_op):
-    // expected-error @below {{null result #0 produced}}
     transform.test_produce_transform_param_or_forward_operand %arg0
       { first_result_is_null }
       : (!transform.any_op) -> (!transform.any_op, !transform.param<i64>)
@@ -1074,6 +1074,19 @@ module {
     transform.test_produce_transform_param_or_forward_operand %arg0
       { second_result_is_handle }
       : (!transform.any_op) -> (!transform.any_op, !transform.param<i64>)
+  }
+}
+
+// -----
+
+// expected-note @below {{when applied to this op}}
+module {
+  transform.sequence failures(propagate) {
+  ^bb0(%arg0: !transform.any_op):
+    // expected-error @below {{expected to produce a Value for result #0}}
+    transform.test_produce_transform_param_or_forward_operand %arg0
+      { second_result_is_handle }
+      : (!transform.any_op) -> (!transform.any_value, !transform.param<i64>)
   }
 }
 
@@ -1176,4 +1189,69 @@ transform.sequence failures(propagate) {
   %0 = test_produce_param_with_number_of_test_ops %arg0 : !transform.any_op
   // expected-error @below {{unexpectedly consumed a value that is not a handle as operand #0}}
   test_consume_operand %0 : !transform.test_dialect_param
+}
+
+// -----
+
+func.func @get_result_of_op(%arg0: index, %arg1: index) -> index {
+  // expected-remark @below {{addi result}}
+  // expected-note @below {{value handle points to an op result #0}}
+  %r = arith.addi %arg0, %arg1 : index
+  return %r : index
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !transform.any_op):
+  %addi = transform.structured.match ops{["arith.addi"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+  %result = transform.get_result %addi[0] : (!transform.any_op) -> !transform.any_value
+  transform.test_print_remark_at_operand_value %result, "addi result" : !transform.any_value
+}
+
+// -----
+
+func.func @get_out_of_bounds_result_of_op(%arg0: index, %arg1: index) -> index {
+  // expected-note @below {{target op}}
+  %r = arith.addi %arg0, %arg1 : index
+  return %r : index
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !transform.any_op):
+  %addi = transform.structured.match ops{["arith.addi"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+  // expected-error @below {{targeted op does not have enough results}}
+  %result = transform.get_result %addi[1] : (!transform.any_op) -> !transform.any_value
+  transform.test_print_remark_at_operand_value %result, "addi result" : !transform.any_value
+}
+
+// -----
+
+func.func @get_result_of_op(%arg0: index, %arg1: index) -> index {
+  // expected-remark @below {{matched}}
+  %r = arith.addi %arg0, %arg1 : index
+  return %r : index
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !transform.any_op):
+  %addi = transform.structured.match ops{["arith.addi"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+  %result = transform.get_result %addi[0] : (!transform.any_op) -> !transform.any_value
+  %op = transform.get_defining_op %result : (!transform.any_value) -> !transform.any_op
+  transform.test_print_remark_at_operand %op, "matched" : !transform.any_op
+}
+
+// -----
+
+// expected-note @below {{target value}}
+func.func @get_result_of_op_bbarg(%arg0: index, %arg1: index) -> index {
+  %r = arith.addi %arg0, %arg1 : index
+  return %r : index
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !transform.any_op):
+  %addi = transform.structured.match ops{["arith.addi"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+  %bbarg = test_produce_value_handle_to_argument_of_parent_block %addi, 0 : (!transform.any_op) -> !transform.any_value
+  // expected-error @below {{cannot get defining op of block argument}}
+  %op = transform.get_defining_op %bbarg : (!transform.any_value) -> !transform.any_op
+  transform.test_print_remark_at_operand %op, "matched" : !transform.any_op
 }

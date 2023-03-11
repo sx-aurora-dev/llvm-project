@@ -4,7 +4,7 @@ set(LLVM_TARGETS_TO_BUILD X86;ARM;AArch64;RISCV CACHE STRING "")
 
 set(PACKAGE_VENDOR Fuchsia CACHE STRING "")
 
-set(LLVM_ENABLE_PROJECTS "bolt;clang;clang-tools-extra;lld;llvm;polly" CACHE STRING "")
+set(_FUCHSIA_ENABLE_PROJECTS "bolt;clang;clang-tools-extra;lld;llvm;polly")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi;libunwind" CACHE STRING "")
 
 set(LLVM_ENABLE_BACKTRACES OFF CACHE BOOL "")
@@ -26,6 +26,9 @@ set(LLVM_USE_RELATIVE_PATHS_IN_FILES ON CACHE BOOL "")
 
 if(WIN32)
   set(LLVM_USE_CRT_RELEASE "MT" CACHE STRING "")
+else()
+  set(LLVM_TOOL_LLVM_DRIVER_BUILD ON CACHE BOOL "")
+  set(LLVM_DRIVER_TARGET llvm-driver)
 endif()
 
 set(CLANG_DEFAULT_CXX_STDLIB libc++ CACHE STRING "")
@@ -88,14 +91,13 @@ if(WIN32 OR LLVM_WINSYSROOT)
       ${LLVM_WINSYSROOT})
     string(REPLACE ";" " " WINDOWS_COMPILER_FLAGS "${WINDOWS_COMPILER_FLAGS}")
     set(WINDOWS_LINK_FLAGS
-        /vfsoverlay:${LLVM_VFSOVERLAY}
-        # TODO: On Windows, linker is invoked by cmake instead of the clang-cl driver,
-        # so we have to manually set the libpath. We use clang-cl driver if we can
-        # and remove these libpath flags.
-        -libpath:"${LLVM_WINSYSROOT}/VC/Tools/MSVC/14.34.31933/lib/x64"
-        -libpath:"${LLVM_WINSYSROOT}/VC/Tools/MSVC/14.34.31933/atlmfc/lib/x64"
-        -libpath:"${LLVM_WINSYSROOT}/Windows Kits/10/Lib/10.0.19041.0/ucrt/x64"
-        -libpath:"${LLVM_WINSYSROOT}/Windows Kits/10/Lib/10.0.19041.0/um/x64")
+      # TODO: lld-link has a bug that it cannot infer the machine type
+      # correctly when /winsysroot is set while Windows libraries search paths
+      # are not explicitly defined.
+      # Explicitly set the machine type for now.
+      /machine:X64
+      /vfsoverlay:${LLVM_VFSOVERLAY}
+      /winsysroot:${LLVM_WINSYSROOT})
     string(REPLACE ";" " " WINDOWS_LINK_FLAGS "${WINDOWS_LINK_FLAGS}")
   endif()
 
@@ -293,6 +295,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-cxxfilt
   llvm-debuginfod-find
   llvm-dlltool
+  ${LLVM_DRIVER_TARGET}
   llvm-dwarfdump
   llvm-dwp
   llvm-ifs
@@ -321,7 +324,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   scan-build-py
   CACHE STRING "")
 
-set(LLVM_DISTRIBUTION_COMPONENTS
+set(_FUCHSIA_DISTRIBUTION_COMPONENTS
   clang
   lld
   clang-apply-replacements
@@ -336,5 +339,13 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   find-all-symbols
   builtins
   runtimes
-  ${LLVM_TOOLCHAIN_TOOLS}
-  CACHE STRING "")
+  ${LLVM_TOOLCHAIN_TOOLS})
+
+set(FUCHSIA_ENABLE_LLDB OFF CACHE BOOL "Enable LLDB")
+if(FUCHSIA_ENABLE_LLDB)
+  list(APPEND _FUCHSIA_ENABLE_PROJECTS "lldb")
+  list(APPEND _FUCHSIA_DISTRIBUTION_COMPONENTS "lldb")
+endif()
+
+set(LLVM_ENABLE_PROJECTS ${_FUCHSIA_ENABLE_PROJECTS} CACHE STRING "")
+set(LLVM_DISTRIBUTION_COMPONENTS ${_FUCHSIA_DISTRIBUTION_COMPONENTS} CACHE STRING "")

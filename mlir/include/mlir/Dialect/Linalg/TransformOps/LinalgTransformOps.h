@@ -9,6 +9,7 @@
 #ifndef MLIR_DIALECT_LINALG_TRANSFORMOPS_LINALGTRANSFORMOPS_H
 #define MLIR_DIALECT_LINALG_TRANSFORMOPS_LINALGTRANSFORMOPS_H
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/PDL/IR/PDLTypes.h"
 #include "mlir/Dialect/Transform/IR/TransformInterfaces.h"
 #include "mlir/Dialect/Utils/StructuredOpsUtils.h"
@@ -26,6 +27,7 @@ class LinalgOp;
 
 namespace tensor {
 class PackOp;
+class PadOp;
 class UnPackOp;
 } // namespace tensor
 
@@ -78,8 +80,8 @@ FailureOr<GemmDimsForPacking> inferGemmDims(linalg::LinalgOp linalgOp);
 /// Return true if `linalgOp` contains an embedded gemm subcomputation.
 bool containsMostMinorGemm(linalg::LinalgOp linalgOp);
 
-/// Implementation of tiling operations using `scf.foreach_thread`.
-DiagnosedSilenceableFailure tileToForeachThreadOpImpl(
+/// Implementation of tiling operations using `scf.forall`.
+DiagnosedSilenceableFailure tileToForallOpImpl(
     RewriterBase &rewriter, transform::TransformState &state,
     TransformOpInterface transformOp, ArrayRef<Operation *> targets,
     ArrayRef<OpFoldResult> mixedNumThreads,

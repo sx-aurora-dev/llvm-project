@@ -9,6 +9,7 @@
 #include "src/math/coshf.h"
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/__support/FPUtil/multiply_add.h"
+#include "src/__support/macros/optimization.h" // LIBC_UNLIKELY
 #include "src/math/generic/explogxf.h"
 
 namespace __llvm_libc {
@@ -35,7 +36,8 @@ LLVM_LIBC_FUNCTION(float, coshf, (float x)) {
     if (LIBC_UNLIKELY(rounding == FE_DOWNWARD || rounding == FE_TOWARDZERO))
       return FPBits(FPBits::MAX_NORMAL).get_val();
 
-    errno = ERANGE;
+    fputil::set_errno_if_required(ERANGE);
+    fputil::raise_except_if_required(FE_OVERFLOW);
 
     return x + FPBits::inf().get_val();
   }

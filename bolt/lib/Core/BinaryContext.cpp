@@ -479,10 +479,12 @@ MemoryContentsType BinaryContext::analyzeMemoryAt(uint64_t Address,
   return MemoryContentsType::UNKNOWN;
 }
 
-bool BinaryContext::analyzeJumpTable(
-    const uint64_t Address, const JumpTable::JumpTableType Type,
-    BinaryFunction &BF, const uint64_t NextJTAddress,
-    JumpTable::AddressesType *EntriesAsAddress) {
+bool BinaryContext::analyzeJumpTable(const uint64_t Address,
+                                     const JumpTable::JumpTableType Type,
+                                     const BinaryFunction &BF,
+                                     const uint64_t NextJTAddress,
+                                     JumpTable::AddressesType *EntriesAsAddress,
+                                     bool *HasEntryInFragment) const {
   // Is one of the targets __builtin_unreachable?
   bool HasUnreachable = false;
 
@@ -495,18 +497,17 @@ bool BinaryContext::analyzeJumpTable(
   };
 
   auto doesBelongToFunction = [&](const uint64_t Addr,
-                                  BinaryFunction *TargetBF) -> bool {
+                                  const BinaryFunction *TargetBF) -> bool {
     if (BF.containsAddress(Addr))
       return true;
     // Nothing to do if we failed to identify the containing function.
     if (!TargetBF)
       return false;
     // Check if BF is a fragment of TargetBF or vice versa.
-    return (BF.isFragment() && BF.isParentFragment(TargetBF)) ||
-           (TargetBF->isFragment() && TargetBF->isParentFragment(&BF));
+    return BF.isChildOf(*TargetBF) || TargetBF->isChildOf(BF);
   };
 
-  ErrorOr<BinarySection &> Section = getSectionForAddress(Address);
+  ErrorOr<const BinarySection &> Section = getSectionForAddress(Address);
   if (!Section)
     return false;
 
@@ -563,7 +564,7 @@ bool BinaryContext::analyzeJumpTable(
     }
 
     // Function or one of its fragments.
-    BinaryFunction *TargetBF = getBinaryFunctionContainingAddress(Value);
+    const BinaryFunction *TargetBF = getBinaryFunctionContainingAddress(Value);
 
     // We assume that a jump table cannot have function start as an entry.
     if (!doesBelongToFunction(Value, TargetBF) || Value == BF.getAddress()) {
@@ -597,8 +598,8 @@ bool BinaryContext::analyzeJumpTable(
     ++NumRealEntries;
     LLVM_DEBUG(dbgs() << formatv("OK: {0:x} real entry\n", Value));
 
-    if (TargetBF != &BF)
-      BF.setHasIndirectTargetToSplitFragment(true);
+    if (TargetBF != &BF && HasEntryInFragment)
+      *HasEntryInFragment = true;
     addEntryAddress(Value);
   }
 
@@ -628,7 +629,7 @@ void BinaryContext::populateJumpTables() {
 
     const bool Success =
         analyzeJumpTable(JT->getAddress(), JT->Type, *(JT->Parents[0]),
-                         NextJTAddress, &JT->EntriesAsAddress);
+                         NextJTAddress, &JT->EntriesAsAddress, &JT->IsSplit);
     if (!Success) {
       LLVM_DEBUG({
         dbgs() << "failed to analyze ";
@@ -641,6 +642,8 @@ void BinaryContext::populateJumpTables() {
       llvm_unreachable("jump table heuristic failure");
     }
     for (BinaryFunction *Frag : JT->Parents) {
+      if (JT->IsSplit)
+        Frag->setHasIndirectTargetToSplitFragment(true);
       for (uint64_t EntryAddress : JT->EntriesAsAddress)
         // if target is builtin_unreachable
         if (EntryAddress == Frag->getAddress() + Frag->getSize()) {
@@ -745,11 +748,6 @@ BinaryFunction *BinaryContext::createBinaryFunction(
 const MCSymbol *
 BinaryContext::getOrCreateJumpTable(BinaryFunction &Function, uint64_t Address,
                                     JumpTable::JumpTableType Type) {
-  auto isFragmentOf = [](BinaryFunction *Fragment, BinaryFunction *Parent) {
-    return (Fragment->isFragment() && Fragment->isParentFragment(Parent));
-  };
-  (void)isFragmentOf;
-
   // Two fragments of same function access same jump table
   if (JumpTable *JT = getJumpTableContainingAddress(Address)) {
     assert(JT->Type == Type && "jump table types have to match");
@@ -758,8 +756,8 @@ BinaryContext::getOrCreateJumpTable(BinaryFunction &Function, uint64_t Address,
     // Prevent associating a jump table to a specific fragment twice.
     // This simple check arises from the assumption: no more than 2 fragments.
     if (JT->Parents.size() == 1 && JT->Parents[0] != &Function) {
-      assert((isFragmentOf(JT->Parents[0], &Function) ||
-              isFragmentOf(&Function, JT->Parents[0])) &&
+      assert((JT->Parents[0]->isChildOf(Function) ||
+              Function.isChildOf(*JT->Parents[0])) &&
              "cannot re-use jump table of a different function");
       // Duplicate the entry for the parent function for easy access
       JT->Parents.push_back(&Function);
@@ -1100,7 +1098,7 @@ void BinaryContext::generateSymbolHashes() {
 bool BinaryContext::registerFragment(BinaryFunction &TargetFunction,
                                      BinaryFunction &Function) const {
   assert(TargetFunction.isFragment() && "TargetFunction must be a fragment");
-  if (TargetFunction.isParentFragment(&Function))
+  if (TargetFunction.isChildOf(Function))
     return true;
   TargetFunction.addParentFragment(Function);
   Function.addFragment(TargetFunction);
@@ -1223,7 +1221,7 @@ void BinaryContext::processInterproceduralReferences() {
 
     if (TargetFunction) {
       if (TargetFunction->isFragment() &&
-          !TargetFunction->isParentFragment(&Function)) {
+          !TargetFunction->isChildOf(Function)) {
         errs() << "BOLT-WARNING: interprocedural reference between unrelated "
                   "fragments: "
                << Function.getPrintName() << " and "
@@ -1351,6 +1349,8 @@ void BinaryContext::foldFunction(BinaryFunction &ChildBF,
 
     ChildBF.setFolded(&ParentBF);
   }
+
+  ParentBF.setHasFunctionsFoldedInto();
 }
 
 void BinaryContext::fixBinaryDataHoles() {
@@ -2091,8 +2091,8 @@ bool BinaryContext::removeRelocationAt(uint64_t Address) {
   return Section->removeRelocationAt(Address - Section->getAddress());
 }
 
-const Relocation *BinaryContext::getRelocationAt(uint64_t Address) {
-  ErrorOr<BinarySection &> Section = getSectionForAddress(Address);
+const Relocation *BinaryContext::getRelocationAt(uint64_t Address) const {
+  ErrorOr<const BinarySection &> Section = getSectionForAddress(Address);
   if (!Section)
     return nullptr;
 

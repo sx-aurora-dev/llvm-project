@@ -76,7 +76,6 @@
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/HashBuilder.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -86,6 +85,7 @@
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <atomic>
@@ -3167,7 +3167,7 @@ static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
     Opts.AddSystemHeaderPrefix(
         A->getValue(), A->getOption().matches(OPT_system_header_prefix));
 
-  for (const auto *A : Args.filtered(OPT_ivfsoverlay))
+  for (const auto *A : Args.filtered(OPT_ivfsoverlay, OPT_vfsoverlay))
     Opts.AddVFSOverlayFile(A->getValue());
 
   return Diags.getNumErrors() == NumErrorsBefore;

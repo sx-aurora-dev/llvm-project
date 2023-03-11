@@ -51,7 +51,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -59,6 +58,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/Triple.h"
 
 //===----------------------------------------------------------------------===//
@@ -142,11 +142,10 @@ static llvm::cl::opt<bool> useHLFIR("hlfir",
 
 using ProgramName = std::string;
 
-// Print the module without the "module { ... }" wrapper.
+// Print the module with the "module { ... }" wrapper, preventing
+// information loss from attribute information appended to the module
 static void printModule(mlir::ModuleOp mlirModule, llvm::raw_ostream &out) {
-  for (auto &op : *mlirModule.getBody())
-    out << op << '\n';
-  out << '\n';
+  out << mlirModule << '\n';
 }
 
 static void registerAllPasses() {

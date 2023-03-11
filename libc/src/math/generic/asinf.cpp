@@ -13,7 +13,8 @@
 #include "src/__support/FPUtil/except_value_utils.h"
 #include "src/__support/FPUtil/multiply_add.h"
 #include "src/__support/FPUtil/sqrt.h"
-#include "src/__support/macros/properties/cpu_features.h"
+#include "src/__support/macros/optimization.h"            // LIBC_UNLIKELY
+#include "src/__support/macros/properties/cpu_features.h" // LIBC_TARGET_CPU_HAS_FMA
 
 #include <errno.h>
 
@@ -104,8 +105,8 @@ LLVM_LIBC_FUNCTION(float, asinf, (float x)) {
   // |x| > 1, return NaNs.
   if (LIBC_UNLIKELY(x_abs > 0x3f80'0000U)) {
     if (x_abs <= 0x7f80'0000U) {
-      errno = EDOM;
-      fputil::set_except(FE_INVALID);
+      fputil::set_errno_if_required(EDOM);
+      fputil::raise_except_if_required(FE_INVALID);
     }
     return x +
            FPBits::build_nan(1 << (fputil::MantissaWidth<float>::VALUE - 1));

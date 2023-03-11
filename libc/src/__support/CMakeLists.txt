@@ -6,6 +6,7 @@ add_header_library(
   HDRS
     blockstore.h
   DEPENDS
+    .libc_assert
     libc.src.__support.CPP.new
 )
 
@@ -87,6 +88,7 @@ add_header_library(
     float_to_string.h
     ryu_constants.h
   DEPENDS
+    .libc_assert
     libc.src.__support.CPP.type_traits
     libc.src.__support.FPUtil.fp_bits
     libc.src.__support.common
@@ -109,8 +111,9 @@ add_header_library(
     .ctype_utils
     .high_precision_decimal
     .str_to_integer
+    .str_to_num_result
     .uint128
-    libc.include.errno
+    libc.src.__support.CPP.optional
     libc.src.__support.CPP.limits
     libc.src.__support.FPUtil.fp_bits
     libc.src.__support.builtin_wrappers
@@ -179,7 +182,7 @@ add_header_library(
     .integer_utils
     libc.src.__support.CPP.array
     libc.src.__support.CPP.type_traits
-    libc.src.__support.macros.attributes
+    libc.src.__support.macros.optimization
 )
 
 add_header_library(
@@ -188,6 +191,15 @@ add_header_library(
     UInt128.h
   DEPENDS
     .uint
+)
+
+add_header_library(
+  libc_assert
+  HDRS
+    libc_assert.h
+  DEPENDS
+    .integer_to_string
+    libc.src.__support.OSUtil.osutil
 )
 
 add_subdirectory(FPUtil)

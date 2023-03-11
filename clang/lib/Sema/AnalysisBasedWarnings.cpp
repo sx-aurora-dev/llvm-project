@@ -2509,14 +2509,17 @@ void clang::sema::AnalysisBasedWarnings::IssueWarnings(
   // Check for throw out of non-throwing function.
   if (!Diags.isIgnored(diag::warn_throw_in_noexcept_func, D->getBeginLoc()))
     if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
-      if (S.getLangOpts().CPlusPlus && isNoexcept(FD))
+      if (S.getLangOpts().CPlusPlus && !fscope->isCoroutine() && isNoexcept(FD))
         checkThrowInNonThrowingFunc(S, FD, AC);
 
   // Emit unsafe buffer usage warnings and fixits.
   if (!Diags.isIgnored(diag::warn_unsafe_buffer_operation, D->getBeginLoc()) ||
       !Diags.isIgnored(diag::warn_unsafe_buffer_variable, D->getBeginLoc())) {
     UnsafeBufferUsageReporter R(S);
-    checkUnsafeBufferUsage(D, R);
+    checkUnsafeBufferUsage(
+        D, R,
+        /*EmitFixits=*/S.getDiagnostics().getDiagnosticOptions().ShowFixits &&
+            S.getLangOpts().CPlusPlus20);
   }
 
   // If none of the previous checks caused a CFG build, trigger one here

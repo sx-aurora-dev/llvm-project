@@ -19,6 +19,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Debug.h"
+#include <optional>
 
 #define DEBUG_TYPE "transform-dialect"
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "] ")
@@ -26,7 +27,7 @@
 using namespace mlir;
 
 static ParseResult parseSequenceOpOperands(
-    OpAsmParser &parser, Optional<OpAsmParser::UnresolvedOperand> &root,
+    OpAsmParser &parser, std::optional<OpAsmParser::UnresolvedOperand> &root,
     Type &rootType,
     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &extraBindings,
     SmallVectorImpl<Type> &extraBindingTypes);
@@ -447,6 +448,27 @@ transform::GetConsumersOfResult::apply(transform::TransformResults &results,
 }
 
 //===----------------------------------------------------------------------===//
+// GetDefiningOp
+//===----------------------------------------------------------------------===//
+
+DiagnosedSilenceableFailure
+transform::GetDefiningOp::apply(transform::TransformResults &results,
+                              transform::TransformState &state) {
+  SmallVector<Operation *> definingOps;
+  for (Value v : state.getPayloadValues(getTarget())) {
+    if (v.isa<BlockArgument>()) {
+      DiagnosedSilenceableFailure diag =
+          emitSilenceableError() << "cannot get defining op of block argument";
+      diag.attachNote(v.getLoc()) << "target value";
+      return diag;
+    }
+    definingOps.push_back(v.getDefiningOp());
+  }
+  results.set(getResult().cast<OpResult>(), definingOps);
+  return DiagnosedSilenceableFailure::success();
+}
+
+//===----------------------------------------------------------------------===//
 // GetProducerOfOperand
 //===----------------------------------------------------------------------===//
 
@@ -471,6 +493,28 @@ transform::GetProducerOfOperand::apply(transform::TransformResults &results,
     producers.push_back(producer);
   }
   results.set(getResult().cast<OpResult>(), producers);
+  return DiagnosedSilenceableFailure::success();
+}
+
+//===----------------------------------------------------------------------===//
+// GetResultOp
+//===----------------------------------------------------------------------===//
+
+DiagnosedSilenceableFailure
+transform::GetResultOp::apply(transform::TransformResults &results,
+                              transform::TransformState &state) {
+  int64_t resultNumber = getResultNumber();
+  SmallVector<Value> opResults;
+  for (Operation *target : state.getPayloadOps(getTarget())) {
+    if (resultNumber >= target->getNumResults()) {
+      DiagnosedSilenceableFailure diag =
+          emitSilenceableError() << "targeted op does not have enough results";
+      diag.attachNote(target->getLoc()) << "target op";
+      return diag;
+    }
+    opResults.push_back(target->getOpResult(resultNumber));
+  }
+  results.setValues(getResult().cast<OpResult>(), opResults);
   return DiagnosedSilenceableFailure::success();
 }
 
@@ -666,7 +710,7 @@ transform::SequenceOp::apply(transform::TransformResults &results,
 }
 
 static ParseResult parseSequenceOpOperands(
-    OpAsmParser &parser, Optional<OpAsmParser::UnresolvedOperand> &root,
+    OpAsmParser &parser, std::optional<OpAsmParser::UnresolvedOperand> &root,
     Type &rootType,
     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &extraBindings,
     SmallVectorImpl<Type> &extraBindingTypes) {
@@ -929,8 +973,9 @@ static void buildSequenceBody(OpBuilder &builder, OperationState &state,
 
   OpBuilder::InsertionGuard guard(builder);
   Region *region = state.regions.back().get();
-  Block *bodyBlock = builder.createBlock(region, region->begin(),
-                                         extraBindingTypes, {state.location});
+  Block *bodyBlock =
+      builder.createBlock(region, region->begin(), types,
+                          SmallVector<Location>(types.size(), state.location));
 
   // Populate body.
   builder.setInsertionPointToStart(bodyBlock);
@@ -948,7 +993,7 @@ void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
                                   Value root,
                                   SequenceBodyBuilderFn bodyBuilder) {
   build(builder, state, resultTypes, failurePropagationMode, root,
-        /*extraBindings=*/ValueRange());
+        /*extra_bindings=*/ValueRange());
   Type bbArgType = root.getType();
   buildSequenceBody(builder, state, bbArgType,
                     /*extraBindingTypes=*/TypeRange(), bodyBuilder);
@@ -971,7 +1016,7 @@ void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
                                   Type bbArgType,
                                   SequenceBodyBuilderFn bodyBuilder) {
   build(builder, state, resultTypes, failurePropagationMode, /*root=*/Value(),
-        /*extraBindings=*/ValueRange());
+        /*extra_bindings=*/ValueRange());
   buildSequenceBody(builder, state, bbArgType,
                     /*extraBindingTypes=*/TypeRange(), bodyBuilder);
 }
@@ -982,7 +1027,7 @@ void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
                                   Type bbArgType, TypeRange extraBindingTypes,
                                   SequenceBodyBuilderArgsFn bodyBuilder) {
   build(builder, state, resultTypes, failurePropagationMode, /*root=*/Value(),
-        /*extraBindings=*/ValueRange());
+        /*extra_bindings=*/ValueRange());
   buildSequenceBody(builder, state, bbArgType, extraBindingTypes, bodyBuilder);
 }
 

@@ -625,7 +625,8 @@ static Value *foldLogOpOfMaskedICmps(ICmpInst *LHS, ICmpInst *RHS, bool IsAnd,
       return RHS;
   }
 
-  if (Mask & BMask_Mixed) {
+  if (Mask & (BMask_Mixed | BMask_NotMixed)) {
+    // Mixed:
     // (icmp eq (A & B), C) & (icmp eq (A & D), E)
     // We already know that B & C == C && D & E == E.
     // If we can prove that (B & D) & (C ^ E) == 0, that is, the bits of
@@ -636,24 +637,50 @@ static Value *foldLogOpOfMaskedICmps(ICmpInst *LHS, ICmpInst *RHS, bool IsAnd,
     // We can't simply use C and E because we might actually handle
     //   (icmp ne (A & B), B) & (icmp eq (A & D), D)
     // with B and D, having a single bit set.
+
+    // NotMixed:
+    // (icmp ne (A & B), C) & (icmp ne (A & D), E)
+    // -> (icmp ne (A & (B & D)), (C & E))
+    // Check the intersection (B & D) for inequality.
+    // Assume that (B & D) == B || (B & D) == D, i.e B/D is a subset of D/B
+    // and (B & D) & (C ^ E) == 0, bits of C and E, which are shared by both the
+    // B and the D, don't contradict.
+    // Note that we can assume (~B & C) == 0 && (~D & E) == 0, previous
+    // operation should delete these icmps if it hadn't been met.
+
     const APInt *OldConstC, *OldConstE;
     if (!match(C, m_APInt(OldConstC)) || !match(E, m_APInt(OldConstE)))
       return nullptr;
 
-    const APInt ConstC = PredL != NewCC ? *ConstB ^ *OldConstC : *OldConstC;
-    const APInt ConstE = PredR != NewCC ? *ConstD ^ *OldConstE : *OldConstE;
+    auto FoldBMixed = [&](ICmpInst::Predicate CC, bool IsNot) -> Value * {
+      CC = IsNot ? CmpInst::getInversePredicate(CC) : CC;
+      const APInt ConstC = PredL != CC ? *ConstB ^ *OldConstC : *OldConstC;
+      const APInt ConstE = PredR != CC ? *ConstD ^ *OldConstE : *OldConstE;
 
-    // If there is a conflict, we should actually return a false for the
-    // whole construct.
-    if (((*ConstB & *ConstD) & (ConstC ^ ConstE)).getBoolValue())
-      return ConstantInt::get(LHS->getType(), !IsAnd);
+      if (((*ConstB & *ConstD) & (ConstC ^ ConstE)).getBoolValue())
+        return IsNot ? nullptr : ConstantInt::get(LHS->getType(), !IsAnd);
 
-    Value *NewOr1 = Builder.CreateOr(B, D);
-    Value *NewAnd = Builder.CreateAnd(A, NewOr1);
-    Constant *NewOr2 = ConstantInt::get(A->getType(), ConstC | ConstE);
-    return Builder.CreateICmp(NewCC, NewAnd, NewOr2);
+      if (IsNot && !ConstB->isSubsetOf(*ConstD) && !ConstD->isSubsetOf(*ConstB))
+        return nullptr;
+
+      APInt BD, CE;
+      if (IsNot) {
+        BD = *ConstB & *ConstD;
+        CE = ConstC & ConstE;
+      } else {
+        BD = *ConstB | *ConstD;
+        CE = ConstC | ConstE;
+      }
+      Value *NewAnd = Builder.CreateAnd(A, BD);
+      Value *CEVal = ConstantInt::get(A->getType(), CE);
+      return Builder.CreateICmp(CC, CEVal, NewAnd);
+    };
+
+    if (Mask & BMask_Mixed)
+      return FoldBMixed(NewCC, false);
+    if (Mask & BMask_NotMixed) // can be else also
+      return FoldBMixed(NewCC, true);
   }
-
   return nullptr;
 }
 
@@ -1468,6 +1495,25 @@ Value *InstCombinerImpl::foldLogicOfFCmps(FCmpInst *LHS, FCmpInst *RHS,
       return Right;
   }
 
+  // Turn at least two fcmps with constants into llvm.is.fpclass.
+  //
+  // If we can represent a combined value test with one class call, we can
+  // potentially eliminate 4-6 instructions. If we can represent a test with a
+  // single fcmp with fneg and fabs, that's likely a better canonical form.
+  if (LHS->hasOneUse() && RHS->hasOneUse()) {
+    auto [ClassValRHS, ClassMaskRHS] = fcmpToClassTest(PredR, RHS0, RHS1);
+    if (ClassValRHS) {
+      auto [ClassValLHS, ClassMaskLHS] = fcmpToClassTest(PredL, LHS0, LHS1);
+      if (ClassValLHS == ClassValRHS) {
+        unsigned CombinedMask = IsAnd ? (ClassMaskLHS & ClassMaskRHS)
+                                      : (ClassMaskLHS | ClassMaskRHS);
+        return Builder.CreateIntrinsic(
+            Intrinsic::is_fpclass, {ClassValLHS->getType()},
+            {ClassValLHS, Builder.getInt32(CombinedMask)});
+      }
+    }
+  }
+
   return nullptr;
 }
 
@@ -2086,16 +2132,16 @@ static Instruction *canonicalizeLogicFirst(BinaryOperator &I,
     return nullptr;
 
   unsigned Width = Ty->getScalarSizeInBits();
-  unsigned LastOneMath = Width - C2->countTrailingZeros();
+  unsigned LastOneMath = Width - C2->countr_zero();
 
   switch (OpC) {
   case Instruction::And:
-    if (C->countLeadingOnes() < LastOneMath)
+    if (C->countl_one() < LastOneMath)
       return nullptr;
     break;
   case Instruction::Xor:
   case Instruction::Or:
-    if (C->countLeadingZeros() < LastOneMath)
+    if (C->countl_zero() < LastOneMath)
       return nullptr;
     break;
   default:
@@ -2213,7 +2259,7 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
     if (match(Op0, m_Add(m_Value(X), m_APInt(AddC)))) {
       // If we add zeros to every bit below a mask, the add has no effect:
       // (X + AddC) & LowMaskC --> X & LowMaskC
-      unsigned Ctlz = C->countLeadingZeros();
+      unsigned Ctlz = C->countl_zero();
       APInt LowMask(APInt::getLowBitsSet(Width, Width - Ctlz));
       if ((*AddC & LowMask).isZero())
         return BinaryOperator::CreateAnd(X, Op1);
@@ -2330,7 +2376,7 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
     const APInt *C3 = C;
     Value *X;
     if (C3->isPowerOf2()) {
-      Constant *Log2C3 = ConstantInt::get(Ty, C3->countTrailingZeros());
+      Constant *Log2C3 = ConstantInt::get(Ty, C3->countr_zero());
       if (match(Op0, m_OneUse(m_LShr(m_Shl(m_ImmConstant(C1), m_Value(X)),
                                      m_ImmConstant(C2)))) &&
           match(C1, m_Power2())) {

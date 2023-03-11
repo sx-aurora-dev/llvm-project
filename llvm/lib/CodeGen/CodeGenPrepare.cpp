@@ -2221,10 +2221,10 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, ModifyDT &ModifiedDT) {
   }
 
   // Align the pointer arguments to this call if the target thinks it's a good
-  // idea (generally only useful for memcpy/memmove/memset).
+  // idea
   unsigned MinSize;
   Align PrefAlign;
-  if (TLI->shouldUpdatePointerArgAlignment(CI, MinSize, PrefAlign, *TTI)) {
+  if (TLI->shouldAlignPointerArgs(CI, MinSize, PrefAlign)) {
     for (auto &Arg : CI->args()) {
       // We want to align both objects whose address is used directly and
       // objects whose address is used in casts and GEPs, though it only makes
@@ -4698,7 +4698,7 @@ bool AddressingModeMatcher::matchOperationAddr(User *AddrInst, unsigned Opcode,
           if (ConstantInt *CI =
                   dyn_cast<ConstantInt>(AddrInst->getOperand(i))) {
             const APInt &CVal = CI->getValue();
-            if (CVal.getMinSignedBits() <= 64) {
+            if (CVal.getSignificantBits() <= 64) {
               ConstantOffset += CVal.getSExtValue() * TypeSize;
               continue;
             }
@@ -7696,7 +7696,7 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
   // whereas scalable vectors would have to be shifted by
   // <2log(vscale) + number of bits> in order to store the
   // low/high parts. Bailing out for now.
-  if (isa<ScalableVectorType>(StoreType))
+  if (StoreType->isScalableTy())
     return false;
 
   if (!DL.typeSizeEqualsStoreSize(StoreType) ||

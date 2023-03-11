@@ -1082,7 +1082,8 @@ static Instruction *foldClampRangeOfTwo(IntrinsicInst *II,
 
 /// If this min/max has a constant operand and an operand that is a matching
 /// min/max with a constant operand, constant-fold the 2 constant operands.
-static Instruction *reassociateMinMaxWithConstants(IntrinsicInst *II) {
+static Value *reassociateMinMaxWithConstants(IntrinsicInst *II,
+                                             IRBuilderBase &Builder) {
   Intrinsic::ID MinMaxID = II->getIntrinsicID();
   auto *LHS = dyn_cast<IntrinsicInst>(II->getArgOperand(0));
   if (!LHS || LHS->getIntrinsicID() != MinMaxID)
@@ -1095,12 +1096,10 @@ static Instruction *reassociateMinMaxWithConstants(IntrinsicInst *II) {
 
   // max (max X, C0), C1 --> max X, (max C0, C1) --> max X, NewC
   ICmpInst::Predicate Pred = MinMaxIntrinsic::getPredicate(MinMaxID);
-  Constant *CondC = ConstantExpr::getICmp(Pred, C0, C1);
-  Constant *NewC = ConstantExpr::getSelect(CondC, C0, C1);
-
-  Module *Mod = II->getModule();
-  Function *MinMax = Intrinsic::getDeclaration(Mod, MinMaxID, II->getType());
-  return CallInst::Create(MinMax, {LHS->getArgOperand(0), NewC});
+  Value *CondC = Builder.CreateICmp(Pred, C0, C1);
+  Value *NewC = Builder.CreateSelect(CondC, C0, C1);
+  return Builder.CreateIntrinsic(MinMaxID, II->getType(),
+                                 {LHS->getArgOperand(0), NewC});
 }
 
 /// If this min/max has a matching min/max operand with a constant, try to push
@@ -1468,6 +1467,46 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       }
     }
 
+    // (umax X, (xor X, Pow2))
+    //      -> (or X, Pow2)
+    // (umin X, (xor X, Pow2))
+    //      -> (and X, ~Pow2)
+    // (smax X, (xor X, Pos_Pow2))
+    //      -> (or X, Pos_Pow2)
+    // (smin X, (xor X, Pos_Pow2))
+    //      -> (and X, ~Pos_Pow2)
+    // (smax X, (xor X, Neg_Pow2))
+    //      -> (and X, ~Neg_Pow2)
+    // (smin X, (xor X, Neg_Pow2))
+    //      -> (or X, Neg_Pow2)
+    if ((match(I0, m_c_Xor(m_Specific(I1), m_Value(X))) ||
+         match(I1, m_c_Xor(m_Specific(I0), m_Value(X)))) &&
+        isKnownToBeAPowerOfTwo(X, /* OrZero */ true)) {
+      bool UseOr = IID == Intrinsic::smax || IID == Intrinsic::umax;
+      bool UseAndN = IID == Intrinsic::smin || IID == Intrinsic::umin;
+
+      if (IID == Intrinsic::smax || IID == Intrinsic::smin) {
+        auto KnownSign = getKnownSign(X, II, DL, &AC, &DT);
+        if (KnownSign == std::nullopt) {
+          UseOr = false;
+          UseAndN = false;
+        } else if (*KnownSign /* true is Signed. */) {
+          UseOr ^= true;
+          UseAndN ^= true;
+          Type *Ty = I0->getType();
+          // Negative power of 2 must be IntMin. It's possible to be able to
+          // prove negative / power of 2 without actually having known bits, so
+          // just get the value by hand.
+          X = Constant::getIntegerValue(
+              Ty, APInt::getSignedMinValue(Ty->getScalarSizeInBits()));
+        }
+      }
+      if (UseOr)
+        return BinaryOperator::CreateOr(I0, X);
+      else if (UseAndN)
+        return BinaryOperator::CreateAnd(I0, Builder.CreateNot(X));
+    }
+
     // If we can eliminate ~A and Y is free to invert:
     // max ~A, Y --> ~(min A, ~Y)
     //
@@ -1532,8 +1571,8 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
         if (Instruction *R = FoldOpIntoSelect(*II, Sel))
           return R;
 
-    if (Instruction *NewMinMax = reassociateMinMaxWithConstants(II))
-      return NewMinMax;
+    if (Value *NewMinMax = reassociateMinMaxWithConstants(II, Builder))
+      return replaceInstUsesWith(*II, NewMinMax);
 
     if (Instruction *R = reassociateMinMaxWithConstantInOperand(II, Builder))
       return R;
@@ -3477,12 +3516,16 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
 }
 
 /// If the callee is a constexpr cast of a function, attempt to move the cast to
-/// the arguments of the call/callbr/invoke.
+/// the arguments of the call/invoke.
+/// CallBrInst is not supported.
 bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
   auto *Callee =
       dyn_cast<Function>(Call.getCalledOperand()->stripPointerCasts());
   if (!Callee)
     return false;
+
+  assert(!isa<CallBrInst>(Call) &&
+         "CallBr's don't have a single point after a def to insert at");
 
   // If this is a call to a thunk function, don't remove the cast. Thunks are
   // used to transparently forward all incoming parameters and outgoing return
@@ -3529,7 +3572,7 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
         return false;   // Attribute not compatible with transformed value.
     }
 
-    // If the callbase is an invoke/callbr instruction, and the return value is
+    // If the callbase is an invoke instruction, and the return value is
     // used by a PHI node in a successor, we cannot change the return type of
     // the call because there is no place to put the cast instruction (without
     // breaking the critical edge).  Bail out in this case.
@@ -3537,8 +3580,6 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
       BasicBlock *PhisNotSupportedBlock = nullptr;
       if (auto *II = dyn_cast<InvokeInst>(Caller))
         PhisNotSupportedBlock = II->getNormalDest();
-      if (auto *CB = dyn_cast<CallBrInst>(Caller))
-        PhisNotSupportedBlock = CB->getDefaultDest();
       if (PhisNotSupportedBlock)
         for (User *U : Caller->users())
           if (PHINode *PN = dyn_cast<PHINode>(U))
@@ -3722,9 +3763,6 @@ bool InstCombinerImpl::transformConstExprCastCall(CallBase &Call) {
   if (InvokeInst *II = dyn_cast<InvokeInst>(Caller)) {
     NewCall = Builder.CreateInvoke(Callee, II->getNormalDest(),
                                    II->getUnwindDest(), Args, OpBundles);
-  } else if (CallBrInst *CBI = dyn_cast<CallBrInst>(Caller)) {
-    NewCall = Builder.CreateCallBr(Callee, CBI->getDefaultDest(),
-                                   CBI->getIndirectDests(), Args, OpBundles);
   } else {
     NewCall = Builder.CreateCall(Callee, Args, OpBundles);
     cast<CallInst>(NewCall)->setTailCallKind(

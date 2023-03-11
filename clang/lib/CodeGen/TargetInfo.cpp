@@ -899,6 +899,11 @@ public:
         Fn->addFnAttr("no-prototype");
     }
   }
+
+  /// Return the WebAssembly externref reference type.
+  virtual llvm::Type *getWasmExternrefReferenceType() const override {
+    return llvm::Type::getWasm_ExternrefTy(getABIInfo().getVMContext());
+  }
 };
 
 /// Classify argument of given type \p Ty.
@@ -2381,9 +2386,7 @@ class X86_64ABIInfo : public ABIInfo {
       return false;
 
     const llvm::Triple &Triple = getTarget().getTriple();
-    if (Triple.isOSDarwin() || Triple.isPS())
-      return false;
-    if (Triple.isOSFreeBSD() && Triple.getOSMajorVersion() >= 10)
+    if (Triple.isOSDarwin() || Triple.isPS() || Triple.isOSFreeBSD())
       return false;
     return true;
   }
