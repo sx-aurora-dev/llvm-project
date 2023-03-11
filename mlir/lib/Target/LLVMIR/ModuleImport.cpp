@@ -16,6 +16,7 @@
 
 #include "AttrKindDetail.h"
 #include "DebugImporter.h"
+#include "LoopAnnotationImporter.h"
 
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -97,15 +98,27 @@ static FloatType getDLFloatType(MLIRContext &ctx, int32_t bitwidth) {
   }
 }
 
-/// Converts the sync scope identifier of `fenceInst` to the string
-/// representation necessary to build the LLVM dialect fence operation.
-static StringRef getLLVMSyncScope(llvm::FenceInst *fenceInst) {
-  llvm::LLVMContext &llvmContext = fenceInst->getContext();
-  SmallVector<StringRef> syncScopeNames;
-  llvmContext.getSyncScopeNames(syncScopeNames);
-  for (StringRef name : syncScopeNames)
-    if (fenceInst->getSyncScopeID() == llvmContext.getOrInsertSyncScopeID(name))
-      return name;
+/// Converts the sync scope identifier of `inst` to the string representation
+/// necessary to build an atomic LLVM dialect operation. Returns the empty
+/// string if the operation has either no sync scope or the default system-level
+/// sync scope attached. The atomic operations only set their sync scope
+/// attribute if they have a non-default sync scope attached.
+static StringRef getLLVMSyncScope(llvm::Instruction *inst) {
+  std::optional<llvm::SyncScope::ID> syncScopeID =
+      llvm::getAtomicSyncScopeID(inst);
+  if (!syncScopeID)
+    return "";
+
+  // Search the sync scope name for the given identifier. The default
+  // system-level sync scope thereby maps to the empty string.
+  SmallVector<StringRef> syncScopeName;
+  llvm::LLVMContext &llvmContext = inst->getContext();
+  llvmContext.getSyncScopeNames(syncScopeName);
+  auto *it = llvm::find_if(syncScopeName, [&](StringRef name) {
+    return *syncScopeID == llvmContext.getOrInsertSyncScopeID(name);
+  });
+  if (it != syncScopeName.end())
+    return *it;
   llvm_unreachable("incorrect sync scope identifier");
 }
 
@@ -241,7 +254,9 @@ ModuleImport::ModuleImport(ModuleOp mlirModule,
       mlirModule(mlirModule), llvmModule(std::move(llvmModule)),
       iface(mlirModule->getContext()),
       typeTranslator(*mlirModule->getContext()),
-      debugImporter(std::make_unique<DebugImporter>(mlirModule)) {
+      debugImporter(std::make_unique<DebugImporter>(mlirModule)),
+      loopAnnotationImporter(
+          std::make_unique<LoopAnnotationImporter>(builder)) {
   builder.setInsertionPointToStart(mlirModule.getBody());
 }
 
@@ -498,35 +513,11 @@ LogicalResult ModuleImport::processTBAAMetadata(const llvm::MDNode *node) {
 
 LogicalResult
 ModuleImport::processAccessGroupMetadata(const llvm::MDNode *node) {
-  // An access group node is either access group or an access group list. Start
-  // by collecting all access groups to translate.
-  SmallVector<const llvm::MDNode *> accessGroups;
-  if (!node->getNumOperands())
-    accessGroups.push_back(node);
-  for (const llvm::MDOperand &operand : node->operands())
-    accessGroups.push_back(cast<llvm::MDNode>(operand.get()));
-
-  // Convert all entries of the access group list to access group operations.
-  for (const llvm::MDNode *accessGroup : accessGroups) {
-    if (accessGroupMapping.count(accessGroup))
-      continue;
-    // Verify the access group node is distinct and empty.
-    Location loc = mlirModule.getLoc();
-    if (accessGroup->getNumOperands() != 0 || !accessGroup->isDistinct())
-      return emitError(loc) << "unsupported access group node: "
-                            << diagMD(accessGroup, llvmModule.get());
-
-    MetadataOp metadataOp = getGlobalMetadataOp();
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(&metadataOp.getBody().back());
-    auto groupOp = builder.create<AccessGroupMetadataOp>(
-        loc, (Twine("group_") + Twine(accessGroupMapping.size())).str());
-    // Add a mapping from the access group node to the symbol reference pointing
-    // to the newly created operation.
-    accessGroupMapping[accessGroup] = SymbolRefAttr::get(
-        builder.getContext(), metadataOp.getSymName(),
-        FlatSymbolRefAttr::get(builder.getContext(), groupOp.getSymName()));
-  }
+  Location loc = mlirModule.getLoc();
+  if (failed(loopAnnotationImporter->translateAccessGroup(
+          node, loc, getGlobalMetadataOp())))
+    return emitError(loc) << "unsupported access group node: "
+                          << diagMD(node, llvmModule.get());
   return success();
 }
 
@@ -859,37 +850,57 @@ ModuleImport::convertGlobalCtorsAndDtors(llvm::GlobalVariable *globalVar) {
 
 SetVector<llvm::Constant *>
 ModuleImport::getConstantsToConvert(llvm::Constant *constant) {
-  // Traverse the constant dependencies in post order.
-  SmallVector<llvm::Constant *> workList;
-  SmallVector<llvm::Constant *> orderedList;
-  workList.push_back(constant);
+  // Return the empty set if the constant has been translated before.
+  if (valueMapping.count(constant))
+    return {};
+
+  // Traverse the constants in post-order and stop the traversal if a constant
+  // already has a `valueMapping` from an earlier constant translation or if the
+  // constant is traversed a second time.
+  SetVector<llvm::Constant *> orderedSet;
+  SetVector<llvm::Constant *> workList;
+  DenseMap<llvm::Constant *, SmallVector<llvm::Constant *>> adjacencyLists;
+  workList.insert(constant);
   while (!workList.empty()) {
-    llvm::Constant *current = workList.pop_back_val();
-    // Skip constants that have been converted before and store all other ones.
-    if (valueMapping.count(current))
-      continue;
-    orderedList.push_back(current);
-    // Add the current constant's dependencies to the work list. Only add
-    // constant dependencies and skip any other values such as basic block
-    // addresses.
-    for (llvm::Value *operand : current->operands())
-      if (auto *constDependency = dyn_cast<llvm::Constant>(operand))
-        workList.push_back(constDependency);
-    // Use the `getElementValue` method to add the dependencies of zero
-    // initialized aggregate constants since they do not take any operands.
-    if (auto *constAgg = dyn_cast<llvm::ConstantAggregateZero>(current)) {
-      unsigned numElements = constAgg->getElementCount().getFixedValue();
-      for (unsigned i = 0, e = numElements; i != e; ++i)
-        workList.push_back(constAgg->getElementValue(i));
+    llvm::Constant *current = workList.back();
+    // Collect all dependencies of the current constant and add them to the
+    // adjacency list if none has been computed before.
+    auto adjacencyIt = adjacencyLists.find(current);
+    if (adjacencyIt == adjacencyLists.end()) {
+      adjacencyIt = adjacencyLists.try_emplace(current).first;
+      // Add all constant operands to the adjacency list and skip any other
+      // values such as basic block addresses.
+      for (llvm::Value *operand : current->operands())
+        if (auto *constDependency = dyn_cast<llvm::Constant>(operand))
+          adjacencyIt->getSecond().push_back(constDependency);
+      // Use the getElementValue method to add the dependencies of zero
+      // initialized aggregate constants since they do not take any operands.
+      if (auto *constAgg = dyn_cast<llvm::ConstantAggregateZero>(current)) {
+        unsigned numElements = constAgg->getElementCount().getFixedValue();
+        for (unsigned i = 0, e = numElements; i != e; ++i)
+          adjacencyIt->getSecond().push_back(constAgg->getElementValue(i));
+      }
     }
+    // Add the current constant to the `orderedSet` of the traversed nodes if
+    // all its dependencies have been traversed before. Additionally, remove the
+    // constant from the `workList` and continue the traversal.
+    if (adjacencyIt->getSecond().empty()) {
+      orderedSet.insert(current);
+      workList.pop_back();
+      continue;
+    }
+    // Add the next dependency from the adjacency list to the `workList` and
+    // continue the traversal. Remove the dependency from the adjacency list to
+    // mark that it has been processed. Only enqueue the dependency if it has no
+    // `valueMapping` from an earlier translation and if it has not been
+    // enqueued before.
+    llvm::Constant *dependency = adjacencyIt->getSecond().pop_back_val();
+    if (valueMapping.count(dependency) || workList.count(dependency) ||
+        orderedSet.count(dependency))
+      continue;
+    workList.insert(dependency);
   }
 
-  // Add the constants in reverse post order to the result set to ensure all
-  // dependencies are satisfied. Avoid storing duplicates since LLVM constants
-  // are uniqued and only one `valueMapping` entry per constant is possible.
-  SetVector<llvm::Constant *> orderedSet;
-  for (llvm::Constant *orderedConst : llvm::reverse(orderedList))
-    orderedSet.insert(orderedConst);
   return orderedSet;
 }
 
@@ -1549,6 +1560,17 @@ LogicalResult ModuleImport::processBasicBlock(llvm::BasicBlock *bb,
     }
   }
   return success();
+}
+
+FailureOr<SmallVector<SymbolRefAttr>>
+ModuleImport::lookupAccessGroupAttrs(const llvm::MDNode *node) const {
+  return loopAnnotationImporter->lookupAccessGroupAttrs(node);
+}
+
+LoopAnnotationAttr
+ModuleImport::translateLoopAnnotationAttr(const llvm::MDNode *node,
+                                          Location loc) const {
+  return loopAnnotationImporter->translateLoopAnnotation(node, loc);
 }
 
 OwningOpRef<ModuleOp>

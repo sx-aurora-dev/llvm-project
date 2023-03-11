@@ -401,6 +401,11 @@ define void @atomic_rmw(ptr %ptr1, i32 %val1, ptr %ptr2, float %val2) {
   %16 = atomicrmw uinc_wrap ptr %ptr1, i32 %val1 acquire
   ; CHECK:  llvm.atomicrmw udec_wrap %[[PTR1]], %[[VAL1]] acquire
   %17 = atomicrmw udec_wrap ptr %ptr1, i32 %val1 acquire
+
+  ; CHECK:  llvm.atomicrmw volatile
+  ; CHECK-SAME:  syncscope("singlethread")
+  ; CHECK-SAME:  {alignment = 8 : i64}
+  %18 = atomicrmw volatile udec_wrap ptr %ptr1, i32 %val1 syncscope("singlethread") acquire, align 8
   ret void
 }
 
@@ -415,6 +420,11 @@ define void @atomic_cmpxchg(ptr %ptr1, i32 %val1, i32 %val2) {
   %1 = cmpxchg ptr %ptr1, i32 %val1, i32 %val2 seq_cst seq_cst
   ; CHECK:  llvm.cmpxchg %[[PTR1]], %[[VAL1]], %[[VAL2]] monotonic seq_cst
   %2 = cmpxchg ptr %ptr1, i32 %val1, i32 %val2 monotonic seq_cst
+
+  ; CHECK:  llvm.cmpxchg weak volatile
+  ; CHECK-SAME:  syncscope("singlethread")
+  ; CHECK-SAME:  {alignment = 8 : i64}
+  %3 = cmpxchg weak volatile ptr %ptr1, i32 %val1, i32 %val2 syncscope("singlethread") monotonic seq_cst, align 8
   ret void
 }
 
@@ -448,7 +458,7 @@ define void @indirect_call(ptr addrspace(42) %fn) {
 ; CHECK-SAME:  %[[PTR:[a-zA-Z0-9]+]]
 define void @gep_static_idx(ptr %ptr) {
   ; CHECK: %[[IDX:.+]] = llvm.mlir.constant(7 : i32)
-  ; CHECK: llvm.getelementptr inbounds %[[PTR]][%[[IDX]]] : (!llvm.ptr, i32) -> !llvm.ptr
+  ; CHECK: llvm.getelementptr inbounds %[[PTR]][%[[IDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, f32
   %1 = getelementptr inbounds float, ptr %ptr, i32 7
   ret void
 }
@@ -476,7 +486,7 @@ define void @varargs_call(i32 %0) {
 ; CHECK-SAME:  %[[IDX:[a-zA-Z0-9]+]]
 define void @gep_dynamic_idx(ptr %ptr, i32 %idx) {
   ; CHECK: %[[C0:.+]] = llvm.mlir.constant(0 : i32)
-  ; CHECK: llvm.getelementptr %[[PTR]][%[[C0]], 1, %[[IDX]]]
+  ; CHECK: llvm.getelementptr %[[PTR]][%[[C0]], 1, %[[IDX]]]{{.*}}"my_struct"
   %1 = getelementptr %my_struct, ptr %ptr, i32 0, i32 1, i32 %idx
   ret void
 }

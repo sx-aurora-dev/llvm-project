@@ -14,12 +14,12 @@
 #include "flang/Lower/ConvertExprToHLFIR.h"
 #include "flang/Lower/ConvertVariable.h"
 #include "flang/Lower/CustomIntrinsicCall.h"
-#include "flang/Lower/IntrinsicCall.h"
 #include "flang/Lower/StatementContext.h"
 #include "flang/Lower/SymbolMap.h"
 #include "flang/Optimizer/Builder/BoxValue.h"
 #include "flang/Optimizer/Builder/Character.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
+#include "flang/Optimizer/Builder/IntrinsicCall.h"
 #include "flang/Optimizer/Builder/LowLevelIntrinsics.h"
 #include "flang/Optimizer/Builder/MutableBox.h"
 #include "flang/Optimizer/Builder/Runtime/Derived.h"
@@ -121,7 +121,7 @@ fir::ExtendedValue Fortran::lower::genCallOpAndResult(
   mlir::Value charFuncPointerLength;
   if (const Fortran::semantics::Symbol *sym =
           caller.getIfIndirectCallSymbol()) {
-    funcPointer = symMap.lookupSymbol(*sym).getAddr();
+    funcPointer = fir::getBase(converter.getSymbolExtendedValue(*sym, &symMap));
     if (!funcPointer)
       fir::emitFatalError(loc, "failed to find indirect call symbol address");
     if (fir::isCharacterProcedureTuple(funcPointer.getType(),
@@ -347,8 +347,8 @@ fir::ExtendedValue Fortran::lower::genCallOpAndResult(
       const Fortran::evaluate::Component *component =
           caller.getCallDescription().proc().GetComponent();
       assert(component && "expect component for type-bound procedure call.");
-      fir::ExtendedValue pass =
-          symMap.lookupSymbol(component->GetFirstSymbol()).toExtendedValue();
+      fir::ExtendedValue pass = converter.getSymbolExtendedValue(
+          component->GetFirstSymbol(), &symMap);
       mlir::Value passObject = fir::getBase(pass);
       if (fir::isa_ref_type(passObject.getType()))
         passObject = builder.create<fir::ConvertOp>(
@@ -608,6 +608,23 @@ extendedValueToHlfirEntity(mlir::Location loc, fir::FirOpBuilder &builder,
   mlir::Value firBase = fir::getBase(exv);
   if (fir::isa_trivial(firBase.getType()))
     return hlfir::EntityWithAttributes{firBase};
+  if (auto charTy = firBase.getType().dyn_cast<fir::CharacterType>()) {
+    // CHAR() intrinsic and BIND(C) procedures returning CHARACTER(1)
+    // are lowered to a fir.char<kind,1> that is not in memory.
+    // This tends to cause a lot of bugs because the rest of the
+    // infrastructure is mostly tested with characters that are
+    // in memory.
+    // To avoid having to deal with this special case here and there,
+    // place it in memory here. If this turns out to be suboptimal,
+    // this could be fixed, but for now llvm opt -O1 is able to get
+    // rid of the memory indirection in a = char(b), so there is
+    // little incentive to increase the compiler complexity.
+    hlfir::Entity storage{builder.createTemporary(loc, charTy)};
+    builder.create<fir::StoreOp>(loc, firBase, storage);
+    auto asExpr = builder.create<hlfir::AsExprOp>(
+        loc, storage, /*mustFree=*/builder.createBool(loc, false));
+    return hlfir::EntityWithAttributes{asExpr.getResult()};
+  }
   return hlfir::genDeclare(loc, builder, exv, name,
                            fir::FortranVariableFlagsAttr{});
 }
@@ -764,6 +781,11 @@ static PreparedDummyArgument preparePresentUserCallActualArgument(
   // Step 1: get the actual argument, which includes addressing the
   // element if this is an array in an elemental call.
   hlfir::Entity actual = preparedActual.getActual(loc, builder);
+
+  // Do nothing if this is a procedure argument. It is already a
+  // fir.boxproc/fir.tuple<fir.boxproc, len> as it should.
+  if (actual.isProcedure())
+    return PreparedDummyArgument{actual, std::nullopt};
 
   const bool passingPolymorphicToNonPolymorphic =
       actual.isPolymorphic() && !fir::isPolymorphicType(dummyType);
@@ -996,7 +1018,10 @@ genUserCall(PreparedActualArguments &loweredActuals,
           loc, "unexpected PassBy::AddressAndLength for actual arguments");
       break;
     case PassBy::CharProcTuple: {
-      TODO(loc, "HLFIR PassBy::CharProcTuple");
+      hlfir::Entity actual = preparedActual->getActual(loc, builder);
+      assert(fir::isCharacterProcedureTuple(actual.getType()) &&
+             "character dummy procedure was not prepared as expected");
+      caller.placeInput(arg, actual);
     } break;
     case PassBy::MutableBox: {
       hlfir::Entity actual = preparedActual->getActual(loc, builder);
@@ -1057,11 +1082,11 @@ genUserCall(PreparedActualArguments &loweredActuals,
 
 /// Lower calls to intrinsic procedures with actual arguments that have been
 /// pre-lowered but have not yet been prepared according to the interface.
-static std::optional<hlfir::EntityWithAttributes> genIntrinsicRefCore(
-    PreparedActualArguments &loweredActuals,
-    const Fortran::evaluate::SpecificIntrinsic &intrinsic,
-    const Fortran::lower::IntrinsicArgumentLoweringRules *argLowering,
-    CallContext &callContext) {
+static std::optional<hlfir::EntityWithAttributes>
+genIntrinsicRefCore(PreparedActualArguments &loweredActuals,
+                    const Fortran::evaluate::SpecificIntrinsic &intrinsic,
+                    const fir::IntrinsicArgumentLoweringRules *argLowering,
+                    CallContext &callContext) {
   llvm::SmallVector<fir::ExtendedValue> operands;
   auto &stmtCtx = callContext.stmtCtx;
   auto &converter = callContext.converter;
@@ -1069,7 +1094,7 @@ static std::optional<hlfir::EntityWithAttributes> genIntrinsicRefCore(
   mlir::Location loc = callContext.loc;
   for (auto arg : llvm::enumerate(loweredActuals)) {
     if (!arg.value()) {
-      operands.emplace_back(Fortran::lower::getAbsentIntrinsicArgument());
+      operands.emplace_back(fir::getAbsentIntrinsicArgument());
       continue;
     }
     if (arg.value()->handleDynamicOptional())
@@ -1081,24 +1106,42 @@ static std::optional<hlfir::EntityWithAttributes> genIntrinsicRefCore(
           Fortran::lower::convertToValue(loc, converter, actual, stmtCtx));
       continue;
     }
+    // Helper to get the type of the Fortran expression in case it is a
+    // computed value that must be placed in memory (logicals are computed as
+    // i1, but must be placed in memory as fir.logical).
+    auto getActualFortranElementType = [&]() {
+      const Fortran::lower::SomeExpr *expr =
+          callContext.procRef.UnwrapArgExpr(arg.index());
+      assert(expr && "must be an expr");
+      mlir::Type type = converter.genType(*expr);
+      return hlfir::getFortranElementType(type);
+    };
     // Ad-hoc argument lowering handling.
-    Fortran::lower::ArgLoweringRule argRules =
-        Fortran::lower::lowerIntrinsicArgumentAs(*argLowering, arg.index());
+    fir::ArgLoweringRule argRules =
+        fir::lowerIntrinsicArgumentAs(*argLowering, arg.index());
     switch (argRules.lowerAs) {
-    case Fortran::lower::LowerIntrinsicArgAs::Value:
+    case fir::LowerIntrinsicArgAs::Value:
       operands.emplace_back(
           Fortran::lower::convertToValue(loc, converter, actual, stmtCtx));
       continue;
-    case Fortran::lower::LowerIntrinsicArgAs::Addr:
-      operands.emplace_back(
-          Fortran::lower::convertToAddress(loc, converter, actual, stmtCtx));
+    case fir::LowerIntrinsicArgAs::Addr:
+      operands.emplace_back(Fortran::lower::convertToAddress(
+          loc, converter, actual, stmtCtx, getActualFortranElementType()));
       continue;
-    case Fortran::lower::LowerIntrinsicArgAs::Box:
-      operands.emplace_back(
-          Fortran::lower::convertToBox(loc, converter, actual, stmtCtx));
+    case fir::LowerIntrinsicArgAs::Box:
+      operands.emplace_back(Fortran::lower::convertToBox(
+          loc, converter, actual, stmtCtx, getActualFortranElementType()));
       continue;
-    case Fortran::lower::LowerIntrinsicArgAs::Inquired:
-      TODO(loc, "as inquired arguments in HLFIR");
+    case fir::LowerIntrinsicArgAs::Inquired:
+      // Place hlfir.expr in memory, and unbox fir.boxchar. Other entities
+      // are translated to fir::ExtendedValue without transformation (notably,
+      // pointers/allocatable are not dereferenced).
+      // TODO: once lowering to FIR retires, UBOUND and LBOUND can be simplified
+      // since the fir.box lowered here are now guaranteed to contain the local
+      // lower bounds thanks to the hlfir.declare (the extra rebox can be
+      // removed).
+      operands.emplace_back(Fortran::lower::translateToExtendedValue(
+          loc, builder, actual, stmtCtx));
       continue;
     }
     llvm_unreachable("bad switch");
@@ -1109,16 +1152,16 @@ static std::optional<hlfir::EntityWithAttributes> genIntrinsicRefCore(
   if (callContext.resultType)
     scalarResultType = hlfir::getFortranElementType(*callContext.resultType);
   // Let the intrinsic library lower the intrinsic procedure call.
-  auto [resultExv, mustBeFreed] = Fortran::lower::genIntrinsicCall(
-      callContext.getBuilder(), loc, intrinsic.name, scalarResultType,
-      operands);
+  auto [resultExv, mustBeFreed] =
+      genIntrinsicCall(callContext.getBuilder(), loc, intrinsic.name,
+                       scalarResultType, operands);
   if (!fir::getBase(resultExv))
     return std::nullopt;
   hlfir::EntityWithAttributes resultEntity = extendedValueToHlfirEntity(
       loc, builder, resultExv, ".tmp.intrinsic_result");
   // Move result into memory into an hlfir.expr since they are immutable from
   // that point, and the result storage is some temp.
-  if (!fir::isa_trivial(resultEntity.getType())) {
+  if (resultEntity.isVariable()) {
     hlfir::AsExprOp asExpr;
     // Character/Derived MERGE lowering returns one of its argument address
     // (this is the only intrinsic implemented in that way so far). The
@@ -1301,8 +1344,7 @@ class ElementalIntrinsicCallBuilder
 public:
   ElementalIntrinsicCallBuilder(
       const Fortran::evaluate::SpecificIntrinsic &intrinsic,
-      const Fortran::lower::IntrinsicArgumentLoweringRules *argLowering,
-      bool isFunction)
+      const fir::IntrinsicArgumentLoweringRules *argLowering, bool isFunction)
       : intrinsic{intrinsic}, argLowering{argLowering}, isFunction{isFunction} {
   }
   std::optional<hlfir::Entity>
@@ -1335,7 +1377,7 @@ public:
 
 private:
   const Fortran::evaluate::SpecificIntrinsic &intrinsic;
-  const Fortran::lower::IntrinsicArgumentLoweringRules *argLowering;
+  const fir::IntrinsicArgumentLoweringRules *argLowering;
   const bool isFunction;
 };
 } // namespace
@@ -1383,8 +1425,8 @@ genIntrinsicRef(const Fortran::evaluate::SpecificIntrinsic &intrinsic,
     TODO(loc, "special cases of intrinsic with optional arguments");
 
   PreparedActualArguments loweredActuals;
-  const Fortran::lower::IntrinsicArgumentLoweringRules *argLowering =
-      Fortran::lower::getIntrinsicArgumentLowering(intrinsic.name);
+  const fir::IntrinsicArgumentLoweringRules *argLowering =
+      fir::getIntrinsicArgumentLowering(intrinsic.name);
   for (const auto &arg : llvm::enumerate(callContext.procRef.arguments())) {
     auto *expr =
         Fortran::evaluate::UnwrapExpr<Fortran::lower::SomeExpr>(arg.value());
@@ -1398,8 +1440,8 @@ genIntrinsicRef(const Fortran::evaluate::SpecificIntrinsic &intrinsic,
         callContext.stmtCtx);
     std::optional<mlir::Value> isPresent;
     if (argLowering) {
-      Fortran::lower::ArgLoweringRule argRules =
-          Fortran::lower::lowerIntrinsicArgumentAs(*argLowering, arg.index());
+      fir::ArgLoweringRule argRules =
+          fir::lowerIntrinsicArgumentAs(*argLowering, arg.index());
       if (argRules.handleDynamicOptional)
         isPresent =
             genIsPresentIfArgMaybeAbsent(loc, loweredActual, *expr, callContext,

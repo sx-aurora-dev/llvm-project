@@ -24,6 +24,9 @@ class LowerToLLVMOptions;
 
 namespace LLVM {
 class LLVMDialect;
+class LLVMPointerType;
+class LLVMFunctionType;
+class LLVMStructType;
 } // namespace LLVM
 
 /// Conversion from types to the LLVM IR dialect.
@@ -105,7 +108,8 @@ public:
   /// pointers to memref descriptors for arguments. Also converts the return
   /// type to a pointer argument if it is a struct. Returns true if this
   /// was the case.
-  std::pair<Type, bool> convertFunctionTypeCWrapper(FunctionType type);
+  std::pair<LLVM::LLVMFunctionType, LLVM::LLVMStructType>
+  convertFunctionTypeCWrapper(FunctionType type);
 
   /// Returns the data layout to use during and after conversion.
   const llvm::DataLayout &getDataLayout() { return options.dataLayout; }
@@ -118,6 +122,17 @@ public:
   /// Gets the LLVM representation of the index type. The returned type is an
   /// integer type with the size configured for this type converter.
   Type getIndexType();
+
+  /// Returns true if using opaque pointers was enabled in the lowering options.
+  bool useOpaquePointers() const { return getOptions().useOpaquePointers; }
+
+  /// Creates an LLVM pointer type with the given element type and address
+  /// space.
+  /// This function is meant to be used in code supporting both typed and opaque
+  /// pointers, as it will create an opaque pointer with the given address space
+  /// if opaque pointers are enabled in the lowering options.
+  LLVM::LLVMPointerType getPointerType(Type elementType,
+                                       unsigned addressSpace = 0);
 
   /// Gets the bitwidth of the index type when converted to LLVM.
   unsigned getIndexTypeBitwidth() { return options.getIndexBitwidth(); }

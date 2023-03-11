@@ -16,9 +16,10 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SpecialCaseList.h"
-#include "llvm/Support/TargetParser.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
+#include "llvm/TargetParser/RISCVTargetParser.h"
+#include "llvm/TargetParser/TargetParser.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
 #include <memory>
 
@@ -545,7 +546,8 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
   if ((Kinds & SanitizerKind::ShadowCallStack) &&
       ((TC.getTriple().isAArch64() &&
         !llvm::AArch64::isX18ReservedByDefault(TC.getTriple())) ||
-       TC.getTriple().isRISCV()) &&
+       (TC.getTriple().isRISCV() &&
+        !llvm::RISCV::isX18ReservedByDefault(TC.getTriple()))) &&
       !Args.hasArg(options::OPT_ffixed_x18) && DiagnoseErrors) {
     D.Diag(diag::err_drv_argument_only_allowed_with)
         << lastArgumentForMask(D, Args, Kinds & SanitizerKind::ShadowCallStack)
@@ -710,6 +712,9 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
     NeedPIE |= CfiCrossDso;
     CfiICallGeneralizePointers =
         Args.hasArg(options::OPT_fsanitize_cfi_icall_generalize_pointers);
+
+    CfiICallNormalizeIntegers =
+        Args.hasArg(options::OPT_fsanitize_cfi_icall_normalize_integers);
 
     if (CfiCrossDso && CfiICallGeneralizePointers && DiagnoseErrors)
       D.Diag(diag::err_drv_argument_not_allowed_with)
@@ -1214,6 +1219,9 @@ void SanitizerArgs::addArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
 
   if (CfiICallGeneralizePointers)
     CmdArgs.push_back("-fsanitize-cfi-icall-generalize-pointers");
+
+  if (CfiICallNormalizeIntegers)
+    CmdArgs.push_back("-fsanitize-cfi-icall-experimental-normalize-integers");
 
   if (CfiCanonicalJumpTables)
     CmdArgs.push_back("-fsanitize-cfi-canonical-jump-tables");

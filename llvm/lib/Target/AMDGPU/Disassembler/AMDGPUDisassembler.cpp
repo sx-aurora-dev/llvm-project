@@ -115,9 +115,6 @@ static DecodeStatus decodeBoolReg(MCInst &Inst, unsigned Val, uint64_t Addr,
     return addOperand(Inst, DAsm->DecoderName(Imm));                           \
   }
 
-#define DECODE_OPERAND_REG(RegClass) \
-DECODE_OPERAND(Decode##RegClass##RegisterClass, decodeOperand_##RegClass)
-
 // Decoder for registers, decode directly using RegClassID. Imm(8-bit) is
 // number of register. Used by VGPR only and AGPR only operands.
 #define DECODE_OPERAND_REG_8(RegClass)                                         \
@@ -248,6 +245,7 @@ DECODE_OPERAND_SRC_REG_OR_IMM_9(VS_32_Lo128, OPW16, 16)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VS_32, OPW32, 16)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VS_32, OPW32, 32)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VS_64, OPW64, 64)
+DECODE_OPERAND_SRC_REG_OR_IMM_9(VS_64, OPW64, 32)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VReg_64, OPW64, 64)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VReg_128, OPW128, 32)
 DECODE_OPERAND_SRC_REG_OR_IMM_9(VReg_256, OPW256, 64)

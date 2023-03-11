@@ -3539,8 +3539,14 @@ let Predicates = [HasSVE2] in {
 
 let Predicates = [HasSVE2orSME] in {
   // SVE2 floating-point base 2 logarithm as integer
-  defm FLOGB_ZPmZ : sve2_fp_flogb<"flogb", int_aarch64_sve_flogb>;
+  defm FLOGB_ZPmZ : sve2_fp_flogb<"flogb", "FLOGB_ZPZZ", int_aarch64_sve_flogb>;
+}
 
+let Predicates = [HasSVE2orSME, UseExperimentalZeroingPseudos] in {
+  defm FLOGB_ZPZZ : sve2_fp_un_pred_zeroing_hsd<int_aarch64_sve_flogb>;
+} // End HasSVE2orSME, UseExperimentalZeroingPseudos
+
+let Predicates = [HasSVE2orSME] in {
   // SVE2 floating-point convert precision
   defm FCVTXNT_ZPmZ : sve2_fp_convert_down_odd_rounding_top<"fcvtxnt", "int_aarch64_sve_fcvtxnt">;
   defm FCVTX_ZPmZ   : sve2_fp_convert_down_odd_rounding<"fcvtx",       "int_aarch64_sve_fcvtx">;
