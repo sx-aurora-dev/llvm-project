@@ -24,7 +24,7 @@
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/FIROpsSupport.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
-#include "flang/Optimizer/Support/FIRContext.h"
+#include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -119,9 +119,13 @@ public:
   mlir::ModuleOp getModule() { return getOperation(); }
 
   template <typename A, typename B, typename C>
-  std::function<mlir::Value(mlir::Operation *)>
+  std::optional<std::function<mlir::Value(mlir::Operation *)>>
   rewriteCallComplexResultType(mlir::Location loc, A ty, B &newResTys,
                                B &newInTys, C &newOpers) {
+    if (noComplexConversion) {
+      newResTys.push_back(ty);
+      return std::nullopt;
+    }
     auto m = specifics->complexReturnType(loc, ty.getElementType());
     // Currently targets mandate COMPLEX is a single aggregate or packed
     // scalar, including the sret case.
@@ -153,6 +157,12 @@ public:
   template <typename A, typename B, typename C>
   void rewriteCallComplexInputType(A ty, mlir::Value oper, B &newInTys,
                                    C &newOpers) {
+    if (noComplexConversion) {
+      newInTys.push_back(ty);
+      newOpers.push_back(oper);
+      return;
+    }
+
     auto *ctx = ty.getContext();
     mlir::Location loc = mlir::UnknownLoc::get(ctx);
     if (auto *op = oper.getDefiningOp())
@@ -245,6 +255,11 @@ public:
           .template Case<fir::BoxCharType>([&](fir::BoxCharType boxTy) {
             bool sret;
             if constexpr (std::is_same_v<std::decay_t<A>, fir::CallOp>) {
+              if (noCharacterConversion) {
+                newInTys.push_back(boxTy);
+                newOpers.push_back(oper);
+                return;
+              }
               sret = callOp.getCallee() &&
                      functionArgIsSRet(
                          index, getModule().lookupSymbol<mlir::func::FuncOp>(
@@ -453,6 +468,16 @@ public:
     return mlir::success();
   }
 
+  // Returns true if the function should be interoperable with C.
+  static bool isFuncWithCCallingConvention(mlir::Operation *op) {
+    auto funcOp = mlir::dyn_cast<mlir::func::FuncOp>(op);
+    if (!funcOp)
+      return false;
+    return op->hasAttrOfType<mlir::UnitAttr>(
+               fir::FIROpsDialect::getFirRuntimeAttrName()) ||
+           op->hasAttrOfType<mlir::StringAttr>(fir::getSymbolAttrName());
+  }
+
   /// If the signature does not need any special target-specific conversions,
   /// then it is considered portable for any target, and this function will
   /// return `true`. Otherwise, the signature is not portable and `false` is
@@ -460,12 +485,11 @@ public:
   bool hasPortableSignature(mlir::Type signature, mlir::Operation *op) {
     assert(signature.isa<mlir::FunctionType>());
     auto func = signature.dyn_cast<mlir::FunctionType>();
-    bool hasFirRuntime = op->hasAttrOfType<mlir::UnitAttr>(
-        fir::FIROpsDialect::getFirRuntimeAttrName());
+    bool hasCCallingConv = isFuncWithCCallingConvention(op);
     for (auto ty : func.getResults())
       if ((ty.isa<fir::BoxCharType>() && !noCharacterConversion) ||
           (fir::isa_complex(ty) && !noComplexConversion) ||
-          (ty.isa<mlir::IntegerType>() && hasFirRuntime)) {
+          (ty.isa<mlir::IntegerType>() && hasCCallingConv)) {
         LLVM_DEBUG(llvm::dbgs() << "rewrite " << signature << " for target\n");
         return false;
       }
@@ -473,7 +497,7 @@ public:
       if (((ty.isa<fir::BoxCharType>() || fir::isCharacterProcedureTuple(ty)) &&
            !noCharacterConversion) ||
           (fir::isa_complex(ty) && !noComplexConversion) ||
-          (ty.isa<mlir::IntegerType>() && hasFirRuntime)) {
+          (ty.isa<mlir::IntegerType>() && hasCCallingConv)) {
         LLVM_DEBUG(llvm::dbgs() << "rewrite " << signature << " for target\n");
         return false;
       }
@@ -537,9 +561,7 @@ public:
             std::size_t resId = newResTys.size();
             llvm::StringRef extensionAttrName = attr.getIntExtensionAttrName();
             if (!extensionAttrName.empty() &&
-                // TODO: we have to do the same for BIND(C) routines.
-                func->hasAttrOfType<mlir::UnitAttr>(
-                    fir::FIROpsDialect::getFirRuntimeAttrName()))
+                isFuncWithCCallingConvention(func))
               resultAttrs.emplace_back(
                   resId, rewriter->getNamedAttr(extensionAttrName,
                                                 rewriter->getUnitAttr()));
@@ -616,16 +638,14 @@ public:
             auto argNo = newInTys.size();
             llvm::StringRef extensionAttrName = attr.getIntExtensionAttrName();
             if (!extensionAttrName.empty() &&
-                // TODO: we have to do the same for BIND(C) routines.
-                func->hasAttrOfType<mlir::UnitAttr>(
-                    fir::FIROpsDialect::getFirRuntimeAttrName())) {
+                isFuncWithCCallingConvention(func))
               fixups.emplace_back(FixupTy::Codes::ArgumentType, argNo,
                                   [=](mlir::func::FuncOp func) {
                                     func.setArgAttr(
                                         argNo, extensionAttrName,
                                         mlir::UnitAttr::get(func.getContext()));
                                   });
-            }
+
             newInTys.push_back(argTy);
           })
           .Default([&](mlir::Type ty) { newInTys.push_back(ty); });

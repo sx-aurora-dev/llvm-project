@@ -161,7 +161,7 @@ void test_P1361() {
   assert_is_formattable<std::chrono::year_month_weekday, CharT>();
   assert_is_formattable<std::chrono::year_month_weekday_last, CharT>();
 
-  assert_is_not_formattable<std::chrono::hh_mm_ss<std::chrono::microseconds>, CharT>();
+  assert_is_formattable<std::chrono::hh_mm_ss<std::chrono::microseconds>, CharT>();
 
   //assert_is_formattable<std::chrono::sys_info, CharT>();
   //assert_is_formattable<std::chrono::local_info, CharT>();
@@ -199,6 +199,12 @@ template <class CharT, class Vector>
 void test_P2286_vector_bool() {
   assert_is_formattable<Vector, CharT>();
   assert_is_formattable<typename Vector::reference, CharT>();
+
+  // The const_reference shall be a bool.
+  // However libc++ uses a __bit_const_reference<vector> when
+  // _LIBCPP_ABI_BITSET_VECTOR_BOOL_CONST_SUBSCRIPT_RETURN_BOOL is defined.
+  assert_is_formattable<const Vector&, CharT>();
+  assert_is_formattable<typename Vector::const_reference, CharT>();
 }
 
 // Tests for P2286 Formatting ranges

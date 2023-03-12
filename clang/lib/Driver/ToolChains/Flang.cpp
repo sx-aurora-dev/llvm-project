@@ -56,7 +56,15 @@ void Flang::addOtherOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
                   {options::OPT_module_dir, options::OPT_fdebug_module_writer,
                    options::OPT_fintrinsic_modules_path, options::OPT_pedantic,
                    options::OPT_std_EQ, options::OPT_W_Joined,
-                   options::OPT_fconvert_EQ, options::OPT_fpass_plugin_EQ});
+                   options::OPT_fconvert_EQ, options::OPT_fpass_plugin_EQ,
+                   options::OPT_funderscoring, options::OPT_fno_underscoring});
+
+  Arg *stackArrays =
+      Args.getLastArg(options::OPT_Ofast, options::OPT_fstack_arrays,
+                      options::OPT_fno_stack_arrays);
+  if (stackArrays &&
+      !stackArrays->getOption().matches(options::OPT_fno_stack_arrays))
+    CmdArgs.push_back("-fstack-arrays");
 }
 
 void Flang::addPicOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
@@ -244,6 +252,7 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   const Driver &D = TC.getDriver();
   ArgStringList CmdArgs;
+  DiagnosticsEngine &Diags = D.getDiags();
 
   // Invoke ourselves in -fc1 mode.
   CmdArgs.push_back("-fc1");
@@ -291,8 +300,20 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   // to avoid warn_drv_unused_argument.
   Args.getLastArg(options::OPT_fcolor_diagnostics,
                   options::OPT_fno_color_diagnostics);
-  if (D.getDiags().getDiagnosticOptions().ShowColors)
+  if (Diags.getDiagnosticOptions().ShowColors)
     CmdArgs.push_back("-fcolor-diagnostics");
+
+  // LTO mode is parsed by the Clang driver library.
+  LTOKind LTOMode = D.getLTOMode(/* IsOffload */ false);
+  assert(LTOMode != LTOK_Unknown && "Unknown LTO mode.");
+  if (LTOMode == LTOK_Full)
+    CmdArgs.push_back("-flto=full");
+  else if (LTOMode == LTOK_Thin) {
+    Diags.Report(
+        Diags.getCustomDiagID(DiagnosticsEngine::Warning,
+                              "the option '-flto=thin' is a work in progress"));
+    CmdArgs.push_back("-flto=thin");
+  }
 
   // -fPIC and related options.
   addPicOptions(Args, CmdArgs);
@@ -319,6 +340,13 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   for (const Arg *A : Args.filtered(options::OPT_mmlir)) {
     A->claim();
     A->render(Args, CmdArgs);
+  }
+
+  // Remove any unsupported gfortran diagnostic options
+  for (const Arg *A : Args.filtered(options::OPT_flang_ignored_w_Group)) {
+    A->claim();
+    D.Diag(diag::warn_drv_unsupported_diag_option_for_flang)
+        << A->getOption().getName();
   }
 
   // Optimization level for CodeGen.

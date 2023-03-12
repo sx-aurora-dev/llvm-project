@@ -22,7 +22,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFVerifier.h"
@@ -36,13 +35,16 @@
 #include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/FileCollector.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/LLVMDriver.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/thread.h"
+#include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -800,12 +802,14 @@ int main(int argc, char **argv) {
         ErrorOr<vfs::Status> stat = Options.LinkOpts.VFS->status(File.path());
         if (!stat)
           break;
-        FileOffset += stat->getSize();
         if (FileOffset > UINT32_MAX) {
-          WithColor::error() << "the universal binary has a slice with an "
-              "offset exceeds 4GB and will produce an invalid Mach-O file.";
+          WithColor::error() << formatv(
+              "the universal binary has a slice with a starting offset ({0:x}) "
+              "that exceeds 4GB and will produce an invalid Mach-O file.",
+              FileOffset);
           return EXIT_FAILURE;
         }
+        FileOffset += stat->getSize();
       }
       if (!MachOUtils::generateUniversalBinary(TempFiles,
                                                OutputLocationOrErr->DWARFFile,

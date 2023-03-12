@@ -180,6 +180,7 @@ Clang-Tidy Checks
    `concurrency-mt-unsafe <concurrency/mt-unsafe.html>`_,
    `concurrency-thread-canceltype-asynchronous <concurrency/thread-canceltype-asynchronous.html>`_,
    `cppcoreguidelines-avoid-capture-default-when-capturing-this <cppcoreguidelines/avoid-capture-default-when-capturing-this.html>`_,
+   `cppcoreguidelines-avoid-capturing-lambda-coroutines <cppcoreguidelines/avoid-capturing-lambda-coroutines.html>`_,
    `cppcoreguidelines-avoid-const-or-ref-data-members <cppcoreguidelines/avoid-const-or-ref-data-members.html>`_,
    `cppcoreguidelines-avoid-do-while <cppcoreguidelines/avoid-do-while.html>`_,
    `cppcoreguidelines-avoid-goto <cppcoreguidelines/avoid-goto.html>`_,
@@ -244,6 +245,7 @@ Clang-Tidy Checks
    `llvm-twine-local <llvm/twine-local.html>`_, "Yes"
    `llvmlibc-callee-namespace <llvmlibc/callee-namespace.html>`_,
    `llvmlibc-implementation-in-namespace <llvmlibc/implementation-in-namespace.html>`_,
+   `llvmlibc-inline-function-decl <llvmlibc/inline-function-decl.html>`_,
    `llvmlibc-restrict-system-libc-headers <llvmlibc/restrict-system-libc-headers.html>`_, "Yes"
    `misc-confusable-identifiers <misc/confusable-identifiers.html>`_,
    `misc-const-correctness <misc/const-correctness.html>`_, "Yes"

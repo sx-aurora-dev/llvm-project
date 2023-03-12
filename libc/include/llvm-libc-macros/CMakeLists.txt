@@ -21,9 +21,21 @@ add_header(
 )
 
 add_header(
+  fenv_macros
+  HDR
+    fenv-macros.h
+)
+
+add_header(
   file_seek_macros
   HDR
     file-seek-macros.h
+)
+
+add_header(
+  math_macros
+  HDR
+    math-macros.h
 )
 
 add_header(
@@ -105,6 +117,14 @@ add_header(
   sys_select_macros
   HDR
     sys-select-macros.h
+)
+
+add_header(
+  sys_socket_macros
+  HDR
+    sys-socket-macros.h
+  DEPENDS
+    .linux.sys_socket_macros
 )
 
 add_header(

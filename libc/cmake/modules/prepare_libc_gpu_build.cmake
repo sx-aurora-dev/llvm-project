@@ -18,7 +18,7 @@ if(LIBC_GPU_ARCHITECTURES STREQUAL "all")
   set(LIBC_GPU_ARCHITECTURES ${all_gpu_architectures} FORCE)
 endif()
 message(STATUS "Building libc for the following GPU architectures: "
-               "${all_gpu_architectures}")
+               "${LIBC_GPU_ARCHITECTURES}")
 
 # Ensure the compiler is a valid clang when building the GPU target.
 set(req_ver "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
@@ -40,6 +40,25 @@ find_program(LIBC_CLANG_OFFLOAD_PACKAGER
 if(NOT LIBC_CLANG_OFFLOAD_PACKAGER)
   message(FATAL_ERROR "Cannot find the 'clang-offload-packager' for the GPU "
                       "build")
+endif()
+
+set(LIBC_GPU_TEST_ARCHITECTURE "" CACHE STRING "Architecture for the GPU tests")
+if(LIBC_GPU_TEST_ARCHITECTURE)
+  message(STATUS "Using user-specified GPU architecture for testing "
+                 "'${LIBC_GPU_TARGET_ARCHITECTURE}'")
+  if("${LIBC_GPU_TEST_ARCHITECTURE}" IN_LIST all_amdgpu_architectures)
+    set(LIBC_GPU_TARGET_ARCHITECTURE_IS_AMDGPU TRUE)
+    set(LIBC_GPU_TARGET_TRIPLE "amdgcn-amd-amdhsa")
+    set(LIBC_GPU_TARGET_ARCHITECTURE "${LIBC_GPU_TEST_ARCHITECTURE}")
+  elseif("${LIBC_GPU_TEST_ARCHITECTURE}" IN_LIST all_nvptx_architectures)
+    set(LIBC_GPU_TARGET_ARCHITECTURE_IS_NVPTX TRUE)
+    set(LIBC_GPU_TARGET_TRIPLE "nvptx64-nvidia-cuda")
+    set(LIBC_GPU_TARGET_ARCHITECTURE "${LIBC_GPU_TEST_ARCHITECTURE}")
+  else()
+    message(FATAL_ERROR 
+            "Unknown GPU architecture '${LIBC_GPU_TARGET_ARCHITECTURE}'")
+  endif()
+  return()
 endif()
 
 # Identify any locally installed AMD GPUs on the system to use for testing.

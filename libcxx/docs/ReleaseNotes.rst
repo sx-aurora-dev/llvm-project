@@ -37,9 +37,13 @@ What's New in Libc++ 17.0.0?
 
 Implemented Papers
 ------------------
+- P2520R0 - ``move_iterator<T*>`` should be a random access iterator
+- P1328R1 - ``constexpr type_info::operator==()``
 
 Improvements and New Features
 -----------------------------
+- ``std::equal`` and ``std::ranges::equal`` are now forwarding to ``std::memcmp`` for integral types and pointers,
+  which can lead up to 40x performance improvements.
 
 - ``std::string_view`` now provides iterators that check for out-of-bounds accesses when the safe
   libc++ mode is enabled.
@@ -51,12 +55,33 @@ Deprecations and Removals
   has been shipping since LLVM 14, so the Coroutines TS implementation is being removed per our policy
   for removing TSes.
 
+- Several incidental transitive includes have been removed from libc++. Those
+  includes are removed based on the language version used. Incidental transitive
+  inclusions of the following headers have been removed:
+
+  - C++2b: ``atomic``, ``bit``, ``cstring``, ``type_traits``
+
+- The headers ``<experimental/algorithm>`` and ``<experimental/functional>`` have been removed, since all the contents
+  have been implemented in namespace ``std`` for at least two releases.
+
+- The formatter specialization ``template<size_t N> struct formatter<const charT[N], charT>``
+  has been removed. Since libc++'s format library was marked experimental there
+  is no backwards compatibility option. This specialization has been removed
+  from the Standard since it was never used, the proper specialization to use
+  instead is ``template<size_t N> struct formatter<charT[N], charT>``.
+
 Upcoming Deprecations and Removals
 ----------------------------------
 
 - The ``_LIBCPP_AVAILABILITY_CUSTOM_VERBOSE_ABORT_PROVIDED`` macro will not be honored anymore in LLVM 18.
   Please see the updated documentation about the safe libc++ mode and in particular the ``_LIBCPP_VERBOSE_ABORT``
   macro for details.
+
+- The headers ``<experimental/deque>``, ``<experimental/forward_list>``, ``<experimental/list>``,
+  ``<experimental/map>``, ``<experimental/memory_resource>``, ``<experimental/regex>``, ``<experimental/set>``,
+  ``<experimental/string>``, ``<experimental/unordered_map>``, ``<experimental/unordered_set>``,
+  and ``<experimental/vector>`` will be removed in LLVM 18, as all their contents will have been implemented in
+  namespace ``std`` for at least two releases.
 
 API Changes
 -----------
@@ -66,3 +91,7 @@ ABI Affecting Changes
 
 Build System Changes
 --------------------
+
+- Building libc++ and libc++abi for Apple platforms now requires targeting macOS 10.13 and later.
+  This is relevant for vendors building the libc++ shared library and for folks statically linking
+  libc++ into an application that has back-deployment requirements on Apple platforms.

@@ -12,11 +12,11 @@
 
 #include "VEMCAsmInfo.h"
 #include "VEMCExpr.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCTargetOptions.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
 

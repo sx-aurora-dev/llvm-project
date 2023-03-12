@@ -293,9 +293,10 @@ namespace llvm {
       externref      = 195,    // WebAssembly's externref type
       x86amx         = 196,    // This is an X86 AMX value
       i64x8          = 197,    // 8 Consecutive GPRs (AArch64)
+      aarch64svcount = 198,    // AArch64 predicate-as-counter
 
       FIRST_VALUETYPE =  1,    // This is always the beginning of the list.
-      LAST_VALUETYPE = i64x8,  // This always remains at the end of the list.
+      LAST_VALUETYPE = aarch64svcount, // This always remains at the end of the list.
       VALUETYPE_SIZE = LAST_VALUETYPE + 1,
 
       // This is the current maximum for LAST_VALUETYPE.
@@ -352,6 +353,12 @@ namespace llvm {
     bool operator>=(const MVT& S) const { return SimpleTy >= S.SimpleTy; }
     bool operator<=(const MVT& S) const { return SimpleTy <= S.SimpleTy; }
 
+    /// Support for debugging, callable in GDB: VT.dump()
+    void dump() const;
+
+    /// Implement operator<<.
+    void print(raw_ostream &OS) const;
+
     /// Return true if this is a valid simple valuetype.
     bool isValid() const {
       return (SimpleTy >= MVT::FIRST_VALUETYPE &&
@@ -395,6 +402,16 @@ namespace llvm {
     bool isScalableVector() const {
       return (SimpleTy >= MVT::FIRST_SCALABLE_VECTOR_VALUETYPE &&
               SimpleTy <= MVT::LAST_SCALABLE_VECTOR_VALUETYPE);
+    }
+
+    /// Return true if this is a custom target type that has a scalable size.
+    bool isScalableTargetExtVT() const {
+      return SimpleTy == MVT::aarch64svcount;
+    }
+
+    /// Return true if the type is a scalable type.
+    bool isScalableVT() const {
+      return isScalableVector() || isScalableTargetExtVT();
     }
 
     bool isFixedLengthVector() const {
@@ -980,6 +997,7 @@ namespace llvm {
       case v2i8:
       case v1i16:
       case v1f16: return TypeSize::Fixed(16);
+      case aarch64svcount:
       case nxv16i1:
       case nxv2i8:
       case nxv1i16:
@@ -1598,6 +1616,11 @@ namespace llvm {
     }
     /// @}
   };
+
+  inline raw_ostream &operator<<(raw_ostream &OS, const MVT &VT) {
+    VT.print(OS);
+    return OS;
+  }
 
 } // end namespace llvm
 

@@ -209,7 +209,7 @@ def note_incompatible_analyzer_plugin_api : Note<
 def err_module_build_requires_fmodules : Error<
   "module compilation requires '-fmodules'">;
 def err_module_interface_requires_cpp_modules : Error<
-  "module interface compilation requires '-std=c++20' or '-fmodules-ts'">;
+  "module interface compilation requires '-std=c++20'">;
 def warn_module_config_mismatch : Warning<
   "module file %0 cannot be loaded due to a configuration mismatch with the current "
   "compilation">, InGroup<DiagGroup<"module-file-config-mismatch">>, DefaultError;
@@ -278,6 +278,10 @@ def err_avx_calling_convention : Error<warn_avx_calling_convention.Summary>;
 def err_alias_to_undefined : Error<
   "%select{alias|ifunc}0 must point to a defined "
   "%select{variable or |}1function">;
+def note_alias_requires_mangled_name : Note<
+  "the %select{function or variable|function}0 specified in an %select{alias|ifunc}1 must refer to its mangled name">;
+def note_alias_mangled_name_alternative: Note<
+  "function by that name is mangled as \"%0\"">;
 def warn_alias_to_weak_alias : Warning<
   "%select{alias|ifunc}2 will always resolve to %0 even if weak definition of "
   "%1 is overridden">,

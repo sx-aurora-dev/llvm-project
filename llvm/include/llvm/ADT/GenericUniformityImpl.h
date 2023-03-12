@@ -1,4 +1,4 @@
-﻿//===- GenericUniformAnalysis.cpp --------------------*- C++ -*------------===//
+﻿//===- GenericUniformityImpl.h -----------------------*- C++ -*------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -784,6 +784,9 @@ bool GenericUniformityAnalysisImpl<ContextT>::markDivergent(
     return false;
   }
 
+  if (isAlwaysUniform(I))
+    return false;
+
   return markDefsDivergent(I);
 }
 
@@ -811,10 +814,10 @@ void GenericUniformityAnalysisImpl<ContextT>::analyzeTemporalDivergence(
 
   LLVM_DEBUG(dbgs() << "Analyze temporal divergence: " << Context.print(&I)
                     << "\n");
-  if (!usesValueFromCycle(I, OuterDivCycle))
+  if (isAlwaysUniform(I))
     return;
 
-  if (isAlwaysUniform(I))
+  if (!usesValueFromCycle(I, OuterDivCycle))
     return;
 
   if (markDivergent(I))
@@ -876,6 +879,11 @@ void GenericUniformityAnalysisImpl<ContextT>::analyzeCycleExitDivergence(
     }
     if (!Promoted)
       break;
+
+    // Restore the set property for the temporary vector
+    llvm::sort(Temp);
+    Temp.erase(std::unique(Temp.begin(), Temp.end()), Temp.end());
+
     DomFrontier = Temp;
   }
 
@@ -947,10 +955,6 @@ void GenericUniformityAnalysisImpl<ContextT>::taintAndPushAllDefs(
     if (I.isTerminator())
       break;
 
-    // Mark this as divergent. We don't check if the instruction is
-    // always uniform. In a cycle where the thread convergence is not
-    // statically known, the instruction is not statically converged,
-    // and its outputs cannot be statically uniform.
     if (markDivergent(I))
       Worklist.push_back(&I);
   }
@@ -963,7 +967,14 @@ void GenericUniformityAnalysisImpl<ContextT>::taintAndPushPhiNodes(
   LLVM_DEBUG(dbgs() << "taintAndPushPhiNodes in " << Context.print(&JoinBlock)
                     << "\n");
   for (const auto &Phi : JoinBlock.phis()) {
-    if (ContextT::isConstantValuePhi(Phi))
+    // FIXME: The non-undef value is not constant per se; it just happens to be
+    // uniform and may not dominate this PHI. So assuming that the same value
+    // reaches along all incoming edges may itself be undefined behaviour. This
+    // particular interpretation of the undef value was added to
+    // DivergenceAnalysis in the following review:
+    //
+    // https://reviews.llvm.org/D19013
+    if (ContextT::isConstantOrUndefValuePhi(Phi))
       continue;
     if (markDivergent(Phi))
       Worklist.push_back(&Phi);
@@ -1255,6 +1266,11 @@ bool GenericUniformityInfo<ContextT>::hasDivergence() const {
 template <typename ContextT>
 bool GenericUniformityInfo<ContextT>::isDivergent(ConstValueRefT V) const {
   return DA->isDivergent(V);
+}
+
+template <typename ContextT>
+bool GenericUniformityInfo<ContextT>::isDivergent(const InstructionT *I) const {
+  return DA->isDivergent(*I);
 }
 
 template <typename ContextT>

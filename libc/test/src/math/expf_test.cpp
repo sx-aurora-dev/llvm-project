@@ -7,10 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/__support/FPUtil/FPBits.h"
+#include "src/errno/libc_errno.h"
 #include "src/math/expf.h"
+#include "test/UnitTest/FPMatcher.h"
+#include "test/UnitTest/Test.h"
 #include "utils/MPFRWrapper/MPFRUtils.h"
-#include "utils/UnitTest/FPMatcher.h"
-#include "utils/UnitTest/Test.h"
 #include <math.h>
 
 #include <errno.h>
@@ -21,7 +22,7 @@ namespace mpfr = __llvm_libc::testing::mpfr;
 DECLARE_SPECIAL_CONSTANTS(float)
 
 TEST(LlvmLibcExpfTest, SpecialNumbers) {
-  errno = 0;
+  libc_errno = 0;
 
   EXPECT_FP_EQ(aNaN, __llvm_libc::expf(aNaN));
   EXPECT_MATH_ERRNO(0);
@@ -40,20 +41,24 @@ TEST(LlvmLibcExpfTest, SpecialNumbers) {
 }
 
 TEST(LlvmLibcExpfTest, Overflow) {
-  errno = 0;
-  EXPECT_FP_EQ(inf, __llvm_libc::expf(float(FPBits(0x7f7fffffU))));
+  libc_errno = 0;
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::expf(float(FPBits(0x7f7fffffU))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 
-  EXPECT_FP_EQ(inf, __llvm_libc::expf(float(FPBits(0x42cffff8U))));
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::expf(float(FPBits(0x42cffff8U))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 
-  EXPECT_FP_EQ(inf, __llvm_libc::expf(float(FPBits(0x42d00008U))));
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::expf(float(FPBits(0x42d00008U))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 }
 
 TEST(LlvmLibcExpfTest, Underflow) {
-  errno = 0;
-  EXPECT_FP_EQ(0.0f, __llvm_libc::expf(float(FPBits(0xff7fffffU))));
+  libc_errno = 0;
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      0.0f, __llvm_libc::expf(float(FPBits(0xff7fffffU))), FE_UNDERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 
   float x = float(FPBits(0xc2cffff8U));
@@ -72,7 +77,7 @@ TEST(LlvmLibcExpfTest, Underflow) {
 TEST(LlvmLibcExpfTest, Borderline) {
   float x;
 
-  errno = 0;
+  libc_errno = 0;
   x = float(FPBits(0x42affff8U));
   ASSERT_MPFR_MATCH_ALL_ROUNDING(mpfr::Operation::Exp, x, __llvm_libc::expf(x),
                                  0.5);
@@ -106,7 +111,7 @@ TEST(LlvmLibcExpfTest, InFloatRange) {
     float x = float(FPBits(v));
     if (isnan(x) || isinf(x))
       continue;
-    errno = 0;
+    libc_errno = 0;
     float result = __llvm_libc::expf(x);
 
     // If the computation resulted in an error or did not produce valid result

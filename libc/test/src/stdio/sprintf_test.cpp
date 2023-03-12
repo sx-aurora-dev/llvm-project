@@ -10,7 +10,7 @@
 
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/__support/FPUtil/PlatformDefs.h"
-#include "utils/UnitTest/Test.h"
+#include "test/UnitTest/Test.h"
 #include "utils/testutils/RoundingModeUtils.h"
 
 // #include <stdio.h>
@@ -502,7 +502,7 @@ TEST(LlvmLibcSPrintfTest, OctConv) {
   ASSERT_STREQ(buff, "0077 01000000000000 002   ");
 }
 
-#ifndef LLVM_LIBC_PRINTF_DISABLE_FLOAT
+#ifndef LIBC_COPT_PRINTF_DISABLE_FLOAT
 
 TEST_F(LlvmLibcSPrintfTest, FloatHexExpConv) {
   __llvm_libc::testutils::ForceRoundingMode r(
@@ -1139,6 +1139,13 @@ TEST_F(LlvmLibcSPrintfTest, FloatDecimalConv) {
 
   written = __llvm_libc::sprintf(buff, "%.5f", 1.008e3);
   ASSERT_STREQ_LEN(written, buff, "1008.00000");
+
+  // Found with the help of Fred Tydeman's tbin2dec test.
+  written = __llvm_libc::sprintf(buff, "%.1f", 0x1.1000000000006p+3);
+  ASSERT_STREQ_LEN(written, buff, "8.5");
+
+  written = __llvm_libc::sprintf(buff, "%.0f", 0x1.1000000000006p+3);
+  ASSERT_STREQ_LEN(written, buff, "9");
 
   // Subnormal Precision Tests
 
@@ -2662,9 +2669,9 @@ TEST_F(LlvmLibcSPrintfTest, FloatAutoConv) {
   ASSERT_STREQ_LEN(written, buff, "+0.126        0001.26e+03");
 }
 
-#endif // LLVM_LIBC_PRINTF_DISABLE_FLOAT
+#endif // LIBC_COPT_PRINTF_DISABLE_FLOAT
 
-#ifndef LLVM_LIBC_PRINTF_DISABLE_WRITE_INT
+#ifndef LIBC_COPT_PRINTF_DISABLE_WRITE_INT
 TEST(LlvmLibcSPrintfTest, WriteIntConv) {
   char buff[64];
   int written;
@@ -2697,9 +2704,9 @@ TEST(LlvmLibcSPrintfTest, WriteIntConv) {
   written = __llvm_libc::sprintf(buff, "abc123%n", nullptr);
   EXPECT_LT(written, 0);
 }
-#endif // LLVM_LIBC_PRINTF_DISABLE_WRITE_INT
+#endif // LIBC_COPT_PRINTF_DISABLE_WRITE_INT
 
-#ifndef LLVM_LIBC_PRINTF_DISABLE_INDEX_MODE
+#ifndef LIBC_COPT_PRINTF_DISABLE_INDEX_MODE
 TEST(LlvmLibcSPrintfTest, IndexModeParsing) {
   char buff[64];
   int written;
@@ -2724,4 +2731,4 @@ TEST(LlvmLibcSPrintfTest, IndexModeParsing) {
   EXPECT_EQ(written, 45);
   ASSERT_STREQ(buff, "why would u do this, this is such   a pain. %");
 }
-#endif // LLVM_LIBC_PRINTF_DISABLE_INDEX_MODE
+#endif // LIBC_COPT_PRINTF_DISABLE_INDEX_MODE

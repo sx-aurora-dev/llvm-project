@@ -422,11 +422,11 @@ define ptr @tautological_select_like_phi(i32 %tc) {
 ; CHECK-LABEL: 'tautological_select_like_phi'
 ; CHECK-NEXT:  Classifying expressions for: @tautological_select_like_phi
 ; CHECK-NEXT:    %iv = phi i32 [ 0, %entry ], [ %iv.next, %latch ]
-; CHECK-NEXT:    --> {0,+,1}<%loop> U: [0,101) S: [0,101) Exits: 100 LoopDispositions: { %loop: Computable }
+; CHECK-NEXT:    --> {0,+,1}<nuw><nsw><%loop> U: [0,101) S: [0,101) Exits: 100 LoopDispositions: { %loop: Computable }
 ; CHECK-NEXT:    %r = phi ptr [ @constant, %truebb ], [ @another_constant, %falsebb ]
 ; CHECK-NEXT:    --> %r U: [0,-3) S: [-9223372036854775808,9223372036854775805) Exits: <<Unknown>> LoopDispositions: { %loop: Variant }
 ; CHECK-NEXT:    %iv.next = add i32 %iv, 1
-; CHECK-NEXT:    --> {1,+,1}<%loop> U: [1,102) S: [1,102) Exits: 101 LoopDispositions: { %loop: Computable }
+; CHECK-NEXT:    --> {1,+,1}<nuw><nsw><%loop> U: [1,102) S: [1,102) Exits: 101 LoopDispositions: { %loop: Computable }
 ; CHECK-NEXT:  Determining loop execution counts for: @tautological_select_like_phi
 ; CHECK-NEXT:  Loop %loop: backedge-taken count is 100
 ; CHECK-NEXT:  Loop %loop: constant max backedge-taken count is 100
@@ -707,9 +707,9 @@ define i32 @umin_seq_x_y_zext_of_umin(i8 %x, i8 %y) {
 ; CHECK-NEXT:    %umin.narrow = call i8 @llvm.umin.i8(i8 %y, i8 %x)
 ; CHECK-NEXT:    --> (%x umin %y) U: full-set S: full-set
 ; CHECK-NEXT:    %umin = zext i8 %umin.narrow to i32
-; CHECK-NEXT:    --> (zext i8 (%x umin %y) to i32) U: [0,256) S: [0,256)
+; CHECK-NEXT:    --> ((zext i8 %x to i32) umin (zext i8 %y to i32)) U: [0,256) S: [0,256)
 ; CHECK-NEXT:    %r = select i1 %x.is.zero, i32 0, i32 %umin
-; CHECK-NEXT:    --> ((zext i8 %x to i32) umin_seq (zext i8 (%x umin %y) to i32)) U: [0,256) S: [0,256)
+; CHECK-NEXT:    --> ((zext i8 %x to i32) umin_seq (zext i8 %y to i32)) U: [0,256) S: [0,256)
 ; CHECK-NEXT:  Determining loop execution counts for: @umin_seq_x_y_zext_of_umin
 ;
   %umin.narrow = call i8 @llvm.umin.i8(i8 %y, i8 %x)

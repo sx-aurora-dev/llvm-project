@@ -86,8 +86,8 @@ define fastcc <512 x double> @test_vp_ffma_vvv_512f64(<512 x double> %i0, <512 x
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmad.d %v1, %v5, %v1, %v3
-; CHECK-NEXT:    vfmad.d %v0, %v4, %v0, %v2
+; CHECK-NEXT:    vfmad.d %v1, %v1, %v3, %v5
+; CHECK-NEXT:    vfmad.d %v0, %v0, %v2, %v4
 ; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %mul = call contract <512 x double> @llvm.vp.fmul.v512f64(<512 x double> %i0, <512 x double> %i1, <512 x i1> %m, i32 %n)
@@ -102,8 +102,8 @@ define fastcc <512 x double> @test_vp_ffma_rvv_512f64(double %s0, <512 x double>
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.d %v1, %v3, %s0, %v1
-; CHECK-NEXT:    vfmad.d %v0, %v2, %s0, %v0
+; CHECK-NEXT:    vfmad.d %v1, %s0, %v1, %v3
+; CHECK-NEXT:    vfmad.d %v0, %s0, %v0, %v2
 ; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b0 = insertelement <512 x double> undef, double %s0, i32 0
@@ -120,8 +120,8 @@ define fastcc <512 x double> @test_vp_ffma_vrv_512f64(<512 x double> %i0, double
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.d %v1, %v3, %s0, %v1
-; CHECK-NEXT:    vfmad.d %v0, %v2, %s0, %v0
+; CHECK-NEXT:    vfmad.d %v1, %v1, %s0, %v3
+; CHECK-NEXT:    vfmad.d %v0, %v0, %s0, %v2
 ; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b1 = insertelement <512 x double> undef, double %s1, i32 0
@@ -138,8 +138,8 @@ define fastcc <512 x double> @test_vp_ffma_vvr_512f64(<512 x double> %i0, <512 x
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.d %v1, %s0, %v1, %v3
-; CHECK-NEXT:    vfmad.d %v0, %s0, %v0, %v2
+; CHECK-NEXT:    vfmad.d %v1, %v1, %s0, %v3
+; CHECK-NEXT:    vfmad.d %v0, %v0, %s0, %v2
 ; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b2 = insertelement <512 x double> undef, double %s2, i32 0
