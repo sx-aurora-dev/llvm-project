@@ -1321,7 +1321,7 @@ define noundef zeroext i1 @_Z30atomic_cmp_swap_relaxed_stk_i1Rbb(ptr nocapture n
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic", align 1
+  %3 = alloca %"struct.std::__1::atomic", align 8
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3)
   %4 = zext i1 %1 to i8
   %5 = load i8, ptr %0, align 1
@@ -1370,7 +1370,7 @@ define noundef signext i8 @_Z30atomic_cmp_swap_relaxed_stk_i8Rcc(ptr nocapture n
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.0", align 1
+  %3 = alloca %"struct.std::__1::atomic.0", align 8
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3)
   %4 = load i8, ptr %0, align 1
   %5 = cmpxchg weak volatile ptr %3, i8 %4, i8 %1 monotonic monotonic, align 1
@@ -1412,7 +1412,7 @@ define noundef zeroext i8 @_Z30atomic_cmp_swap_relaxed_stk_u8Rhh(ptr nocapture n
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.5", align 1
+  %3 = alloca %"struct.std::__1::atomic.5", align 8
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3)
   %4 = load i8, ptr %0, align 1
   %5 = cmpxchg weak volatile ptr %3, i8 %4, i8 %1 monotonic monotonic, align 1
@@ -1455,7 +1455,7 @@ define noundef signext i16 @_Z31atomic_cmp_swap_relaxed_stk_i16Rss(ptr nocapture
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.10", align 2
+  %3 = alloca %"struct.std::__1::atomic.10", align 8
   call void @llvm.lifetime.start.p0(i64 2, ptr nonnull %3)
   %4 = load i16, ptr %0, align 2
   %5 = cmpxchg weak volatile ptr %3, i16 %4, i16 %1 monotonic monotonic, align 2
@@ -1497,7 +1497,7 @@ define noundef zeroext i16 @_Z31atomic_cmp_swap_relaxed_stk_u16Rtt(ptr nocapture
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.15", align 2
+  %3 = alloca %"struct.std::__1::atomic.15", align 8
   call void @llvm.lifetime.start.p0(i64 2, ptr nonnull %3)
   %4 = load i16, ptr %0, align 2
   %5 = cmpxchg weak volatile ptr %3, i16 %4, i16 %1 monotonic monotonic, align 2
@@ -1531,7 +1531,7 @@ define noundef signext i32 @_Z31atomic_cmp_swap_relaxed_stk_i32Rii(ptr nocapture
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.20", align 4
+  %3 = alloca %"struct.std::__1::atomic.20", align 8
   call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %3)
   %4 = load i32, ptr %0, align 4
   %5 = cmpxchg weak volatile ptr %3, i32 %4, i32 %1 monotonic monotonic, align 4
@@ -1565,7 +1565,7 @@ define noundef zeroext i32 @_Z31atomic_cmp_swap_relaxed_stk_u32Rjj(ptr nocapture
 ; CHECK-NEXT:    and %s0, 1, %s2
 ; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = alloca %"struct.std::__1::atomic.25", align 4
+  %3 = alloca %"struct.std::__1::atomic.25", align 8
   call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %3)
   %4 = load i32, ptr %0, align 4
   %5 = cmpxchg weak volatile ptr %3, i32 %4, i32 %1 monotonic monotonic, align 4

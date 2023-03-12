@@ -49,6 +49,7 @@ FunctionPass *createSIFormMemoryClausesPass();
 FunctionPass *createSIPostRABundlerPass();
 FunctionPass *createAMDGPUSimplifyLibCallsPass(const TargetMachine *);
 FunctionPass *createAMDGPUUseNativeCallsPass();
+ModulePass *createAMDGPURemoveIncompatibleFunctionsPass(const TargetMachine *);
 FunctionPass *createAMDGPUCodeGenPreparePass();
 FunctionPass *createAMDGPULateCodeGenPreparePass();
 FunctionPass *createAMDGPUMachineCFGStructurizerPass();
@@ -288,6 +289,9 @@ extern char &AMDGPUAnnotateUniformValuesPassID;
 void initializeAMDGPUCodeGenPreparePass(PassRegistry&);
 extern char &AMDGPUCodeGenPrepareID;
 
+void initializeAMDGPURemoveIncompatibleFunctionsPass(PassRegistry &);
+extern char &AMDGPURemoveIncompatibleFunctionsID;
+
 void initializeAMDGPULateCodeGenPreparePass(PassRegistry &);
 extern char &AMDGPULateCodeGenPrepareID;
 
@@ -421,6 +425,12 @@ inline bool isFlatGlobalAddrSpace(unsigned AS) {
   return AS == AMDGPUAS::GLOBAL_ADDRESS ||
          AS == AMDGPUAS::FLAT_ADDRESS ||
          AS == AMDGPUAS::CONSTANT_ADDRESS ||
+         AS > AMDGPUAS::MAX_AMDGPU_ADDRESS;
+}
+
+inline bool isExtendedGlobalAddrSpace(unsigned AS) {
+  return AS == AMDGPUAS::GLOBAL_ADDRESS || AS == AMDGPUAS::CONSTANT_ADDRESS ||
+         AS == AMDGPUAS::CONSTANT_ADDRESS_32BIT ||
          AS > AMDGPUAS::MAX_AMDGPU_ADDRESS;
 }
 }

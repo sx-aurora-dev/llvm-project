@@ -20,6 +20,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include <optional>
 
 using namespace mlir;
 using namespace mlir::detail;
@@ -288,7 +289,7 @@ struct OpReplacement {
 enum class BlockActionKind {
   Create,
   Erase,
-  Merge,
+  Inline,
   Move,
   Split,
   TypeConversion
@@ -301,13 +302,14 @@ struct BlockPosition {
   Block *insertAfterBlock;
 };
 
-/// Information needed to undo the merge actions.
-/// - the source block, and
-/// - the Operation that was the last operation in the dest block before the
-///   merge (could be null if the dest block was empty).
-struct MergeInfo {
+/// Information needed to undo inlining actions.
+/// - the source block
+/// - the first inlined operation (could be null if the source block was empty)
+/// - the last inlined operation (could be null if the source block was empty)
+struct InlineInfo {
   Block *sourceBlock;
-  Operation *destBlockLastInst;
+  Operation *firstInlinedInst;
+  Operation *lastInlinedInst;
 };
 
 /// The storage class for an undoable block action (one of BlockActionKind),
@@ -319,9 +321,12 @@ struct BlockAction {
   static BlockAction getErase(Block *block, BlockPosition originalPosition) {
     return {BlockActionKind::Erase, block, {originalPosition}};
   }
-  static BlockAction getMerge(Block *block, Block *sourceBlock) {
-    BlockAction action{BlockActionKind::Merge, block, {}};
-    action.mergeInfo = {sourceBlock, block->empty() ? nullptr : &block->back()};
+  static BlockAction getInline(Block *block, Block *srcBlock,
+                               Block::iterator before) {
+    BlockAction action{BlockActionKind::Inline, block, {}};
+    action.inlineInfo = {srcBlock,
+                         srcBlock->empty() ? nullptr : &srcBlock->front(),
+                         srcBlock->empty() ? nullptr : &srcBlock->back()};
     return action;
   }
   static BlockAction getMove(Block *block, BlockPosition originalPosition) {
@@ -343,16 +348,16 @@ struct BlockAction {
   Block *block;
 
   union {
-    // In use if kind == BlockActionKind::Move or BlockActionKind::Erase, and
+    // In use if kind == BlockActionKind::Inline or BlockActionKind::Erase, and
     // contains a pointer to the region that originally contained the block as
     // well as the position of the block in that region.
     BlockPosition originalPosition;
     // In use if kind == BlockActionKind::Split and contains a pointer to the
     // block that was split into two parts.
     Block *originalBlock;
-    // In use if kind == BlockActionKind::Merge, and contains the information
-    // needed to undo the merge.
-    MergeInfo mergeInfo;
+    // In use if kind == BlockActionKind::Inline, and contains the information
+    // needed to undo the inlining.
+    InlineInfo inlineInfo;
   };
 };
 
@@ -944,8 +949,9 @@ struct ConversionPatternRewriterImpl {
   /// Notifies that a block was split.
   void notifySplitBlock(Block *block, Block *continuation);
 
-  /// Notifies that `block` is being merged with `srcBlock`.
-  void notifyBlocksBeingMerged(Block *block, Block *srcBlock);
+  /// Notifies that a block is being inlined into another block.
+  void notifyBlockBeingInlined(Block *block, Block *srcBlock,
+                               Block::iterator before);
 
   /// Notifies that the blocks of a region are about to be moved.
   void notifyRegionIsBeingInlinedBefore(Region &region, Region &parent,
@@ -1212,18 +1218,17 @@ void ConversionPatternRewriterImpl::undoBlockActions(
                        action.block);
       break;
     }
-    // Split the block at the position which was originally the end of the
-    // destination block (owned by action), and put the instructions back into
-    // the block used before the merge.
-    case BlockActionKind::Merge: {
-      Block *sourceBlock = action.mergeInfo.sourceBlock;
-      Block::iterator splitPoint =
-          (action.mergeInfo.destBlockLastInst
-               ? ++Block::iterator(action.mergeInfo.destBlockLastInst)
-               : action.block->begin());
-      sourceBlock->getOperations().splice(sourceBlock->begin(),
-                                          action.block->getOperations(),
-                                          splitPoint, action.block->end());
+    // Put the instructions from the destination block (owned by the action)
+    // back into the source block.
+    case BlockActionKind::Inline: {
+      Block *sourceBlock = action.inlineInfo.sourceBlock;
+      if (action.inlineInfo.firstInlinedInst) {
+        assert(action.inlineInfo.lastInlinedInst && "expected operation");
+        sourceBlock->getOperations().splice(
+            sourceBlock->begin(), action.block->getOperations(),
+            Block::iterator(action.inlineInfo.firstInlinedInst),
+            ++Block::iterator(action.inlineInfo.lastInlinedInst));
+      }
       break;
     }
     // Move the block back to its original position.
@@ -1444,9 +1449,9 @@ void ConversionPatternRewriterImpl::notifySplitBlock(Block *block,
   blockActions.push_back(BlockAction::getSplit(continuation, block));
 }
 
-void ConversionPatternRewriterImpl::notifyBlocksBeingMerged(Block *block,
-                                                            Block *srcBlock) {
-  blockActions.push_back(BlockAction::getMerge(block, srcBlock));
+void ConversionPatternRewriterImpl::notifyBlockBeingInlined(
+    Block *block, Block *srcBlock, Block::iterator before) {
+  blockActions.push_back(BlockAction::getInline(block, srcBlock, before));
 }
 
 void ConversionPatternRewriterImpl::notifyRegionIsBeingInlinedBefore(
@@ -1494,7 +1499,10 @@ LogicalResult ConversionPatternRewriterImpl::notifyMatchFailure(
 
 ConversionPatternRewriter::ConversionPatternRewriter(MLIRContext *ctx)
     : PatternRewriter(ctx),
-      impl(new detail::ConversionPatternRewriterImpl(*this)) {}
+      impl(new detail::ConversionPatternRewriterImpl(*this)) {
+  setListener(this);
+}
+
 ConversionPatternRewriter::~ConversionPatternRewriter() = default;
 
 void ConversionPatternRewriter::replaceOpWithIf(
@@ -1599,17 +1607,23 @@ Block *ConversionPatternRewriter::splitBlock(Block *block,
   return continuation;
 }
 
-void ConversionPatternRewriter::mergeBlocks(Block *source, Block *dest,
-                                            ValueRange argValues) {
-  impl->notifyBlocksBeingMerged(dest, source);
-  assert(llvm::all_of(source->getPredecessors(),
-                      [dest](Block *succ) { return succ == dest; }) &&
-         "expected 'source' to have no predecessors or only 'dest'");
+void ConversionPatternRewriter::inlineBlockBefore(Block *source, Block *dest,
+                                                  Block::iterator before,
+                                                  ValueRange argValues) {
   assert(argValues.size() == source->getNumArguments() &&
          "incorrect # of argument replacement values");
+#ifndef NDEBUG
+  auto opIgnored = [&](Operation *op) { return impl->isOpIgnored(op); };
+#endif // NDEBUG
+  // The source block will be deleted, so it should not have any users (i.e.,
+  // there should be no predecessors).
+  assert(llvm::all_of(source->getUsers(), opIgnored) &&
+         "expected 'source' to have no predecessors");
+
+  impl->notifyBlockBeingInlined(dest, source, before);
   for (auto it : llvm::zip(source->getArguments(), argValues))
     replaceUsesOfBlockArgument(std::get<0>(it), std::get<1>(it));
-  dest->getOperations().splice(dest->end(), source->getOperations());
+  dest->getOperations().splice(before, source->getOperations());
   eraseBlock(source);
 }
 
@@ -1650,6 +1664,7 @@ void ConversionPatternRewriter::startRootUpdate(Operation *op) {
 }
 
 void ConversionPatternRewriter::finalizeRootUpdate(Operation *op) {
+  PatternRewriter::finalizeRootUpdate(op);
   // There is nothing to do here, we only need to track the operation at the
   // start of the update.
 #ifndef NDEBUG
@@ -3051,6 +3066,54 @@ auto TypeConverter::convertBlockSignature(Block *block)
   if (failed(convertSignatureArgs(block->getArgumentTypes(), conversion)))
     return std::nullopt;
   return conversion;
+}
+
+//===----------------------------------------------------------------------===//
+// Type attribute conversion
+//===----------------------------------------------------------------------===//
+TypeConverter::AttributeConversionResult
+TypeConverter::AttributeConversionResult::result(Attribute attr) {
+  return AttributeConversionResult(attr, resultTag);
+}
+
+TypeConverter::AttributeConversionResult
+TypeConverter::AttributeConversionResult::na() {
+  return AttributeConversionResult(nullptr, naTag);
+}
+
+TypeConverter::AttributeConversionResult
+TypeConverter::AttributeConversionResult::abort() {
+  return AttributeConversionResult(nullptr, abortTag);
+}
+
+bool TypeConverter::AttributeConversionResult::hasResult() const {
+  return impl.getInt() == resultTag;
+}
+
+bool TypeConverter::AttributeConversionResult::isNa() const {
+  return impl.getInt() == naTag;
+}
+
+bool TypeConverter::AttributeConversionResult::isAbort() const {
+  return impl.getInt() == abortTag;
+}
+
+Attribute TypeConverter::AttributeConversionResult::getResult() const {
+  assert(hasResult() && "Cannot get result from N/A or abort");
+  return impl.getPointer();
+}
+
+std::optional<Attribute> TypeConverter::convertTypeAttribute(Type type,
+                                                             Attribute attr) {
+  for (TypeAttributeConversionCallbackFn &fn :
+       llvm::reverse(typeAttributeConversions)) {
+    AttributeConversionResult res = fn(type, attr);
+    if (res.hasResult())
+      return res.getResult();
+    if (res.isAbort())
+      return std::nullopt;
+  }
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//

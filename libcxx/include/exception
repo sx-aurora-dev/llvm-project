@@ -87,6 +87,7 @@ template <class E> void rethrow_if_nested(const E& e);
 #include <__type_traits/is_copy_constructible.h>
 #include <__type_traits/is_final.h>
 #include <__type_traits/is_polymorphic.h>
+#include <__utility/forward.h>
 #include <cstddef>
 #include <cstdlib>
 #include <version>
@@ -221,7 +222,7 @@ template<class _Ep>
 _LIBCPP_INLINE_VISIBILITY exception_ptr
 make_exception_ptr(_Ep __e) _NOEXCEPT
 {
-#ifndef _LIBCPP_NO_EXCEPTIONS
+#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
     try
     {
         throw __e;
@@ -304,7 +305,7 @@ struct __nested
     _LIBCPP_INLINE_VISIBILITY explicit __nested(const _Tp& __t) : _Tp(__t) {}
 };
 
-#ifndef _LIBCPP_NO_EXCEPTIONS
+#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
 template <class _Tp, class _Up, bool>
 struct __throw_with_nested;
 
@@ -313,20 +314,16 @@ struct __throw_with_nested<_Tp, _Up, true> {
     _LIBCPP_NORETURN static inline _LIBCPP_INLINE_VISIBILITY void
     __do_throw(_Tp&& __t)
     {
-        throw __nested<_Up>(static_cast<_Tp&&>(__t));
+        throw __nested<_Up>(std::forward<_Tp>(__t));
     }
 };
 
 template <class _Tp, class _Up>
 struct __throw_with_nested<_Tp, _Up, false> {
     _LIBCPP_NORETURN static inline _LIBCPP_INLINE_VISIBILITY void
-#ifndef _LIBCPP_CXX03_LANG
     __do_throw(_Tp&& __t)
-#else
-    __do_throw (_Tp& __t)
-#endif // _LIBCPP_CXX03_LANG
     {
-        throw static_cast<_Tp&&>(__t);
+        throw std::forward<_Tp>(__t);
     }
 };
 #endif
@@ -336,14 +333,14 @@ _LIBCPP_NORETURN _LIBCPP_HIDE_FROM_ABI
 void
 throw_with_nested(_Tp&& __t)
 {
-#ifndef _LIBCPP_NO_EXCEPTIONS
+#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
     typedef typename decay<_Tp>::type _Up;
     static_assert( is_copy_constructible<_Up>::value, "type thrown must be CopyConstructible");
     __throw_with_nested<_Tp, _Up,
         is_class<_Up>::value &&
         !is_base_of<nested_exception, _Up>::value &&
         !__libcpp_is_final<_Up>::value>::
-            __do_throw(static_cast<_Tp&&>(__t));
+            __do_throw(std::forward<_Tp>(__t));
 #else
     ((void)__t);
     // FIXME: Make this abort

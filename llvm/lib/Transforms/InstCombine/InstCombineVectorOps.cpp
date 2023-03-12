@@ -1129,6 +1129,11 @@ Instruction *InstCombinerImpl::foldAggregateConstructionIntoAggregateReuse(
 /// It should be transformed to:
 ///  %0 = insertvalue { i8, i32 } undef, i8 %y, 0
 Instruction *InstCombinerImpl::visitInsertValueInst(InsertValueInst &I) {
+  if (Value *V = simplifyInsertValueInst(
+          I.getAggregateOperand(), I.getInsertedValueOperand(), I.getIndices(),
+          SQ.getWithInstruction(&I)))
+    return replaceInstUsesWith(I, V);
+
   bool IsRedundant = false;
   ArrayRef<unsigned int> FirstIndices = I.getIndices();
 
@@ -2713,7 +2718,8 @@ static Instruction *foldIdentityPaddedShuffles(ShuffleVectorInst &Shuf) {
 // splatting the first element of the result of the BinOp
 Instruction *InstCombinerImpl::simplifyBinOpSplats(ShuffleVectorInst &SVI) {
   if (!match(SVI.getOperand(1), m_Undef()) ||
-      !match(SVI.getShuffleMask(), m_ZeroMask()))
+      !match(SVI.getShuffleMask(), m_ZeroMask()) ||
+      !SVI.getOperand(0)->hasOneUse())
     return nullptr;
 
   Value *Op0 = SVI.getOperand(0);

@@ -75,8 +75,6 @@ void llvm::GenericUniformityAnalysisImpl<MachineSSAContext>::pushUsers(
     Register Reg) {
   const auto &RegInfo = F.getRegInfo();
   for (MachineInstr &UserInstr : RegInfo.use_instructions(Reg)) {
-    if (isAlwaysUniform(UserInstr))
-      continue;
     if (markDivergent(UserInstr))
       Worklist.push_back(&UserInstr);
   }
@@ -102,7 +100,12 @@ bool llvm::GenericUniformityAnalysisImpl<MachineSSAContext>::usesValueFromCycle(
     if (!Op.isReg() || !Op.readsReg())
       continue;
     auto Reg = Op.getReg();
-    assert(Reg.isVirtual());
+
+    // FIXME: Physical registers need to be properly checked instead of always
+    // returning true
+    if (Reg.isPhysical())
+      return true;
+
     auto *Def = F.getRegInfo().getVRegDef(Reg);
     if (DefCycle.contains(Def->getParent()))
       return true;

@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -38,12 +39,13 @@ static constexpr const char kCompareEqFuncNamePrefix[] = "_sparse_compare_eq_";
 static constexpr const char kPartitionFuncNamePrefix[] = "_sparse_partition_";
 static constexpr const char kBinarySearchFuncNamePrefix[] =
     "_sparse_binary_search_";
-static constexpr const char kSortNonstableFuncNamePrefix[] =
-    "_sparse_sort_nonstable_";
+static constexpr const char kHybridQuickSortFuncNamePrefix[] =
+    "_sparse_hybrid_qsort_";
 static constexpr const char kSortStableFuncNamePrefix[] =
     "_sparse_sort_stable_";
 static constexpr const char kShiftDownFuncNamePrefix[] = "_sparse_shift_down_";
 static constexpr const char kHeapSortFuncNamePrefix[] = "_sparse_heap_sort_";
+static constexpr const char kQuickSortFuncNamePrefix[] = "_sparse_qsort_";
 
 using FuncGeneratorType = function_ref<void(
     OpBuilder &, ModuleOp, func::FuncOp, uint64_t, uint64_t, bool, uint32_t)>;
@@ -916,56 +918,59 @@ static void createHeapSortFunc(OpBuilder &builder, ModuleOp module,
   builder.create<func::ReturnOp>(loc);
 }
 
-/// Creates a function to perform quick sort on the value in the range of
-/// index [lo, hi).
-//
-// The generate IR corresponds to this C like algorithm:
-// void quickSort(lo, hi, data) {
-//   if (lo < hi) {
-//        p = partition(low, high, data);
-//        quickSort(lo, p, data);
-//        quickSort(p + 1, hi, data);
-//   }
-// }
-static void createSortNonstableFunc(OpBuilder &builder, ModuleOp module,
-                                    func::FuncOp func, uint64_t nx, uint64_t ny,
-                                    bool isCoo, uint32_t nTrailingP) {
-  (void)nTrailingP;
-  OpBuilder::InsertionGuard insertionGuard(builder);
-  Block *entryBlock = func.addEntryBlock();
-  builder.setInsertionPointToStart(entryBlock);
-
+/// A helper for generating code to perform quick sort. It partitions [lo, hi),
+/// recursively calls quick sort to process the smaller partition and returns
+/// the bigger partition to be processed by the enclosed while-loop.
+static std::pair<Value, Value>
+createQuickSort(OpBuilder &builder, ModuleOp module, func::FuncOp func,
+                ValueRange args, uint64_t nx, uint64_t ny, bool isCoo,
+                uint32_t nTrailingP) {
   MLIRContext *context = module.getContext();
   Location loc = func.getLoc();
-  ValueRange args = entryBlock->getArguments();
   Value lo = args[loIdx];
   Value hi = args[hiIdx];
-  Value cond =
-      builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, lo, hi);
-  scf::IfOp ifOp = builder.create<scf::IfOp>(loc, cond, /*else=*/false);
-
-  // The if-stmt true branch.
-  builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
   FlatSymbolRefAttr partitionFunc = getMangledSortHelperFunc(
       builder, func, {IndexType::get(context)}, kPartitionFuncNamePrefix, nx,
-      ny, isCoo, args, createPartitionFunc);
-  auto p = builder.create<func::CallOp>(
-      loc, partitionFunc, TypeRange{IndexType::get(context)}, ValueRange(args));
+      ny, isCoo, args.drop_back(nTrailingP), createPartitionFunc);
+  Value p = builder
+                .create<func::CallOp>(loc, partitionFunc,
+                                      TypeRange{IndexType::get(context)},
+                                      args.drop_back(nTrailingP))
+                .getResult(0);
+  Value pP1 =
+      builder.create<arith::AddIOp>(loc, p, constantIndex(builder, loc, 1));
+  Value lenLow = builder.create<arith::SubIOp>(loc, p, lo);
+  Value lenHigh = builder.create<arith::SubIOp>(loc, hi, p);
+  Value cond = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ule,
+                                             lenLow, lenHigh);
 
-  SmallVector<Value> lowOperands{lo, p.getResult(0)};
-  lowOperands.append(args.begin() + xStartIdx, args.end());
-  builder.create<func::CallOp>(loc, func, lowOperands);
+  SmallVector<Type, 2> types(2, lo.getType()); // Only two types.
+  scf::IfOp ifOp = builder.create<scf::IfOp>(loc, types, cond, /*else=*/true);
 
-  SmallVector<Value> highOperands{
-      builder.create<arith::AddIOp>(loc, p.getResult(0),
-                                    constantIndex(builder, loc, 1)),
-      hi};
-  highOperands.append(args.begin() + xStartIdx, args.end());
-  builder.create<func::CallOp>(loc, func, highOperands);
+  Value c0 = constantIndex(builder, loc, 0);
+  auto mayRecursion = [&](Value low, Value high, Value len) {
+    Value cond =
+        builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, len, c0);
+    scf::IfOp ifOp = builder.create<scf::IfOp>(loc, cond, /*else=*/false);
+    builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
+    SmallVector<Value> operands{low, high};
+    operands.append(args.begin() + xStartIdx, args.end());
+    builder.create<func::CallOp>(loc, func, operands);
+    builder.setInsertionPointAfter(ifOp);
+  };
 
-  // After the if-stmt.
+  // Recursively call quickSort to process the smaller partition and return
+  // the bigger partition to be processed by the enclosed while-loop.
+  builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
+  mayRecursion(lo, p, lenLow);
+  builder.create<scf::YieldOp>(loc, ValueRange{pP1, hi});
+
+  builder.setInsertionPointToStart(&ifOp.getElseRegion().front());
+  mayRecursion(pP1, hi, lenHigh);
+  builder.create<scf::YieldOp>(loc, ValueRange{lo, p});
+
   builder.setInsertionPointAfter(ifOp);
-  builder.create<func::ReturnOp>(loc);
+  return std::make_pair(ifOp.getResult(0), ifOp.getResult(1));
 }
 
 /// Creates a function to perform insertion sort on the values in the range of
@@ -1054,6 +1059,153 @@ static void createSortStableFunc(OpBuilder &builder, ModuleOp module,
   builder.create<func::ReturnOp>(loc);
 }
 
+/// Creates a function to perform quick sort or a hybrid quick sort on the
+/// values in the range of index [lo, hi).
+//
+//
+// When nTrailingP == 0, the generated IR corresponds to this C like algorithm:
+// void quickSort(lo, hi, data) {
+//   while (lo + 1 < hi) {
+//        p = partition(low, high, data);
+//        if (len(lo, p) < len(p+1, hi)) {
+//          quickSort(lo, p, data);
+//          lo = p+1;
+//        } else {
+//          quickSort(p + 1, hi, data);
+//          hi = p;
+//        }
+//   }
+// }
+//
+// When nTrailingP == 1, the generated IR corresponds to this C like algorithm:
+// void hybridQuickSort(lo, hi, data, depthLimit) {
+//   while (lo + 1 < hi) {
+//     len = hi - lo;
+//     if (len <= limit) {
+//       insertionSort(lo, hi, data);
+//     } else {
+//       depthLimit --;
+//       if (depthLimit <= 0) {
+//         heapSort(lo, hi, data);
+//       } else {
+//          p = partition(low, high, data);
+//          if (len(lo, p) < len(p+1, hi)) {
+//            quickSort(lo, p, data, depthLimit);
+//            lo = p+1;
+//          } else {
+//            quickSort(p + 1, hi, data, depthLimit);
+//            hi = p;
+//          }
+//       }
+//     }
+//   }
+// }
+//
+static void createQuickSortFunc(OpBuilder &builder, ModuleOp module,
+                                func::FuncOp func, uint64_t nx, uint64_t ny,
+                                bool isCoo, uint32_t nTrailingP) {
+  assert(nTrailingP == 1 || nTrailingP == 0);
+  bool isHybrid = (nTrailingP == 1);
+  OpBuilder::InsertionGuard insertionGuard(builder);
+  Block *entryBlock = func.addEntryBlock();
+  builder.setInsertionPointToStart(entryBlock);
+
+  Location loc = func.getLoc();
+  SmallVector<Value> args;
+  args.append(entryBlock->getArguments().begin(),
+              entryBlock->getArguments().end());
+  Value lo = args[loIdx];
+  Value hi = args[hiIdx];
+  SmallVector<Type, 2> types(2, lo.getType()); // Only two types.
+  scf::WhileOp whileOp =
+      builder.create<scf::WhileOp>(loc, types, SmallVector<Value, 2>{lo, hi});
+
+  // The before-region of the WhileOp.
+  Block *before =
+      builder.createBlock(&whileOp.getBefore(), {}, types, {loc, loc});
+  builder.setInsertionPointToEnd(before);
+  lo = before->getArgument(0);
+  hi = before->getArgument(1);
+  Value loP1 =
+      builder.create<arith::AddIOp>(loc, lo, constantIndex(builder, loc, 1));
+  Value needSort =
+      builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, loP1, hi);
+  builder.create<scf::ConditionOp>(loc, needSort, before->getArguments());
+
+  // The after-region of the WhileOp.
+  Block *after =
+      builder.createBlock(&whileOp.getAfter(), {}, types, {loc, loc});
+  builder.setInsertionPointToEnd(after);
+  lo = after->getArgument(0);
+  hi = after->getArgument(1);
+  args[0] = lo;
+  args[1] = hi;
+
+  if (isHybrid) {
+    Value len = builder.create<arith::SubIOp>(loc, hi, lo);
+    Value lenLimit = constantIndex(builder, loc, 30);
+    Value lenCond = builder.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::ule, len, lenLimit);
+    scf::IfOp lenIf =
+        builder.create<scf::IfOp>(loc, types, lenCond, /*else=*/true);
+
+    // When len <= limit.
+    builder.setInsertionPointToStart(&lenIf.getThenRegion().front());
+    FlatSymbolRefAttr insertionSortFunc = getMangledSortHelperFunc(
+        builder, func, TypeRange(), kSortStableFuncNamePrefix, nx, ny, isCoo,
+        ValueRange(args).drop_back(nTrailingP), createSortStableFunc);
+    builder.create<func::CallOp>(loc, insertionSortFunc, TypeRange(),
+                                 ValueRange(args).drop_back(nTrailingP));
+    builder.create<scf::YieldOp>(loc, ValueRange{lo, lo});
+
+    // When len > limit.
+    builder.setInsertionPointToStart(&lenIf.getElseRegion().front());
+    Value depthLimit = args.back();
+    depthLimit = builder.create<arith::SubIOp>(loc, depthLimit,
+                                               constantI64(builder, loc, 1));
+    Value depthCond =
+        builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ule,
+                                      depthLimit, constantI64(builder, loc, 0));
+    scf::IfOp depthIf =
+        builder.create<scf::IfOp>(loc, types, depthCond, /*else=*/true);
+
+    // When depth exceeds limit.
+    builder.setInsertionPointToStart(&depthIf.getThenRegion().front());
+    FlatSymbolRefAttr heapSortFunc = getMangledSortHelperFunc(
+        builder, func, TypeRange(), kHeapSortFuncNamePrefix, nx, ny, isCoo,
+        ValueRange(args).drop_back(nTrailingP), createHeapSortFunc);
+    builder.create<func::CallOp>(loc, heapSortFunc, TypeRange(),
+                                 ValueRange(args).drop_back(nTrailingP));
+    builder.create<scf::YieldOp>(loc, ValueRange{lo, lo});
+
+    // When depth doesn't exceed limit.
+    builder.setInsertionPointToStart(&depthIf.getElseRegion().front());
+    args.back() = depthLimit;
+    std::tie(lo, hi) =
+        createQuickSort(builder, module, func, args, nx, ny, isCoo, nTrailingP);
+    builder.create<scf::YieldOp>(loc, ValueRange{lo, hi});
+
+    builder.setInsertionPointAfter(depthIf);
+    lo = depthIf.getResult(0);
+    hi = depthIf.getResult(1);
+    builder.create<scf::YieldOp>(loc, ValueRange{lo, hi});
+
+    builder.setInsertionPointAfter(lenIf);
+    lo = lenIf.getResult(0);
+    hi = lenIf.getResult(1);
+  } else {
+    std::tie(lo, hi) =
+        createQuickSort(builder, module, func, args, nx, ny, isCoo, nTrailingP);
+  }
+
+  // New [lo, hi) for the next while-loop iteration.
+  builder.create<scf::YieldOp>(loc, ValueRange{lo, hi});
+
+  // After the while-loop.
+  builder.setInsertionPointAfter(whileOp);
+  builder.create<func::ReturnOp>(loc);
+}
+
 /// Implements the rewriting for operator sort and sort_coo.
 template <typename OpTy>
 LogicalResult matchAndRewriteSortOp(OpTy op, ValueRange xys, uint64_t nx,
@@ -1074,14 +1226,32 @@ LogicalResult matchAndRewriteSortOp(OpTy op, ValueRange xys, uint64_t nx,
   }
 
   auto insertPoint = op->template getParentOfType<func::FuncOp>();
+  if (!insertPoint)
+    return failure();
+
   SmallString<32> funcName;
   FuncGeneratorType funcGenerator;
   uint32_t nTrailingP = 0;
   switch (op.getAlgorithm()) {
-  case SparseTensorSortKind::HybridQuickSort:
+  case SparseTensorSortKind::HybridQuickSort: {
+    funcName = kHybridQuickSortFuncNamePrefix;
+    funcGenerator = createQuickSortFunc;
+    nTrailingP = 1;
+    // As a heuristics, set depthLimit = 2 * log2(n).
+    Value lo = operands[loIdx];
+    Value hi = operands[hiIdx];
+    Value len = rewriter.create<arith::IndexCastOp>(
+        loc, rewriter.getI64Type(),
+        rewriter.create<arith::SubIOp>(loc, hi, lo));
+    Value depthLimit = rewriter.create<arith::SubIOp>(
+        loc, constantI64(rewriter, loc, 64),
+        rewriter.create<math::CountLeadingZerosOp>(loc, len));
+    operands.push_back(depthLimit);
+    break;
+  }
   case SparseTensorSortKind::QuickSort:
-    funcName = kSortNonstableFuncNamePrefix;
-    funcGenerator = createSortNonstableFunc;
+    funcName = kQuickSortFuncNamePrefix;
+    funcGenerator = createQuickSortFunc;
     break;
   case SparseTensorSortKind::InsertionSortStable:
     funcName = kSortStableFuncNamePrefix;

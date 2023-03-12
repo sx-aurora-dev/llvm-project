@@ -511,8 +511,11 @@ mlir::Value fir::FirOpBuilder::createBox(mlir::Location loc,
   }
   mlir::Type boxTy = fir::BoxType::get(elementType);
   mlir::Value tdesc;
-  if (isPolymorphic)
+  if (isPolymorphic) {
+    elementType = fir::updateTypeForUnlimitedPolymorphic(elementType);
     boxTy = fir::ClassType::get(elementType);
+  }
+
   return exv.match(
       [&](const fir::ArrayBoxValue &box) -> mlir::Value {
         mlir::Value empty;
@@ -559,6 +562,17 @@ mlir::Value fir::FirOpBuilder::createBox(mlir::Location loc,
       });
 }
 
+mlir::Value fir::FirOpBuilder::createBox(mlir::Location loc, mlir::Type boxType,
+                                         mlir::Value addr, mlir::Value shape,
+                                         mlir::Value slice,
+                                         llvm::ArrayRef<mlir::Value> lengths,
+                                         mlir::Value tdesc) {
+  mlir::Type valueOrSequenceType = fir::unwrapPassByRefType(boxType);
+  return create<fir::EmboxOp>(
+      loc, boxType, addr, shape, slice,
+      elideLengthsAlreadyInType(valueOrSequenceType, lengths), tdesc);
+}
+
 void fir::FirOpBuilder::dumpFunc() { getFunction().dump(); }
 
 static mlir::Value
@@ -598,6 +612,18 @@ mlir::Value fir::FirOpBuilder::genExtentFromTriplet(mlir::Location loc,
   auto cmp = create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::sgt,
                                          div, zero);
   return create<mlir::arith::SelectOp>(loc, cmp, div, zero);
+}
+
+mlir::Value fir::FirOpBuilder::genAbsentOp(mlir::Location loc,
+                                           mlir::Type argTy) {
+  if (!fir::isCharacterProcedureTuple(argTy))
+    return create<fir::AbsentOp>(loc, argTy);
+
+  auto boxProc =
+      create<fir::AbsentOp>(loc, argTy.cast<mlir::TupleType>().getType(0));
+  mlir::Value charLen = create<fir::UndefOp>(loc, getCharacterLengthType());
+  return fir::factory::createCharacterProcedureTuple(*this, loc, argTy, boxProc,
+                                                     charLen);
 }
 
 void fir::FirOpBuilder::setCommonAttributes(mlir::Operation *op) const {
@@ -1194,7 +1220,7 @@ static bool recordTypeCanBeMemCopied(fir::RecordType recordType) {
     if (fir::unwrapSequenceType(fieldType).isa<fir::RecordType>())
       return false;
     // Allocatable components need deep copy.
-    if (auto boxType = fieldType.dyn_cast<fir::BoxType>())
+    if (auto boxType = fieldType.dyn_cast<fir::BaseBoxType>())
       if (boxType.getEleTy().isa<fir::HeapType>())
         return false;
   }

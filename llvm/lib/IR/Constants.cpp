@@ -874,7 +874,10 @@ Constant *ConstantInt::getBool(Type *Ty, bool V) {
 ConstantInt *ConstantInt::get(LLVMContext &Context, const APInt &V) {
   // get an existing value or the insertion position
   LLVMContextImpl *pImpl = Context.pImpl;
-  std::unique_ptr<ConstantInt> &Slot = pImpl->IntConstants[V];
+  std::unique_ptr<ConstantInt> &Slot =
+      V.isZero()  ? pImpl->IntZeroConstants[V.getBitWidth()]
+      : V.isOne() ? pImpl->IntOneConstants[V.getBitWidth()]
+                  : pImpl->IntConstants[V];
   if (!Slot) {
     // Get the corresponding integer type for the bit width of the value.
     IntegerType *ITy = IntegerType::get(Context, V.getBitWidth());
@@ -2685,11 +2688,6 @@ Constant *ConstantExpr::getOr(Constant *C1, Constant *C2) {
 
 Constant *ConstantExpr::getXor(Constant *C1, Constant *C2) {
   return get(Instruction::Xor, C1, C2);
-}
-
-Constant *ConstantExpr::getUMin(Constant *C1, Constant *C2) {
-  Constant *Cmp = ConstantExpr::getICmp(CmpInst::ICMP_ULT, C1, C2);
-  return getSelect(Cmp, C1, C2);
 }
 
 Constant *ConstantExpr::getShl(Constant *C1, Constant *C2,

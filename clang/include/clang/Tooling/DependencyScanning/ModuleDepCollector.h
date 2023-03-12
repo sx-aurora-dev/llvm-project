@@ -27,6 +27,7 @@ namespace clang {
 namespace tooling {
 namespace dependencies {
 
+class DependencyActionController;
 class DependencyConsumer;
 
 /// Modular dependency that has already been built prior to the dependency scan.
@@ -60,6 +61,27 @@ struct ModuleID {
   bool operator==(const ModuleID &Other) const {
     return ModuleName == Other.ModuleName && ContextHash == Other.ContextHash;
   }
+};
+
+/// P1689ModuleInfo - Represents the needed information of standard C++20
+/// modules for P1689 format.
+struct P1689ModuleInfo {
+  /// The name of the module. This may include `:` for partitions.
+  std::string ModuleName;
+
+  /// Optional. The source path to the module.
+  std::string SourcePath;
+
+  /// If this module is a standard c++ interface unit.
+  bool IsStdCXXModuleInterface = true;
+
+  enum class ModuleType {
+    NamedCXXModule
+    // To be supported
+    // AngleHeaderUnit,
+    // QuoteHeaderUnit
+  };
+  ModuleType Type = ModuleType::NamedCXXModule;
 };
 
 /// An output from a module compilation, such as the path of the module file.
@@ -126,9 +148,9 @@ class ModuleDepCollectorPP final : public PPCallbacks {
 public:
   ModuleDepCollectorPP(ModuleDepCollector &MDC) : MDC(MDC) {}
 
-  void FileChanged(SourceLocation Loc, FileChangeReason Reason,
-                   SrcMgr::CharacteristicKind FileType,
-                   FileID PrevFID) override;
+  void LexedFileChanged(FileID FID, LexedFileChangeReason Reason,
+                        SrcMgr::CharacteristicKind FileType, FileID PrevFID,
+                        SourceLocation Loc) override;
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange,
@@ -180,8 +202,9 @@ class ModuleDepCollector final : public DependencyCollector {
 public:
   ModuleDepCollector(std::unique_ptr<DependencyOutputOptions> Opts,
                      CompilerInstance &ScanInstance, DependencyConsumer &C,
+                     DependencyActionController &Controller,
                      CompilerInvocation OriginalCI, bool OptimizeArgs,
-                     bool EagerLoadModules);
+                     bool EagerLoadModules, bool IsStdModuleP1689Format);
 
   void attachToPreprocessor(Preprocessor &PP) override;
   void attachToASTReader(ASTReader &R) override;
@@ -197,6 +220,8 @@ private:
   CompilerInstance &ScanInstance;
   /// The consumer of collected dependency information.
   DependencyConsumer &Consumer;
+  /// Callbacks for computing dependency information.
+  DependencyActionController &Controller;
   /// Path to the main source file.
   std::string MainFile;
   /// Hash identifying the compilation conditions of the current TU.
@@ -219,6 +244,12 @@ private:
   bool OptimizeArgs;
   /// Whether to set up command-lines to load PCM files eagerly.
   bool EagerLoadModules;
+  /// If we're generating dependency output in P1689 format
+  /// for standard C++ modules.
+  bool IsStdModuleP1689Format;
+
+  std::optional<P1689ModuleInfo> ProvidedStdCXXModule;
+  std::vector<P1689ModuleInfo> RequiredStdCXXModules;
 
   /// Checks whether the module is known as being prebuilt.
   bool isPrebuiltModule(const Module *M);

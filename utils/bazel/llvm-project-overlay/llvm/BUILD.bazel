@@ -204,6 +204,7 @@ cc_library(
         "lib/Support/BLAKE3/blake3.c",
         "lib/Support/BLAKE3/blake3_dispatch.c",
         "lib/Support/BLAKE3/blake3_portable.c",
+        "lib/Support/BLAKE3/llvm_blake3_prefix.h",
     ] + select({
         "@platforms//cpu:aarch64": [
             "lib/Support/BLAKE3/blake3_neon.c",
@@ -437,6 +438,7 @@ cc_library(
         ":DebugInfoCodeView",
         ":DebugInfoDWARF",
         ":DebugInfoPDB",
+        ":Demangle",
         ":MC",
         ":MCDisassembler",
         ":Object",
@@ -522,6 +524,7 @@ cc_library(
         ":MC",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -561,6 +564,7 @@ cc_library(
         ":Demangle",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -828,6 +832,7 @@ cc_library(
         ":Demangle",
         ":Remarks",
         ":Support",
+        ":TargetParser",
         ":attributes_gen",
         ":config",
         ":intrinsic_enums_gen",
@@ -854,6 +859,7 @@ cc_library(
         ":BitstreamReader",
         ":Core",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -871,6 +877,7 @@ cc_library(
         ":DebugInfoCodeView",
         ":MC",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -889,6 +896,7 @@ cc_library(
     deps = [
         ":BinaryFormat",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -955,6 +963,7 @@ cc_library(
         ":MC",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -977,6 +986,7 @@ cc_library(
         ":Object",
         ":Support",
         ":Symbolize",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -993,6 +1003,7 @@ cc_library(
         ":Object",
         ":ProfileData",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -1024,6 +1035,7 @@ cc_library(
         ":Object",
         ":ProfileData",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -1050,6 +1062,7 @@ cc_library(
         ":MC",
         ":Object",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -1073,6 +1086,7 @@ cc_library(
         ":Core",
         ":MC",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -1145,7 +1159,6 @@ cc_library(
     ]),
     hdrs = glob(["include/llvm/Transforms/Utils/*.h"]) + [
         "include/llvm/Transforms/Utils.h",
-        "include/llvm-c/Transforms/Utils.h",
     ],
     copts = llvm_copts,
     deps = [
@@ -1156,6 +1169,7 @@ cc_library(
         ":ProfileData",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -1184,9 +1198,7 @@ cc_library(
         "lib/Transforms/InstCombine/*.cpp",
         "lib/Transforms/InstCombine/*.h",
     ]),
-    hdrs = glob(["include/llvm/Transforms/InstCombine/*.h"]) + [
-        "include/llvm-c/Transforms/InstCombine.h",
-    ],
+    hdrs = glob(["include/llvm/Transforms/InstCombine/*.h"]),
     copts = llvm_copts,
     deps = [
         ":Analysis",
@@ -1237,6 +1249,7 @@ cc_library(
         ":ProfileData",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":config",
     ],
@@ -1267,7 +1280,6 @@ cc_library(
         "lib/Transforms/Scalar/*.h",
     ]),
     hdrs = glob(["include/llvm/Transforms/Scalar/*.h"]) + [
-        "include/llvm-c/Transforms/Scalar.h",
         "include/llvm/Transforms/Scalar.h",
     ],
     copts = llvm_copts,
@@ -1294,7 +1306,6 @@ cc_library(
     hdrs = glob([
         "include/llvm/Transforms/Vectorize/*.h",
     ]) + [
-        "include/llvm-c/Transforms/Vectorize.h",
         "include/llvm/Transforms/Vectorize.h",
     ],
     copts = llvm_copts,
@@ -1377,6 +1388,7 @@ cc_library(
         ":Scalar",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
     ],
 )
@@ -1500,6 +1512,7 @@ cc_library(
         ":Core",
         ":Object",
         ":Support",
+        ":TargetParser",
         ":TransformUtils",
         ":config",
     ],
@@ -1514,8 +1527,6 @@ cc_library(
     hdrs = glob([
         "include/llvm/Transforms/IPO/*.h",
     ]) + [
-        "include/llvm-c/Transforms/IPO.h",
-        "include/llvm-c/Transforms/PassManagerBuilder.h",
         "include/llvm/Transforms/IPO.h",
     ],
     copts = llvm_copts,
@@ -1538,6 +1549,7 @@ cc_library(
         ":Scalar",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":Vectorize",
         ":config",
@@ -1555,6 +1567,7 @@ cc_library(
     deps = [
         ":Core",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -1642,6 +1655,7 @@ cc_library(
         ":Scalar",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":asm_printer_defs",
         ":config",
@@ -1664,6 +1678,7 @@ cc_library(
         ":BinaryFormat",
         ":MC",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -2399,6 +2414,7 @@ cc_library(
         ":Scalar",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":common_transforms",
         ":config",
@@ -2439,6 +2455,7 @@ cc_library(
         ":Passes",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -2492,6 +2509,7 @@ cc_library(
         ":OrcShared",
         ":OrcTargetProcess",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -2555,6 +2573,7 @@ cc_library(
         ":Passes",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":WindowsDriver",
         ":config",
@@ -2615,6 +2634,7 @@ cc_library(
         ":Passes",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -2634,6 +2654,7 @@ cc_library(
         ":MC",
         ":Support",
         ":Target",
+        ":TargetParser",
     ],
 )
 
@@ -2659,6 +2680,7 @@ cc_library(
         ":Object",
         ":Option",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -2704,6 +2726,7 @@ cc_library(
         ":MC",
         ":Object",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -2733,11 +2756,6 @@ cc_library(
         "include/llvm/WindowsManifest/*.h",
     ]),
     copts = llvm_copts,
-    linkopts = [
-        # Libxml2 is required to process Windows manifests. Without this,
-        # lld uses Microsoft mt.exe instead, which is not cross-platform.
-        "-lxml2",
-    ],
     deps = [
         ":Support",
         ":config",
@@ -2782,6 +2800,7 @@ cc_library(
     deps = [
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -2918,6 +2937,7 @@ cc_binary(
         ":Remarks",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":config",
         ":remark_linker",
     ],
@@ -2945,6 +2965,7 @@ cc_binary(
         ":Remarks",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
     ],
 )
@@ -2992,6 +3013,7 @@ cc_binary(
         ":OrcJIT",
         ":OrcTargetProcess",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -3022,6 +3044,7 @@ cc_binary(
         ":LibDriver",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3129,6 +3152,7 @@ cc_binary(
         ":Object",
         ":ProfileData",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -3188,6 +3212,7 @@ cc_binary(
     copts = llvm_copts,
     stamp = 0,
     deps = [
+        ":ProfileData",
         ":Support",
     ],
 )
@@ -3295,6 +3320,7 @@ cc_binary(
         ":MC",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3330,6 +3356,7 @@ cc_binary(
         ":Option",
         ":Support",
         ":Target",
+        ":TargetParser",
     ],
 )
 
@@ -3365,6 +3392,7 @@ cc_binary(
         ":MCParser",
         ":Object",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -3407,6 +3435,7 @@ cc_binary(
         ":Object",
         ":Support",
         ":Target",
+        ":TargetParser",
     ],
 )
 
@@ -3446,6 +3475,7 @@ cc_binary(
         ":ObjectYAML",
         ":Option",
         ":Support",
+        ":TargetParser",
         ":TextAPI",
     ],
 )
@@ -3490,6 +3520,7 @@ cc_binary(
         ":OrcShared",
         ":OrcTargetProcess",
         ":Support",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -3573,6 +3604,7 @@ cc_binary(
         ":Object",
         ":Option",
         ":Support",
+        ":TargetParser",
         ":TextAPI",
     ],
 )
@@ -3638,6 +3670,7 @@ cc_binary(
         ":MCParser",
         ":Object",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3660,6 +3693,7 @@ cc_binary(
         ":MCA",
         ":MCParser",
         ":Support",
+        ":TargetParser",
         ":llvm-mca-headers",
     ],
 )
@@ -3694,6 +3728,7 @@ cc_binary(
         ":MlTableGen",
         ":Option",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3790,6 +3825,7 @@ cc_binary(
         ":Object",
         ":Option",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3893,6 +3929,7 @@ cc_binary(
         ":Option",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":llvm-bitcode-strip-opts",
         ":llvm-installnametool-opts",
         ":llvm-objcopy-opts",
@@ -3941,6 +3978,7 @@ cc_binary(
         ":OtoolOptsTableGen",
         ":Support",
         ":Symbolize",
+        ":TargetParser",
         ":config",
     ],
 )
@@ -4055,6 +4093,7 @@ cc_binary(
         ":ProfileData",
         ":Support",
         ":Symbolize",
+        ":TargetParser",
     ],
 )
 
@@ -4110,6 +4149,7 @@ cc_binary(
         ":Option",
         ":RcTableGen",
         ":Support",
+        ":TargetParser",
         ":WindresTableGen",
         ":llvm-rc-defs-lib",
     ],
@@ -4193,6 +4233,7 @@ cc_binary(
         ":Passes",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
     ],
 )
@@ -4421,6 +4462,7 @@ cc_binary(
         ":Scalar",
         ":Support",
         ":Target",
+        ":TargetParser",
         ":TransformUtils",
         ":common_transforms",
         ":config",
@@ -4493,6 +4535,7 @@ cc_library(
         ":Core",
         ":Scalar",
         ":Support",
+        ":TargetParser",
         ":TransformUtils",
     ],
 )
@@ -4595,6 +4638,7 @@ cc_binary(
         ":Passes",
         ":Scalar",
         ":Support",
+        ":TargetParser",
         ":TransformUtils",
         ":common_transforms",
         ":config",
@@ -4668,6 +4712,7 @@ cc_binary(
         ":MCDisassembler",
         ":Object",
         ":OrcJIT",
+        ":Passes",
         ":Remarks",
         ":Scalar",
         ":Support",
@@ -4828,6 +4873,7 @@ cc_binary(
         ":Remarks",
         ":Support",
         ":TLICheckerOptsTableGen",
+        ":TargetParser",
         ":TextAPI",
         ":config",
     ],

@@ -15,12 +15,12 @@
 #include "src/__support/common.h"
 #include "src/__support/error_or.h"
 #include "src/__support/threads/linux/futex_word.h" // For FutexWordType
+#include "src/errno/libc_errno.h"                   // For error macros
 
-#ifdef LLVM_LIBC_ARCH_AARCH64
+#ifdef LIBC_TARGET_ARCH_IS_AARCH64
 #include <arm_acle.h>
 #endif
 
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/futex.h>
 #include <linux/prctl.h> // For PR_SET_NAME
@@ -54,6 +54,16 @@ static constexpr unsigned CLONE_SYSCALL_FLAGS =
     | CLONE_CHILD_CLEARTID // Let the kernel clear the tid address
                            // wake the joining thread.
     | CLONE_SETTLS;        // Setup the thread pointer of the new thread.
+
+#ifdef LIBC_TARGET_ARCH_IS_AARCH64
+#define CLONE_RESULT_REGISTER "x0"
+#elif defined(LIBC_TARGET_ARCH_IS_RISCV64)
+#define CLONE_RESULT_REGISTER "t0"
+#elif defined(LIBC_TARGET_ARCH_IS_X86_64)
+#define CLONE_RESULT_REGISTER "rax"
+#else
+#error "CLONE_RESULT_REGISTER not defined for your target architecture"
+#endif
 
 LIBC_INLINE ErrorOr<void *> alloc_stack(size_t size) {
   long mmap_result =
@@ -99,14 +109,15 @@ __attribute__((always_inline)) inline uintptr_t get_start_args_addr() {
 // NOTE: For __builtin_frame_address to work reliably across compilers,
 // architectures and various optimization levels, the TU including this file
 // should be compiled with -fno-omit-frame-pointer.
-#ifdef LLVM_LIBC_ARCH_X86_64
+#ifdef LIBC_TARGET_ARCH_IS_X86_64
   return reinterpret_cast<uintptr_t>(__builtin_frame_address(0))
          // The x86_64 call instruction pushes resume address on to the stack.
          // Next, The x86_64 SysV ABI requires that the frame pointer be pushed
          // on to the stack. So, we have to step past two 64-bit values to get
          // to the start args.
          + sizeof(uintptr_t) * 2;
-#elif defined(LLVM_LIBC_ARCH_AARCH64)
+#elif defined(LIBC_TARGET_ARCH_IS_AARCH64) ||                                  \
+    defined(LIBC_TARGET_ARCH_IS_RISCV64)
   // The frame pointer after cloning the new thread in the Thread::run method
   // is set to the stack pointer where start args are stored. So, we fetch
   // from there.
@@ -190,16 +201,17 @@ int Thread::run(ThreadStyle style, ThreadRunner runner, void *arg, void *stack,
   // Also, we want the result of the syscall to be in a register as the child
   // thread gets a completely different stack after it is created. The stack
   // variables from this function will not be availalbe to the child thread.
-#ifdef LLVM_LIBC_ARCH_X86_64
-  long register clone_result asm("rax");
+#if defined(LIBC_TARGET_ARCH_IS_X86_64)
+  long register clone_result asm(CLONE_RESULT_REGISTER);
   clone_result = __llvm_libc::syscall_impl(
       SYS_clone, CLONE_SYSCALL_FLAGS, adjusted_stack,
       &attrib->tid,    // The address where the child tid is written
       &clear_tid->val, // The futex where the child thread status is signalled
       tls.tp           // The thread pointer value for the new thread.
   );
-#elif defined(LLVM_LIBC_ARCH_AARCH64)
-  long register clone_result asm("x0");
+#elif defined(LIBC_TARGET_ARCH_IS_AARCH64) ||                                  \
+    defined(LIBC_TARGET_ARCH_IS_RISCV64)
+  long register clone_result asm(CLONE_RESULT_REGISTER);
   clone_result = __llvm_libc::syscall_impl(
       SYS_clone, CLONE_SYSCALL_FLAGS, adjusted_stack,
       &attrib->tid,   // The address where the child tid is written
@@ -211,10 +223,17 @@ int Thread::run(ThreadStyle style, ThreadRunner runner, void *arg, void *stack,
 #endif
 
   if (clone_result == 0) {
-#ifdef LLVM_LIBC_ARCH_AARCH64
+#ifdef LIBC_TARGET_ARCH_IS_AARCH64
     // We set the frame pointer to be the same as the "sp" so that start args
     // can be sniffed out from start_thread.
+#ifdef __clang__
+    // GCC does not currently implement __arm_wsr64/__arm_rsr64.
     __arm_wsr64("x29", __arm_rsr64("sp"));
+#else
+    asm volatile("mov x29, sp");
+#endif
+#elif defined(LIBC_TARGET_ARCH_IS_RISCV64)
+    asm volatile("mv fp, sp");
 #endif
     start_thread();
   } else if (clone_result < 0) {

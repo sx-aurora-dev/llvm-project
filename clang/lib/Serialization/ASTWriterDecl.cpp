@@ -1068,7 +1068,7 @@ void ASTDeclWriter::VisitVarDecl(VarDecl *D) {
   if (D->getStorageDuration() == SD_Static) {
     bool ModulesCodegen = false;
     if (Writer.WritingModule &&
-        !D->getDescribedVarTemplate() && !D->getMemberSpecializationInfo()) {
+        !D->getDescribedVarTemplate()) {
       // When building a C++20 module interface unit or a partition unit, a
       // strong definition in the module interface is provided by the
       // compilation of that unit, not by its users. (Inline variables are still
@@ -1077,7 +1077,7 @@ void ASTDeclWriter::VisitVarDecl(VarDecl *D) {
           (Writer.WritingModule->isInterfaceOrPartition() ||
            (D->hasAttr<DLLExportAttr>() &&
             Writer.Context->getLangOpts().BuildingPCHWithObjectFile)) &&
-          Writer.Context->GetGVALinkageForVariable(D) == GVA_StrongExternal;
+           Writer.Context->GetGVALinkageForVariable(D) >= GVA_StrongExternal;
     }
     Record.push_back(ModulesCodegen);
     if (ModulesCodegen)
@@ -2468,7 +2468,13 @@ void ASTWriter::WriteDeclAbbrevs() {
 /// relatively painless since they would presumably only do it for top-level
 /// decls.
 static bool isRequiredDecl(const Decl *D, ASTContext &Context,
-                           bool WritingModule) {
+                           Module *WritingModule) {
+  // Named modules have different semantics than header modules. Every named
+  // module units owns a translation unit. So the importer of named modules
+  // doesn't need to deserilize everything ahead of time.
+  if (WritingModule && WritingModule->isModulePurview())
+    return false;
+
   // An ObjCMethodDecl is never considered as "required" because its
   // implementation container always is.
 
@@ -2550,7 +2556,7 @@ void ASTRecordWriter::AddFunctionDefinition(const FunctionDecl *FD) {
       // compilation of that unit, not by its users. (Inline functions are still
       // emitted in module users.)
       Linkage = Writer->Context->GetGVALinkageForFunction(FD);
-      ModulesCodegen = *Linkage == GVA_StrongExternal;
+      ModulesCodegen = *Linkage >= GVA_StrongExternal;
     }
     if (Writer->Context->getLangOpts().ModulesCodegen ||
         (FD->hasAttr<DLLExportAttr>() &&

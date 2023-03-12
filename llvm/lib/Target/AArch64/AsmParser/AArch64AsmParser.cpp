@@ -48,7 +48,6 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SMLoc.h"
-#include "llvm/Support/TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
 #include <cassert>
@@ -3408,8 +3407,7 @@ AArch64AsmParser::parseCondCodeString(StringRef Cond, std::string &Suggestion) {
                     .Case("nv", AArch64CC::NV)
                     .Default(AArch64CC::Invalid);
 
-  if (CC == AArch64CC::Invalid &&
-      getSTI().getFeatureBits()[AArch64::FeatureSVE]) {
+  if (CC == AArch64CC::Invalid && getSTI().hasFeature(AArch64::FeatureSVE)) {
     CC = StringSwitch<AArch64CC::CondCode>(Cond.lower())
                     .Case("none",  AArch64CC::EQ)
                     .Case("any",   AArch64CC::NE)
@@ -6355,7 +6353,7 @@ bool AArch64AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   // instruction for FP registers correctly in some rare circumstances. Convert
   // it to a safe instruction and warn (because silently changing someone's
   // assembly is rude).
-  if (getSTI().getFeatureBits()[AArch64::FeatureZCZeroingFPWorkaround] &&
+  if (getSTI().hasFeature(AArch64::FeatureZCZeroingFPWorkaround) &&
       NumOperands == 4 && Tok == "movi") {
     AArch64Operand &Op1 = static_cast<AArch64Operand &>(*Operands[1]);
     AArch64Operand &Op2 = static_cast<AArch64Operand &>(*Operands[2]);

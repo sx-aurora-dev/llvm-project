@@ -186,6 +186,10 @@ enum class TailFoldingStyle {
   /// active.lane.mask to calculate the mask for the next iteration. If the
   /// increment overflows, the mask is no longer correct.
   DataAndControlFlow,
+  /// Use predicate to control both data and control flow, but modify
+  /// the trip count so that a runtime overflow check can be avoided
+  /// and such that the scalar epilogue loop can always be removed.
+  DataAndControlFlowWithoutRuntimeCheck
 };
 
 class TargetTransformInfo;
@@ -541,7 +545,13 @@ public:
                                    InterleavedAccessInfo *IAI) const;
 
   /// Query the target what the preferred style of tail folding is.
-  TailFoldingStyle getPreferredTailFoldingStyle() const;
+  /// \param IVUpdateMayOverflow Tells whether it is known if the IV update
+  /// may (or will never) overflow for the suggested VF/UF in the given loop.
+  /// Targets can use this information to select a more optimal tail folding
+  /// style. The value conservatively defaults to true, such that no assumptions
+  /// are made on overflow.
+  TailFoldingStyle
+  getPreferredTailFoldingStyle(bool IVUpdateMayOverflow = true) const;
 
   // Parameters that control the loop peeling transformation
   struct PeelingPreferences {
@@ -1096,7 +1106,7 @@ public:
   /// \return The maximum interleave factor that any transform should try to
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
-  unsigned getMaxInterleaveFactor(unsigned VF) const;
+  unsigned getMaxInterleaveFactor(ElementCount VF) const;
 
   /// Collect properties of V used in cost analysis, e.g. OP_PowerOf2.
   static OperandValueInfo getOperandInfo(const Value *V);
@@ -1570,6 +1580,17 @@ public:
   VPLegalization getVPLegalizationStrategy(const VPIntrinsic &PI) const;
   /// @}
 
+  /// \returns Whether a 32-bit branch instruction is available in Arm or Thumb
+  /// state.
+  ///
+  /// Used by the LowerTypeTests pass, which constructs an IR inline assembler
+  /// node containing a jump table in a format suitable for the target, so it
+  /// needs to know what format of jump table it can legally use.
+  ///
+  /// For non-Arm targets, this function isn't used. It defaults to returning
+  /// false, but it shouldn't matter what it returns anyway.
+  bool hasArmWideBranch(bool Thumb) const;
+
   /// @}
 
 private:
@@ -1635,7 +1656,8 @@ public:
                               AssumptionCache &AC, TargetLibraryInfo *TLI,
                               DominatorTree *DT, LoopVectorizationLegality *LVL,
                               InterleavedAccessInfo *IAI) = 0;
-  virtual TailFoldingStyle getPreferredTailFoldingStyle() = 0;
+  virtual TailFoldingStyle
+  getPreferredTailFoldingStyle(bool IVUpdateMayOverflow = true) = 0;
   virtual std::optional<Instruction *> instCombineIntrinsic(
       InstCombiner &IC, IntrinsicInst &II) = 0;
   virtual std::optional<Value *> simplifyDemandedUseBitsIntrinsic(
@@ -1785,7 +1807,7 @@ public:
   /// \return if target want to issue a prefetch in address space \p AS.
   virtual bool shouldPrefetchAddressSpace(unsigned AS) const = 0;
 
-  virtual unsigned getMaxInterleaveFactor(unsigned VF) = 0;
+  virtual unsigned getMaxInterleaveFactor(ElementCount VF) = 0;
   virtual InstructionCost getArithmeticInstrCost(
       unsigned Opcode, Type *Ty, TTI::TargetCostKind CostKind,
       OperandValueInfo Opd1Info, OperandValueInfo Opd2Info,
@@ -1927,6 +1949,7 @@ public:
                                      Align Alignment) const = 0;
   virtual VPLegalization
   getVPLegalizationStrategy(const VPIntrinsic &PI) const = 0;
+  virtual bool hasArmWideBranch(bool Thumb) const = 0;
 };
 
 template <typename T>
@@ -2035,8 +2058,9 @@ public:
                                    InterleavedAccessInfo *IAI) override {
     return Impl.preferPredicateOverEpilogue(L, LI, SE, AC, TLI, DT, LVL, IAI);
   }
-  TailFoldingStyle getPreferredTailFoldingStyle() override {
-    return Impl.getPreferredTailFoldingStyle();
+  TailFoldingStyle
+  getPreferredTailFoldingStyle(bool IVUpdateMayOverflow = true) override {
+    return Impl.getPreferredTailFoldingStyle(IVUpdateMayOverflow);
   }
   std::optional<Instruction *>
   instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) override {
@@ -2344,7 +2368,7 @@ public:
     return Impl.shouldPrefetchAddressSpace(AS);
   }
 
-  unsigned getMaxInterleaveFactor(unsigned VF) override {
+  unsigned getMaxInterleaveFactor(ElementCount VF) override {
     return Impl.getMaxInterleaveFactor(VF);
   }
   unsigned getEstimatedNumberOfCaseClusters(const SwitchInst &SI,
@@ -2605,6 +2629,10 @@ public:
   VPLegalization
   getVPLegalizationStrategy(const VPIntrinsic &PI) const override {
     return Impl.getVPLegalizationStrategy(PI);
+  }
+
+  bool hasArmWideBranch(bool Thumb) const override {
+    return Impl.hasArmWideBranch(Thumb);
   }
 };
 

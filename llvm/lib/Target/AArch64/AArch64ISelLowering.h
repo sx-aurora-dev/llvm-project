@@ -503,6 +503,11 @@ enum Rounding {
 
 // Bit position of rounding mode bits in FPCR.
 const unsigned RoundingBitsPos = 22;
+
+// Registers used to pass function arguments.
+const ArrayRef<MCPhysReg> getGPRArgRegs();
+const ArrayRef<MCPhysReg> getFPRArgRegs();
+
 } // namespace AArch64
 
 class AArch64Subtarget;
@@ -613,6 +618,8 @@ public:
   bool shouldReduceLoadWidth(SDNode *Load, ISD::LoadExtType ExtTy,
                              EVT NewVT) const override;
 
+  bool shouldRemoveRedundantExtend(SDValue Op) const override;
+
   bool isTruncateFree(Type *Ty1, Type *Ty2) const override;
   bool isTruncateFree(EVT VT1, EVT VT2) const override;
 
@@ -708,6 +715,7 @@ public:
   void emitAtomicCmpXchgNoStoreLLBalance(IRBuilderBase &Builder) const override;
 
   bool isOpSuitableForLDPSTP(const Instruction *I) const;
+  bool isOpSuitableForLSE128(const Instruction *I) const;
   bool isOpSuitableForRCPC3(const Instruction *I) const;
   bool shouldInsertFencesForAtomic(const Instruction *I) const override;
   bool
@@ -834,11 +842,6 @@ public:
       ComplexDeinterleavingRotation Rotation, Value *InputA, Value *InputB,
       Value *Accumulator = nullptr) const override;
 
-  bool hasBitPreservingFPLogic(EVT VT) const override {
-    // FIXME: Is this always true? It should be true for vectors at least.
-    return VT == MVT::f32 || VT == MVT::f64;
-  }
-
   bool supportSplitCSR(MachineFunction *MF) const override {
     return MF->getFunction().getCallingConv() == CallingConv::CXX_FAST_TLS &&
            MF->getFunction().hasFnAttribute(Attribute::NoUnwind);
@@ -929,8 +932,7 @@ private:
   bool isExtFreeImpl(const Instruction *Ext) const override;
 
   void addTypeForNEON(MVT VT);
-  void addTypeForStreamingSVE(MVT VT);
-  void addTypeForFixedLengthSVE(MVT VT);
+  void addTypeForFixedLengthSVE(MVT VT, bool StreamingSVE);
   void addDRTypeForNEON(MVT VT);
   void addQRTypeForNEON(MVT VT);
 
@@ -1054,6 +1056,8 @@ private:
   SDValue LowerVECTOR_SPLICE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINSERT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVECTOR_DEINTERLEAVE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVECTOR_INTERLEAVE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerDIV(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMUL(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVectorSRA_SRL_SHL(SDValue Op, SelectionDAG &DAG) const;
@@ -1166,8 +1170,7 @@ private:
   bool isUsedByReturnOnly(SDNode *N, SDValue &Chain) const override;
   bool mayBeEmittedAsTailCall(const CallInst *CI) const override;
   bool getIndexedAddressParts(SDNode *N, SDNode *Op, SDValue &Base,
-                              SDValue &Offset, ISD::MemIndexedMode &AM,
-                              bool &IsInc, SelectionDAG &DAG) const;
+                              SDValue &Offset, SelectionDAG &DAG) const;
   bool getPreIndexedAddressParts(SDNode *N, SDValue &Base, SDValue &Offset,
                                  ISD::MemIndexedMode &AM,
                                  SelectionDAG &DAG) const override;

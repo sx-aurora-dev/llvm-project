@@ -7,10 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/__support/FPUtil/FPBits.h"
+#include "src/errno/libc_errno.h"
 #include "src/math/log2f.h"
+#include "test/UnitTest/FPMatcher.h"
+#include "test/UnitTest/Test.h"
 #include "utils/MPFRWrapper/MPFRUtils.h"
-#include "utils/UnitTest/FPMatcher.h"
-#include "utils/UnitTest/Test.h"
 #include <math.h>
 
 #include <errno.h>
@@ -23,10 +24,10 @@ DECLARE_SPECIAL_CONSTANTS(float)
 TEST(LlvmLibcLog2fTest, SpecialNumbers) {
   EXPECT_FP_EQ(aNaN, __llvm_libc::log2f(aNaN));
   EXPECT_FP_EQ(inf, __llvm_libc::log2f(inf));
-  EXPECT_TRUE(FPBits(__llvm_libc::log2f(neg_inf)).is_nan());
-  EXPECT_FP_EQ(neg_inf, __llvm_libc::log2f(0.0f));
-  EXPECT_FP_EQ(neg_inf, __llvm_libc::log2f(-0.0f));
-  EXPECT_TRUE(FPBits(__llvm_libc::log2f(-1.0f)).is_nan());
+  EXPECT_FP_IS_NAN_WITH_EXCEPTION(__llvm_libc::log2f(neg_inf), FE_INVALID);
+  EXPECT_FP_EQ_WITH_EXCEPTION(neg_inf, __llvm_libc::log2f(0.0f), FE_DIVBYZERO);
+  EXPECT_FP_EQ_WITH_EXCEPTION(neg_inf, __llvm_libc::log2f(-0.0f), FE_DIVBYZERO);
+  EXPECT_FP_IS_NAN_WITH_EXCEPTION(__llvm_libc::log2f(-1.0f), FE_INVALID);
   EXPECT_FP_EQ(zero, __llvm_libc::log2f(1.0f));
 }
 
@@ -50,7 +51,7 @@ TEST(LlvmLibcLog2fTest, InFloatRange) {
     float x = float(FPBits(v));
     if (isnan(x) || isinf(x))
       continue;
-    errno = 0;
+    libc_errno = 0;
     float result = __llvm_libc::log2f(x);
     // If the computation resulted in an error or did not produce valid result
     // in the single-precision floating point range, then ignore comparing with

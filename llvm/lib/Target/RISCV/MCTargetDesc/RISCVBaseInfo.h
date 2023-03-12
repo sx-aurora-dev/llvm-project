@@ -14,6 +14,8 @@
 #define LLVM_LIB_TARGET_RISCV_MCTARGETDESC_RISCVBASEINFO_H
 
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -43,8 +45,12 @@ enum {
   InstFormatCA = 14,
   InstFormatCB = 15,
   InstFormatCJ = 16,
-  InstFormatCSZN = 17,
-  InstFormatOther = 18,
+  InstFormatCU = 17,
+  InstFormatCLB = 18,
+  InstFormatCLH = 19,
+  InstFormatCSB = 20,
+  InstFormatCSH = 21,
+  InstFormatOther = 22,
 
   InstFormatMask = 31,
   InstFormatShift = 0,
@@ -243,6 +249,8 @@ enum OperandType : unsigned {
   OPERAND_UIMM7_LSB00,
   OPERAND_UIMM8_LSB00,
   OPERAND_UIMM8_LSB000,
+  OPERAND_UIMM9_LSB000,
+  OPERAND_UIMM10_LSB00_NONZERO,
   OPERAND_UIMM12,
   OPERAND_ZERO,
   OPERAND_SIMM5,
@@ -255,7 +263,7 @@ enum OperandType : unsigned {
   OPERAND_UIMM20,
   OPERAND_UIMMLOG2XLEN,
   OPERAND_UIMMLOG2XLEN_NONZERO,
-  OPERAND_UIMM_SHFL,
+  OPERAND_CLUI_IMM,
   OPERAND_VTYPEI10,
   OPERAND_VTYPEI11,
   OPERAND_RVKRNUM,
@@ -333,6 +341,80 @@ inline static bool isValidRoundingMode(unsigned Mode) {
   }
 }
 } // namespace RISCVFPRndMode
+
+//===----------------------------------------------------------------------===//
+// Floating-point Immediates
+//
+
+namespace RISCVLoadFPImm {
+int getLoadFPImm(bool Sign, uint8_t Exp, uint8_t Mantissa);
+float getFPImm(unsigned Imm);
+
+/// getLoadFP32Imm - Return a 5-bit binary encoding of the 32-bit
+/// floating-point immediate value. If the value cannot be represented as a
+/// 5-bit binary encoding, then return -1.
+static inline int getLoadFP32Imm(const APInt &Imm) {
+  if (Imm.extractBitsAsZExtValue(21, 0) != 0)
+    return -1;
+
+  bool Sign = Imm.extractBitsAsZExtValue(1, 31);
+  uint8_t Exp = Imm.extractBitsAsZExtValue(8, 23);
+  uint8_t Mantissa = Imm.extractBitsAsZExtValue(2, 21);
+  return getLoadFPImm(Sign, Exp, Mantissa);
+}
+
+static inline int getLoadFP32Imm(const APFloat &FPImm) {
+  return getLoadFP32Imm(FPImm.bitcastToAPInt());
+}
+
+/// getLoadFP64Imm - Return a 5-bit binary encoding of the 64-bit
+/// floating-point immediate value. If the value cannot be represented as a
+/// 5-bit binary encoding, then return -1.
+static inline int getLoadFP64Imm(const APInt &Imm) {
+  if (Imm.extractBitsAsZExtValue(50, 0) != 0)
+    return -1;
+
+  bool Sign = Imm.extractBitsAsZExtValue(1, 63);
+  uint8_t Mantissa = Imm.extractBitsAsZExtValue(2, 50);
+  uint8_t Exp;
+  if (Imm.extractBitsAsZExtValue(11, 52) == 1)
+    Exp = 0b00000001;
+  else if (Imm.extractBitsAsZExtValue(11, 52) == 2047)
+    Exp = 0b11111111;
+  else
+    Exp = Imm.extractBitsAsZExtValue(11, 52) - 1023 + 127;
+
+  return getLoadFPImm(Sign, Exp, Mantissa);
+}
+
+static inline int getLoadFP64Imm(const APFloat &FPImm) {
+  return getLoadFP64Imm(FPImm.bitcastToAPInt());
+}
+
+/// getLoadFP16Imm - Return a 5-bit binary encoding of the 16-bit
+/// floating-point immediate value. If the value cannot be represented as a
+/// 5-bit binary encoding, then return -1.
+static inline int getLoadFP16Imm(const APInt &Imm) {
+  if (Imm.extractBitsAsZExtValue(8, 0) != 0)
+    return -1;
+
+  bool Sign = Imm.extractBitsAsZExtValue(1, 15);
+  uint8_t Mantissa = Imm.extractBitsAsZExtValue(2, 8);
+  uint8_t Exp;
+  if (Imm.extractBitsAsZExtValue(5, 10) == 1)
+    Exp = 0b00000001;
+  else if (Imm.extractBitsAsZExtValue(5, 10) == 31)
+    Exp = 0b11111111;
+  else
+    Exp = Imm.extractBitsAsZExtValue(5, 10) - 15 + 127;
+
+  return getLoadFPImm(Sign, Exp, Mantissa);
+}
+
+static inline int getLoadFP16Imm(const APFloat &FPImm) {
+  return getLoadFP16Imm(FPImm.bitcastToAPInt());
+}
+} // namespace RISCVLoadFPImm
 
 namespace RISCVSysReg {
 struct SysReg {

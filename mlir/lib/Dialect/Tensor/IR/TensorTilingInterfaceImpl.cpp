@@ -34,10 +34,7 @@ struct PadOpTiling : public TilingInterface::ExternalModel<PadOpTiling, PadOp> {
 
   SmallVector<Range> getIterationDomain(Operation *op, OpBuilder &b) const {
     ReifiedRankedShapedTypeDims reifiedShapes;
-    ReifyRankedShapedTypeOpInterface reifyShapedTypeInterface =
-        dyn_cast<ReifyRankedShapedTypeOpInterface>(op);
-    (void)reifyShapedTypeInterface.reifyResultShapes(b, reifiedShapes);
-
+    (void)reifyResultShapes(b, op, reifiedShapes);
     Location loc = op->getLoc();
     Value zero = b.create<arith::ConstantIndexOp>(loc, 0);
     Value one = b.create<arith::ConstantIndexOp>(loc, 1);
@@ -84,7 +81,7 @@ static SmallVector<Range> getPackUnPackIterationDomain(OpTy op,
   Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
   Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
   ReifiedRankedShapedTypeDims resultShape;
-  (void)op.reifyResultShapes(builder, resultShape);
+  (void)reifyResultShapes(builder, op, resultShape);
   SmallVector<Range> loopBounds(rank);
   for (auto dim : llvm::seq<int64_t>(0, rank)) {
     loopBounds[dim].offset = zero;
@@ -161,11 +158,13 @@ struct PackOpTiling
       }
 
       // Limit the size of the input operand for incomplete tiles.
-      OpFoldResult dimSize = srcDimValues[dim];
-      auto avDimSize = AV(dim0).bind(dimSize);
-      auto avInputIdx = AV(dim1).bind(inputIndices.back());
-      inputSizes.back() =
-          ab.min({inputSizes.back(), ab.sub(avDimSize, avInputIdx)});
+      if (packOp.getPaddingValue()) {
+        OpFoldResult dimSize = srcDimValues[dim];
+        auto avDimSize = AV(dim0).bind(dimSize);
+        auto avInputIdx = AV(dim1).bind(inputIndices.back());
+        inputSizes.back() =
+            ab.min({inputSizes.back(), ab.sub(avDimSize, avInputIdx)});
+      }
     }
 
     auto oneAttr = b.getI64IntegerAttr(1);
@@ -214,10 +213,10 @@ struct PackOpTiling
     resultOffsets.append(outputRank - inputRank, zeroAttr);
 
     ReifiedRankedShapedTypeDims outputShape;
-    (void)packOp.reifyResultShapes(b, outputShape);
+    (void)reifyResultShapes(b, packOp, outputShape);
     resultSizes.assign(sizes.begin(), sizes.end());
     for (auto dataTileDim : llvm::seq<unsigned>(inputRank, outputRank))
-      resultSizes.push_back(getAsOpFoldResult(outputShape[0][dataTileDim]));
+      resultSizes.push_back(outputShape[0][dataTileDim]);
 
     return success();
   }
@@ -318,8 +317,11 @@ static UnpackTileDimInfo getUnpackTileDimInfo(OpBuilder &b, UnPackOp unpackOp,
       ab.add(AV(dim0).bind(lengthMinusOne), AV(dim1).bind(oneAttr));
   info.sourceOffset = firstCoord.quotient;
   info.resultOffset = firstCoord.remainder;
-  info.destExpandedSize =
-      ab.mul(AV(dim0).bind(info.sourceSize), AV(sym0).bind(innerTileSize));
+  // Do not create an Affine ops for expanded size because the affine op is too
+  // complicated which would trigger an issue in affine ops simplification.
+  info.destExpandedSize = b.createOrFold<arith::MulIOp>(
+      loc, getValueOrCreateConstantIndexOp(b, loc, info.sourceSize),
+      getValueOrCreateConstantIndexOp(b, loc, innerTileSize));
   return info;
 }
 
@@ -402,9 +404,12 @@ struct UnPackOpTiling
                                     unpackOp.getDestType().getElementType());
     }
 
-    Operation *tiledUnpackOp =
-        b.create<UnPackOp>(loc, TypeRange{sliceDest.getType()},
-                           ValueRange{sliceSource, sliceDest}, op->getAttrs());
+    SmallVector<Value> tiledOperands = {sliceSource, sliceDest};
+    for (auto tile : unpackOp.getInnerTiles())
+      tiledOperands.push_back(tile);
+
+    Operation *tiledUnpackOp = b.create<UnPackOp>(
+        loc, TypeRange{sliceDest.getType()}, tiledOperands, op->getAttrs());
 
     if (isPerfectTilingCase)
       return {tiledUnpackOp};
