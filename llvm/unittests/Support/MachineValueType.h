@@ -54,10 +54,10 @@ namespace llvm::tmp {
       LAST_INTEGER_FIXEDLEN_VECTOR_VALUETYPE = v1i128,
 
       FIRST_FP_FIXEDLEN_VECTOR_VALUETYPE = v1f16,
-      LAST_FP_FIXEDLEN_VECTOR_VALUETYPE = v256f64,
+      LAST_FP_FIXEDLEN_VECTOR_VALUETYPE = v512f64,
 
       FIRST_FIXEDLEN_VECTOR_VALUETYPE = v1i1,
-      LAST_FIXEDLEN_VECTOR_VALUETYPE = v256f64,
+      LAST_FIXEDLEN_VECTOR_VALUETYPE = v512f64,
 
       FIRST_INTEGER_SCALABLE_VECTOR_VALUETYPE = nxv1i1,
       LAST_INTEGER_SCALABLE_VECTOR_VALUETYPE = nxv32i64,
@@ -368,6 +368,7 @@ namespace llvm::tmp {
       case v64i64:
       case v128i64:
       case v256i64:
+      case v512i64:
       case nxv1i64:
       case nxv2i64:
       case nxv4i64:
@@ -441,6 +442,7 @@ namespace llvm::tmp {
       case v64f64:
       case v128f64:
       case v256f64:
+      case v512f64:
       case nxv1f64:
       case nxv2f64:
       case nxv4f64:
@@ -465,8 +467,10 @@ namespace llvm::tmp {
       case v512i8:
       case v512i16:
       case v512i32:
+      case v512i64:
       case v512f16:
-      case v512f32: return 512;
+      case v512f32:
+      case v512f64: return 512;
       case v256i1:
       case v256i2:
       case v256i8:
@@ -895,6 +899,7 @@ namespace llvm::tmp {
         if (NumElements == 64) return MVT::v64i64;
         if (NumElements == 128) return MVT::v128i64;
         if (NumElements == 256) return MVT::v256i64;
+        if (NumElements == 512) return MVT::v512i64;
         break;
       case MVT::i128:
         if (NumElements == 1)  return MVT::v1i128;
@@ -955,6 +960,7 @@ namespace llvm::tmp {
         if (NumElements == 64) return MVT::v64f64;
         if (NumElements == 128) return MVT::v128f64;
         if (NumElements == 256) return MVT::v256f64;
+        if (NumElements == 512) return MVT::v512f64;
         break;
       }
       return (MVT::SimpleValueType)(MVT::INVALID_SIMPLE_VALUE_TYPE);
