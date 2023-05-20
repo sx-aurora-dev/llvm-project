@@ -20,6 +20,7 @@
 #include "LegalizeTypes.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/CodeGen/StackMaps.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
@@ -2319,16 +2320,44 @@ SDValue DAGTypeLegalizer::PromoteIntOp_VECREDUCE(SDNode *N) {
   // An i1 vecreduce_or is equivalent to vecreduce_umax, use that instead if
   // vecreduce_or is not legal
   else if (Opcode == ISD::VECREDUCE_OR && OrigEltVT == MVT::i1 &&
-      !TLI.isOperationLegalOrCustom(ISD::VECREDUCE_OR, InVT) &&
-      TLI.isOperationLegalOrCustom(ISD::VECREDUCE_UMAX, InVT))
+           !TLI.isOperationLegalOrCustom(ISD::VECREDUCE_OR, InVT) &&
+           TLI.isOperationLegalOrCustom(ISD::VECREDUCE_UMAX, InVT)) {
     Opcode = ISD::VECREDUCE_UMAX;
+    // Can't use promoteTargetBoolean here because we still need
+    // to either sign_ext or zero_ext in the undefined case.
+    switch (TLI.getBooleanContents(InVT)) {
+    case TargetLoweringBase::UndefinedBooleanContent:
+      Op = SExtOrZExtPromotedInteger(N->getOperand(0));
+      break;
+    case TargetLoweringBase::ZeroOrOneBooleanContent:
+      Op = ZExtPromotedInteger(N->getOperand(0));
+      break;
+    case TargetLoweringBase::ZeroOrNegativeOneBooleanContent:
+      Op = SExtPromotedInteger(N->getOperand(0));
+      break;
+    }
+  }
 
   // An i1 vecreduce_and is equivalent to vecreduce_umin, use that instead if
   // vecreduce_and is not legal
   else if (Opcode == ISD::VECREDUCE_AND && OrigEltVT == MVT::i1 &&
-      !TLI.isOperationLegalOrCustom(ISD::VECREDUCE_AND, InVT) &&
-      TLI.isOperationLegalOrCustom(ISD::VECREDUCE_UMIN, InVT))
+           !TLI.isOperationLegalOrCustom(ISD::VECREDUCE_AND, InVT) &&
+           TLI.isOperationLegalOrCustom(ISD::VECREDUCE_UMIN, InVT)) {
     Opcode = ISD::VECREDUCE_UMIN;
+    // Can't use promoteTargetBoolean here because we still need
+    // to either sign_ext or zero_ext in the undefined case.
+    switch (TLI.getBooleanContents(InVT)) {
+    case TargetLoweringBase::UndefinedBooleanContent:
+      Op = SExtOrZExtPromotedInteger(N->getOperand(0));
+      break;
+    case TargetLoweringBase::ZeroOrOneBooleanContent:
+      Op = ZExtPromotedInteger(N->getOperand(0));
+      break;
+    case TargetLoweringBase::ZeroOrNegativeOneBooleanContent:
+      Op = SExtPromotedInteger(N->getOperand(0));
+      break;
+    }
+  }
 
   if (ResVT.bitsGE(EltVT))
     return DAG.getNode(Opcode, SDLoc(N), ResVT, Op);
@@ -3049,7 +3078,14 @@ void DAGTypeLegalizer::ExpandIntRes_ADDSUB(SDNode *N,
     if (isOneConstant(LoOps[1]))
       Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), Lo,
                          DAG.getConstant(0, dl, NVT), ISD::SETEQ);
-    else
+    else if (isAllOnesConstant(LoOps[1])) {
+      if (isAllOnesConstant(HiOps[1]))
+        Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), LoOps[0],
+                           DAG.getConstant(0, dl, NVT), ISD::SETEQ);
+      else
+        Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), LoOps[0],
+                           DAG.getConstant(0, dl, NVT), ISD::SETNE);
+    } else
       Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), Lo, LoOps[0],
                          ISD::SETULT);
 
@@ -3060,7 +3096,10 @@ void DAGTypeLegalizer::ExpandIntRes_ADDSUB(SDNode *N,
       Carry = DAG.getSelect(dl, NVT, Cmp, DAG.getConstant(1, dl, NVT),
                              DAG.getConstant(0, dl, NVT));
 
-    Hi = DAG.getNode(ISD::ADD, dl, NVT, Hi, Carry);
+    if (isAllOnesConstant(LoOps[1]) && isAllOnesConstant(HiOps[1]))
+      Hi = DAG.getNode(ISD::SUB, dl, NVT, HiOps[0], Carry);
+    else
+      Hi = DAG.getNode(ISD::ADD, dl, NVT, Hi, Carry);
   } else {
     Lo = DAG.getNode(ISD::SUB, dl, NVT, LoOps);
     Hi = DAG.getNode(ISD::SUB, dl, NVT, ArrayRef(HiOps, 2));
@@ -3179,6 +3218,11 @@ void DAGTypeLegalizer::ExpandIntRes_UADDSUBO(SDNode *N,
       SDValue Or = DAG.getNode(ISD::OR, dl, Lo.getValueType(), Lo, Hi);
       Ovf = DAG.getSetCC(dl, N->getValueType(1), Or,
                          DAG.getConstant(0, dl, Lo.getValueType()), ISD::SETEQ);
+    } else if (N->getOpcode() == ISD::UADDO && isAllOnesConstant(RHS)) {
+      // Special case: uaddo X, -1 overflows if X == 0.
+      Ovf =
+          DAG.getSetCC(dl, N->getValueType(1), LHS,
+                       DAG.getConstant(0, dl, LHS.getValueType()), ISD::SETNE);
     } else {
       // Calculate the overflow: addition overflows iff a + b < a, and
       // subtraction overflows iff a - b > a.

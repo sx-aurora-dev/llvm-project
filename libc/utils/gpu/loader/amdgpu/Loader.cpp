@@ -14,8 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Loader.h"
-
-#include "src/__support/RPC/rpc.h"
+#include "Server.h"
 
 #include <hsa/hsa.h>
 #include <hsa/hsa_ext_amd.h>
@@ -39,30 +38,6 @@ struct kernel_args_t {
   void *buffer;
 };
 
-static __llvm_libc::rpc::Server server;
-
-/// Queries the RPC client at least once and performs server-side work if there
-/// are any active requests.
-void handle_server() {
-  while (server.handle(
-      [&](__llvm_libc::rpc::Buffer *buffer) {
-        switch (static_cast<__llvm_libc::rpc::Opcode>(buffer->data[0])) {
-        case __llvm_libc::rpc::Opcode::PRINT_TO_STDERR: {
-          fputs(reinterpret_cast<const char *>(&buffer->data[1]), stderr);
-          break;
-        }
-        case __llvm_libc::rpc::Opcode::EXIT: {
-          exit(buffer->data[1]);
-          break;
-        }
-        default:
-          return;
-        };
-      },
-      [](__llvm_libc::rpc::Buffer *buffer) {}))
-    ;
-}
-
 /// Print the error code and exit if \p code indicates an error.
 static void handle_error(hsa_status_t code) {
   if (code == HSA_STATUS_SUCCESS || code == HSA_STATUS_INFO_BREAK)
@@ -72,6 +47,11 @@ static void handle_error(hsa_status_t code) {
   if (hsa_status_string(code, &desc) != HSA_STATUS_SUCCESS)
     desc = "Unknown error";
   fprintf(stderr, "%s\n", desc);
+  exit(EXIT_FAILURE);
+}
+
+static void handle_error(const char *msg) {
+  fprintf(stderr, "%s\n", msg);
   exit(EXIT_FAILURE);
 }
 
@@ -165,7 +145,8 @@ hsa_status_t get_agent_memory_pool(hsa_agent_t agent,
   return iterate_agent_memory_pools(agent, cb);
 }
 
-int load(int argc, char **argv, char **envp, void *image, size_t size) {
+int load(int argc, char **argv, char **envp, void *image, size_t size,
+         const LaunchParameters &params) {
   // Initialize the HSA runtime used to communicate with the device.
   if (hsa_status_t err = hsa_init())
     handle_error(err);
@@ -279,50 +260,23 @@ int load(int argc, char **argv, char **envp, void *image, size_t size) {
 
   // Allocate fine-grained memory on the host to hold the pointer array for the
   // copied argv and allow the GPU agent to access it.
-  void *dev_argv;
-  if (hsa_status_t err =
-          hsa_amd_memory_pool_allocate(finegrained_pool, argc * sizeof(char *),
-                                       /*flags=*/0, &dev_argv))
-    handle_error(err);
-  hsa_amd_agents_allow_access(1, &dev_agent, nullptr, dev_argv);
-
-  // Copy each string in the argument vector to global memory on the device.
-  for (int i = 0; i < argc; ++i) {
-    size_t size = strlen(argv[i]) + 1;
-    void *dev_str;
+  auto allocator = [&](uint64_t size) -> void * {
+    void *dev_ptr = nullptr;
     if (hsa_status_t err = hsa_amd_memory_pool_allocate(finegrained_pool, size,
-                                                        /*flags=*/0, &dev_str))
+                                                        /*flags=*/0, &dev_ptr))
       handle_error(err);
-    hsa_amd_agents_allow_access(1, &dev_agent, nullptr, dev_str);
-    // Load the host memory buffer with the pointer values of the newly
-    // allocated strings.
-    std::memcpy(dev_str, argv[i], size);
-    static_cast<void **>(dev_argv)[i] = dev_str;
-  }
+    hsa_amd_agents_allow_access(1, &dev_agent, nullptr, dev_ptr);
+    return dev_ptr;
+  };
+  void *dev_argv = copy_argument_vector(argc, argv, allocator);
+  if (!dev_argv)
+    handle_error("Failed to allocate device argv");
 
   // Allocate fine-grained memory on the host to hold the pointer array for the
   // copied environment array and allow the GPU agent to access it.
-  int envc = 0;
-  for (char **env = envp; *env != 0; ++env)
-    ++envc;
-  void *dev_envp;
-  if (hsa_status_t err =
-          hsa_amd_memory_pool_allocate(finegrained_pool, envc * sizeof(char *),
-                                       /*flags=*/0, &dev_envp))
-    handle_error(err);
-  hsa_amd_agents_allow_access(1, &dev_agent, nullptr, dev_envp);
-  for (int i = 0; i < envc; ++i) {
-    size_t size = strlen(envp[i]) + 1;
-    void *dev_str;
-    if (hsa_status_t err = hsa_amd_memory_pool_allocate(finegrained_pool, size,
-                                                        /*flags=*/0, &dev_str))
-      handle_error(err);
-    hsa_amd_agents_allow_access(1, &dev_agent, nullptr, dev_str);
-    // Load the host memory buffer with the pointer values of the newly
-    // allocated strings.
-    std::memcpy(dev_str, envp[i], size);
-    static_cast<void **>(dev_envp)[i] = dev_str;
-  }
+  void *dev_envp = copy_environment(envp, allocator);
+  if (!dev_envp)
+    handle_error("Failed to allocate device environment");
 
   // Allocate space for the return pointer and initialize it to zero.
   void *dev_ret;
@@ -377,13 +331,15 @@ int load(int argc, char **argv, char **envp, void *image, size_t size) {
   // with one thread on the device, forcing the rest of the wavefront to be
   // masked off.
   std::memset(packet, 0, sizeof(hsa_kernel_dispatch_packet_t));
-  packet->setup = 1 << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
-  packet->workgroup_size_x = 1;
-  packet->workgroup_size_y = 1;
-  packet->workgroup_size_z = 1;
-  packet->grid_size_x = 1;
-  packet->grid_size_y = 1;
-  packet->grid_size_z = 1;
+  packet->setup = (1 + (params.num_blocks_y * params.num_threads_y != 1) +
+                   (params.num_blocks_z * params.num_threads_z != 1))
+                  << HSA_KERNEL_DISPATCH_PACKET_SETUP_DIMENSIONS;
+  packet->workgroup_size_x = params.num_threads_x;
+  packet->workgroup_size_y = params.num_threads_y;
+  packet->workgroup_size_z = params.num_threads_z;
+  packet->grid_size_x = params.num_blocks_x * params.num_threads_x;
+  packet->grid_size_y = params.num_blocks_y * params.num_threads_y;
+  packet->grid_size_z = params.num_blocks_z * params.num_threads_z;
   packet->private_segment_size = private_size;
   packet->group_segment_size = group_size;
   packet->kernel_object = kernel;
@@ -395,7 +351,7 @@ int load(int argc, char **argv, char **envp, void *image, size_t size) {
     handle_error(err);
 
   // Initialize the RPC server's buffer for host-device communication.
-  server.reset(server_inbox, server_outbox, buffer);
+  server.reset(&lock, server_inbox, server_outbox, buffer);
 
   // Initialize the packet header and set the doorbell signal to begin execution
   // by the HSA runtime.
@@ -438,6 +394,22 @@ int load(int argc, char **argv, char **envp, void *image, size_t size) {
 
   // Save the return value and perform basic clean-up.
   int ret = *static_cast<int *>(host_ret);
+
+  // Free the memory allocated for the device.
+  if (hsa_status_t err = hsa_amd_memory_pool_free(args))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(dev_argv))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(dev_ret))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(server_inbox))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(server_outbox))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(buffer))
+    handle_error(err);
+  if (hsa_status_t err = hsa_amd_memory_pool_free(host_ret))
+    handle_error(err);
 
   if (hsa_status_t err = hsa_signal_destroy(memory_signal))
     handle_error(err);

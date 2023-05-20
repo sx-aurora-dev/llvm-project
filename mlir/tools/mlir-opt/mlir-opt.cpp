@@ -40,6 +40,7 @@ void registerSliceAnalysisTestPass();
 void registerSymbolTestPasses();
 void registerRegionTestPasses();
 void registerTestAffineDataCopyPass();
+void registerTestAffineReifyValueBoundsPass();
 void registerTestDecomposeAffineOpPass();
 void registerTestAffineLoopUnswitchingPass();
 void registerTestAllReduceLoweringPass();
@@ -99,14 +100,17 @@ void registerTestLinalgGreedyFusion();
 void registerTestLinalgTransforms();
 void registerTestLivenessPass();
 void registerTestLoopFusion();
+void registerTestCFGLoopInfoPass();
 void registerTestLoopMappingPass();
 void registerTestLoopUnrollingPass();
 void registerTestLowerToLLVM();
+void registerTestMakeIsolatedFromAbovePass();
 void registerTestMatchReductionPass();
 void registerTestMathAlgebraicSimplificationPass();
 void registerTestMathPolynomialApproximationPass();
 void registerTestMemRefDependenceCheck();
 void registerTestMemRefStrideCalculation();
+void registerTestOneToNTypeConversionPass();
 void registerTestOpaqueLoc();
 void registerTestPadFusion();
 void registerTestPDLByteCodePass();
@@ -149,6 +153,7 @@ void registerTestPasses() {
   registerSymbolTestPasses();
   registerRegionTestPasses();
   registerTestAffineDataCopyPass();
+  registerTestAffineReifyValueBoundsPass();
   registerTestDecomposeAffineOpPass();
   registerTestAffineLoopUnswitchingPass();
   registerTestAllReduceLoweringPass();
@@ -210,14 +215,17 @@ void registerTestPasses() {
   mlir::test::registerTestLinalgTransforms();
   mlir::test::registerTestLivenessPass();
   mlir::test::registerTestLoopFusion();
+  mlir::test::registerTestCFGLoopInfoPass();
   mlir::test::registerTestLoopMappingPass();
   mlir::test::registerTestLoopUnrollingPass();
   mlir::test::registerTestLowerToLLVM();
+  mlir::test::registerTestMakeIsolatedFromAbovePass();
   mlir::test::registerTestMatchReductionPass();
   mlir::test::registerTestMathAlgebraicSimplificationPass();
   mlir::test::registerTestMathPolynomialApproximationPass();
   mlir::test::registerTestMemRefDependenceCheck();
   mlir::test::registerTestMemRefStrideCalculation();
+  mlir::test::registerTestOneToNTypeConversionPass();
   mlir::test::registerTestOpaqueLoc();
   mlir::test::registerTestPadFusion();
   mlir::test::registerTestPDLByteCodePass();
@@ -253,6 +261,5 @@ int main(int argc, char **argv) {
   ::test::registerTestDynDialect(registry);
 #endif
   return mlir::asMainReturnCode(
-      mlir::MlirOptMain(argc, argv, "MLIR modular optimizer driver\n", registry,
-                        /*preloadDialectsInContext=*/false));
+      mlir::MlirOptMain(argc, argv, "MLIR modular optimizer driver\n", registry));
 }

@@ -14,6 +14,7 @@
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Dialect/MemRef/Transforms/Transforms.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dominance.h"
@@ -189,7 +190,7 @@ mlir::memref::multiBuffer(RewriterBase &rewriter, memref::AllocOp allocOp,
   Value stepVal = getValueOrCreateConstantIndexOp(rewriter, loc, *singleStep);
   AffineExpr iv, lb, step;
   bindDims(rewriter.getContext(), iv, lb, step);
-  Value bufferIndex = makeComposedAffineApply(
+  Value bufferIndex = affine::makeComposedAffineApply(
       rewriter, loc, ((iv - lb).floorDiv(step)) % multiBufferingFactor,
       {ivVal, lbVal, stepVal});
   LLVM_DEBUG(DBGS() << "--multi-buffered indexing: " << bufferIndex << "\n");

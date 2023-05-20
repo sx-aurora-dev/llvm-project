@@ -37,7 +37,9 @@ scf::SCFTilingOptions::setTileSizes(ArrayRef<int64_t> ts) {
   tileSizeComputationFunction = [tileSizes](OpBuilder &b, Operation *op) {
     OpBuilder::InsertionGuard guard(b);
     b.setInsertionPointToStart(
-        &op->getParentOfType<func::FuncOp>().getBody().front());
+        &op->getParentWithTrait<OpTrait::IsIsolatedFromAbove>()
+             ->getRegion(0)
+             .front());
     return llvm::to_vector<4>(map_range(tileSizes, [&](int64_t s) {
       Value v = b.create<arith::ConstantIndexOp>(op->getLoc(), s);
       return v;
@@ -100,7 +102,7 @@ static OpFoldResult getBoundedTileSize(OpBuilder &b, Location loc,
   bindSymbols(b.getContext(), s0, s1);
   AffineMap minMap = AffineMap::get(1, 2, {s0, s1 - d0}, b.getContext());
   Value size = getValueOrCreateConstantIndexOp(b, loc, loopRange.size);
-  return makeComposedFoldedAffineMin(
+  return affine::makeComposedFoldedAffineMin(
       b, loc, minMap, SmallVector<OpFoldResult>{iv, tileSize, size});
 }
 

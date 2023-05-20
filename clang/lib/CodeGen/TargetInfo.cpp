@@ -467,7 +467,7 @@ unsigned TargetCodeGenInfo::getSizeOfUnwindException() const {
   // Verified for:
   //   x86-64     FreeBSD, Linux, Darwin
   //   x86-32     FreeBSD, Linux, Darwin
-  //   PowerPC    Linux, Darwin
+  //   PowerPC    Linux
   //   ARM        Darwin (*not* EABI)
   //   AArch64    Linux
   return 32;
@@ -7373,6 +7373,11 @@ void NVPTXTargetCodeGenInfo::setTargetAttributes(
       }
     }
   }
+
+  // Attach kernel metadata directly if compiling for NVPTX.
+  if (FD->hasAttr<NVPTXKernelAttr>()) {
+    addNVVMMetadata(F, "kernel", 1);
+  }
 }
 
 void NVPTXTargetCodeGenInfo::addNVVMMetadata(llvm::GlobalValue *GV,
@@ -7911,7 +7916,7 @@ bool SystemZTargetCodeGenInfo::isVectorTypeBased(const Type *Ty,
     if (isVectorTypeBased(FT->getReturnType().getTypePtr(), /*IsParam*/true))
       return true;
   if (const FunctionProtoType *Proto = Ty->getAs<FunctionProtoType>())
-    for (auto ParamType : Proto->getParamTypes())
+    for (const auto &ParamType : Proto->getParamTypes())
       if (isVectorTypeBased(ParamType.getTypePtr(), /*IsParam*/true))
         return true;
 
@@ -9469,6 +9474,7 @@ public:
                                          llvm::Function *BlockInvokeFunc,
                                          llvm::Type *BlockTy) const override;
   bool shouldEmitStaticExternCAliases() const override;
+  bool shouldEmitDWARFBitFieldSeparators() const override;
   void setCUDAKernelCallingConvention(const FunctionType *&FT) const override;
 };
 }
@@ -9582,12 +9588,9 @@ void AMDGPUTargetCodeGenInfo::setTargetAttributes(
 
   const bool IsHIPKernel =
       M.getLangOpts().HIP && FD && FD->hasAttr<CUDAGlobalAttr>();
-  const bool IsOpenMPkernel =
-      M.getLangOpts().OpenMPIsDevice &&
-      (F->getCallingConv() == llvm::CallingConv::AMDGPU_KERNEL);
 
   // TODO: This should be moved to language specific attributes instead.
-  if (IsHIPKernel || IsOpenMPkernel)
+  if (IsHIPKernel)
     F->addFnAttr("uniform-work-group-size", "true");
 
   if (M.getContext().getTargetInfo().allowAMDGPUUnsafeFPAtomics())
@@ -9684,6 +9687,10 @@ AMDGPUTargetCodeGenInfo::getLLVMSyncScopeID(const LangOptions &LangOpts,
 
 bool AMDGPUTargetCodeGenInfo::shouldEmitStaticExternCAliases() const {
   return false;
+}
+
+bool AMDGPUTargetCodeGenInfo::shouldEmitDWARFBitFieldSeparators() const {
+  return true;
 }
 
 void AMDGPUTargetCodeGenInfo::setCUDAKernelCallingConvention(
@@ -11053,7 +11060,7 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getOpenCLType(CodeGenModule &CGM,
   return nullptr;
 }
 //===----------------------------------------------------------------------===//
-// RISCV ABI Implementation
+// RISC-V ABI Implementation
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -11152,10 +11159,9 @@ bool RISCVABIInfo::detectFPCCEligibleStructHelper(QualType Ty, CharUnits CurOff,
     uint64_t Size = getContext().getTypeSize(Ty);
     if (IsInt && Size > XLen)
       return false;
-    // Can't be eligible if larger than the FP registers. Half precision isn't
-    // currently supported on RISC-V and the ABI hasn't been confirmed, so
-    // default to the integer ABI in that case.
-    if (IsFloat && (Size > FLen || Size < 32))
+    // Can't be eligible if larger than the FP registers. Handling of half
+    // precision values has been specified in the ABI, so don't block those.
+    if (IsFloat && Size > FLen)
       return false;
     // Can't be eligible if an integer type was already found (int+int pairs
     // are not eligible).

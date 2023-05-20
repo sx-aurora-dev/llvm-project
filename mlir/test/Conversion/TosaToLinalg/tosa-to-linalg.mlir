@@ -237,14 +237,9 @@ func.func @test_simple_f32(%arg0: tensor<1xf32>) -> () {
   %19 = "tosa.sigmoid"(%0) : (tensor<1xf32>) -> tensor<1xf32>
 
   // CHECK: linalg.generic
-  // CHECK: arith.constant 0.000000e+00
-  // CHECK: arith.constant 5.000000e-01
   // CHECK: arith.constant -2.14748365E+9
   // CHECK: arith.constant 2.14748365E+9
-  // CHECK: arith.addf
-  // CHECK: arith.subf
-  // CHECK: arith.cmpf olt
-  // CHECK: select
+  // CHECK: math.roundeven
   // CHECK: arith.minf
   // CHECK: arith.maxf
   // CHECK: arith.fptosi
@@ -1267,6 +1262,30 @@ func.func @gather_float_dyn(%arg0: tensor<?x3x2xf32>, %arg1: tensor<?x3xi32>) ->
   // CHECK:   %[[EXTRACT:.+]] = tensor.extract %[[ARG0]][%[[IDX0]], %[[CAST]], %[[IDX2]]] : tensor<?x3x2xf32>
   // CHECK:   linalg.yield %[[EXTRACT]]
   %0 = "tosa.gather"(%arg0, %arg1)  : (tensor<?x3x2xf32>, tensor<?x3xi32>)  -> (tensor<?x3x2xf32>)
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @gather_float_all_dynamic
+// CHECK-SAME: (%[[ARG0:[0-9a-zA-Z_]*]]
+// CHECK-SAME:  %[[ARG1:[0-9a-zA-Z_]*]]
+func.func @gather_float_all_dynamic(%arg0: tensor<?x?x?xf32>, %arg1: tensor<?x?xi32>) -> () {
+  // CHECK: %[[C0:.+]] = arith.constant 0
+  // CHECK: %[[BATCH:.+]] = tensor.dim %[[ARG0]], %[[C0]]
+  // CHECK: %[[C1:.+]] = arith.constant 1
+  // CHECK: %[[INDEX:.+]] = tensor.dim %[[ARG1]], %[[C1]]
+  // CHECK: %[[C2:.+]] = arith.constant 2
+  // CHECK: %[[CHANNEL:.+]] = tensor.dim %[[ARG0]], %[[C2]]
+  // CHECK: %[[INIT:.+]] = tensor.empty(%[[BATCH]], %[[INDEX]], %[[CHANNEL]])
+  // CHECK: %[[GENERIC:.+]] = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel", "parallel"]} ins(%[[ARG1]] : tensor<?x?xi32>) outs(%[[INIT]] : tensor<?x?x?xf32>)
+  // CHECK: ^bb0(%[[BBARG0:.+]]: i32, %[[BBARG1:.+]]: f32)
+  // CHECK:   %[[IDX0:.+]] = linalg.index 0
+  // CHECK:   %[[CAST:.+]] = arith.index_cast %[[BBARG0]]
+  // CHECK:   %[[IDX2:.+]] = linalg.index 2
+  // CHECK:   %[[EXTRACT:.+]] = tensor.extract %[[ARG0]][%[[IDX0]], %[[CAST]], %[[IDX2]]] : tensor<?x?x?xf32>
+  // CHECK:   linalg.yield %[[EXTRACT]]
+  %0 = "tosa.gather"(%arg0, %arg1)  : (tensor<?x?x?xf32>, tensor<?x?xi32>)  -> (tensor<?x?x?xf32>)
   return
 }
 

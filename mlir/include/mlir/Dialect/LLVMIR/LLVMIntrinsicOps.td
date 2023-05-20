@@ -3,6 +3,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Dialect/LLVMIR/LLVMAttrDefs.td"
+include "mlir/Dialect/LLVMIR/LLVMEnums.td"
 include "mlir/Dialect/LLVMIR/LLVMOpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
@@ -57,17 +58,29 @@ class LLVM_BinarySameArgsIntrOpF<string func, list<Trait> traits = []> :
   let arguments = !con(commonArgs, fmfArg);
 }
 
-class LLVM_TernarySameArgsIntrOpF<string func, list<Trait> traits = []> :
+class LLVM_TernarySameArgsIntrOpBase<string func, Type element,
+              list<Trait> traits = [], bit requiresFastmath = 0> :
     LLVM_OneResultIntrOp<func, [], [0],
            !listconcat([Pure, SameOperandsAndResultType], traits),
-           /*requiresFastmath=*/1> {
-  let arguments = (ins LLVM_ScalarOrVectorOf<AnyFloat>:$a,
-                       LLVM_ScalarOrVectorOf<AnyFloat>:$b,
-                       LLVM_ScalarOrVectorOf<AnyFloat>:$c,
-                       DefaultValuedAttr<LLVM_FastmathFlagsAttr,
-                                         "{}">:$fastmathFlags);
+           requiresFastmath> {
+  dag commonArgs = (ins LLVM_ScalarOrVectorOf<element>:$a,
+                       LLVM_ScalarOrVectorOf<element>:$b,
+                       LLVM_ScalarOrVectorOf<element>:$c);
   let assemblyFormat = "`(` operands `)` custom<LLVMOpAttrs>(attr-dict) `:` "
       "functional-type(operands, results)";
+}
+
+class LLVM_TernarySameArgsIntrOpI<string func, list<Trait> traits = []> :
+    LLVM_TernarySameArgsIntrOpBase<func, AnySignlessInteger, traits> {
+  let arguments = commonArgs;
+}
+
+class LLVM_TernarySameArgsIntrOpF<string func, list<Trait> traits = []> :
+    LLVM_TernarySameArgsIntrOpBase<func, LLVM_AnyFloat, traits,
+                                  /*requiresFastmath=*/1> {
+  dag fmfArg = (
+    ins DefaultValuedAttr<LLVM_FastmathFlagsAttr, "{}">:$fastmathFlags);
+  let arguments = !con(commonArgs, fmfArg);
 }
 
 class LLVM_CountZerosIntrOp<string func, list<Trait> traits = []> :
@@ -117,9 +130,12 @@ def LLVM_PowIOp : LLVM_OneResultIntrOp<"powi", [], [0,1],
       "functional-type(operands, results)";
 }
 def LLVM_BitReverseOp : LLVM_UnaryIntrOpI<"bitreverse">;
+def LLVM_ByteSwapOp : LLVM_UnaryIntrOpI<"bswap">;
 def LLVM_CountLeadingZerosOp : LLVM_CountZerosIntrOp<"ctlz">;
 def LLVM_CountTrailingZerosOp : LLVM_CountZerosIntrOp<"cttz">;
 def LLVM_CtPopOp : LLVM_UnaryIntrOpI<"ctpop">;
+def LLVM_FshlOp : LLVM_TernarySameArgsIntrOpI<"fshl">;
+def LLVM_FshrOp : LLVM_TernarySameArgsIntrOpI<"fshr">;
 def LLVM_MaxNumOp : LLVM_BinarySameArgsIntrOpF<"maxnum">;
 def LLVM_MinNumOp : LLVM_BinarySameArgsIntrOpF<"minnum">;
 def LLVM_MaximumOp : LLVM_BinarySameArgsIntrOpF<"maximum">;
@@ -165,6 +181,31 @@ def LLVM_MemsetOp : LLVM_ZeroResultIntrOp<"memset", [0, 2], [],
             /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
     }]
   >];
+}
+
+def LLVM_NoAliasScopeDeclOp
+    : LLVM_ZeroResultIntrOp<"experimental.noalias.scope.decl"> {
+  let arguments = (ins SymbolRefAttr:$scope);
+  string llvmBuilder = [{
+    // Wrap the scope argument into a list since the LLVM IR intrinsic takes
+    // a list containing exactly one scope rather than a scope itself.
+    llvm::MDNode* node = moduleTranslation.getAliasScopes(op, {$scope});
+    builder.CreateNoAliasScopeDeclaration(node);
+  }];
+  string mlirBuilder = [{
+    FailureOr<SmallVector<SymbolRefAttr>> scopeAttrs =
+      moduleImport.matchAliasScopeAttrs(llvmOperands[0]);
+    // Drop the intrinsic if the alias scope translation fails since the scope
+    // is not used by an aliasing operation, such as a load or store, that is
+    // used to convert the alias scope metadata.
+    if (failed(scopeAttrs))
+      return success();
+    if (scopeAttrs->size() != 1)
+      return failure();
+    $_op = $_builder.create<LLVM::NoAliasScopeDeclOp>(
+      $_location, (*scopeAttrs)[0]);
+  }];
+  let assemblyFormat = "$scope attr-dict";
 }
 
 //===----------------------------------------------------------------------===//

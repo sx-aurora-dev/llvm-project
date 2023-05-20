@@ -52,11 +52,6 @@ static cl::opt<bool> UnrollRuntimeLocal(
   cl::desc("Allow runtime unroll for AMDGPU if local memory used in a loop"),
   cl::init(true), cl::Hidden);
 
-static cl::opt<bool> UseLegacyDA(
-  "amdgpu-use-legacy-divergence-analysis",
-  cl::desc("Enable legacy divergence analysis for AMDGPU"),
-  cl::init(false), cl::Hidden);
-
 static cl::opt<unsigned> UnrollMaxBlockToAnalyze(
     "amdgpu-unroll-max-block-to-analyze",
     cl::desc("Inner loop block size threshold to analyze in unroll for AMDGPU"),
@@ -779,14 +774,14 @@ GCNTTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *Ty,
 
 InstructionCost
 GCNTTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
-                                   bool IsUnsigned,
+                                   bool IsUnsigned, FastMathFlags FMF,
                                    TTI::TargetCostKind CostKind) {
   EVT OrigTy = TLI->getValueType(DL, Ty);
 
   // Computes cost on targets that have packed math instructions(which support
   // 16-bit types only).
   if (!ST->hasVOP3PInsts() || OrigTy.getScalarSizeInBits() != 16)
-    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsUnsigned, CostKind);
+    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsUnsigned, FMF, CostKind);
 
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Ty);
   return LT.first * getHalfRateInstrCost(CostKind);
@@ -858,11 +853,6 @@ bool GCNTTIImpl::isInlineAsmSourceOfDivergence(
   }
 
   return false;
-}
-
-/// \returns true if the new GPU divergence analysis is enabled.
-bool GCNTTIImpl::useGPUDivergenceAnalysis() const {
-  return !UseLegacyDA;
 }
 
 bool GCNTTIImpl::isReadRegisterSourceOfDivergence(

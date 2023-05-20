@@ -8,7 +8,9 @@
 
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/Support/Format.h"
 #include "gtest/gtest.h"
+#include <cmath>
 #include <vector>
 
 using namespace llvm;
@@ -507,8 +509,39 @@ FirstSecondThirdByteMask [ (0x333)
   verifyAll(ExpectedOut, JSONExpectedOut, PrintFunc);
 }
 
+// Format floats using the same format string as PrintNumber, so we can check
+// the output on all platforms.
+template <typename T,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+std::string formatFloatString(T Val) {
+  std::string Ret;
+  raw_string_ostream OS(Ret);
+  OS << format("%5.1f", Val);
+  return Ret;
+}
+
+// Format floats using the same format string used in JSON, so we can check the
+// output on all platforms.
+template <typename T,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+std::string formatJsonFloatString(T Val) {
+  std::string Ret;
+  raw_string_ostream OS(Ret);
+  OS << format("%.*g", std::numeric_limits<double>::max_digits10, Val);
+  return Ret;
+}
+
 TEST_F(ScopedPrinterTest, PrintNumber) {
-  auto PrintFunc = [](ScopedPrinter &W) {
+  constexpr float MaxFloat = std::numeric_limits<float>::max();
+  constexpr float MinFloat = std::numeric_limits<float>::min();
+  constexpr float InfFloat = std::numeric_limits<float>::infinity();
+  const float NaNFloat = std::nanf("1");
+  constexpr double MaxDouble = std::numeric_limits<double>::max();
+  constexpr double MinDouble = std::numeric_limits<double>::min();
+  constexpr double InfDouble = std::numeric_limits<double>::infinity();
+  const double NaNDouble = std::nan("1");
+
+  auto PrintFunc = [&](ScopedPrinter &W) {
     uint64_t Unsigned64Max = std::numeric_limits<uint64_t>::max();
     uint64_t Unsigned64Min = std::numeric_limits<uint64_t>::min();
     W.printNumber("uint64_t-max", Unsigned64Max);
@@ -553,9 +586,24 @@ TEST_F(ScopedPrinterTest, PrintNumber) {
     W.printNumber("apsint", LargeNum);
 
     W.printNumber("label", "value", 0);
+
+    W.printNumber("float-max", MaxFloat);
+    W.printNumber("float-min", MinFloat);
+    W.printNumber("float-inf", InfFloat);
+    W.printNumber("float-nan", NaNFloat);
+    W.printNumber("float-42.0", 42.0f);
+    W.printNumber("float-42.5625", 42.5625f);
+
+    W.printNumber("double-max", MaxDouble);
+    W.printNumber("double-min", MinDouble);
+    W.printNumber("double-inf", InfDouble);
+    W.printNumber("double-nan", NaNDouble);
+    W.printNumber("double-42.0", 42.0);
+    W.printNumber("double-42.5625", 42.5625);
   };
 
-  const char *ExpectedOut = R"(uint64_t-max: 18446744073709551615
+  std::string ExpectedOut = Twine(
+                                R"(uint64_t-max: 18446744073709551615
 uint64_t-min: 0
 uint32_t-max: 4294967295
 uint32_t-min: 0
@@ -573,9 +621,28 @@ int8_t-max: 127
 int8_t-min: -128
 apsint: 9999999999999999999999
 label: value (0)
-)";
+float-max: )" + formatFloatString(MaxFloat) +
+                                R"(
+float-min:   0.0
+float-inf: )" + formatFloatString(InfFloat) +
+                                R"(
+float-nan: )" + formatFloatString(NaNFloat) +
+                                R"(
+float-42.0:  42.0
+float-42.5625:  42.6
+double-max: )" + formatFloatString(MaxDouble) +
+                                R"(
+double-min:   0.0
+double-inf: )" + formatFloatString(InfDouble) +
+                                R"(
+double-nan: )" + formatFloatString(NaNDouble) +
+                                R"(
+double-42.0:  42.0
+double-42.5625:  42.6
+)")
+                                .str();
 
-  const char *JSONExpectedOut = R"({
+  std::string JSONExpectedOut = Twine(R"({
   "uint64_t-max": 18446744073709551615,
   "uint64_t-min": 0,
   "uint32_t-max": 4294967295,
@@ -596,8 +663,25 @@ label: value (0)
   "label": {
     "Name": "value",
     "Value": 0
-  }
-})";
+  },
+  "float-max": 3.4028234663852886e+38,
+  "float-min": 1.1754943508222875e-38,
+  "float-inf": )" + formatJsonFloatString(InfFloat) +
+                                      R"(,
+  "float-nan": )" + formatJsonFloatString(NaNFloat) +
+                                      R"(,
+  "float-42.0": 42,
+  "float-42.5625": 42.5625,
+  "double-max": 1.7976931348623157e+308,
+  "double-min": 2.2250738585072014e-308,
+  "double-inf": )" + formatJsonFloatString(InfDouble) +
+                                      R"(,
+  "double-nan": )" + formatJsonFloatString(NaNDouble) +
+                                      R"(,
+  "double-42.0": 42,
+  "double-42.5625": 42.5625
+})")
+                                    .str();
   verifyAll(ExpectedOut, JSONExpectedOut, PrintFunc);
 }
 

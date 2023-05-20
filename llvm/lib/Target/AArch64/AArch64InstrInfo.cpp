@@ -126,6 +126,12 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     if (NumBytes == 0)
       NumBytes = 4;
     break;
+  case TargetOpcode::PATCHABLE_FUNCTION_ENTER:
+  case TargetOpcode::PATCHABLE_FUNCTION_EXIT:
+    // An XRay sled can be 4 bytes of alignment plus a 32-byte block.
+    NumBytes = 36;
+    break;
+
   case AArch64::SPACE:
     NumBytes = MI.getOperand(1).getImm();
     break;
@@ -1692,17 +1698,34 @@ static bool isSUBSRegImm(unsigned Opcode) {
 ///        MI and CmpInstr
 ///        or if MI opcode is not the S form there must be neither defs of flags
 ///        nor uses of flags between MI and CmpInstr.
-/// - and  C/V flags are not used after CmpInstr
+/// - and, if C/V flags are not used after CmpInstr
+///        or if N flag is used but MI produces poison value if signed overflow
+///        occurs.
 static bool canInstrSubstituteCmpInstr(MachineInstr &MI, MachineInstr &CmpInstr,
                                        const TargetRegisterInfo &TRI) {
+  // NOTE this assertion guarantees that MI.getOpcode() is add or subtraction
+  // that may or may not set flags.
   assert(sForm(MI) != AArch64::INSTRUCTION_LIST_END);
 
   const unsigned CmpOpcode = CmpInstr.getOpcode();
   if (!isADDSRegImm(CmpOpcode) && !isSUBSRegImm(CmpOpcode))
     return false;
 
+  assert((CmpInstr.getOperand(2).isImm() &&
+          CmpInstr.getOperand(2).getImm() == 0) &&
+         "Caller guarantees that CmpInstr compares with constant 0");
+
   std::optional<UsedNZCV> NZVCUsed = examineCFlagsUse(MI, CmpInstr, TRI);
-  if (!NZVCUsed || NZVCUsed->C || NZVCUsed->V)
+  if (!NZVCUsed || NZVCUsed->C)
+    return false;
+
+  // CmpInstr is either 'ADDS %vreg, 0' or 'SUBS %vreg, 0', and MI is either
+  // '%vreg = add ...' or '%vreg = sub ...'.
+  // Condition flag V is used to indicate signed overflow.
+  // 1) MI and CmpInstr set N and V to the same value.
+  // 2) If MI is add/sub with no-signed-wrap, it produces a poison value when
+  //    signed overflow occurs, so CmpInstr could still be simplified away.
+  if (NZVCUsed->V && !MI.getFlag(MachineInstr::NoSWrap))
     return false;
 
   AccessKind AccessToCheck = AK_Write;
@@ -7677,7 +7700,6 @@ AArch64InstrInfo::getOutlinableRanges(MachineBasicBlock &MBB,
     LRAvailableEverywhere &= LRU.available(AArch64::LR);
     RangeBegin = MI.getIterator();
     ++RangeLen;
-    continue;
   }
   // Above loop misses the last (or only) range. If we are still safe, then
   // let's save the range.

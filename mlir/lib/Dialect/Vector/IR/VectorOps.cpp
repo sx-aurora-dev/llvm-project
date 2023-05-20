@@ -280,7 +280,7 @@ void VectorDialect::initialize() {
 Operation *VectorDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
-  return builder.create<arith::ConstantOp>(loc, type, value);
+  return arith::ConstantOp::materialize(builder, value, type, loc);
 }
 
 IntegerType vector::getVectorSubscriptType(Builder &builder) {
@@ -640,10 +640,9 @@ ParseResult ContractionOp::parse(OpAsmParser &parser, OperationState &result) {
   auto loc = parser.getCurrentLocation();
   DictionaryAttr dictAttr;
   // TODO: Unify linalg op attribute parsing.
-  if (parser.parseAttribute(dictAttr, "_", result.attributes) ||
-      parser.parseOperand(lhsInfo) || parser.parseComma() ||
-      parser.parseOperand(rhsInfo) || parser.parseComma() ||
-      parser.parseOperand(accInfo) ||
+  if (parser.parseAttribute(dictAttr) || parser.parseOperand(lhsInfo) ||
+      parser.parseComma() || parser.parseOperand(rhsInfo) ||
+      parser.parseComma() || parser.parseOperand(accInfo) ||
       parser.parseTrailingOperandList(masksInfo) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonTypeList(types) ||
@@ -653,7 +652,7 @@ ParseResult ContractionOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperand(accInfo, resultType, result.operands) ||
       parser.addTypeToList(resultType, result.types))
     return failure();
-  result.attributes.assign(dictAttr.getValue().begin(),
+  result.attributes.append(dictAttr.getValue().begin(),
                            dictAttr.getValue().end());
 
   // Convert array of string into an array of IteratyType enums. This is needed,
@@ -729,8 +728,6 @@ void ContractionOp::print(OpAsmPrinter &p) {
   auto dictAttr = DictionaryAttr::get(getContext(), attrs);
   p << " " << dictAttr << " " << getLhs() << ", ";
   p << getRhs() << ", " << getAcc();
-  if (getMasks().size() == 2)
-    p << ", " << getMasks();
 
   p.printOptionalAttrDict((*this)->getAttrs(), attrNames);
   p << " : " << getLhs().getType() << ", " << getRhs().getType() << " into "
@@ -897,18 +894,6 @@ LogicalResult ContractionOp::verify() {
   if (failed(verifyOutputShape(*this, lhsType, rhsType, accType, resType,
                                contractingDimMap, batchDimMap)))
     return failure();
-
-  // Verify that either two vector masks are set or none are set.
-  auto lhsMaskType = getLHSVectorMaskType();
-  auto rhsMaskType = getRHSVectorMaskType();
-  if ((lhsMaskType && !rhsMaskType) || (!lhsMaskType && rhsMaskType))
-    return emitOpError("invalid number of vector masks specified");
-  if (lhsMaskType && rhsMaskType) {
-    // Verify mask rank == argument rank.
-    if (lhsMaskType.getShape().size() != lhsType.getShape().size() ||
-        rhsMaskType.getShape().size() != rhsType.getShape().size())
-      return emitOpError("invalid vector mask rank");
-  }
 
   // Verify supported combining kind.
   auto vectorType = resType.dyn_cast<VectorType>();
@@ -1744,7 +1729,7 @@ public:
     auto splat = vectorCst.dyn_cast<SplatElementsAttr>();
     if (!splat)
       return failure();
-    Attribute newAttr = splat.getSplatValue<Attribute>();
+    TypedAttr newAttr = splat.getSplatValue<TypedAttr>();
     if (auto vecDstType = extractOp.getType().dyn_cast<VectorType>())
       newAttr = DenseElementsAttr::get(vecDstType, newAttr);
     rewriter.replaceOpWithNewOp<arith::ConstantOp>(extractOp, newAttr);
@@ -1782,9 +1767,9 @@ public:
     copy(getI64SubArray(extractOp.getPosition()), completePositions.begin());
     int64_t elemBeginPosition =
         linearize(completePositions, computeStrides(vecTy.getShape()));
-    auto denseValuesBegin = dense.value_begin<Attribute>() + elemBeginPosition;
+    auto denseValuesBegin = dense.value_begin<TypedAttr>() + elemBeginPosition;
 
-    Attribute newAttr;
+    TypedAttr newAttr;
     if (auto resVecTy = extractOp.getType().dyn_cast<VectorType>()) {
       SmallVector<Attribute> elementValues(
           denseValuesBegin, denseValuesBegin + resVecTy.getNumElements());
@@ -3733,6 +3718,8 @@ namespace {
 /// %1 = vector.transfer_read %t[%p0, %p1], %cst {in_bounds = [true, true]}
 ///     : tensor<?x?xf32>, vector<4x5xf32>
 /// ```
+// TODO: this is brittle and should be deprecated in favor of a more general
+// pattern that applies on-demand.
 struct FoldExtractSliceIntoTransferRead
     : public OpRewritePattern<TransferReadOp> {
 public:
@@ -3883,9 +3870,13 @@ struct TransferReadAfterWriteToBroadcast
 
 void TransferReadOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
-  results
-      .add<FoldExtractSliceIntoTransferRead, TransferReadAfterWriteToBroadcast>(
-          context);
+  // clang-format off
+  results.add <
+               // TODO: this is brittle and should be deprecated in favor of a
+               // more general pattern that applies on-demand.
+               FoldExtractSliceIntoTransferRead,
+               TransferReadAfterWriteToBroadcast>(context);
+  // clang-format on
 }
 
 //===----------------------------------------------------------------------===//
@@ -4235,6 +4226,8 @@ public:
 /// %1 = vector.transfer_write %v, %t2[%a, %b] {in_bounds = [true, true]}
 ///     : vector<4x5xf32>, tensor<?x?xf32>
 /// ```
+// TODO: this is brittle and should be deprecated in favor of a more general
+// pattern that applies on-demand.
 struct FoldInsertSliceIntoTransferWrite
     : public OpRewritePattern<tensor::InsertSliceOp> {
 public:
@@ -4417,8 +4410,13 @@ public:
 
 void TransferWriteOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
-  results.add<FoldWaw, FoldInsertSliceIntoTransferWrite,
+  // clang-format off
+  results.add<FoldWaw,
+              // TODO: this is brittle and should be deprecated in favor of a
+              // more general pattern that applies on-demand.
+              FoldInsertSliceIntoTransferWrite,
               SwapExtractSliceOfTransferWrite>(context);
+  // clang-format on
 }
 
 //===----------------------------------------------------------------------===//
@@ -4630,6 +4628,10 @@ Type GatherOp::getExpectedMaskType() {
   auto vecType = this->getIndexVectorType();
   return VectorType::get(vecType.getShape(),
                          IntegerType::get(vecType.getContext(), /*width=*/1));
+}
+
+std::optional<SmallVector<int64_t, 4>> GatherOp::getShapeForUnroll() {
+  return llvm::to_vector<4>(getVectorType().getShape());
 }
 
 namespace {
@@ -5270,23 +5272,37 @@ class FoldTransposeCreateMask final : public OpRewritePattern<TransposeOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(TransposeOp transposeOp,
+  LogicalResult matchAndRewrite(TransposeOp transpOp,
                                 PatternRewriter &rewriter) const override {
-    auto createMaskOp =
-        transposeOp.getVector().getDefiningOp<vector::CreateMaskOp>();
-    if (!createMaskOp)
+    Value transposeSrc = transpOp.getVector();
+    auto createMaskOp = transposeSrc.getDefiningOp<vector::CreateMaskOp>();
+    auto constantMaskOp = transposeSrc.getDefiningOp<vector::ConstantMaskOp>();
+    if (!createMaskOp && !constantMaskOp)
       return failure();
 
-    // Get the transpose permutation and apply it to the vector.create_mask
-    // operands.
-    auto maskOperands = createMaskOp.getOperands();
+    // Get the transpose permutation and apply it to the vector.create_mask or
+    // vector.constant_mask operands.
     SmallVector<int64_t> permutation;
-    transposeOp.getTransp(permutation);
-    SmallVector<Value> newOperands(maskOperands.begin(), maskOperands.end());
-    applyPermutationToVector(newOperands, permutation);
+    transpOp.getTransp(permutation);
 
-    rewriter.replaceOpWithNewOp<vector::CreateMaskOp>(
-        transposeOp, transposeOp.getResultVectorType(), newOperands);
+    if (createMaskOp) {
+      auto maskOperands = createMaskOp.getOperands();
+      SmallVector<Value> newOperands(maskOperands.begin(), maskOperands.end());
+      applyPermutationToVector(newOperands, permutation);
+
+      rewriter.replaceOpWithNewOp<vector::CreateMaskOp>(
+          transpOp, transpOp.getResultVectorType(), newOperands);
+      return success();
+    }
+
+    // ConstantMaskOp case.
+    auto maskDimSizes = constantMaskOp.getMaskDimSizes();
+    SmallVector<Attribute> newMaskDimSizes(maskDimSizes.getValue());
+    applyPermutationToVector(newMaskDimSizes, permutation);
+
+    rewriter.replaceOpWithNewOp<vector::ConstantMaskOp>(
+        transpOp, transpOp.getResultVectorType(),
+        ArrayAttr::get(transpOp.getContext(), newMaskDimSizes));
     return success();
   }
 };
@@ -5355,6 +5371,14 @@ LogicalResult ConstantMaskOp::verify() {
 //===----------------------------------------------------------------------===//
 // CreateMaskOp
 //===----------------------------------------------------------------------===//
+
+void CreateMaskOp::build(OpBuilder &builder, OperationState &result,
+                         VectorType type,
+                         ArrayRef<OpFoldResult> mixedOperands) {
+  SmallVector<Value> operands =
+      getValueOrCreateConstantIndexOp(builder, result.location, mixedOperands);
+  build(builder, result, type, operands);
+}
 
 LogicalResult CreateMaskOp::verify() {
   auto vectorType = getResult().getType().cast<VectorType>();

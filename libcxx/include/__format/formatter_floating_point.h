@@ -16,6 +16,9 @@
 #include <__algorithm/min.h>
 #include <__algorithm/rotate.h>
 #include <__algorithm/transform.h>
+#include <__charconv/chars_format.h>
+#include <__charconv/to_chars_floating_point.h>
+#include <__charconv/to_chars_result.h>
 #include <__concepts/arithmetic.h>
 #include <__concepts/same_as.h>
 #include <__config>
@@ -26,10 +29,12 @@
 #include <__format/formatter_output.h>
 #include <__format/parser_std_format_spec.h>
 #include <__memory/allocator.h>
+#include <__system_error/errc.h>
 #include <__type_traits/conditional.h>
 #include <__utility/move.h>
 #include <__utility/unreachable.h>
-#include <charconv>
+#include <cmath>
+#include <cstddef>
 
 #ifndef _LIBCPP_HAS_NO_LOCALIZATION
 #  include <locale>
@@ -739,13 +744,13 @@ public:
 };
 
 template <__fmt_char_type _CharT>
-struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT formatter<float, _CharT>
+struct _LIBCPP_TEMPLATE_VIS formatter<float, _CharT>
     : public __formatter_floating_point<_CharT> {};
 template <__fmt_char_type _CharT>
-struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT formatter<double, _CharT>
+struct _LIBCPP_TEMPLATE_VIS formatter<double, _CharT>
     : public __formatter_floating_point<_CharT> {};
 template <__fmt_char_type _CharT>
-struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT formatter<long double, _CharT>
+struct _LIBCPP_TEMPLATE_VIS formatter<long double, _CharT>
     : public __formatter_floating_point<_CharT> {};
 
 #endif //_LIBCPP_STD_VER >= 20

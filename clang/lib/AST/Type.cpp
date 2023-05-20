@@ -2594,6 +2594,50 @@ bool QualType::isTriviallyRelocatableType(const ASTContext &Context) const {
   }
 }
 
+static bool
+HasNonDeletedDefaultedEqualityComparison(const CXXRecordDecl *Decl) {
+  if (Decl->isUnion())
+    return false;
+
+  if (llvm::none_of(Decl->methods(), [](const CXXMethodDecl *MemberFunction) {
+        return MemberFunction->isOverloadedOperator() &&
+               MemberFunction->getOverloadedOperator() ==
+                   OverloadedOperatorKind::OO_EqualEqual &&
+               MemberFunction->isDefaulted();
+      }))
+    return false;
+
+  return llvm::all_of(Decl->bases(),
+                      [](const CXXBaseSpecifier &BS) {
+                        if (const auto *RD = BS.getType()->getAsCXXRecordDecl())
+                          HasNonDeletedDefaultedEqualityComparison(RD);
+                        return true;
+                      }) &&
+         llvm::all_of(Decl->fields(), [](const FieldDecl *FD) {
+           auto Type = FD->getType();
+           if (Type->isReferenceType() || Type->isEnumeralType())
+             return false;
+           if (const auto *RD = Type->getAsCXXRecordDecl())
+             return HasNonDeletedDefaultedEqualityComparison(RD);
+           return true;
+         });
+}
+
+bool QualType::isTriviallyEqualityComparableType(
+    const ASTContext &Context) const {
+  QualType CanonicalType = getCanonicalType();
+  if (CanonicalType->isIncompleteType() || CanonicalType->isDependentType() ||
+      CanonicalType->isEnumeralType())
+    return false;
+
+  if (const auto *RD = CanonicalType->getAsCXXRecordDecl()) {
+    if (!HasNonDeletedDefaultedEqualityComparison(RD))
+      return false;
+  }
+
+  return Context.hasUniqueObjectRepresentations(CanonicalType);
+}
+
 bool QualType::isNonWeakInMRRWithObjCWeak(const ASTContext &Context) const {
   return !Context.getLangOpts().ObjCAutoRefCount &&
          Context.getLangOpts().ObjCWeak &&
@@ -4590,8 +4634,14 @@ AutoType::AutoType(QualType DeducedAsType, AutoTypeKeyword Keyword,
     auto *ArgBuffer =
         const_cast<TemplateArgument *>(getTypeConstraintArguments().data());
     for (const TemplateArgument &Arg : TypeConstraintArgs) {
-      addDependence(
-          toSyntacticDependence(toTypeDependence(Arg.getDependence())));
+      // If we have a deduced type, our constraints never affect semantic
+      // dependence. Prior to deduction, however, our canonical type depends
+      // on the template arguments, so we are a dependent type if any of them
+      // is dependent.
+      TypeDependence ArgDependence = toTypeDependence(Arg.getDependence());
+      if (!DeducedAsType.isNull())
+        ArgDependence = toSyntacticDependence(ArgDependence);
+      addDependence(ArgDependence);
 
       new (ArgBuffer++) TemplateArgument(Arg);
     }

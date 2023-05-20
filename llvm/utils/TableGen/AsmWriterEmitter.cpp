@@ -17,7 +17,6 @@
 #include "CodeGenRegisters.h"
 #include "CodeGenTarget.h"
 #include "SequenceToOffsetTable.h"
-#include "TableGenBackends.h"
 #include "Types.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -1007,7 +1006,7 @@ void AsmWriterEmitter::EmitPrintAliasInstruction(raw_ostream &O) {
         bool IsOr = CombineType == "any_of";
         // Change (any_of FeatureAll, (any_of ...)) to (any_of FeatureAll, ...).
         if (IsOr && D->getNumArgs() == 2 && isa<DagInit>(D->getArg(1))) {
-          DagInit *RHS = dyn_cast<DagInit>(D->getArg(1));
+          DagInit *RHS = cast<DagInit>(D->getArg(1));
           SmallVector<Init *> Args{D->getArg(0)};
           SmallVector<StringInit *> ArgNames{D->getArgName(0)};
           for (unsigned i = 0, e = RHS->getNumArgs(); i != e; ++i) {
@@ -1303,17 +1302,12 @@ void AsmWriterEmitter::run(raw_ostream &O) {
   std::vector<std::vector<std::string>> TableDrivenOperandPrinters;
   unsigned BitsLeft = 0;
   unsigned AsmStrBits = 0;
+  emitSourceFileHeader("Assembly Writer Source Fragment", O);
   EmitGetMnemonic(O, TableDrivenOperandPrinters, BitsLeft, AsmStrBits);
   EmitPrintInstruction(O, TableDrivenOperandPrinters, BitsLeft, AsmStrBits);
   EmitGetRegisterName(O);
   EmitPrintAliasInstruction(O);
 }
 
-namespace llvm {
-
-void EmitAsmWriter(RecordKeeper &RK, raw_ostream &OS) {
-  emitSourceFileHeader("Assembly Writer Source Fragment", OS);
-  AsmWriterEmitter(RK).run(OS);
-}
-
-} // end namespace llvm
+static TableGen::Emitter::OptClass<AsmWriterEmitter>
+    X("gen-asm-writer", "Generate assembly writer");

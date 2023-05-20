@@ -174,7 +174,7 @@ CodeGenModule::CodeGenModule(ASTContext &C,
 
   // If debug info or coverage generation is enabled, create the CGDebugInfo
   // object.
-  if (CodeGenOpts.getDebugInfo() != codegenoptions::NoDebugInfo ||
+  if (CodeGenOpts.getDebugInfo() != llvm::codegenoptions::NoDebugInfo ||
       CodeGenOpts.EmitGcovArcs || CodeGenOpts.EmitGcovNotes)
     DebugInfo.reset(new CGDebugInfo(*this));
 
@@ -548,6 +548,8 @@ void CodeGenModule::Release() {
     GlobalTopLevelStmtBlockInFlight = {nullptr, nullptr};
   }
 
+  // Module implementations are initialized the same way as a regular TU that
+  // imports one or more modules.
   if (CXX20ModuleInits && Primary && Primary->isInterfaceOrPartition())
     EmitCXXModuleInitFunc(Primary);
   else
@@ -6534,16 +6536,14 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
         EmitTopLevelDecl(D);
 
       // Visit the submodules of this module.
-      for (clang::Module::submodule_iterator Sub = Mod->submodule_begin(),
-                                             SubEnd = Mod->submodule_end();
-           Sub != SubEnd; ++Sub) {
+      for (auto *Submodule : Mod->submodules()) {
         // Skip explicit children; they need to be explicitly imported to emit
         // the initializers.
-        if ((*Sub)->IsExplicit)
+        if (Submodule->IsExplicit)
           continue;
 
-        if (Visited.insert(*Sub).second)
-          Stack.push_back(*Sub);
+        if (Visited.insert(Submodule).second)
+          Stack.push_back(Submodule);
       }
     }
     break;

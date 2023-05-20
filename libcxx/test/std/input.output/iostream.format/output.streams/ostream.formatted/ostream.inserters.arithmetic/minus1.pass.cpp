@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.12
+// XFAIL: stdlib=apple-libc++ && target={{.+}}-apple-macosx10.12
 
 // <ostream>
 
@@ -54,7 +54,7 @@ void test_hex(const char *expected)
     ss << std::hex << static_cast<T>(-1);
 
     std::string str = ss.str();
-    for (size_t i = 0; i < str.size(); ++i )
+    for (std::size_t i = 0; i < str.size(); ++i )
         str[i] = static_cast<char>(std::toupper(str[i]));
 
     assert(str == expected);

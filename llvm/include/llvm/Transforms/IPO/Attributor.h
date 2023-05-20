@@ -125,6 +125,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/DOTGraphTraits.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/CallGraphUpdater.h"
@@ -306,7 +307,7 @@ inline bool operator==(const RangeTy &A, const RangeTy &B) {
 inline bool operator!=(const RangeTy &A, const RangeTy &B) { return !(A == B); }
 
 /// Return the initial value of \p Obj with type \p Ty if that is a constant.
-Constant *getInitialValueForObj(Value &Obj, Type &Ty,
+Constant *getInitialValueForObj(Attributor &A, Value &Obj, Type &Ty,
                                 const TargetLibraryInfo *TLI,
                                 const DataLayout &DL,
                                 RangeTy *RangePtr = nullptr);
@@ -1895,6 +1896,40 @@ struct Attributor {
     return SimplificationCallbacks.count(IRP);
   }
 
+  /// Register \p CB as a simplification callback.
+  /// Similar to \p registerSimplificationCallback, the call back will be called
+  /// first when we simplify a global variable \p GV.
+  using GlobalVariableSimplifictionCallbackTy =
+      std::function<std::optional<Constant *>(
+          const GlobalVariable &, const AbstractAttribute *, bool &)>;
+  void registerGlobalVariableSimplificationCallback(
+      const GlobalVariable &GV,
+      const GlobalVariableSimplifictionCallbackTy &CB) {
+    GlobalVariableSimplificationCallbacks[&GV].emplace_back(CB);
+  }
+
+  /// Return true if there is a simplification callback for \p GV.
+  bool hasGlobalVariableSimplificationCallback(const GlobalVariable &GV) {
+    return GlobalVariableSimplificationCallbacks.count(&GV);
+  }
+
+  /// Return \p std::nullopt if there is no call back registered for \p GV or
+  /// the call back is still not sure if \p GV can be simplified. Return \p
+  /// nullptr if \p GV can't be simplified.
+  std::optional<Constant *>
+  getAssumedInitializerFromCallBack(const GlobalVariable &GV,
+                                    const AbstractAttribute *AA,
+                                    bool &UsedAssumedInformation) {
+    assert(GlobalVariableSimplificationCallbacks.contains(&GV));
+    for (auto &CB : GlobalVariableSimplificationCallbacks.lookup(&GV)) {
+      auto SimplifiedGV = CB(GV, AA, UsedAssumedInformation);
+      // For now we assume the call back will not return a std::nullopt.
+      assert(SimplifiedGV.has_value() && "SimplifiedGV has not value");
+      return *SimplifiedGV;
+    }
+    llvm_unreachable("there must be a callback registered");
+  }
+
   using VirtualUseCallbackTy =
       std::function<bool(Attributor &, const AbstractAttribute *)>;
   void registerVirtualUseCallback(const Value &V,
@@ -1906,6 +1941,12 @@ private:
   /// The vector with all simplification callbacks registered by outside AAs.
   DenseMap<IRPosition, SmallVector<SimplifictionCallbackTy, 1>>
       SimplificationCallbacks;
+
+  /// The vector with all simplification callbacks for global variables
+  /// registered by outside AAs.
+  DenseMap<const GlobalVariable *,
+           SmallVector<GlobalVariableSimplifictionCallbackTy, 1>>
+      GlobalVariableSimplificationCallbacks;
 
   DenseMap<const Value *, SmallVector<VirtualUseCallbackTy, 1>>
       VirtualUseCallbacks;
@@ -5090,7 +5131,10 @@ struct AAExecutionDomain
                                          const Instruction &I) const = 0;
 
   virtual ExecutionDomainTy getExecutionDomain(const BasicBlock &) const = 0;
-  virtual ExecutionDomainTy getExecutionDomain(const CallBase &) const = 0;
+  /// Return the execution domain with which the call \p CB is entered and the
+  /// one with which it is left.
+  virtual std::pair<ExecutionDomainTy, ExecutionDomainTy>
+  getExecutionDomain(const CallBase &CB) const = 0;
   virtual ExecutionDomainTy getFunctionExecutionDomain() const = 0;
 
   /// This function should return true if the type of the \p AA is
@@ -5136,6 +5180,37 @@ struct AAInterFnReachability
   const char *getIdAddr() const override { return &ID; }
 
   /// This function should return true if the type of the \p AA is AACallEdges.
+  static bool classof(const AbstractAttribute *AA) {
+    return (AA->getIdAddr() == &ID);
+  }
+
+  /// Unique ID (due to the unique address)
+  static const char ID;
+};
+
+/// An abstract Attribute for determining the necessity of the convergent
+/// attribute.
+struct AANonConvergent : public StateWrapper<BooleanState, AbstractAttribute> {
+  using Base = StateWrapper<BooleanState, AbstractAttribute>;
+
+  AANonConvergent(const IRPosition &IRP, Attributor &A) : Base(IRP) {}
+
+  /// Create an abstract attribute view for the position \p IRP.
+  static AANonConvergent &createForPosition(const IRPosition &IRP, Attributor &A);
+
+  /// Return true if "non-convergent" is assumed.
+  bool isAssumedNotConvergent() const { return getAssumed(); }
+
+  /// Return true if "non-convergent" is known.
+  bool isKnownNotConvergent() const { return getKnown(); }
+
+  /// See AbstractAttribute::getName()
+  const std::string getName() const override { return "AANonConvergent"; }
+
+  /// See AbstractAttribute::getIdAddr()
+  const char *getIdAddr() const override { return &ID; }
+
+  /// This function should return true if the type of the \p AA is AANonConvergent.
   static bool classof(const AbstractAttribute *AA) {
     return (AA->getIdAddr() == &ID);
   }

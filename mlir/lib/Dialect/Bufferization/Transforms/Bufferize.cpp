@@ -208,8 +208,8 @@ struct OneShotBufferizePass
       opt.analysisHeuristic = parseHeuristicOption(analysisHeuristic);
       opt.copyBeforeWrite = copyBeforeWrite;
       opt.createDeallocs = createDeallocs;
-      opt.functionBoundaryTypeConversion =
-          parseLayoutMapOption(functionBoundaryTypeConversion);
+      opt.setFunctionBoundaryTypeConversion(
+          parseLayoutMapOption(functionBoundaryTypeConversion));
       if (mustInferMemorySpace)
         opt.defaultMemorySpace = std::nullopt;
       opt.printConflicts = printConflicts;
@@ -358,9 +358,12 @@ public:
 
 protected:
   void notifyOperationRemoved(Operation *op) override {
-    erasedOps.insert(op);
-    // Erase if present.
-    toMemrefOps.erase(op);
+    // TODO: Walk can be removed when D144193 has landed.
+    op->walk([&](Operation *op) {
+      erasedOps.insert(op);
+      // Erase if present.
+      toMemrefOps.erase(op);
+    });
   }
 
   void notifyOperationInserted(Operation *op) override {

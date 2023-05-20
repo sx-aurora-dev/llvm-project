@@ -163,6 +163,28 @@ def Builtin_Float8E4M3FNUZ : Builtin_FloatType<"Float8E4M3FNUZ"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Float8E4M3B11FNUZType
+
+def Builtin_Float8E4M3B11FNUZ : Builtin_FloatType<"Float8E4M3B11FNUZ"> {
+  let summary = "8-bit floating point with 3 bit mantissa";
+  let description = [{
+    An 8-bit floating point type with 1 sign bit, 4 bits exponent and 3 bits
+    mantissa. This is not a standard type as defined by IEEE-754, but it follows
+    similar conventions, with the exception that there are no infinity values,
+    no negative zero, and only one NaN representation. This type has the
+    following characteristics:
+
+      * bit encoding: S1E4M3
+      * exponent bias: 11
+      * infinities: Not supported
+      * NaNs: Supported with sign bit set to 1, exponent bits and mantissa bits set to all 0s
+      * denormals when exponent is 0
+
+    Related to: https://dl.acm.org/doi/10.5555/3454287.3454728
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // BFloat16Type
 
 def Builtin_BFloat16 : Builtin_FloatType<"BFloat16"> {
@@ -1020,7 +1042,7 @@ def Builtin_Vector : Builtin_Type<"Vector", [ShapedTypeInterface], "Type"> {
     // A 1D scalable-length vector that contains a multiple of 4 f32 elements.
     vector<[4]xf32>
 
-    // A 2D scalable-length vector that contains a multiple of 2x8 i8 elements.
+    // A 2D scalable-length vector that contains a multiple of 2x8 f32 elements.
     vector<[2x8]xf32>
 
     // A 2D mixed fixed/scalable vector that contains 4 scalable vectors of 4 f32 elements.

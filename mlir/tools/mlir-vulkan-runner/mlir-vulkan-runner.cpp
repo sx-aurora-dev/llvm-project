@@ -34,6 +34,7 @@
 #include "mlir/ExecutionEngine/JitRunner.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
@@ -56,7 +57,8 @@ static LogicalResult runMLIRPasses(Operation *op,
   if (!module)
     return op->emitOpError("expected a 'builtin.module' op");
   PassManager passManager(module.getContext());
-  applyPassManagerCLOptions(passManager);
+  if (failed(applyPassManagerCLOptions(passManager)))
+    return failure();
 
   passManager.addPass(createGpuKernelOutliningPass());
   passManager.addPass(memref::createFoldMemRefAliasOpsPass());
@@ -114,6 +116,7 @@ int main(int argc, char **argv) {
                   mlir::gpu::GPUDialect, mlir::spirv::SPIRVDialect,
                   mlir::func::FuncDialect, mlir::memref::MemRefDialect,
                   mlir::vector::VectorDialect>();
+  mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
 
   return mlir::JitRunnerMain(argc, argv, registry, jitRunnerConfig);

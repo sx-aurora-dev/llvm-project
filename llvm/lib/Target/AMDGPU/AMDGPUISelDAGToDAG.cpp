@@ -28,6 +28,7 @@
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #ifdef EXPENSIVE_CHECKS
 #include "llvm/Analysis/LoopInfo.h"
@@ -2528,6 +2529,18 @@ void AMDGPUDAGToDAGISel::SelectINTRINSIC_WO_CHAIN(SDNode *N) {
   case Intrinsic::amdgcn_interp_p1_f16:
     SelectInterpP1F16(N);
     return;
+  case Intrinsic::amdgcn_inverse_ballot:
+    switch (N->getOperand(1).getValueSizeInBits()) {
+    case 32:
+      Opcode = AMDGPU::S_INVERSE_BALLOT_U32;
+      break;
+    case 64:
+      Opcode = AMDGPU::S_INVERSE_BALLOT_U64;
+      break;
+    default:
+      llvm_unreachable("Unsupported size for inverse ballot mask.");
+    }
+    break;
   default:
     SelectCode(N);
     return;
@@ -2770,7 +2783,7 @@ bool AMDGPUDAGToDAGISel::SelectDotIUVOP3PMods(SDValue In, SDValue &Src) const {
   assert(C->getAPIntValue().getBitWidth() == 1 && "expected i1 value");
 
   unsigned Mods = SISrcMods::OP_SEL_1;
-  unsigned SrcSign = C->getAPIntValue().getZExtValue();
+  unsigned SrcSign = C->getZExtValue();
   if (SrcSign == 1)
     Mods ^= SISrcMods::NEG;
 
@@ -2784,7 +2797,7 @@ bool AMDGPUDAGToDAGISel::SelectWMMAOpSelVOP3PMods(SDValue In,
   assert(C->getAPIntValue().getBitWidth() == 1 && "expected i1 value");
 
   unsigned Mods = SISrcMods::OP_SEL_1;
-  unsigned SrcVal = C->getAPIntValue().getZExtValue();
+  unsigned SrcVal = C->getZExtValue();
   if (SrcVal == 1)
     Mods |= SISrcMods::OP_SEL_0;
 

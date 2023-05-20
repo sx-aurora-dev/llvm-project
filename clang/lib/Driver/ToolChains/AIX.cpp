@@ -143,6 +143,22 @@ void aix::Linker::ConstructJob(Compilation &C, const JobAction &JA,
        Args.hasArg(options::OPT_coverage))
     CmdArgs.push_back("-bdbg:namedsects:ss");
 
+  if (Arg *A =
+          Args.getLastArg(clang::driver::options::OPT_mxcoff_build_id_EQ)) {
+    StringRef BuildId = A->getValue();
+    if (BuildId[0] != '0' || BuildId[1] != 'x' ||
+        BuildId.find_if_not(llvm::isHexDigit, 2) != StringRef::npos)
+      ToolChain.getDriver().Diag(diag::err_drv_unsupported_option_argument)
+          << A->getSpelling() << BuildId;
+    else {
+      std::string LinkerFlag = "-bdbg:ldrinfo:xcoff_binary_id:0x";
+      if (BuildId.size() % 2) // Prepend a 0 if odd number of digits.
+        LinkerFlag += "0";
+      LinkerFlag += BuildId.drop_front(2).lower();
+      CmdArgs.push_back(Args.MakeArgString(LinkerFlag));
+    }
+  }
+
   // Specify linker output file.
   assert((Output.isFilename() || Output.isNothing()) && "Invalid output.");
   if (Output.isFilename()) {
@@ -163,19 +179,19 @@ void aix::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-bpD:0x110000000");
   }
 
-  auto getCrt0Basename = [&Args, IsArch32Bit] {
-    if (Arg *A = Args.getLastArgNoClaim(options::OPT_p, options::OPT_pg)) {
-      // Enable gprofiling when "-pg" is specified.
-      if (A->getOption().matches(options::OPT_pg))
-        return IsArch32Bit ? "gcrt0.o" : "gcrt0_64.o";
-      // Enable profiling when "-p" is specified.
-      return IsArch32Bit ? "mcrt0.o" : "mcrt0_64.o";
-    }
-    return IsArch32Bit ? "crt0.o" : "crt0_64.o";
-  };
-
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles,
                    options::OPT_shared, options::OPT_r)) {
+    auto getCrt0Basename = [&Args, IsArch32Bit] {
+      if (Arg *A = Args.getLastArgNoClaim(options::OPT_p, options::OPT_pg)) {
+        // Enable gprofiling when "-pg" is specified.
+        if (A->getOption().matches(options::OPT_pg))
+          return IsArch32Bit ? "gcrt0.o" : "gcrt0_64.o";
+        // Enable profiling when "-p" is specified.
+        return IsArch32Bit ? "mcrt0.o" : "mcrt0_64.o";
+      }
+      return IsArch32Bit ? "crt0.o" : "crt0_64.o";
+    };
+
     CmdArgs.push_back(
         Args.MakeArgString(ToolChain.GetFilePath(getCrt0Basename())));
 
@@ -234,8 +250,8 @@ void aix::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Add directory to library search path.
   Args.AddAllArgs(CmdArgs, options::OPT_L);
-  ToolChain.AddFilePathLibArgs(Args, CmdArgs);
   if (!Args.hasArg(options::OPT_r)) {
+    ToolChain.AddFilePathLibArgs(Args, CmdArgs);
     ToolChain.addProfileRTLibs(Args, CmdArgs);
 
     if (getToolChain().ShouldLinkCXXStdlib(Args))

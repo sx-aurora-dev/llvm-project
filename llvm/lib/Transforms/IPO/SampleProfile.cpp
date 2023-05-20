@@ -58,8 +58,6 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/PseudoProbe.h"
 #include "llvm/IR/ValueSymbolTable.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
 #include "llvm/ProfileData/InstrProf.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
@@ -138,6 +136,11 @@ static cl::opt<bool> PersistProfileStaleness(
     "persist-profile-staleness", cl::Hidden, cl::init(false),
     cl::desc("Compute stale profile statistical metrics and write it into the "
              "native object file(.llvm_stats section)."));
+
+static cl::opt<bool> FlattenProfileForMatching(
+    "flatten-profile-for-matching", cl::Hidden, cl::init(true),
+    cl::desc(
+        "Use flattened profile for stale profile detection and matching."));
 
 static cl::opt<bool> ProfileSampleAccurate(
     "profile-sample-accurate", cl::Hidden, cl::init(false),
@@ -434,6 +437,7 @@ class SampleProfileMatcher {
   Module &M;
   SampleProfileReader &Reader;
   const PseudoProbeManager *ProbeManager;
+  SampleProfileMap FlattenedProfiles;
 
   // Profile mismatching statstics.
   uint64_t TotalProfiledCallsites = 0;
@@ -448,7 +452,21 @@ class SampleProfileMatcher {
 public:
   SampleProfileMatcher(Module &M, SampleProfileReader &Reader,
                        const PseudoProbeManager *ProbeManager)
-      : M(M), Reader(Reader), ProbeManager(ProbeManager) {}
+      : M(M), Reader(Reader), ProbeManager(ProbeManager) {
+    if (FlattenProfileForMatching) {
+      ProfileConverter::flattenProfile(Reader.getProfiles(), FlattenedProfiles,
+                                       FunctionSamples::ProfileIsCS);
+    }
+  }
+
+  FunctionSamples *getFlattenedSamplesFor(const Function &F) {
+    StringRef CanonFName = FunctionSamples::getCanonicalFnName(F);
+    auto It = FlattenedProfiles.find(CanonFName);
+    if (It != FlattenedProfiles.end())
+      return &It->second;
+    return nullptr;
+  }
+
   void detectProfileMismatch();
   void detectProfileMismatch(const Function &F, const FunctionSamples &FS);
 };
@@ -1263,7 +1281,7 @@ bool SampleProfileLoader::tryInlineCandidate(
   if (!Cost)
     return false;
 
-  InlineFunctionInfo IFI(nullptr, GetAC);
+  InlineFunctionInfo IFI(GetAC);
   IFI.UpdateProfile = false;
   InlineResult IR = InlineFunction(CB, IFI,
                                    /*MergeAttributes=*/true);
@@ -2156,7 +2174,11 @@ void SampleProfileMatcher::detectProfileMismatch() {
   for (auto &F : M) {
     if (F.isDeclaration() || !F.hasFnAttribute("use-sample-profile"))
       continue;
-    FunctionSamples *FS = Reader.getSamplesFor(F);
+    FunctionSamples *FS = nullptr;
+    if (FlattenProfileForMatching)
+      FS = getFlattenedSamplesFor(F);
+    else
+      FS = Reader.getSamplesFor(F);
     if (!FS)
       continue;
     detectProfileMismatch(F, *FS);

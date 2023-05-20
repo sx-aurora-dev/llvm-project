@@ -414,6 +414,7 @@ def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
 def TargetWebAssembly : TargetArch<["wasm32", "wasm64"]>;
+def TargetNVPTX : TargetArch<["nvptx", "nvptx64"]>;
 def TargetWindows : TargetSpec {
   let OSes = ["Win32"];
 }
@@ -833,7 +834,7 @@ def Annotate : InheritableParamAttr {
     return AnnotateAttr::Create(Ctx, Annotation, nullptr, 0, CommonInfo);
   }
   static AnnotateAttr *CreateImplicit(ASTContext &Ctx, llvm::StringRef Annotation, \
-              const AttributeCommonInfo &CommonInfo = {SourceRange{}}) {
+              const AttributeCommonInfo &CommonInfo) {
     return AnnotateAttr::CreateImplicit(Ctx, Annotation, nullptr, 0, CommonInfo);
   }
   }];
@@ -1220,6 +1221,12 @@ def CUDAHost : InheritableAttr {
   let SimpleHandler = 1;
 }
 def : MutualExclusions<[CUDAGlobal, CUDAHost]>;
+
+def NVPTXKernel : InheritableAttr, TargetSpecificAttr<TargetNVPTX> {
+  let Spellings = [Clang<"nvptx_kernel">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+}
 
 def HIPManaged : InheritableAttr {
   let Spellings = [GNU<"managed">, Declspec<"__managed__">];
@@ -2841,6 +2848,7 @@ def Unavailable : InheritableAttr {
                  "IR_ARCInitReturnsUnrelated",
                  "IR_ARCFieldWithOwnership"], 1, /*fake*/ 1>];
   let Documentation = [Undocumented];
+  let MeaningfulToClassTemplateDefinition = 1;
 }
 
 def DiagnoseIf : InheritableAttr {

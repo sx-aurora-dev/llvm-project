@@ -1721,6 +1721,7 @@ static bool CheckConstexprParameterTypes(Sema &SemaRef,
                                               e = FT->param_type_end();
        i != e; ++i, ++ArgIndex) {
     const ParmVarDecl *PD = FD->getParamDecl(ArgIndex);
+    assert(PD && "null in a parameter list");
     SourceLocation ParamLoc = PD->getLocation();
     if (CheckLiteralType(SemaRef, Kind, ParamLoc, *i,
                          diag::err_constexpr_non_literal_param, ArgIndex + 1,
@@ -3231,16 +3232,6 @@ static bool InitializationHasSideEffects(const FieldDecl &FD) {
   return false;
 }
 
-static const ParsedAttr *getMSPropertyAttr(const ParsedAttributesView &list) {
-  ParsedAttributesView::const_iterator Itr =
-      llvm::find_if(list, [](const ParsedAttr &AL) {
-        return AL.isDeclspecPropertyAttribute();
-      });
-  if (Itr != list.end())
-    return &*Itr;
-  return nullptr;
-}
-
 // Check if there is a field shadowing.
 void Sema::CheckShadowInheritedFields(const SourceLocation &Loc,
                                       DeclarationName FieldName,
@@ -3318,7 +3309,7 @@ Sema::ActOnCXXMemberDeclarator(Scope *S, AccessSpecifier AS, Declarator &D,
 
   bool isFunc = D.isDeclarationOfFunction();
   const ParsedAttr *MSPropertyAttr =
-      getMSPropertyAttr(D.getDeclSpec().getAttributes());
+      D.getDeclSpec().getAttributes().getMSPropertyAttr();
 
   if (cast<CXXRecordDecl>(CurContext)->isInterface()) {
     // The Microsoft extension __interface only permits public member functions
@@ -3576,12 +3567,12 @@ Sema::ActOnCXXMemberDeclarator(Scope *S, AccessSpecifier AS, Declarator &D,
   }
 
   if (VS.isOverrideSpecified())
-    Member->addAttr(OverrideAttr::Create(Context, VS.getOverrideLoc(),
-                                         AttributeCommonInfo::AS_Keyword));
+    Member->addAttr(OverrideAttr::Create(Context, VS.getOverrideLoc()));
   if (VS.isFinalSpecified())
-    Member->addAttr(FinalAttr::Create(
-        Context, VS.getFinalLoc(), AttributeCommonInfo::AS_Keyword,
-        static_cast<FinalAttr::Spelling>(VS.isFinalSpelledSealed())));
+    Member->addAttr(FinalAttr::Create(Context, VS.getFinalLoc(),
+                                      VS.isFinalSpelledSealed()
+                                          ? FinalAttr::Keyword_sealed
+                                          : FinalAttr::Keyword_final));
 
   if (VS.getLastLocation().isValid()) {
     // Update the end location of a method that has a virt-specifiers.
@@ -3980,7 +3971,7 @@ namespace {
     }
 
     llvm::SmallPtrSet<QualType, 4> UninitializedBaseClasses;
-    for (auto I : RD->bases())
+    for (const auto &I : RD->bases())
       UninitializedBaseClasses.insert(I.getType().getCanonicalType());
 
     if (UninitializedFields.empty() && UninitializedBaseClasses.empty())
@@ -6347,6 +6338,18 @@ void Sema::checkClassLevelDLLAttribute(CXXRecordDecl *Class) {
   if (!ClassAttr)
     return;
 
+  // MSVC allows imported or exported template classes that have UniqueExternal
+  // linkage. This occurs when the template class has been instantiated with
+  // a template parameter which itself has internal linkage.
+  // We drop the attribute to avoid exporting or importing any members.
+  if ((Context.getTargetInfo().getCXXABI().isMicrosoft() ||
+       Context.getTargetInfo().getTriple().isPS()) &&
+      (!Class->isExternallyVisible() && Class->hasExternalFormalLinkage())) {
+    Class->dropAttr<DLLExportAttr>();
+    Class->dropAttr<DLLImportAttr>();
+    return;
+  }
+
   if (!Class->isExternallyVisible()) {
     Diag(Class->getLocation(), diag::err_attribute_dll_not_extern)
         << Class << ClassAttr;
@@ -7755,6 +7758,10 @@ protected:
 
     //   followed by the non-static data members of C
     for (FieldDecl *Field : Record->fields()) {
+      // C++23 [class.bit]p2:
+      //   Unnamed bit-fields are not members ...
+      if (Field->isUnnamedBitfield())
+        continue;
       // Recursively expand anonymous structs.
       if (Field->isAnonymousStructOrUnion()) {
         if (visitSubobjects(Results, Field->getType()->getAsCXXRecordDecl(),
@@ -16715,7 +16722,8 @@ static bool UsefulToPrintExpr(const Expr *E) {
 /// Try to print more useful information about a failed static_assert
 /// with expression \E
 void Sema::DiagnoseStaticAssertDetails(const Expr *E) {
-  if (const auto *Op = dyn_cast<BinaryOperator>(E)) {
+  if (const auto *Op = dyn_cast<BinaryOperator>(E);
+      Op && Op->getOpcode() != BO_LOr) {
     const Expr *LHS = Op->getLHS()->IgnoreParenImpCasts();
     const Expr *RHS = Op->getRHS()->IgnoreParenImpCasts();
 
@@ -16816,19 +16824,20 @@ Decl *Sema::BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
       if (InnerCond && isa<ConceptSpecializationExpr>(InnerCond)) {
         // Drill down into concept specialization expressions to see why they
         // weren't satisfied.
-        Diag(StaticAssertLoc, diag::err_static_assert_failed)
-          << !AssertMessage << Msg.str() << AssertExpr->getSourceRange();
+        Diag(AssertExpr->getBeginLoc(), diag::err_static_assert_failed)
+            << !AssertMessage << Msg.str() << AssertExpr->getSourceRange();
         ConstraintSatisfaction Satisfaction;
         if (!CheckConstraintSatisfaction(InnerCond, Satisfaction))
           DiagnoseUnsatisfiedConstraint(Satisfaction);
       } else if (InnerCond && !isa<CXXBoolLiteralExpr>(InnerCond)
                            && !isa<IntegerLiteral>(InnerCond)) {
-        Diag(StaticAssertLoc, diag::err_static_assert_requirement_failed)
-          << InnerCondDescription << !AssertMessage
-          << Msg.str() << InnerCond->getSourceRange();
+        Diag(InnerCond->getBeginLoc(),
+             diag::err_static_assert_requirement_failed)
+            << InnerCondDescription << !AssertMessage << Msg.str()
+            << InnerCond->getSourceRange();
         DiagnoseStaticAssertDetails(InnerCond);
       } else {
-        Diag(StaticAssertLoc, diag::err_static_assert_failed)
+        Diag(AssertExpr->getBeginLoc(), diag::err_static_assert_failed)
             << !AssertMessage << Msg.str() << AssertExpr->getSourceRange();
         PrintContextStack();
       }

@@ -471,11 +471,6 @@ createLinalgBodyCalculationForElementwiseOp(Operation *op, ValueRange args,
     }
 
     if (arith::FPToSIOp::areCastCompatible(srcTy, dstTy)) {
-      auto zero = rewriter.create<arith::ConstantOp>(
-          loc, rewriter.getF32FloatAttr(0.0f));
-      auto half = rewriter.create<arith::ConstantOp>(
-          loc, rewriter.getF32FloatAttr(0.5f));
-
       auto intMin = rewriter.create<arith::ConstantOp>(
           loc, rewriter.getF32FloatAttr(
                    APInt::getSignedMinValue(dstTy.getIntOrFloatBitWidth())
@@ -486,12 +481,7 @@ createLinalgBodyCalculationForElementwiseOp(Operation *op, ValueRange args,
                    APInt::getSignedMaxValue(dstTy.getIntOrFloatBitWidth())
                        .getSExtValue()));
 
-      auto added = rewriter.create<arith::AddFOp>(loc, args[0], half);
-      auto subbed = rewriter.create<arith::SubFOp>(loc, args[0], half);
-      auto negative = rewriter.create<arith::CmpFOp>(
-          loc, arith::CmpFPredicate::OLT, args[0], zero);
-      auto rounded =
-          rewriter.create<arith::SelectOp>(loc, negative, subbed, added);
+      auto rounded = rewriter.create<math::RoundEvenOp>(loc, args[0]);
 
       auto clamped = clampFloatHelper(loc, rounded, intMin, intMax, rewriter);
 
@@ -635,7 +625,7 @@ elementwiseMatchAndRewriteHelper(Operation *operation,
 
 // Returns the constant initial value for a given reduction operation. The
 // attribute type varies depending on the element type required.
-static Attribute createInitialValueForReduceOp(Operation *op, Type elementTy,
+static TypedAttr createInitialValueForReduceOp(Operation *op, Type elementTy,
                                                PatternRewriter &rewriter) {
   if (isa<tosa::ReduceSumOp>(op) && elementTy.isa<FloatType>())
     return rewriter.getFloatAttr(elementTy, 0.0);
@@ -1839,19 +1829,19 @@ public:
     auto input = adaptor.getOperands()[0];
     auto indices = adaptor.getOperands()[1];
 
+    auto valuesTy =
+        op.getValues().getType().dyn_cast_or_null<RankedTensorType>();
     auto resultTy = op.getType().cast<ShapedType>();
 
-    auto dynamicDimsOr = checkHasDynamicBatchDims(
-        rewriter, op, {input, indices, op.getOutput()});
-    if (!dynamicDimsOr.has_value())
-      return rewriter.notifyMatchFailure(
-          op, "tosa.gather currently only supports dynamic batch dimensions");
-    SmallVector<Value> dynamicDims = *dynamicDimsOr;
+    if (!valuesTy)
+      return rewriter.notifyMatchFailure(op, "unranked tensors not supported");
+
+    auto dynamicDims = inferDynamicDimsForGather(
+        rewriter, op.getLoc(), adaptor.getValues(), adaptor.getIndices());
 
     auto resultElementTy = resultTy.getElementType();
 
     auto loc = op.getLoc();
-
     auto emptyTensor =
         rewriter
             .create<tensor::EmptyOp>(loc, resultTy.getShape(), resultElementTy,
@@ -1881,6 +1871,24 @@ public:
         });
     rewriter.replaceOp(op, genericOp.getResult(0));
     return success();
+  }
+
+  static llvm::SmallVector<Value> inferDynamicDimsForGather(OpBuilder &builder,
+                                                            Location loc,
+                                                            Value values,
+                                                            Value indices) {
+    llvm::SmallVector<Value> results;
+
+    auto addDynamicDimension = [&](Value source, int64_t dim) {
+      auto dynamicDim = tensor::createDimValue(builder, loc, source, dim);
+      if (auto dimValue = dynamicDim.value().dyn_cast<Value>())
+        results.push_back(dimValue);
+    };
+
+    addDynamicDimension(values, 0);
+    addDynamicDimension(indices, 1);
+    addDynamicDimension(values, 2);
+    return results;
   }
 };
 

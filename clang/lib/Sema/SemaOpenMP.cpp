@@ -2025,9 +2025,9 @@ enum class FunctionEmissionStatus {
 };
 } // anonymous namespace
 
-Sema::SemaDiagnosticBuilder Sema::diagIfOpenMPDeviceCode(SourceLocation Loc,
-                                                         unsigned DiagID,
-                                                         FunctionDecl *FD) {
+Sema::SemaDiagnosticBuilder
+Sema::diagIfOpenMPDeviceCode(SourceLocation Loc, unsigned DiagID,
+                             const FunctionDecl *FD) {
   assert(LangOpts.OpenMP && LangOpts.OpenMPIsDevice &&
          "Expected OpenMP device compilation.");
 
@@ -2065,7 +2065,7 @@ Sema::SemaDiagnosticBuilder Sema::diagIfOpenMPDeviceCode(SourceLocation Loc,
 
 Sema::SemaDiagnosticBuilder Sema::diagIfOpenMPHostCode(SourceLocation Loc,
                                                        unsigned DiagID,
-                                                       FunctionDecl *FD) {
+                                                       const FunctionDecl *FD) {
   assert(LangOpts.OpenMP && !LangOpts.OpenMPIsDevice &&
          "Expected OpenMP host compilation.");
 
@@ -2273,10 +2273,10 @@ bool Sema::isOpenMPCapturedByRef(const ValueDecl *D, unsigned Level,
   // and alignment, because the runtime library only deals with uintptr types.
   // If it does not fit the uintptr size, we need to pass the data by reference
   // instead.
-  if (!IsByRef &&
-      (Ctx.getTypeSizeInChars(Ty) >
-           Ctx.getTypeSizeInChars(Ctx.getUIntPtrType()) ||
-       Ctx.getDeclAlign(D) > Ctx.getTypeAlignInChars(Ctx.getUIntPtrType()))) {
+  if (!IsByRef && (Ctx.getTypeSizeInChars(Ty) >
+                       Ctx.getTypeSizeInChars(Ctx.getUIntPtrType()) ||
+                   Ctx.getAlignOfGlobalVarInChars(Ty) >
+                       Ctx.getTypeAlignInChars(Ctx.getUIntPtrType()))) {
     IsByRef = true;
   }
 
@@ -4227,8 +4227,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     Sema::CapturedParamNameType ParamsTarget[] = {
         std::make_pair(StringRef(), QualType()) // __context with shared vars
     };
@@ -4272,8 +4271,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope, CR_OpenMP,
                              std::make_pair(StringRef(), QualType()),
                              /*OpenMPCaptureLevel=*/1);
@@ -4333,8 +4331,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     break;
   }
   case OMPD_taskloop:
@@ -4380,8 +4377,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     break;
   }
   case OMPD_parallel_masked_taskloop:
@@ -4433,8 +4429,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     break;
   }
   case OMPD_distribute_parallel_for_simd:
@@ -4480,8 +4475,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     Sema::CapturedParamNameType ParamsTarget[] = {
         std::make_pair(StringRef(), QualType()) // __context with shared vars
     };
@@ -4583,8 +4577,7 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     // function directly.
     getCurCapturedRegion()->TheCapturedDecl->addAttr(
         AlwaysInlineAttr::CreateImplicit(
-            Context, {}, AttributeCommonInfo::AS_Keyword,
-            AlwaysInlineAttr::Keyword_forceinline));
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
     break;
   }
   case OMPD_threadprivate:
@@ -6121,6 +6114,11 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(
       checkNestingOfRegions(*this, DSAStack, Kind, DirName, CancelRegion,
                             BindKind, StartLoc))
     return StmtError();
+
+  // Report affected OpenMP target offloading behavior when in HIP lang-mode.
+  if (getLangOpts().HIP && (isOpenMPTargetExecutionDirective(Kind) ||
+                            isOpenMPTargetDataManagementDirective(Kind)))
+    Diag(StartLoc, diag::warn_hip_omp_target_directives);
 
   llvm::SmallVector<OMPClause *, 8> ClausesWithImplicit;
   VarsWithInheritedDSAType VarsWithInheritedDSA;
@@ -13285,6 +13283,10 @@ StmtResult Sema::ActOnOpenMPTeamsDirective(ArrayRef<OMPClause *> Clauses,
                                            SourceLocation EndLoc) {
   if (!AStmt)
     return StmtError();
+
+  // Report affected OpenMP target offloading behavior when in HIP lang-mode.
+  if (getLangOpts().HIP && (DSAStack->getParentDirective() == OMPD_target))
+    Diag(StartLoc, diag::warn_hip_omp_target_directives);
 
   auto *CS = cast<CapturedStmt>(AStmt);
   // 1.2.2 OpenMP Language Terminology
@@ -22855,6 +22857,11 @@ bool Sema::ActOnStartOpenMPDeclareTargetContext(
     Diag(DTCI.Loc, diag::err_omp_region_not_file_context);
     return false;
   }
+
+  // Report affected OpenMP target offloading behavior when in HIP lang-mode.
+  if (getLangOpts().HIP)
+    Diag(DTCI.Loc, diag::warn_hip_omp_target_directives);
+
   DeclareTargetNesting.push_back(DTCI);
   return true;
 }
@@ -22926,6 +22933,10 @@ void Sema::ActOnOpenMPDeclareTargetName(NamedDecl *ND, SourceLocation Loc,
   if (LangOpts.OpenMP >= 50 &&
       (ND->isUsed(/*CheckUsedAttr=*/false) || ND->isReferenced()))
     Diag(Loc, diag::warn_omp_declare_target_after_first_use);
+
+  // Report affected OpenMP target offloading behavior when in HIP lang-mode.
+  if (getLangOpts().HIP)
+    Diag(Loc, diag::warn_hip_omp_target_directives);
 
   // Explicit declare target lists have precedence.
   const unsigned Level = -1;

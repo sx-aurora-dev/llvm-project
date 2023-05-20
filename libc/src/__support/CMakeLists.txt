@@ -52,6 +52,12 @@ add_header_library(
 )
 
 add_header_library(
+  wctype_utils
+  HDRS
+    wctype_utils.h
+)
+
+add_header_library(
   str_to_num_result
   HDRS
     str_to_num_result.h
@@ -66,6 +72,7 @@ add_header_library(
     .str_to_num_result
     libc.src.errno.errno
     libc.src.__support.CPP.limits
+    libc.src.__support.CPP.type_traits
     libc.src.__support.common
 )
 
@@ -114,6 +121,7 @@ add_header_library(
     .uint128
     libc.src.__support.CPP.optional
     libc.src.__support.CPP.limits
+    libc.src.__support.FPUtil.fenv_impl
     libc.src.__support.FPUtil.fp_bits
     libc.src.__support.builtin_wrappers
     libc.src.__support.common
@@ -204,6 +212,7 @@ add_header_library(
 add_subdirectory(FPUtil)
 add_subdirectory(OSUtil)
 add_subdirectory(StringUtil)
+add_subdirectory(GPU)
 add_subdirectory(RPC)
 
 # Thread support is used by other "File". So, we add the "threads"

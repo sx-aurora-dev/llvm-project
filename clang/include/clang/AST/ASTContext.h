@@ -1716,6 +1716,10 @@ public:
   /// C++11 deduction pattern for 'auto &&' type.
   QualType getAutoRRefDeductType() const;
 
+  /// Remove any type constraints from a template parameter type, for
+  /// equivalence comparison of template parameters.
+  QualType getUnconstrainedType(QualType T) const;
+
   /// C++17 deduced class template specialization type.
   QualType getDeducedTemplateSpecializationType(TemplateName Template,
                                                 QualType DeducedType,
@@ -2488,7 +2492,9 @@ public:
 
   /// Return true if the specified type has unique object representations
   /// according to (C++17 [meta.unary.prop]p9)
-  bool hasUniqueObjectRepresentations(QualType Ty) const;
+  bool
+  hasUniqueObjectRepresentations(QualType Ty,
+                                 bool CheckIfTriviallyCopyable = true) const;
 
   //===--------------------------------------------------------------------===//
   //                            Type Operators
@@ -2652,11 +2658,6 @@ public:
   /// Determine whether the given template names refer to the same
   /// template.
   bool hasSameTemplateName(const TemplateName &X, const TemplateName &Y) const;
-
-  /// Determine whether two Friend functions are different because constraints
-  /// that refer to an enclosing template, according to [temp.friend] p9.
-  bool FriendsDifferByConstraints(const FunctionDecl *X,
-                                  const FunctionDecl *Y) const;
 
   /// Determine whether the two declarations refer to the same entity.
   bool isSameEntity(const NamedDecl *X, const NamedDecl *Y) const;

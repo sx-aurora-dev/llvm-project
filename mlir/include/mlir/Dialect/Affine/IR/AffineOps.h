@@ -22,12 +22,11 @@
 #include "mlir/Interfaces/LoopLikeInterface.h"
 
 namespace mlir {
+namespace affine {
+
 class AffineApplyOp;
 class AffineBound;
 class AffineValueMap;
-
-/// TODO: These should be renamed if they are on the mlir namespace.
-///       Ideally, they should go in a mlir::affine:: namespace.
 
 /// A utility function to check if a value is defined at the top level of an
 /// op with trait `AffineScope` or is a region argument for such an op. A value
@@ -89,7 +88,8 @@ Region *getAffineScope(Operation *op);
 class AffineDmaStartOp
     : public Op<AffineDmaStartOp, OpTrait::MemRefsNormalizable,
                 OpTrait::VariadicOperands, OpTrait::ZeroResults,
-                OpTrait::OpInvariants, AffineMapAccessInterface::Trait> {
+                OpTrait::OpInvariants, AffineMapAccessInterface::Trait,
+                MemoryEffectOpInterface::Trait> {
 public:
   using Op::Op;
   static ArrayRef<StringRef> getAttributeNames() { return {}; }
@@ -233,6 +233,10 @@ public:
     return isSrcMemorySpaceFaster() ? 0 : getDstMemRefOperandIndex();
   }
 
+  void
+  getEffects(SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+                 &effects);
+
   static StringRef getSrcMapAttrStrName() { return "src_map"; }
   static StringRef getDstMapAttrStrName() { return "dst_map"; }
   static StringRef getTagMapAttrStrName() { return "tag_map"; }
@@ -333,6 +337,9 @@ public:
   LogicalResult verifyInvariants() { return verifyInvariantsImpl(); }
   LogicalResult fold(ArrayRef<Attribute> cstOperands,
                      SmallVectorImpl<OpFoldResult> &results);
+  void
+  getEffects(SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+                 &effects);
 };
 
 /// Returns true if the given Value can be used as a dimension id in the region
@@ -430,13 +437,18 @@ SmallVector<Value, 4> applyMapToValues(OpBuilder &b, Location loc,
 /// argument.
 void fullyComposeAffineMapAndOperands(AffineMap *map,
                                       SmallVectorImpl<Value> *operands);
+
+} // namespace affine
 } // namespace mlir
+
 #include "mlir/Dialect/Affine/IR/AffineOpsDialect.h.inc"
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/Affine/IR/AffineOps.h.inc"
 
 namespace mlir {
+namespace affine {
+
 /// Returns true if the provided value is the induction variable of an
 /// AffineForOp.
 bool isAffineForInductionVar(Value val);
@@ -529,6 +541,7 @@ private:
   friend class AffineForOp;
 };
 
+} // namespace affine
 } // namespace mlir
 
 #endif

@@ -108,6 +108,14 @@ IntrinsicCostAttributes::IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
   Arguments.insert(Arguments.begin(), Args.begin(), Args.end());
 }
 
+HardwareLoopInfo::HardwareLoopInfo(Loop *L) : L(L) {
+  // Match default options:
+  // - hardware-loop-counter-bitwidth = 32
+  // - hardware-loop-decrement = 1
+  CountType = Type::getInt32Ty(L->getHeader()->getContext());
+  LoopDecrement = ConstantInt::get(CountType, 1);
+}
+
 bool HardwareLoopInfo::isHardwareLoopCandidate(ScalarEvolution &SE,
                                                LoopInfo &LI, DominatorTree &DT,
                                                bool ForceNestedLoop,
@@ -254,16 +262,17 @@ bool TargetTransformInfo::hasBranchDivergence() const {
   return TTIImpl->hasBranchDivergence();
 }
 
-bool TargetTransformInfo::useGPUDivergenceAnalysis() const {
-  return TTIImpl->useGPUDivergenceAnalysis();
-}
-
 bool TargetTransformInfo::isSourceOfDivergence(const Value *V) const {
   return TTIImpl->isSourceOfDivergence(V);
 }
 
 bool llvm::TargetTransformInfo::isAlwaysUniform(const Value *V) const {
   return TTIImpl->isAlwaysUniform(V);
+}
+
+bool llvm::TargetTransformInfo::isValidAddrSpaceCast(unsigned FromAS,
+                                                     unsigned ToAS) const {
+  return TTIImpl->isValidAddrSpaceCast(FromAS, ToAS);
 }
 
 unsigned TargetTransformInfo::getFlatAddressSpace() const {
@@ -314,10 +323,8 @@ bool TargetTransformInfo::isHardwareLoopProfitable(
 }
 
 bool TargetTransformInfo::preferPredicateOverEpilogue(
-    Loop *L, LoopInfo *LI, ScalarEvolution &SE, AssumptionCache &AC,
-    TargetLibraryInfo *TLI, DominatorTree *DT, LoopVectorizationLegality *LVL,
-    InterleavedAccessInfo *IAI) const {
-  return TTIImpl->preferPredicateOverEpilogue(L, LI, SE, AC, TLI, DT, LVL, IAI);
+    TailFoldingInfo *TFI) const {
+  return TTIImpl->preferPredicateOverEpilogue(TFI);
 }
 
 TailFoldingStyle TargetTransformInfo::getPreferredTailFoldingStyle(
@@ -680,6 +687,10 @@ std::optional<unsigned> TargetTransformInfo::getVScaleForTuning() const {
   return TTIImpl->getVScaleForTuning();
 }
 
+bool TargetTransformInfo::isVScaleKnownToBeAPowerOfTwo() const {
+  return TTIImpl->isVScaleKnownToBeAPowerOfTwo();
+}
+
 bool TargetTransformInfo::shouldMaximizeVectorBandwidth(
     TargetTransformInfo::RegisterKind K) const {
   return TTIImpl->shouldMaximizeVectorBandwidth(K);
@@ -1033,17 +1044,17 @@ InstructionCost TargetTransformInfo::getArithmeticReductionCost(
 }
 
 InstructionCost TargetTransformInfo::getMinMaxReductionCost(
-    VectorType *Ty, VectorType *CondTy, bool IsUnsigned,
+    VectorType *Ty, VectorType *CondTy, bool IsUnsigned, FastMathFlags FMF,
     TTI::TargetCostKind CostKind) const {
   InstructionCost Cost =
-      TTIImpl->getMinMaxReductionCost(Ty, CondTy, IsUnsigned, CostKind);
+      TTIImpl->getMinMaxReductionCost(Ty, CondTy, IsUnsigned, FMF, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
 
 InstructionCost TargetTransformInfo::getExtendedReductionCost(
     unsigned Opcode, bool IsUnsigned, Type *ResTy, VectorType *Ty,
-    std::optional<FastMathFlags> FMF, TTI::TargetCostKind CostKind) const {
+    FastMathFlags FMF, TTI::TargetCostKind CostKind) const {
   return TTIImpl->getExtendedReductionCost(Opcode, IsUnsigned, ResTy, Ty, FMF,
                                            CostKind);
 }
@@ -1181,6 +1192,10 @@ TargetTransformInfo::getVPLegalizationStrategy(const VPIntrinsic &VPI) const {
 
 bool TargetTransformInfo::hasArmWideBranch(bool Thumb) const {
   return TTIImpl->hasArmWideBranch(Thumb);
+}
+
+unsigned TargetTransformInfo::getMaxNumArgs() const {
+  return TTIImpl->getMaxNumArgs();
 }
 
 bool TargetTransformInfo::shouldExpandReduction(const IntrinsicInst *II) const {

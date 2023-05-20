@@ -15,7 +15,7 @@ function(add_fp_unittest name)
   endif()
 
   if(MATH_UNITTEST_NEED_MPFR)
-    list(APPEND MATH_UNITTEST_LINK_LIBRARIES libcMPFRWrapper -lmpfr -lgmp)
+    list(APPEND MATH_UNITTEST_LINK_LIBRARIES libcMPFRWrapper libc_math_test_utils -lmpfr -lgmp)
   endif()
   list(APPEND MATH_UNITTEST_LINK_LIBRARIES LibcFPTestHelpers)
 
@@ -35,6 +35,7 @@ add_subdirectory(string)
 add_subdirectory(stdlib)
 add_subdirectory(inttypes)
 add_subdirectory(stdio)
+add_subdirectory(wchar)
 
 if(${LIBC_TARGET_OS} STREQUAL "linux")
   add_subdirectory(fcntl)

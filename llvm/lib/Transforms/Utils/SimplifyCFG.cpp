@@ -1117,16 +1117,12 @@ static void CloneInstructionsIntoPredecessorBlockAndUpdateSSAUses(
                      RF_NoModuleLevelChanges | RF_IgnoreMissingLocals);
     VMap[&BonusInst] = NewBonusInst;
 
-    // If we moved a load, we cannot any longer claim any knowledge about
-    // its potential value. The previous information might have been valid
+    // If we speculated an instruction, we need to drop any metadata that may
+    // result in undefined behavior, as the metadata might have been valid
     // only given the branch precondition.
-    // For an analogous reason, we must also drop all the metadata whose
-    // semantics we don't understand. We *can* preserve !annotation, because
-    // it is tied to the instruction itself, not the value or position.
     // Similarly strip attributes on call parameters that may cause UB in
     // location the call is moved to.
-    NewBonusInst->dropUndefImplyingAttrsAndUnknownMetadata(
-        LLVMContext::MD_annotation);
+    NewBonusInst->dropUBImplyingAttrsAndMetadata();
 
     NewBonusInst->insertInto(PredBlock, PTI->getIterator());
     NewBonusInst->takeName(&BonusInst);
@@ -2444,9 +2440,13 @@ bool CompatibleSets::shouldBelongToSameSet(ArrayRef<InvokeInst *> Invokes) {
 
   // Can we theoretically form the data operands for the merged `invoke`?
   auto IsIllegalToMergeArguments = [](auto Ops) {
-    Type *Ty = std::get<0>(Ops)->getType();
-    assert(Ty == std::get<1>(Ops)->getType() && "Incompatible types?");
-    return Ty->isTokenTy() && std::get<0>(Ops) != std::get<1>(Ops);
+    Use &U0 = std::get<0>(Ops);
+    Use &U1 = std::get<1>(Ops);
+    if (U0 == U1)
+      return false;
+    return U0->getType()->isTokenTy() ||
+           !canReplaceOperandWithVariable(cast<Instruction>(U0.getUser()),
+                                          U0.getOperandNo());
   };
   assert(Invokes.size() == 2 && "Always called with exactly two candidates.");
   if (any_of(zip(Invokes[0]->data_ops(), Invokes[1]->data_ops()),
@@ -3010,7 +3010,7 @@ bool SimplifyCFGOpt::SpeculativelyExecuteBB(BranchInst *BI, BasicBlock *ThenBB,
   }
 
   // Metadata can be dependent on the condition we are hoisting above.
-  // Conservatively strip all metadata on the instruction. Drop the debug loc
+  // Strip all UB-implying metadata on the instruction. Drop the debug loc
   // to avoid making it appear as if the condition is a constant, which would
   // be misleading while debugging.
   // Similarly strip attributes that maybe dependent on condition we are
@@ -3021,7 +3021,7 @@ bool SimplifyCFGOpt::SpeculativelyExecuteBB(BranchInst *BI, BasicBlock *ThenBB,
       if (!isa<DbgAssignIntrinsic>(&I))
         I.setDebugLoc(DebugLoc());
     }
-    I.dropUndefImplyingAttrsAndUnknownMetadata();
+    I.dropUBImplyingAttrsAndMetadata();
 
     // Drop ephemeral values.
     if (EphTracker.contains(&I)) {
@@ -3580,17 +3580,7 @@ static bool performBranchToCommonDestFolding(BranchInst *BI, BranchInst *PBI,
 
   // If we need to invert the condition in the pred block to match, do so now.
   if (InvertPredCond) {
-    Value *NewCond = PBI->getCondition();
-    if (NewCond->hasOneUse() && isa<CmpInst>(NewCond)) {
-      CmpInst *CI = cast<CmpInst>(NewCond);
-      CI->setPredicate(CI->getInversePredicate());
-    } else {
-      NewCond =
-          Builder.CreateNot(NewCond, PBI->getCondition()->getName() + ".not");
-    }
-
-    PBI->setCondition(NewCond);
-    PBI->swapSuccessors();
+    InvertBranch(PBI, Builder);
   }
 
   BasicBlock *UniqueSucc =

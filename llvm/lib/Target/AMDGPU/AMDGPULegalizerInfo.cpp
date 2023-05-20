@@ -1353,7 +1353,7 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     Atomic.legalFor({{S32, LocalPtr}, {S32, RegionPtr}});
     if (ST.hasGFX90AInsts())
       Atomic.legalFor({{S64, LocalPtr}});
-    if (ST.hasGFX940Insts())
+    if (ST.hasAtomicDsPkAdd16Insts())
       Atomic.legalFor({{V2S16, LocalPtr}});
   }
   if (ST.hasAtomicFaddInsts())
@@ -2486,7 +2486,8 @@ bool AMDGPULegalizerInfo::buildPCRelGlobalAddress(Register DstReg, LLT PtrTy,
   else
     MIB.addGlobalAddress(GV, Offset + 12, GAFlags + 1);
 
-  B.getMRI()->setRegClass(PCReg, &AMDGPU::SReg_64RegClass);
+  if (!B.getMRI()->getRegClassOrNull(PCReg))
+    B.getMRI()->setRegClass(PCReg, &AMDGPU::SReg_64RegClass);
 
   if (PtrTy.getSizeInBits() == 32)
     B.buildExtract(DstReg, PCReg, 0);
@@ -2542,7 +2543,7 @@ bool AMDGPULegalizerInfo::legalizeGlobalValue(
       // allocated ones. They all share the same offset.
       if (B.getDataLayout().getTypeAllocSize(Ty).isZero()) {
         // Adjust alignment for that dynamic shared memory array.
-        MFI->setDynLDSAlign(B.getDataLayout(), *cast<GlobalVariable>(GV));
+        MFI->setDynLDSAlign(MF.getFunction(), *cast<GlobalVariable>(GV));
         LLT S32 = LLT::scalar(32);
         auto Sz =
             B.buildIntrinsic(Intrinsic::amdgcn_groupstaticsize, {S32}, false);

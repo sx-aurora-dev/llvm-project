@@ -568,6 +568,12 @@ public:
     return DL.getIntPtrType(Context, AddrSpace);
   }
 
+  /// Fetch the type of an integer that should be used to index GEP operations
+  /// within AddressSpace.
+  IntegerType *getIndexTy(const DataLayout &DL, unsigned AddrSpace) {
+    return DL.getIndexType(Context, AddrSpace);
+  }
+
   //===--------------------------------------------------------------------===//
   // Intrinsic creation methods
   //===--------------------------------------------------------------------===//
@@ -2450,12 +2456,12 @@ public:
 
   /// Return a boolean value testing if \p Arg == 0.
   Value *CreateIsNull(Value *Arg, const Twine &Name = "") {
-    return CreateICmpEQ(Arg, ConstantInt::getNullValue(Arg->getType()), Name);
+    return CreateICmpEQ(Arg, Constant::getNullValue(Arg->getType()), Name);
   }
 
   /// Return a boolean value testing if \p Arg != 0.
   Value *CreateIsNotNull(Value *Arg, const Twine &Name = "") {
-    return CreateICmpNE(Arg, ConstantInt::getNullValue(Arg->getType()), Name);
+    return CreateICmpNE(Arg, Constant::getNullValue(Arg->getType()), Name);
   }
 
   /// Return a boolean value testing if \p Arg < 0.

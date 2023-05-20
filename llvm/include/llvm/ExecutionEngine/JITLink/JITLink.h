@@ -18,6 +18,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ExecutionEngine/JITLink/JITLinkMemoryManager.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/Shared/ExecutorAddress.h"
+#include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
 #include "llvm/ExecutionEngine/Orc/Shared/MemoryFlags.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/BinaryStreamReader.h"
@@ -352,13 +354,13 @@ private:
 };
 
 // Align an address to conform with block alignment requirements.
-inline uint64_t alignToBlock(uint64_t Addr, Block &B) {
+inline uint64_t alignToBlock(uint64_t Addr, const Block &B) {
   uint64_t Delta = (B.getAlignmentOffset() - Addr) % B.getAlignment();
   return Addr + Delta;
 }
 
 // Align a orc::ExecutorAddr to conform with block alignment requirements.
-inline orc::ExecutorAddr alignToBlock(orc::ExecutorAddr Addr, Block &B) {
+inline orc::ExecutorAddr alignToBlock(orc::ExecutorAddr Addr, const Block &B) {
   return orc::ExecutorAddr(alignToBlock(Addr.getValue(), B));
 }
 
@@ -367,12 +369,14 @@ inline orc::ExecutorAddr alignToBlock(orc::ExecutorAddr Addr, Block &B) {
 // must end with a zero, and contain no zeros before the end.
 bool isCStringBlock(Block &B);
 
-/// Describes symbol linkage. This can be used to make resolve definition
-/// clashes.
+/// Describes symbol linkage. This can be used to resolve definition clashes.
 enum class Linkage : uint8_t {
   Strong,
   Weak,
 };
+
+/// Holds target-specific properties for a symbol.
+using TargetFlagsType = uint8_t;
 
 /// For errors and debugging output.
 const char *getLinkageName(Linkage L);
@@ -418,6 +422,7 @@ private:
     setScope(S);
     setLive(IsLive);
     setCallable(IsCallable);
+    setTargetFlags(TargetFlagsType{});
   }
 
   static Symbol &constructExternal(BumpPtrAllocator &Allocator,
@@ -611,6 +616,17 @@ public:
     this->S = static_cast<uint8_t>(S);
   }
 
+  /// Check wehther the given target flags are set for this Symbol.
+  bool hasTargetFlags(TargetFlagsType Flags) const {
+    return static_cast<TargetFlagsType>(TargetFlags) & Flags;
+  }
+
+  /// Set the target flags for this Symbol.
+  void setTargetFlags(TargetFlagsType Flags) {
+    assert(Flags <= 1 && "Add more bits to store more than single flag");
+    TargetFlags = Flags;
+  }
+
   /// Returns true if this is a weakly referenced external symbol.
   /// This method may only be called on external symbols.
   bool isWeaklyReferenced() const {
@@ -655,12 +671,13 @@ private:
   // FIXME: A char* or SymbolStringPtr may pack better.
   StringRef Name;
   Addressable *Base = nullptr;
-  uint64_t Offset : 58;
+  uint64_t Offset : 57;
   uint64_t L : 1;
   uint64_t S : 2;
   uint64_t IsLive : 1;
   uint64_t IsCallable : 1;
   uint64_t WeakRef : 1;
+  uint64_t TargetFlags : 1;
   size_t Size = 0;
 };
 
@@ -712,6 +729,9 @@ public:
 
   /// Returns the ordinal for this section.
   SectionOrdinal getOrdinal() const { return SecOrdinal; }
+
+  /// Returns true if this section is empty (contains no blocks or symbols).
+  bool empty() const { return Blocks.empty(); }
 
   /// Returns an iterator over the blocks defined in this section.
   iterator_range<block_iterator> blocks() {
@@ -1082,7 +1102,7 @@ public:
                                    orc::ExecutorAddr Address,
                                    uint64_t Alignment, uint64_t AlignmentOffset,
                                    bool ZeroInitialize = true) {
-    auto Content = allocateContent(ContentSize);
+    auto Content = allocateBuffer(ContentSize);
     if (ZeroInitialize)
       memset(Content.data(), 0, Content.size());
     return createBlock(Parent, Content, Address, Alignment, AlignmentOffset);
@@ -1713,7 +1733,7 @@ enum class SymbolLookupFlags { RequiredSymbol, WeaklyReferencedSymbol };
 raw_ostream &operator<<(raw_ostream &OS, const SymbolLookupFlags &LF);
 
 /// A map of symbol names to resolved addresses.
-using AsyncLookupResult = DenseMap<StringRef, JITEvaluatedSymbol>;
+using AsyncLookupResult = DenseMap<StringRef, orc::ExecutorSymbolDef>;
 
 /// A function object to call with a resolved symbol map (See AsyncLookupResult)
 /// or an error if resolution failed.

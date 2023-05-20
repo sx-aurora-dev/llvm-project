@@ -95,7 +95,6 @@ def Vector_ContractionOp :
       DeclareOpInterfaceMethods<VectorUnrollOpInterface, ["getShapeForUnroll"]>
     ]>,
     Arguments<(ins AnyVector:$lhs, AnyVector:$rhs, AnyType:$acc,
-               Variadic<VectorOf<[I1]>>:$masks,
                ArrayAttr:$indexing_maps,
                Vector_IteratorTypeArrayAttr:$iterator_types,
                DefaultValuedAttr<Vector_CombiningKindAttr,
@@ -114,10 +113,6 @@ def Vector_ContractionOp :
     promoted to have the same bitwidth as the result before performing the
     contraction. For integer types, only signless integer types are supported,
     and the promotion happens via sign extension.
-
-    Optional vector mask arguments (produced by CreateMaskOp or ConstantMaskOp)
-    specify the dynamic dimension sizes of valid data within the lhs/rhs vector
-    arguments.
 
     An iterator type attribute list must be specified, where each element of
     the list represents an iterator with one of the following types:
@@ -195,17 +190,9 @@ def Vector_ContractionOp :
     %4 = vector.contract #contraction_trait %0, %1, %2
         : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x5xf32>
 
-    // 4D vector contraction with two contracting dimensions and optional
-    // vector mask arguments.
-    %lhs_mask = vector.constant_mask [7, 8, 16, 15] : vector<7x8x16x15xi1>
-    %rhs_mask = vector.constant_mask [8, 16, 7, 5] : vector<8x16x7x5xi1>
-
-    %5 = vector.contract #contraction_trait %0, %1, %2, %lhs_mask, %rhs_mask
-       : vector<7x8x16x15xf32>, vector<8x16x7x5xf32> into vector<8x15x8x5xf32>
-
     // Vector contraction with mixed typed. lhs/rhs have different element
     // types than accumulator/result.
-    %6 = vector.contract #contraction_trait %0, %1, %2
+    %5 = vector.contract #contraction_trait %0, %1, %2
       : vector<10xf16>, vector<10xf16> into f32
 
     // Contract with max (K = 0).
@@ -219,7 +206,7 @@ def Vector_ContractionOp :
       iterator_types = ["reduction"],
       kind = #vector.kind<max>
     }
-    %7 = vector.contract #contraction_trait %0, %1, %2
+    %6 = vector.contract #contraction_trait %0, %1, %2
       : vector<10xf32>, vector<10xf32> into f32
     ```
   }];
@@ -241,14 +228,6 @@ def Vector_ContractionOp :
       return getRhs().getType().cast<VectorType>();
     }
     Type getAccType() { return getAcc().getType(); }
-    VectorType getLHSVectorMaskType() {
-      if (llvm::size(getMasks()) != 2) return VectorType();
-      return getOperand(3).getType().cast<VectorType>();
-    }
-    VectorType getRHSVectorMaskType() {
-      if (llvm::size(getMasks()) != 2) return VectorType();
-      return getOperand(4).getType().cast<VectorType>();
-    }
     Type getResultType() { return getResult().getType(); }
     SmallVector<StringRef> getTraitAttrNames();
     static unsigned getAccOperandIndex() { return 2; }
@@ -550,7 +529,7 @@ def Vector_ExtractElementOp :
   Vector_Op<"extractelement", [Pure,
      TypesMatchWith<"result type matches element type of vector operand",
                     "vector", "result",
-                    "$_self.cast<ShapedType>().getElementType()">]>,
+                    "$_self.cast<VectorType>().getElementType()">]>,
     Arguments<(ins AnyVectorOfAnyRank:$vector,
                    Optional<AnySignlessIntegerOrIndex>:$position)>,
     Results<(outs AnyType:$result)> {
@@ -665,7 +644,7 @@ def Vector_InsertElementOp :
   Vector_Op<"insertelement", [Pure,
      TypesMatchWith<"source operand type matches element type of result",
                     "result", "source",
-                    "$_self.cast<ShapedType>().getElementType()">,
+                    "$_self.cast<VectorType>().getElementType()">,
      AllTypesMatch<["dest", "result"]>]>,
      Arguments<(ins AnyType:$source, AnyVectorOfAnyRank:$dest,
                     Optional<AnySignlessIntegerOrIndex>:$position)>,
@@ -1859,7 +1838,10 @@ def Vector_MaskedStoreOp :
 }
 
 def Vector_GatherOp :
-  Vector_Op<"gather", [DeclareOpInterfaceMethods<MaskableOpInterface>]>,
+  Vector_Op<"gather", [
+    DeclareOpInterfaceMethods<MaskableOpInterface>,
+    DeclareOpInterfaceMethods<VectorUnrollOpInterface, ["getShapeForUnroll"]>
+  ]>,
     Arguments<(ins Arg<AnyShaped, "", [MemRead]>:$base,
                Variadic<Index>:$indices,
                VectorOf<[AnyInteger, Index]>:$index_vec,
@@ -1905,23 +1887,15 @@ def Vector_GatherOp :
        : memref<16x16xf32>, vector<16xi32>, vector<16xi1>, vector<16xf32> into vector<16xf32>
     ```
   }];
+
   let extraClassDeclaration = [{
-    ShapedType getBaseType() {
-      return getBase().getType().cast<ShapedType>();
-    }
-    VectorType getIndexVectorType() {
-      return getIndexVec().getType().cast<VectorType>();
-    }
-    VectorType getMaskVectorType() {
-      return getMask().getType().cast<VectorType>();
-    }
-    VectorType getPassThruVectorType() {
-      return getPassThru().getType().cast<VectorType>();
-    }
-    VectorType getVectorType() {
-      return getResult().getType().cast<VectorType>();
-    }
+    ShapedType getBaseType() { return getBase().getType(); }
+    VectorType getIndexVectorType() { return getIndexVec().getType(); }
+    VectorType getMaskVectorType() { return getMask().getType(); }
+    VectorType getPassThruVectorType() { return getPassThru().getType(); }
+    VectorType getVectorType() { return getResult().getType(); }
   }];
+
   let assemblyFormat =
     "$base `[` $indices `]` `[` $index_vec `]` `,` "
     "$mask `,` $pass_thru attr-dict `:` type($base) `,` "
@@ -1981,20 +1955,14 @@ def Vector_ScatterOp :
         : memref<16x16xf32>, vector<16xi32>, vector<16xi1>, vector<16xf32>
     ```
   }];
+
   let extraClassDeclaration = [{
-    MemRefType getMemRefType() {
-      return getBase().getType().cast<MemRefType>();
-    }
-    VectorType getIndexVectorType() {
-      return getIndexVec().getType().cast<VectorType>();
-    }
-    VectorType getMaskVectorType() {
-      return getMask().getType().cast<VectorType>();
-    }
-    VectorType getVectorType() {
-      return getValueToStore().getType().cast<VectorType>();
-    }
+    MemRefType getMemRefType() { return getBase().getType(); }
+    VectorType getIndexVectorType() { return getIndexVec().getType(); }
+    VectorType getMaskVectorType() { return getMask().getType(); }
+    VectorType getVectorType() { return getValueToStore().getType(); }
   }];
+
   let assemblyFormat =
       "$base `[` $indices `]` `[` $index_vec `]` `,` "
       "$mask `,` $valueToStore attr-dict `:` type($base) `,` "
@@ -2342,6 +2310,11 @@ def Vector_CreateMaskOp :
             3 | 0    0    0
     ```
   }];
+
+  let builders = [
+    // Build with mixed static/dynamic operands.
+    OpBuilder<(ins "VectorType":$type, "ArrayRef<OpFoldResult>":$mixedOperands)>
+  ];
 
   let hasCanonicalizer = 1;
   let hasVerifier = 1;

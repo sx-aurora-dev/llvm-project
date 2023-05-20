@@ -1183,12 +1183,28 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   /// Fill memory range with the given origin value.
   void paintOrigin(IRBuilder<> &IRB, Value *Origin, Value *OriginPtr,
                    TypeSize TS, Align Alignment) {
-    unsigned Size = TS.getFixedValue();
     const DataLayout &DL = F.getParent()->getDataLayout();
     const Align IntptrAlignment = DL.getABITypeAlign(MS.IntptrTy);
     unsigned IntptrSize = DL.getTypeStoreSize(MS.IntptrTy);
     assert(IntptrAlignment >= kMinOriginAlignment);
     assert(IntptrSize >= kOriginSize);
+
+    // Note: The loop based formation works for fixed length vectors too,
+    // however we prefer to unroll and specialize alignment below.
+    if (TS.isScalable()) {
+      Value *Size = IRB.CreateTypeSize(IRB.getInt32Ty(), TS);
+      Value *RoundUp = IRB.CreateAdd(Size, IRB.getInt32(kOriginSize - 1));
+      Value *End = IRB.CreateUDiv(RoundUp, IRB.getInt32(kOriginSize));
+      auto [InsertPt, Index] =
+        SplitBlockAndInsertSimpleForLoop(End, &*IRB.GetInsertPoint());
+      IRB.SetInsertPoint(InsertPt);
+
+      Value *GEP = IRB.CreateGEP(MS.OriginTy, OriginPtr, Index);
+      IRB.CreateAlignedStore(Origin, GEP, kMinOriginAlignment);
+      return;
+    }
+
+    unsigned Size = TS.getFixedValue();
 
     unsigned Ofs = 0;
     Align CurrentAlignment = Alignment;
@@ -1575,6 +1591,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     if (ArrayType *Array = dyn_cast<ArrayType>(V->getType()))
       return collapseArrayShadow(Array, V, IRB);
     if (isa<VectorType>(V->getType())) {
+      if (isa<ScalableVectorType>(V->getType()))
+        return convertShadowToScalar(IRB.CreateOrReduce(V), IRB);
       unsigned BitWidth =
         V->getType()->getPrimitiveSizeInBits().getFixedValue();
       return IRB.CreateBitCast(V, IntegerType::get(*MS.C, BitWidth));
@@ -4591,8 +4609,8 @@ struct VarArgAMD64Helper : public VarArgHelper {
   Function &F;
   MemorySanitizer &MS;
   MemorySanitizerVisitor &MSV;
-  Value *VAArgTLSCopy = nullptr;
-  Value *VAArgTLSOriginCopy = nullptr;
+  AllocaInst *VAArgTLSCopy = nullptr;
+  AllocaInst *VAArgTLSOriginCopy = nullptr;
   Value *VAArgOverflowSize = nullptr;
 
   SmallVector<CallInst *, 16> VAStartInstrumentationList;
@@ -4788,11 +4806,20 @@ struct VarArgAMD64Helper : public VarArgHelper {
       Value *CopySize = IRB.CreateAdd(
           ConstantInt::get(MS.IntptrTy, AMD64FpEndOffset), VAArgOverflowSize);
       VAArgTLSCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-      IRB.CreateMemCpy(VAArgTLSCopy, Align(8), MS.VAArgTLS, Align(8), CopySize);
+      VAArgTLSCopy->setAlignment(kShadowTLSAlignment);
+      IRB.CreateMemSet(VAArgTLSCopy, Constant::getNullValue(IRB.getInt8Ty()),
+                       CopySize, kShadowTLSAlignment, false);
+
+      Value *SrcSize = IRB.CreateBinaryIntrinsic(
+          Intrinsic::umin, CopySize,
+          ConstantInt::get(MS.IntptrTy, kParamTLSSize));
+      IRB.CreateMemCpy(VAArgTLSCopy, kShadowTLSAlignment, MS.VAArgTLS,
+                       kShadowTLSAlignment, SrcSize);
       if (MS.TrackOrigins) {
         VAArgTLSOriginCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-        IRB.CreateMemCpy(VAArgTLSOriginCopy, Align(8), MS.VAArgOriginTLS,
-                         Align(8), CopySize);
+        VAArgTLSOriginCopy->setAlignment(kShadowTLSAlignment);
+        IRB.CreateMemCpy(VAArgTLSOriginCopy, kShadowTLSAlignment,
+                         MS.VAArgOriginTLS, kShadowTLSAlignment, SrcSize);
       }
     }
 
@@ -4850,7 +4877,7 @@ struct VarArgMIPS64Helper : public VarArgHelper {
   Function &F;
   MemorySanitizer &MS;
   MemorySanitizerVisitor &MSV;
-  Value *VAArgTLSCopy = nullptr;
+  AllocaInst *VAArgTLSCopy = nullptr;
   Value *VAArgSize = nullptr;
 
   SmallVector<CallInst *, 16> VAStartInstrumentationList;
@@ -4935,7 +4962,15 @@ struct VarArgMIPS64Helper : public VarArgHelper {
       // If there is a va_start in this function, make a backup copy of
       // va_arg_tls somewhere in the function entry block.
       VAArgTLSCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-      IRB.CreateMemCpy(VAArgTLSCopy, Align(8), MS.VAArgTLS, Align(8), CopySize);
+      VAArgTLSCopy->setAlignment(kShadowTLSAlignment);
+      IRB.CreateMemSet(VAArgTLSCopy, Constant::getNullValue(IRB.getInt8Ty()),
+                       CopySize, kShadowTLSAlignment, false);
+
+      Value *SrcSize = IRB.CreateBinaryIntrinsic(
+          Intrinsic::umin, CopySize,
+          ConstantInt::get(MS.IntptrTy, kParamTLSSize));
+      IRB.CreateMemCpy(VAArgTLSCopy, kShadowTLSAlignment, MS.VAArgTLS,
+                       kShadowTLSAlignment, SrcSize);
     }
 
     // Instrument va_start.
@@ -4977,7 +5012,7 @@ struct VarArgAArch64Helper : public VarArgHelper {
   Function &F;
   MemorySanitizer &MS;
   MemorySanitizerVisitor &MSV;
-  Value *VAArgTLSCopy = nullptr;
+  AllocaInst *VAArgTLSCopy = nullptr;
   Value *VAArgOverflowSize = nullptr;
 
   SmallVector<CallInst *, 16> VAStartInstrumentationList;
@@ -5121,7 +5156,15 @@ struct VarArgAArch64Helper : public VarArgHelper {
       Value *CopySize = IRB.CreateAdd(
           ConstantInt::get(MS.IntptrTy, AArch64VAEndOffset), VAArgOverflowSize);
       VAArgTLSCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-      IRB.CreateMemCpy(VAArgTLSCopy, Align(8), MS.VAArgTLS, Align(8), CopySize);
+      VAArgTLSCopy->setAlignment(kShadowTLSAlignment);
+      IRB.CreateMemSet(VAArgTLSCopy, Constant::getNullValue(IRB.getInt8Ty()),
+                       CopySize, kShadowTLSAlignment, false);
+
+      Value *SrcSize = IRB.CreateBinaryIntrinsic(
+          Intrinsic::umin, CopySize,
+          ConstantInt::get(MS.IntptrTy, kParamTLSSize));
+      IRB.CreateMemCpy(VAArgTLSCopy, kShadowTLSAlignment, MS.VAArgTLS,
+                       kShadowTLSAlignment, SrcSize);
     }
 
     Value *GrArgSize = ConstantInt::get(MS.IntptrTy, kAArch64GrArgSize);
@@ -5221,7 +5264,7 @@ struct VarArgPowerPC64Helper : public VarArgHelper {
   Function &F;
   MemorySanitizer &MS;
   MemorySanitizerVisitor &MSV;
-  Value *VAArgTLSCopy = nullptr;
+  AllocaInst *VAArgTLSCopy = nullptr;
   Value *VAArgSize = nullptr;
 
   SmallVector<CallInst *, 16> VAStartInstrumentationList;
@@ -5364,8 +5407,17 @@ struct VarArgPowerPC64Helper : public VarArgHelper {
     if (!VAStartInstrumentationList.empty()) {
       // If there is a va_start in this function, make a backup copy of
       // va_arg_tls somewhere in the function entry block.
+
       VAArgTLSCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-      IRB.CreateMemCpy(VAArgTLSCopy, Align(8), MS.VAArgTLS, Align(8), CopySize);
+      VAArgTLSCopy->setAlignment(kShadowTLSAlignment);
+      IRB.CreateMemSet(VAArgTLSCopy, Constant::getNullValue(IRB.getInt8Ty()),
+                       CopySize, kShadowTLSAlignment, false);
+
+      Value *SrcSize = IRB.CreateBinaryIntrinsic(
+          Intrinsic::umin, CopySize,
+          ConstantInt::get(MS.IntptrTy, kParamTLSSize));
+      IRB.CreateMemCpy(VAArgTLSCopy, kShadowTLSAlignment, MS.VAArgTLS,
+                       kShadowTLSAlignment, SrcSize);
     }
 
     // Instrument va_start.
@@ -5408,8 +5460,8 @@ struct VarArgSystemZHelper : public VarArgHelper {
   MemorySanitizer &MS;
   MemorySanitizerVisitor &MSV;
   bool IsSoftFloatABI;
-  Value *VAArgTLSCopy = nullptr;
-  Value *VAArgTLSOriginCopy = nullptr;
+  AllocaInst *VAArgTLSCopy = nullptr;
+  AllocaInst *VAArgTLSOriginCopy = nullptr;
   Value *VAArgOverflowSize = nullptr;
 
   SmallVector<CallInst *, 16> VAStartInstrumentationList;
@@ -5678,11 +5730,20 @@ struct VarArgSystemZHelper : public VarArgHelper {
           IRB.CreateAdd(ConstantInt::get(MS.IntptrTy, SystemZOverflowOffset),
                         VAArgOverflowSize);
       VAArgTLSCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-      IRB.CreateMemCpy(VAArgTLSCopy, Align(8), MS.VAArgTLS, Align(8), CopySize);
+      VAArgTLSCopy->setAlignment(kShadowTLSAlignment);
+      IRB.CreateMemSet(VAArgTLSCopy, Constant::getNullValue(IRB.getInt8Ty()),
+                       CopySize, kShadowTLSAlignment, false);
+
+      Value *SrcSize = IRB.CreateBinaryIntrinsic(
+          Intrinsic::umin, CopySize,
+          ConstantInt::get(MS.IntptrTy, kParamTLSSize));
+      IRB.CreateMemCpy(VAArgTLSCopy, kShadowTLSAlignment, MS.VAArgTLS,
+                       kShadowTLSAlignment, SrcSize);
       if (MS.TrackOrigins) {
         VAArgTLSOriginCopy = IRB.CreateAlloca(Type::getInt8Ty(*MS.C), CopySize);
-        IRB.CreateMemCpy(VAArgTLSOriginCopy, Align(8), MS.VAArgOriginTLS,
-                         Align(8), CopySize);
+        VAArgTLSOriginCopy->setAlignment(kShadowTLSAlignment);
+        IRB.CreateMemCpy(VAArgTLSOriginCopy, kShadowTLSAlignment,
+                         MS.VAArgOriginTLS, kShadowTLSAlignment, SrcSize);
       }
     }
 

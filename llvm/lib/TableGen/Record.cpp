@@ -151,12 +151,6 @@ bool BitsRecTy::typeIsConvertibleTo(const RecTy *RHS) const {
   return (kind == BitRecTyKind && Size == 1) || (kind == IntRecTyKind);
 }
 
-bool BitsRecTy::typeIsA(const RecTy *RHS) const {
-  if (const BitsRecTy *RHSb = dyn_cast<BitsRecTy>(RHS))
-    return RHSb->Size == Size;
-  return false;
-}
-
 IntRecTy *IntRecTy::get(RecordKeeper &RK) {
   return &RK.getImpl().SharedIntRecTy;
 }
@@ -3005,6 +2999,10 @@ std::vector<Record *> RecordKeeper::getAllDerivedDefinitions(
                           }))
       Defs.push_back(OneDef.second.get());
   }
+
+  llvm::sort(Defs, [](Record *LHS, Record *RHS) {
+    return LHS->getName().compare_numeric(RHS->getName()) < 0;
+  });
 
   return Defs;
 }

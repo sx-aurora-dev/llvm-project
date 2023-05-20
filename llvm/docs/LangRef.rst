@@ -4568,9 +4568,9 @@ The following is the syntax for constant expressions:
     Perform the :ref:`getelementptr operation <i_getelementptr>` on
     constants. As with the :ref:`getelementptr <i_getelementptr>`
     instruction, the index list may have one or more indexes, which are
-    required to make sense for the type of "pointer to TY".
-``select (COND, VAL1, VAL2)``
-    Perform the :ref:`select operation <i_select>` on constants.
+    required to make sense for the type of "pointer to TY". These indexes
+    may be implicitly sign-extended or truncated to match the index size
+    of CSTPTR's address space.
 ``icmp COND (VAL1, VAL2)``
     Perform the :ref:`icmp operation <i_icmp>` on constants.
 ``fcmp COND (VAL1, VAL2)``
@@ -4584,22 +4584,24 @@ The following is the syntax for constant expressions:
 ``shufflevector (VEC1, VEC2, IDXMASK)``
     Perform the :ref:`shufflevector operation <i_shufflevector>` on
     constants.
-``extractvalue (VAL, IDX0, IDX1, ...)``
-    Perform the :ref:`extractvalue operation <i_extractvalue>` on
-    constants. The index list is interpreted in a similar manner as
-    indices in a ':ref:`getelementptr <i_getelementptr>`' operation. At
-    least one index value must be specified.
-``insertvalue (VAL, ELT, IDX0, IDX1, ...)``
-    Perform the :ref:`insertvalue operation <i_insertvalue>` on constants.
-    The index list is interpreted in a similar manner as indices in a
-    ':ref:`getelementptr <i_getelementptr>`' operation. At least one index
-    value must be specified.
-``OPCODE (LHS, RHS)``
-    Perform the specified operation of the LHS and RHS constants. OPCODE
-    may be any of the :ref:`binary <binaryops>` or :ref:`bitwise
-    binary <bitwiseops>` operations. The constraints on operands are
-    the same as those for the corresponding instruction (e.g. no bitwise
-    operations on floating-point values are allowed).
+``add (LHS, RHS)``
+    Perform an addition on constants.
+``sub (LHS, RHS)``
+    Perform a subtraction on constants.
+``mul (LHS, RHS)``
+    Perform a multiplication on constants.
+``shl (LHS, RHS)``
+    Perform a left shift on constants.
+``lshr (LHS, RHS)``
+    Perform a logical right shift on constants.
+``ashr (LHS, RHS)``
+    Perform an arithmetic right shift on constants.
+``and (LHS, RHS)``
+    Perform a bitwise and on constants.
+``or (LHS, RHS)``
+    Perform a bitwise or on constants.
+``xor (LHS, RHS)``
+    Perform a bitwise xor on constants.
 
 Other Values
 ============
@@ -6654,7 +6656,8 @@ or switch that it is attached to is completely unpredictable.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The existence of the ``!dereferenceable`` metadata on the instruction
-tells the optimizer that the value loaded is known to be dereferenceable.
+tells the optimizer that the value loaded is known to be dereferenceable,
+otherwise the behavior is undefined.
 The number of bytes known to be dereferenceable is specified by the integer
 value in the metadata node. This is analogous to the ''dereferenceable''
 attribute on parameters and return values.
@@ -6666,7 +6669,7 @@ attribute on parameters and return values.
 
 The existence of the ``!dereferenceable_or_null`` metadata on the
 instruction tells the optimizer that the value loaded is known to be either
-dereferenceable or null.
+dereferenceable or null, otherwise the behavior is undefined.
 The number of bytes known to be dereferenceable is specified by the integer
 value in the metadata node. This is analogous to the ''dereferenceable_or_null''
 attribute on parameters and return values.
@@ -9583,7 +9586,13 @@ Overview:
 """""""""
 
 The '``frem``' instruction returns the remainder from the division of
-its two operands.
+its two operands. 
+
+.. note::
+
+	The instruction is implemented as a call to libm's '``fmod``'
+	for some targets, and using the instruction may thus require linking libm.
+
 
 Arguments:
 """"""""""
@@ -10325,11 +10334,11 @@ alignment is not set to a value which is at least the size in bytes of the
 pointee. ``!nontemporal`` does not have any defined semantics for atomic loads.
 
 The optional constant ``align`` argument specifies the alignment of the
-operation (that is, the alignment of the memory address). It is the 
+operation (that is, the alignment of the memory address). It is the
 responsibility of the code emitter to ensure that the alignment information is
-correct. Overestimating the alignment results in undefined behavior. 
+correct. Overestimating the alignment results in undefined behavior.
 Underestimating the alignment may produce less efficient code. An alignment of
-1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment 
+1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment
 value higher than the size of the loaded type implies memory up to the
 alignment value bytes can be safely loaded without trapping in the default
 address space. Access of the high bytes can interfere with debugging tools, so
@@ -10465,11 +10474,11 @@ the alignment is not set to a value which is at least the size in bytes of the
 pointee. ``!nontemporal`` does not have any defined semantics for atomic stores.
 
 The optional constant ``align`` argument specifies the alignment of the
-operation (that is, the alignment of the memory address). It is the 
+operation (that is, the alignment of the memory address). It is the
 responsibility of the code emitter to ensure that the alignment information is
-correct. Overestimating the alignment results in undefined behavior. 
+correct. Overestimating the alignment results in undefined behavior.
 Underestimating the alignment may produce less efficient code. An alignment of
-1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment 
+1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment
 value higher than the size of the loaded type implies memory up to the
 alignment value bytes can be safely loaded without trapping in the default
 address space. Access of the high bytes can interfere with debugging tools, so
@@ -10897,9 +10906,9 @@ than half the pointer index type space.
 
 If the ``inbounds`` keyword is not present, the offsets are added to the
 base address with silently-wrapping two's complement arithmetic. If the
-offsets have a different width from the pointer, they are sign-extended
-or truncated to the width of the pointer. The result value of the
-``getelementptr`` may be outside the object pointed to by the base
+offsets have a different width from the pointer's index type, they are
+sign-extended or truncated to the width of the pointer's index type. The result
+value of the ``getelementptr`` may be outside the object pointed to by the base
 pointer. The result value may not necessarily be used to access memory
 though, even if it happens to point into allocated storage. See the
 :ref:`Pointer Aliasing Rules <pointeraliasing>` section for more
@@ -13645,6 +13654,33 @@ The last argument specifies the value of the increment of the counter variable.
 Semantics:
 """"""""""
 See description of '``llvm.instrprof.increment``' intrinsic.
+
+'``llvm.instrprof.timestamp``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare void @llvm.instrprof.timestamp(i8* <name>, i64 <hash>,
+                                             i32 <num-counters>, i32 <index>)
+
+Overview:
+"""""""""
+
+The '``llvm.instrprof.timestamp``' intrinsic is used to implement temporal
+profiling.
+
+Arguments:
+""""""""""
+The arguments are the same as '``llvm.instrprof.increment``'. The ``index`` is
+expected to always be zero.
+
+Semantics:
+""""""""""
+Similar to the '``llvm.instrprof.increment``' intrinsic, but it stores a
+timestamp representing when this function was executed for the first time.
 
 '``llvm.instrprof.cover``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -23483,7 +23519,9 @@ Proper :ref:`function attributes <fnattrs>` usage is required for the
 constrained intrinsics to function correctly.
 
 All function *calls* done in a function that uses constrained floating
-point intrinsics must have the ``strictfp`` attribute.
+point intrinsics must have the ``strictfp`` attribute either on the
+calling instruction or on the declaration or definition of the function
+being called.
 
 All function *definitions* that use constrained floating point intrinsics
 must have the ``strictfp`` attribute.

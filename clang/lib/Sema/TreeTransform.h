@@ -377,20 +377,41 @@ public:
   /// By default, this routine transforms a statement by delegating to the
   /// appropriate TransformXXXAttr function to transform a specific kind
   /// of attribute. Subclasses may override this function to transform
-  /// attributed statements using some other mechanism.
+  /// attributed statements/types using some other mechanism.
   ///
   /// \returns the transformed attribute
   const Attr *TransformAttr(const Attr *S);
 
-/// Transform the specified attribute.
-///
-/// Subclasses should override the transformation of attributes with a pragma
-/// spelling to transform expressions stored within the attribute.
-///
-/// \returns the transformed attribute.
-#define ATTR(X)
-#define PRAGMA_SPELLING_ATTR(X)                                                \
+  // Transform the given statement attribute.
+  //
+  // Delegates to the appropriate TransformXXXAttr function to transform a
+  // specific kind of statement attribute. Unlike the non-statement taking
+  // version of this, this implements all attributes, not just pragmas.
+  const Attr *TransformStmtAttr(const Stmt *OrigS, const Stmt *InstS,
+                                const Attr *A);
+
+  // Transform the specified attribute.
+  //
+  // Subclasses should override the transformation of attributes with a pragma
+  // spelling to transform expressions stored within the attribute.
+  //
+  // \returns the transformed attribute.
+#define ATTR(X)                                                                \
   const X##Attr *Transform##X##Attr(const X##Attr *R) { return R; }
+#include "clang/Basic/AttrList.inc"
+
+  // Transform the specified attribute.
+  //
+  // Subclasses should override the transformation of attributes to do
+  // transformation and checking of statement attributes. By default, this
+  // delegates to the non-statement taking version.
+  //
+  // \returns the transformed attribute.
+#define ATTR(X)                                                                \
+  const X##Attr *TransformStmt##X##Attr(const Stmt *, const Stmt *,            \
+                                        const X##Attr *A) {                    \
+    return getDerived().Transform##X##Attr(A);                                 \
+  }
 #include "clang/Basic/AttrList.inc"
 
   /// Transform the given expression.
@@ -3152,6 +3173,13 @@ public:
                                           Expr *Sub,
                                           SourceLocation RParenLoc,
                                           bool ListInitialization) {
+    // If Sub is a ParenListExpr, then Sub is the syntatic form of a
+    // CXXParenListInitExpr. Pass its expanded arguments so that the
+    // CXXParenListInitExpr can be rebuilt.
+    if (auto *PLE = dyn_cast<ParenListExpr>(Sub))
+      return getSema().BuildCXXTypeConstructExpr(
+          TInfo, LParenLoc, MultiExprArg(PLE->getExprs(), PLE->getNumExprs()),
+          RParenLoc, ListInitialization);
     return getSema().BuildCXXTypeConstructExpr(TInfo, LParenLoc,
                                                MultiExprArg(&Sub, 1), RParenLoc,
                                                ListInitialization);
@@ -3879,16 +3907,6 @@ public:
   ExprResult RebuildEmptyCXXFoldExpr(SourceLocation EllipsisLoc,
                                      BinaryOperatorKind Operator) {
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
-  }
-
-  ExprResult RebuildCXXParenListInitExpr(ArrayRef<Expr *> Args, QualType T,
-                                         unsigned NumUserSpecifiedExprs,
-                                         SourceLocation InitLoc,
-                                         SourceLocation LParenLoc,
-                                         SourceLocation RParenLoc) {
-    return CXXParenListInitExpr::Create(getSema().Context, Args, T,
-                                        NumUserSpecifiedExprs, InitLoc,
-                                        LParenLoc, RParenLoc);
   }
 
   /// Build a new atomic operation expression.
@@ -7551,35 +7569,51 @@ const Attr *TreeTransform<Derived>::TransformAttr(const Attr *R) {
     return R;
 
   switch (R->getKind()) {
-// Transform attributes with a pragma spelling by calling TransformXXXAttr.
-#define ATTR(X)
-#define PRAGMA_SPELLING_ATTR(X)                                                \
+// Transform attributes by calling TransformXXXAttr.
+#define ATTR(X)                                                                \
   case attr::X:                                                                \
     return getDerived().Transform##X##Attr(cast<X##Attr>(R));
 #include "clang/Basic/AttrList.inc"
-  default:
-    return R;
   }
+  return R;
+}
+
+template <typename Derived>
+const Attr *TreeTransform<Derived>::TransformStmtAttr(const Stmt *OrigS,
+                                                      const Stmt *InstS,
+                                                      const Attr *R) {
+  if (!R)
+    return R;
+
+  switch (R->getKind()) {
+// Transform attributes by calling TransformStmtXXXAttr.
+#define ATTR(X)                                                                \
+  case attr::X:                                                                \
+    return getDerived().TransformStmt##X##Attr(OrigS, InstS, cast<X##Attr>(R));
+#include "clang/Basic/AttrList.inc"
+  }
+  return TransformAttr(R);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformAttributedStmt(AttributedStmt *S,
                                                 StmtDiscardKind SDK) {
+  StmtResult SubStmt = getDerived().TransformStmt(S->getSubStmt(), SDK);
+  if (SubStmt.isInvalid())
+    return StmtError();
+
   bool AttrsChanged = false;
   SmallVector<const Attr *, 1> Attrs;
 
   // Visit attributes and keep track if any are transformed.
   for (const auto *I : S->getAttrs()) {
-    const Attr *R = getDerived().TransformAttr(I);
+    const Attr *R =
+        getDerived().TransformStmtAttr(S->getSubStmt(), SubStmt.get(), I);
     AttrsChanged |= (I != R);
     if (R)
       Attrs.push_back(R);
   }
-
-  StmtResult SubStmt = getDerived().TransformStmt(S->getSubStmt(), SDK);
-  if (SubStmt.isInvalid())
-    return StmtError();
 
   if (SubStmt.get() == S->getSubStmt() && !AttrsChanged)
     return S;
@@ -8065,6 +8099,13 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
     if (DeallocRes.isInvalid())
       return StmtError();
     Builder.Deallocate = DeallocRes.get();
+
+    if (auto *ResultDecl = S->getResultDecl()) {
+      StmtResult Res = getDerived().TransformStmt(ResultDecl);
+      if (Res.isInvalid())
+        return StmtError();
+      Builder.ResultDecl = Res.get();
+    }
 
     if (auto *ReturnStmt = S->getReturnStmt()) {
       StmtResult Res = getDerived().TransformStmt(ReturnStmt);
@@ -11620,13 +11661,12 @@ TreeTransform<Derived>::TransformDesignatedInitExpr(DesignatedInitExpr *E) {
   bool ExprChanged = false;
   for (const DesignatedInitExpr::Designator &D : E->designators()) {
     if (D.isFieldDesignator()) {
-      Desig.AddDesignator(Designator::getField(D.getFieldName(),
-                                               D.getDotLoc(),
-                                               D.getFieldLoc()));
-      if (D.getField()) {
+      Desig.AddDesignator(Designator::CreateFieldDesignator(
+          D.getFieldName(), D.getDotLoc(), D.getFieldLoc()));
+      if (D.getFieldDecl()) {
         FieldDecl *Field = cast_or_null<FieldDecl>(
-            getDerived().TransformDecl(D.getFieldLoc(), D.getField()));
-        if (Field != D.getField())
+            getDerived().TransformDecl(D.getFieldLoc(), D.getFieldDecl()));
+        if (Field != D.getFieldDecl())
           // Rebuild the expression when the transformed FieldDecl is
           // different to the already assigned FieldDecl.
           ExprChanged = true;
@@ -11645,7 +11685,7 @@ TreeTransform<Derived>::TransformDesignatedInitExpr(DesignatedInitExpr *E) {
         return ExprError();
 
       Desig.AddDesignator(
-          Designator::getArray(Index.get(), D.getLBracketLoc()));
+          Designator::CreateArrayDesignator(Index.get(), D.getLBracketLoc()));
 
       ExprChanged = ExprChanged || Init.get() != E->getArrayIndex(D);
       ArrayExprs.push_back(Index.get());
@@ -11662,10 +11702,8 @@ TreeTransform<Derived>::TransformDesignatedInitExpr(DesignatedInitExpr *E) {
     if (End.isInvalid())
       return ExprError();
 
-    Desig.AddDesignator(Designator::getArrayRange(Start.get(),
-                                                  End.get(),
-                                                  D.getLBracketLoc(),
-                                                  D.getEllipsisLoc()));
+    Desig.AddDesignator(Designator::CreateArrayRangeDesignator(
+        Start.get(), End.get(), D.getLBracketLoc(), D.getEllipsisLoc()));
 
     ExprChanged = ExprChanged || Start.get() != E->getArrayRangeStart(D) ||
                   End.get() != E->getArrayRangeEnd(D);
@@ -13272,13 +13310,6 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
       E->getCaptureDefault());
   getDerived().transformedLocalDecl(OldClass, {Class});
 
-  std::optional<std::tuple<bool, unsigned, unsigned, Decl *>> Mangling;
-  if (getDerived().ReplacingOriginal())
-    Mangling = std::make_tuple(OldClass->hasKnownLambdaInternalLinkage(),
-                               OldClass->getLambdaManglingNumber(),
-                               OldClass->getDeviceLambdaManglingNumber(),
-                               OldClass->getLambdaContextDecl());
-
   CXXMethodDecl *NewCallOperator =
       getSema().CreateLambdaCallOperator(E->getIntroducerRange(), Class);
   NewCallOperator->setLexicalDeclContext(getSema().CurContext);
@@ -13458,7 +13489,13 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
   {
     // Number the lambda for linkage purposes if necessary.
     Sema::ContextRAII ManglingContext(getSema(), Class->getDeclContext());
-    getSema().handleLambdaNumbering(Class, NewCallOperator, Mangling);
+
+    std::optional<CXXRecordDecl::LambdaNumbering> Numbering;
+    if (getDerived().ReplacingOriginal()) {
+      Numbering = OldClass->getLambdaNumbering();
+    }
+
+    getSema().handleLambdaNumbering(Class, NewCallOperator, Numbering);
   }
 
   // FIXME: Sema's lambda-building mechanism expects us to push an expression
@@ -14091,9 +14128,8 @@ TreeTransform<Derived>::TransformCXXParenListInitExpr(CXXParenListInitExpr *E) {
                      TransformedInits))
     return ExprError();
 
-  return getDerived().RebuildCXXParenListInitExpr(
-      TransformedInits, E->getType(), E->getUserSpecifiedInitExprs().size(),
-      E->getInitLoc(), E->getBeginLoc(), E->getEndLoc());
+  return getDerived().RebuildParenListExpr(E->getBeginLoc(), TransformedInits,
+                                           E->getEndLoc());
 }
 
 template<typename Derived>

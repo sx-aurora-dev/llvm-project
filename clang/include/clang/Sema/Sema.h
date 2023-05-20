@@ -840,7 +840,7 @@ public:
   /// FieldCollector - Collects CXXFieldDecls during parsing of C++ classes.
   std::unique_ptr<CXXFieldCollector> FieldCollector;
 
-  typedef llvm::SmallSetVector<NamedDecl *, 16> NamedDeclSetType;
+  typedef llvm::SmallSetVector<const NamedDecl *, 16> NamedDeclSetType;
 
   /// Set containing all declared private fields that are not used.
   NamedDeclSetType UnusedPrivateFields;
@@ -1392,6 +1392,9 @@ public:
   /// A stack of expression evaluation contexts.
   SmallVector<ExpressionEvaluationContextRecord, 8> ExprEvalContexts;
 
+  // Set of failed immediate invocations to avoid double diagnosing.
+  llvm::SmallPtrSet<ConstantExpr *, 4> FailedImmediateInvocations;
+
   /// Emit a warning for all pending noderef expressions that we recorded.
   void WarnOnPendingNoDerefs(ExpressionEvaluationContextRecord &Rec);
 
@@ -1486,7 +1489,7 @@ public:
   /// Determine if VD, which must be a variable or function, is an external
   /// symbol that nonetheless can't be referenced from outside this translation
   /// unit because its type has no linkage and it's not extern "C".
-  bool isExternalWithNoLinkageType(ValueDecl *VD) const;
+  bool isExternalWithNoLinkageType(const ValueDecl *VD) const;
 
   /// Obtain a sorted list of functions that are undefined but ODR-used.
   void getUndefinedButUsed(
@@ -1775,7 +1778,7 @@ public:
     };
 
     SemaDiagnosticBuilder(Kind K, SourceLocation Loc, unsigned DiagID,
-                          FunctionDecl *Fn, Sema &S);
+                          const FunctionDecl *Fn, Sema &S);
     SemaDiagnosticBuilder(SemaDiagnosticBuilder &&D);
     SemaDiagnosticBuilder(const SemaDiagnosticBuilder &) = default;
     ~SemaDiagnosticBuilder();
@@ -1850,7 +1853,7 @@ public:
     Sema &S;
     SourceLocation Loc;
     unsigned DiagID;
-    FunctionDecl *Fn;
+    const FunctionDecl *Fn;
     bool ShowCallStack;
 
     // Invariant: At most one of these Optionals has a value.
@@ -2274,6 +2277,10 @@ private:
   };
   /// The modules we're currently parsing.
   llvm::SmallVector<ModuleScope, 16> ModuleScopes;
+
+  /// For an interface unit, this is the implicitly imported interface unit.
+  clang::Module *ThePrimaryInterface = nullptr;
+
   /// The explicit global module fragment of the current translation unit.
   /// The explicit Global Module Fragment, as specified in C++
   /// [module.global.frag].
@@ -2396,8 +2403,8 @@ public:
   bool hasReachableDeclarationSlow(
       const NamedDecl *D, llvm::SmallVectorImpl<Module *> *Modules = nullptr);
 
-  bool hasVisibleMergedDefinition(NamedDecl *Def);
-  bool hasMergedDefinitionInCurrentModule(NamedDecl *Def);
+  bool hasVisibleMergedDefinition(const NamedDecl *Def);
+  bool hasMergedDefinitionInCurrentModule(const NamedDecl *Def);
 
   /// Determine if \p D and \p Suggested have a structurally compatible
   /// layout as described in C11 6.2.7/1.
@@ -3235,9 +3242,9 @@ public:
 
   /// Diagnose that the specified declaration needs to be visible but
   /// isn't, and suggest a module import that would resolve the problem.
-  void diagnoseMissingImport(SourceLocation Loc, NamedDecl *Decl,
+  void diagnoseMissingImport(SourceLocation Loc, const NamedDecl *Decl,
                              MissingImportKind MIK, bool Recover = true);
-  void diagnoseMissingImport(SourceLocation Loc, NamedDecl *Decl,
+  void diagnoseMissingImport(SourceLocation Loc, const NamedDecl *Decl,
                              SourceLocation DeclLoc, ArrayRef<Module *> Modules,
                              MissingImportKind MIK, bool Recover);
 
@@ -4069,7 +4076,7 @@ public:
 
   // Emit as a 'note' the specific overload candidate
   void NoteOverloadCandidate(
-      NamedDecl *Found, FunctionDecl *Fn,
+      const NamedDecl *Found, const FunctionDecl *Fn,
       OverloadCandidateRewriteKind RewriteKind = OverloadCandidateRewriteKind(),
       QualType DestType = QualType(), bool TakingAddress = false);
 
@@ -4503,7 +4510,7 @@ public:
     TemplateDiscarded, // Discarded due to uninstantiated templates
     Unknown,
   };
-  FunctionEmissionStatus getEmissionStatus(FunctionDecl *Decl,
+  FunctionEmissionStatus getEmissionStatus(const FunctionDecl *Decl,
                                            bool Final = false);
 
   // Whether the callee should be ignored in CUDA/HIP/OpenMP host/device check.
@@ -4714,6 +4721,11 @@ public:
       MSInheritanceModel SemanticSpelling);
 
   void CheckAlignasUnderalignment(Decl *D);
+
+  bool CheckNoInlineAttr(const Stmt *OrigSt, const Stmt *CurSt,
+                         const AttributeCommonInfo &A);
+  bool CheckAlwaysInlineAttr(const Stmt *OrigSt, const Stmt *CurSt,
+                             const AttributeCommonInfo &A);
 
   /// Adjust the calling convention of a method to be the ABI default if it
   /// wasn't specified explicitly.  This handles method types formed from
@@ -5551,7 +5563,7 @@ public:
                               DeclarationNameInfo &NameInfo,
                               const TemplateArgumentListInfo *&TemplateArgs);
 
-  bool DiagnoseDependentMemberLookup(LookupResult &R);
+  bool DiagnoseDependentMemberLookup(const LookupResult &R);
 
   bool
   DiagnoseEmptyLookup(Scope *S, CXXScopeSpec &SS, LookupResult &R,
@@ -7099,10 +7111,9 @@ public:
                         Expr *TrailingRequiresClause);
 
   /// Number lambda for linkage purposes if necessary.
-  void handleLambdaNumbering(
-      CXXRecordDecl *Class, CXXMethodDecl *Method,
-      std::optional<std::tuple<bool, unsigned, unsigned, Decl *>> Mangling =
-          std::nullopt);
+  void handleLambdaNumbering(CXXRecordDecl *Class, CXXMethodDecl *Method,
+                             std::optional<CXXRecordDecl::LambdaNumbering>
+                                 NumberingOverride = std::nullopt);
 
   /// Endow the lambda scope info with the relevant properties.
   void buildLambdaScope(sema::LambdaScopeInfo *LSI, CXXMethodDecl *CallOperator,
@@ -8096,6 +8107,8 @@ public:
                                 SourceLocation EqualLoc,
                                 ParsedType DefaultArg, bool HasTypeConstraint);
 
+  bool CheckTypeConstraint(TemplateIdAnnotation *TypeConstraint);
+
   bool ActOnTypeConstraint(const CXXScopeSpec &SS,
                            TemplateIdAnnotation *TypeConstraint,
                            TemplateTypeParmDecl *ConstrainedParameter,
@@ -8114,7 +8127,8 @@ public:
                             SourceLocation EllipsisLoc);
 
   bool AttachTypeConstraint(AutoTypeLoc TL,
-                            NonTypeTemplateParmDecl *ConstrainedParameter,
+                            NonTypeTemplateParmDecl *NewConstrainedParm,
+                            NonTypeTemplateParmDecl *OrigConstrainedParm,
                             SourceLocation EllipsisLoc);
 
   bool RequireStructuralType(QualType T, SourceLocation Loc);
@@ -8448,24 +8462,31 @@ public:
     /// template<int Value> struct integer_c;
     /// X<integer_c> xic;
     /// \endcode
-    TPL_TemplateTemplateArgumentMatch
+    TPL_TemplateTemplateArgumentMatch,
+
+    /// We are determining whether the template-parameters are equivalent
+    /// according to C++ [temp.over.link]/6. This comparison does not consider
+    /// constraints.
+    ///
+    /// \code
+    /// template<C1 T> void f(T);
+    /// template<C2 T> void f(T);
+    /// \endcode
+    TPL_TemplateParamsEquivalent,
   };
 
   bool TemplateParameterListsAreEqual(
       const NamedDecl *NewInstFrom, TemplateParameterList *New,
       const NamedDecl *OldInstFrom, TemplateParameterList *Old, bool Complain,
       TemplateParameterListEqualKind Kind,
-      SourceLocation TemplateArgLoc = SourceLocation(),
-      bool PartialOrdering = false);
+      SourceLocation TemplateArgLoc = SourceLocation());
 
   bool TemplateParameterListsAreEqual(
       TemplateParameterList *New, TemplateParameterList *Old, bool Complain,
       TemplateParameterListEqualKind Kind,
-      SourceLocation TemplateArgLoc = SourceLocation(),
-      bool PartialOrdering = false) {
+      SourceLocation TemplateArgLoc = SourceLocation()) {
     return TemplateParameterListsAreEqual(nullptr, New, nullptr, Old, Complain,
-                                          Kind, TemplateArgLoc,
-                                          PartialOrdering);
+                                          Kind, TemplateArgLoc);
   }
 
   bool CheckTemplateDeclScope(Scope *S, TemplateParameterList *TemplateParams);
@@ -10694,6 +10715,9 @@ public:
   /// Called on #pragma clang __debug dump II
   void ActOnPragmaDump(Scope *S, SourceLocation Loc, IdentifierInfo *II);
 
+  /// Called on #pragma clang __debug dump E
+  void ActOnPragmaDump(Expr *E);
+
   /// ActOnPragmaDetectMismatch - Call on well-formed \#pragma detect_mismatch
   void ActOnPragmaDetectMismatch(SourceLocation Loc, StringRef Name,
                                  StringRef Value);
@@ -12819,20 +12843,22 @@ public:
     Decl *ConditionVar;
     FullExprArg Condition;
     bool Invalid;
-    bool HasKnownValue;
-    bool KnownValue;
+    std::optional<bool> KnownValue;
 
     friend class Sema;
     ConditionResult(Sema &S, Decl *ConditionVar, FullExprArg Condition,
                     bool IsConstexpr)
-        : ConditionVar(ConditionVar), Condition(Condition), Invalid(false),
-          HasKnownValue(IsConstexpr && Condition.get() &&
-                        !Condition.get()->isValueDependent()),
-          KnownValue(HasKnownValue &&
-                     !!Condition.get()->EvaluateKnownConstInt(S.Context)) {}
+        : ConditionVar(ConditionVar), Condition(Condition), Invalid(false) {
+      if (IsConstexpr && Condition.get()) {
+        if (std::optional<llvm::APSInt> Val =
+                Condition.get()->getIntegerConstantExpr(S.Context)) {
+          KnownValue = !!(*Val);
+        }
+      }
+    }
     explicit ConditionResult(bool Invalid)
         : ConditionVar(nullptr), Condition(nullptr), Invalid(Invalid),
-          HasKnownValue(false), KnownValue(false) {}
+          KnownValue(std::nullopt) {}
 
   public:
     ConditionResult() : ConditionResult(false) {}
@@ -12841,11 +12867,7 @@ public:
       return std::make_pair(cast_or_null<VarDecl>(ConditionVar),
                             Condition.get());
     }
-    std::optional<bool> getKnownValue() const {
-      if (!HasKnownValue)
-        return std::nullopt;
-      return KnownValue;
-    }
+    std::optional<bool> getKnownValue() const { return KnownValue; }
   };
   static ConditionResult ConditionError() { return ConditionResult(true); }
 
@@ -12975,14 +12997,14 @@ public:
   /// Diagnostics that are emitted only if we discover that the given function
   /// must be codegen'ed.  Because handling these correctly adds overhead to
   /// compilation, this is currently only enabled for CUDA compilations.
-  llvm::DenseMap<CanonicalDeclPtr<FunctionDecl>,
+  llvm::DenseMap<CanonicalDeclPtr<const FunctionDecl>,
                  std::vector<PartialDiagnosticAt>>
       DeviceDeferredDiags;
 
   /// A pair of a canonical FunctionDecl and a SourceLocation.  When used as the
   /// key in a hashtable, both the FD and location are hashed.
   struct FunctionDeclAndLoc {
-    CanonicalDeclPtr<FunctionDecl> FD;
+    CanonicalDeclPtr<const FunctionDecl> FD;
     SourceLocation Loc;
   };
 
@@ -12996,7 +13018,7 @@ public:
   ///
   /// Functions that we can tell a priori must be emitted aren't added to this
   /// map.
-  llvm::DenseMap</* Callee = */ CanonicalDeclPtr<FunctionDecl>,
+  llvm::DenseMap</* Callee = */ CanonicalDeclPtr<const FunctionDecl>,
                  /* Caller = */ FunctionDeclAndLoc>
       DeviceKnownEmittedFns;
 
@@ -13041,8 +13063,9 @@ public:
   ///  if (diagIfOpenMPDeviceCode(Loc, diag::err_vla_unsupported))
   ///    return ExprError();
   ///  // Otherwise, continue parsing as normal.
-  SemaDiagnosticBuilder
-  diagIfOpenMPDeviceCode(SourceLocation Loc, unsigned DiagID, FunctionDecl *FD);
+  SemaDiagnosticBuilder diagIfOpenMPDeviceCode(SourceLocation Loc,
+                                               unsigned DiagID,
+                                               const FunctionDecl *FD);
 
   /// Creates a SemaDiagnosticBuilder that emits the diagnostic if the current
   /// context is "used as host code".
@@ -13058,13 +13081,14 @@ public:
   ///    return ExprError();
   ///  // Otherwise, continue parsing as normal.
   SemaDiagnosticBuilder diagIfOpenMPHostCode(SourceLocation Loc,
-                                             unsigned DiagID, FunctionDecl *FD);
+                                             unsigned DiagID,
+                                             const FunctionDecl *FD);
 
   SemaDiagnosticBuilder targetDiag(SourceLocation Loc, unsigned DiagID,
-                                   FunctionDecl *FD = nullptr);
+                                   const FunctionDecl *FD = nullptr);
   SemaDiagnosticBuilder targetDiag(SourceLocation Loc,
                                    const PartialDiagnostic &PD,
-                                   FunctionDecl *FD = nullptr) {
+                                   const FunctionDecl *FD = nullptr) {
     return targetDiag(Loc, PD.getDiagID(), FD) << PD;
   }
 
@@ -14023,7 +14047,8 @@ namespace llvm {
 // SourceLocation.
 template <> struct DenseMapInfo<clang::Sema::FunctionDeclAndLoc> {
   using FunctionDeclAndLoc = clang::Sema::FunctionDeclAndLoc;
-  using FDBaseInfo = DenseMapInfo<clang::CanonicalDeclPtr<clang::FunctionDecl>>;
+  using FDBaseInfo =
+      DenseMapInfo<clang::CanonicalDeclPtr<const clang::FunctionDecl>>;
 
   static FunctionDeclAndLoc getEmptyKey() {
     return {FDBaseInfo::getEmptyKey(), clang::SourceLocation()};

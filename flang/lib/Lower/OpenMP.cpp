@@ -173,6 +173,12 @@ void DataSharingProcessor::collectSymbolsForPrivatization() {
     }
   }
 
+  for (auto *ps : privatizedSymbols) {
+    if (ps->has<Fortran::semantics::CommonBlockDetails>())
+      TODO(converter.getCurrentLocation(),
+           "Common Block in privatization clause");
+  }
+
   if (hasCollapse && hasLastPrivateOp)
     TODO(converter.getCurrentLocation(), "Collapse clause with lastprivate");
 }
@@ -662,22 +668,22 @@ createBodyOfOp(Op &op, Fortran::lower::AbstractConverter &converter,
   }
 }
 
-static void
-createTargetDataOp(Fortran::lower::AbstractConverter &converter,
-                   const Fortran::parser::OmpClauseList &opClauseList,
-                   const llvm::omp::Directive &directive,
-                   Fortran::lower::pft::Evaluation *eval = nullptr) {
+static void createTargetOp(Fortran::lower::AbstractConverter &converter,
+                           const Fortran::parser::OmpClauseList &opClauseList,
+                           const llvm::omp::Directive &directive,
+                           Fortran::lower::pft::Evaluation *eval = nullptr) {
   Fortran::lower::StatementContext stmtCtx;
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
-  mlir::Value ifClauseOperand, deviceOperand;
+  mlir::Value ifClauseOperand, deviceOperand, threadLmtOperand;
   mlir::UnitAttr nowaitAttr;
   llvm::SmallVector<mlir::Value> useDevicePtrOperand, useDeviceAddrOperand,
       mapOperands;
   llvm::SmallVector<mlir::IntegerAttr> mapTypes;
 
   auto addMapClause = [&firOpBuilder, &converter, &mapOperands,
-                       &mapTypes](const auto &mapClause) {
+                       &mapTypes](const auto &mapClause,
+                                  mlir::Location &currentLocation) {
     auto mapType = std::get<Fortran::parser::OmpMapType::Type>(
         std::get<std::optional<Fortran::parser::OmpMapType>>(mapClause->v.t)
             ->t);
@@ -719,10 +725,26 @@ createTargetDataOp(Fortran::lower::AbstractConverter &converter,
             mapTypeBits));
 
     llvm::SmallVector<mlir::Value> mapOperand;
+    /// Check for unsupported map operand types.
+    for (const Fortran::parser::OmpObject &ompObject :
+         std::get<Fortran::parser::OmpObjectList>(mapClause->v.t).v) {
+      if (Fortran::parser::Unwrap<Fortran::parser::ArrayElement>(ompObject) ||
+          Fortran::parser::Unwrap<Fortran::parser::StructureComponent>(
+              ompObject))
+        TODO(currentLocation,
+             "OMPD_target_data for Array Expressions or Structure Components");
+    }
     genObjectList(std::get<Fortran::parser::OmpObjectList>(mapClause->v.t),
                   converter, mapOperand);
 
     for (mlir::Value mapOp : mapOperand) {
+      /// Check for unsupported map operand types.
+      mlir::Type checkType = mapOp.getType();
+      if (auto refType = checkType.dyn_cast<fir::ReferenceType>())
+        checkType = refType.getElementType();
+      if (checkType.isa<fir::BoxType>())
+        TODO(currentLocation, "OMPD_target_data MapOperand BoxType");
+
       mapOperands.push_back(mapOp);
       mapTypes.push_back(mapTypeAttr);
     }
@@ -754,11 +776,16 @@ createTargetDataOp(Fortran::lower::AbstractConverter &converter,
     } else if (std::get_if<Fortran::parser::OmpClause::UseDeviceAddr>(
                    &clause.u)) {
       TODO(currentLocation, "OMPD_target Use Device Addr");
+    } else if (const auto &threadLmtClause =
+                   std::get_if<Fortran::parser::OmpClause::ThreadLimit>(
+                       &clause.u)) {
+      threadLmtOperand = fir::getBase(converter.genExprValue(
+          *Fortran::semantics::GetExpr(threadLmtClause->v), stmtCtx));
     } else if (std::get_if<Fortran::parser::OmpClause::Nowait>(&clause.u)) {
       nowaitAttr = firOpBuilder.getUnitAttr();
     } else if (const auto &mapClause =
                    std::get_if<Fortran::parser::OmpClause::Map>(&clause.u)) {
-      addMapClause(mapClause);
+      addMapClause(mapClause, currentLocation);
     } else {
       TODO(currentLocation, "OMPD_target unhandled clause");
     }
@@ -770,7 +797,12 @@ createTargetDataOp(Fortran::lower::AbstractConverter &converter,
       ArrayAttr::get(firOpBuilder.getContext(), mapTypesAttr);
   mlir::Location currentLocation = converter.getCurrentLocation();
 
-  if (directive == llvm::omp::Directive::OMPD_target_data) {
+  if (directive == llvm::omp::Directive::OMPD_target) {
+    auto targetOp = firOpBuilder.create<omp::TargetOp>(
+        currentLocation, ifClauseOperand, deviceOperand, threadLmtOperand,
+        nowaitAttr, mapOperands, mapTypesArrayAttr);
+    createBodyOfOp(targetOp, converter, currentLocation, *eval, &opClauseList);
+  } else if (directive == llvm::omp::Directive::OMPD_target_data) {
     auto dataOp = firOpBuilder.create<omp::DataOp>(
         currentLocation, ifClauseOperand, deviceOperand, useDevicePtrOperand,
         useDeviceAddrOperand, mapOperands, mapTypesArrayAttr);
@@ -814,7 +846,7 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
   case llvm::omp::Directive::OMPD_target_data:
   case llvm::omp::Directive::OMPD_target_enter_data:
   case llvm::omp::Directive::OMPD_target_exit_data:
-    createTargetDataOp(converter, opClauseList, directive.v);
+    createTargetOp(converter, opClauseList, directive.v);
     break;
   case llvm::omp::Directive::OMPD_target_update:
     TODO(converter.getCurrentLocation(), "OMPD_target_update");
@@ -1030,6 +1062,10 @@ genOMP(Fortran::lower::AbstractConverter &converter,
       // Map clause is exclusive to Target Data directives. It is handled
       // as part of the DataOp creation.
       continue;
+    } else if (std::get_if<Fortran::parser::OmpClause::ThreadLimit>(
+                   &clause.u)) {
+      // Handled as part of TargetOp creation.
+      continue;
     } else if (const auto &finalClause =
                    std::get_if<Fortran::parser::OmpClause::Final>(&clause.u)) {
       mlir::Value finalVal = fir::getBase(converter.genExprValue(
@@ -1097,8 +1133,10 @@ genOMP(Fortran::lower::AbstractConverter &converter,
         /*task_reductions=*/nullptr, allocateOperands, allocatorOperands);
     createBodyOfOp(taskGroupOp, converter, currentLocation, eval,
                    &opClauseList);
+  } else if (blockDirective.v == llvm::omp::OMPD_target) {
+    createTargetOp(converter, opClauseList, blockDirective.v, &eval);
   } else if (blockDirective.v == llvm::omp::OMPD_target_data) {
-    createTargetDataOp(converter, opClauseList, blockDirective.v, &eval);
+    createTargetOp(converter, opClauseList, blockDirective.v, &eval);
   } else {
     TODO(converter.getCurrentLocation(), "Unhandled block directive");
   }
@@ -1110,7 +1148,8 @@ genOMP(Fortran::lower::AbstractConverter &converter,
 ///    1 * x = x
 static int getOperationIdentity(llvm::StringRef reductionOpName,
                                 mlir::Location loc) {
-  if (reductionOpName.contains("add"))
+  if (reductionOpName.contains("add") || reductionOpName.contains("or") ||
+      reductionOpName.contains("neqv"))
     return 0;
   if (reductionOpName.contains("multiply") || reductionOpName.contains("and") ||
       reductionOpName.contains("eqv"))
@@ -1133,6 +1172,15 @@ static Value getReductionInitValue(mlir::Location loc, mlir::Type type,
     unsigned bits = type.getIntOrFloatBitWidth();
     int64_t minInt = llvm::APInt::getSignedMinValue(bits).getSExtValue();
     return builder.createIntegerConstant(loc, type, minInt);
+  } else if (reductionOpName.contains("min")) {
+    if (auto ty = type.dyn_cast<mlir::FloatType>()) {
+      const llvm::fltSemantics &sem = ty.getFloatSemantics();
+      return builder.createRealConstant(
+          loc, type, llvm::APFloat::getSmallest(sem, /*Negative=*/true));
+    }
+    unsigned bits = type.getIntOrFloatBitWidth();
+    int64_t maxInt = llvm::APInt::getSignedMaxValue(bits).getSExtValue();
+    return builder.createIntegerConstant(loc, type, maxInt);
   } else {
     if (type.isa<FloatType>())
       return builder.create<mlir::arith::ConstantOp>(
@@ -1216,6 +1264,10 @@ createReductionDecl(fir::FirOpBuilder &builder, llvm::StringRef reductionOpName,
       reductionOp =
           getReductionOperation<mlir::arith::MaxFOp, mlir::arith::MaxSIOp>(
               builder, type, loc, op1, op2);
+    } else if (name->source == "min") {
+      reductionOp =
+          getReductionOperation<mlir::arith::MinFOp, mlir::arith::MinSIOp>(
+              builder, type, loc, op1, op2);
     } else {
       TODO(loc, "Reduction of some intrinsic operators is not supported");
     }
@@ -1267,12 +1319,31 @@ static omp::ReductionDeclareOp createReductionDecl(
     reductionOp = builder.createConvert(loc, type, andiOp);
     break;
   }
+  case Fortran::parser::DefinedOperator::IntrinsicOperator::OR: {
+    Value op1I1 = builder.createConvert(loc, builder.getI1Type(), op1);
+    Value op2I1 = builder.createConvert(loc, builder.getI1Type(), op2);
+
+    Value oriOp = builder.create<mlir::arith::OrIOp>(loc, op1I1, op2I1);
+
+    reductionOp = builder.createConvert(loc, type, oriOp);
+    break;
+  }
   case Fortran::parser::DefinedOperator::IntrinsicOperator::EQV: {
     Value op1I1 = builder.createConvert(loc, builder.getI1Type(), op1);
     Value op2I1 = builder.createConvert(loc, builder.getI1Type(), op2);
 
     Value cmpiOp = builder.create<mlir::arith::CmpIOp>(
         loc, arith::CmpIPredicate::eq, op1I1, op2I1);
+
+    reductionOp = builder.createConvert(loc, type, cmpiOp);
+    break;
+  }
+  case Fortran::parser::DefinedOperator::IntrinsicOperator::NEQV: {
+    Value op1I1 = builder.createConvert(loc, builder.getI1Type(), op1);
+    Value op2I1 = builder.createConvert(loc, builder.getI1Type(), op2);
+
+    Value cmpiOp = builder.create<mlir::arith::CmpIOp>(
+        loc, arith::CmpIPredicate::ne, op1I1, op2I1);
 
     reductionOp = builder.createConvert(loc, type, cmpiOp);
     break;
@@ -1372,6 +1443,10 @@ static std::string getReductionName(
     return "and_reduction";
   case Fortran::parser::DefinedOperator::IntrinsicOperator::EQV:
     return "eqv_reduction";
+  case Fortran::parser::DefinedOperator::IntrinsicOperator::OR:
+    return "or_reduction";
+  case Fortran::parser::DefinedOperator::IntrinsicOperator::NEQV:
+    return "neqv_reduction";
   default:
     reductionName = "other_reduction";
     break;
@@ -1479,6 +1554,8 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
         case Fortran::parser::DefinedOperator::IntrinsicOperator::Multiply:
         case Fortran::parser::DefinedOperator::IntrinsicOperator::AND:
         case Fortran::parser::DefinedOperator::IntrinsicOperator::EQV:
+        case Fortran::parser::DefinedOperator::IntrinsicOperator::OR:
+        case Fortran::parser::DefinedOperator::IntrinsicOperator::NEQV:
           break;
 
         default:
@@ -1517,10 +1594,11 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
                          &redOperator.u)) {
         if (const auto *name{Fortran::parser::Unwrap<Fortran::parser::Name>(
                 reductionIntrinsic)}) {
-          if (name->source != "max") {
+          if ((name->source != "max") && (name->source != "min")) {
             TODO(currentLocation,
                  "Reduction of intrinsic procedures is not supported");
           }
+          std::string intrinsicOp = name->ToString();
           for (const auto &ompObject : objectList.v) {
             if (const auto *name{Fortran::parser::Unwrap<Fortran::parser::Name>(
                     ompObject)}) {
@@ -1532,7 +1610,7 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
                 assert(redType.isIntOrIndexOrFloat() &&
                        "Unsupported reduction type");
                 decl = createReductionDecl(
-                    firOpBuilder, getReductionName("max", redType),
+                    firOpBuilder, getReductionName(intrinsicOp, redType),
                     *reductionIntrinsic, redType, currentLocation);
                 reductionDeclSymbols.push_back(SymbolRefAttr::get(
                     firOpBuilder.getContext(), decl.getSymName()));
@@ -2243,6 +2321,8 @@ void Fortran::lower::genOpenMPReduction(
         case Fortran::parser::DefinedOperator::IntrinsicOperator::Multiply:
         case Fortran::parser::DefinedOperator::IntrinsicOperator::AND:
         case Fortran::parser::DefinedOperator::IntrinsicOperator::EQV:
+        case Fortran::parser::DefinedOperator::IntrinsicOperator::OR:
+        case Fortran::parser::DefinedOperator::IntrinsicOperator::NEQV:
           break;
         default:
           continue;
@@ -2284,7 +2364,7 @@ void Fortran::lower::genOpenMPReduction(
                          &redOperator.u)) {
         if (const auto *name{Fortran::parser::Unwrap<Fortran::parser::Name>(
                 reductionIntrinsic)}) {
-          if (name->source != "max") {
+          if ((name->source != "max") && (name->source != "min")) {
             continue;
           }
           for (const auto &ompObject : objectList.v) {
@@ -2301,6 +2381,8 @@ void Fortran::lower::genOpenMPReduction(
                     // Match the pattern here.
                     mlir::Operation *reductionOp =
                         findReductionChain(loadVal, &reductionVal);
+                    if (reductionOp == nullptr)
+                      continue;
                     assert(mlir::isa<mlir::arith::SelectOp>(reductionOp) &&
                            "Selection Op not found in reduction intrinsic");
                     mlir::Operation *compareOp =
