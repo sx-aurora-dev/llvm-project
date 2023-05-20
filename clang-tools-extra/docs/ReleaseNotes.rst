@@ -114,18 +114,24 @@ New checks
 
   Warns when lambda specify a capture default and capture ``this``.
 
-- New :doc:`llvmlibc-inline-function-decl
-  <clang-tidy/checks/llvmlibc/inline-function-decl>` check.
-
-  Checks that all implicit and explicit inline functions in header files are
-  tagged with the ``LIBC_INLINE`` macro.
-
 - New :doc:`cppcoreguidelines-avoid-capturing-lambda-coroutines
   <clang-tidy/checks/cppcoreguidelines/avoid-capturing-lambda-coroutines>` check.
 
   Flags C++20 coroutine lambdas with non-empty capture lists that may cause
   use-after-free errors and suggests avoiding captures or ensuring the lambda
   closure object has a guaranteed lifetime.
+
+- New :doc:`cppcoreguidelines-rvalue-reference-param-not-moved
+  <clang-tidy/checks/cppcoreguidelines/rvalue-reference-param-not-moved>` check.
+
+  Warns when an rvalue reference function parameter is never moved within
+  the function body.
+
+- New :doc:`llvmlibc-inline-function-decl
+  <clang-tidy/checks/llvmlibc/inline-function-decl>` check.
+
+  Checks that all implicit and explicit inline functions in header files are
+  tagged with the ``LIBC_INLINE`` macro.
 
 New check aliases
 ^^^^^^^^^^^^^^^^^
@@ -140,6 +146,11 @@ New check aliases
 
 Changes in existing checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Improved :doc:`readability-redundant-string-cstr
+  <clang-tidy/checks/readability/redundant-string-cstr>` check to recognise
+  unnecessary ``std::string::c_str()`` and ``std::string::data()`` calls in
+  arguments to ``std::print``, ``std::format`` or other functions listed in
+  the ``StringParameterFunction`` check option.
 
 - Deprecated check-local options `HeaderFileExtensions`
   in :doc:`bugprone-dynamic-static-initializers
@@ -190,6 +201,12 @@ Changes in existing checks
   :doc:`readability-identifier-naming
   <clang-tidy/checks/readability/identifier-naming>` check.
 
+- Updated the Hungarian prefixes for enums in C files to match those used in C++
+  files for improved readability, as checked by :doc:`readability-identifier-naming
+  <clang-tidy/checks/readability/identifier-naming>`. To preserve the previous
+  behavior of using `i` as the prefix for enum tags, set the `EnumConstantPrefix`
+  option to `i` instead of using `EnumConstantHungarianPrefix`.
+
 - Fixed a false positive in :doc:`readability-container-size-empty
   <clang-tidy/checks/readability/container-size-empty>` check when comparing
   ``std::array`` objects to default constructed ones. The behavior for this and
@@ -199,10 +216,23 @@ Changes in existing checks
   <clang-tidy/checks/bugprone/too-small-loop-variable>` check. Basic support
   for bit-field and integer members as a loop variable or upper limit were added.
 
-- Improved :doc:`readability-magic-numbers 
+- Improved :doc:`readability-magic-numbers
   <clang-tidy/checks/readability/magic-numbers>` check, now allows for
   magic numbers in type aliases such as ``using`` and ``typedef`` declarations if
   the new ``IgnoreTypeAliases`` option is set to true.
+
+- Fixed a false positive in :doc:`cppcoreguidelines-slicing
+  <clang-tidy/checks/cppcoreguidelines/slicing>` check when warning would be
+  emitted in constructor for virtual base class initialization.
+
+- Improved :doc:`bugprone-use-after-move
+  <clang-tidy/checks/bugprone/use-after-move>` to understand that there is a
+  sequence point between designated initializers.
+
+- Fixed an issue in :doc:`readability-identifier-naming
+  <clang-tidy/checks/readability/identifier-naming>` when specifying an empty
+  string for ``Prefix`` or ``Suffix`` options could result in the style not
+  being used.
 
 Removed checks
 ^^^^^^^^^^^^^^

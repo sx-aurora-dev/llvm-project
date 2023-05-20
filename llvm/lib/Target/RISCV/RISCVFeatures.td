@@ -576,9 +576,9 @@ def HasVendorXTHeadVdot : Predicate<"Subtarget->hasVendorXTHeadVdot()">,
 // Feature32Bit exists to mark CPUs that support RV32 to distinquish them from
 // tuning CPU names.
 def Feature32Bit
-    : SubtargetFeature<"32bit", "HasRV32", "true", "Implements RV32">;
+    : SubtargetFeature<"32bit", "IsRV32", "true", "Implements RV32">;
 def Feature64Bit
-    : SubtargetFeature<"64bit", "HasRV64", "true", "Implements RV64">;
+    : SubtargetFeature<"64bit", "IsRV64", "true", "Implements RV64">;
 def IsRV64 : Predicate<"Subtarget->is64Bit()">,
                        AssemblerPredicate<(all_of Feature64Bit),
                                          "RV64I Base Instruction Set">;
@@ -587,7 +587,7 @@ def IsRV32 : Predicate<"!Subtarget->is64Bit()">,
                                           "RV32I Base Instruction Set">;
 
 defvar RV32 = DefaultMode;
-def RV64           : HwMode<"+64bit">;
+def RV64           : HwMode<"+64bit", [IsRV64]>;
 
 def FeatureRV32E
     : SubtargetFeature<"e", "IsRV32E", "true",

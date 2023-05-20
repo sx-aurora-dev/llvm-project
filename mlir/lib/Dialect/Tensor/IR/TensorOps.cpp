@@ -1233,7 +1233,7 @@ int64_t ExpandShapeOp::getCorrespondingSourceDim(int64_t resultDim) {
   assert(resultDim >= 0 && resultDim < getResultType().getRank() &&
          "invalid resultDim");
   for (const auto &it : llvm::enumerate(getReassociationIndices()))
-    if (llvm::find(it.value(), resultDim) != it.value().end())
+    if (llvm::is_contained(it.value(), resultDim))
       return it.index();
   llvm_unreachable("could not find reassociation group");
 }
@@ -2518,26 +2518,27 @@ RankedTensorType PadOp::inferResultType(RankedTensorType sourceType,
   return RankedTensorType::get(inferredShape, sourceType.getElementType());
 }
 
-void PadOp::build(OpBuilder &b, OperationState &result, Value source,
-                  ArrayRef<int64_t> staticLow, ArrayRef<int64_t> staticHigh,
-                  ValueRange low, ValueRange high, bool nofold,
-                  ArrayRef<NamedAttribute> attrs) {
+void PadOp::build(OpBuilder &b, OperationState &result, Type resultType,
+                  Value source, ArrayRef<int64_t> staticLow,
+                  ArrayRef<int64_t> staticHigh, ValueRange low, ValueRange high,
+                  bool nofold, ArrayRef<NamedAttribute> attrs) {
   auto sourceType = source.getType().cast<RankedTensorType>();
-  auto resultType = inferResultType(sourceType, staticLow, staticHigh);
+  if (!resultType)
+    resultType = inferResultType(sourceType, staticLow, staticHigh);
   build(b, result, resultType, source, low, high,
         b.getDenseI64ArrayAttr(staticLow), b.getDenseI64ArrayAttr(staticHigh),
         nofold ? b.getUnitAttr() : UnitAttr());
   result.addAttributes(attrs);
 }
 
-void PadOp::build(OpBuilder &b, OperationState &result, Value source,
-                  ValueRange low, ValueRange high, bool nofold,
+void PadOp::build(OpBuilder &b, OperationState &result, Type resultType,
+                  Value source, ValueRange low, ValueRange high, bool nofold,
                   ArrayRef<NamedAttribute> attrs) {
   auto sourceType = source.getType().cast<RankedTensorType>();
   unsigned rank = sourceType.getRank();
   SmallVector<int64_t, 4> staticVector(rank, ShapedType::kDynamic);
-  build(b, result, source, staticVector, staticVector, low, high, nofold,
-        attrs);
+  build(b, result, resultType, source, staticVector, staticVector, low, high,
+        nofold, attrs);
 }
 
 void PadOp::build(OpBuilder &b, OperationState &result, Type resultType,
@@ -2635,9 +2636,9 @@ struct FoldSourceTensorCast : public OpRewritePattern<PadOp> {
     } else {
       auto newOp = rewriter.create<PadOp>(
           padTensorOp->getLoc(), newResultType, padTensorOp.getSource(),
-          padTensorOp.getLow(), padTensorOp.getHigh(),
           padTensorOp.getStaticLow(), padTensorOp.getStaticHigh(),
-          padTensorOp.getNofold());
+          padTensorOp.getLow(), padTensorOp.getHigh(), padTensorOp.getNofold(),
+          getPrunedAttributeList(padTensorOp, PadOp::getAttributeNames()));
       IRMapping mapper;
       padTensorOp.getRegion().cloneInto(&newOp.getRegion(), mapper);
 
@@ -2667,9 +2668,10 @@ struct FoldTargetTensorCast : public OpRewritePattern<PadOp> {
 
     auto replacementOp = rewriter.create<PadOp>(
         padTensorOp.getLoc(), tensorCastOp.getDest().getType(),
-        padTensorOp.getSource(), padTensorOp.getLow(), padTensorOp.getHigh(),
-        padTensorOp.getStaticLow(), padTensorOp.getStaticHigh(),
-        padTensorOp.getNofold());
+        padTensorOp.getSource(), padTensorOp.getStaticLow(),
+        padTensorOp.getStaticHigh(), padTensorOp.getLow(),
+        padTensorOp.getHigh(), padTensorOp.getNofold(),
+        getPrunedAttributeList(padTensorOp, PadOp::getAttributeNames()));
     replacementOp.getRegion().takeBody(padTensorOp.getRegion());
 
     rewriter.replaceOp(padTensorOp, replacementOp.getResult());
@@ -2773,7 +2775,7 @@ struct FoldOrthogonalPaddings : public OpRewritePattern<PadOp> {
     // zero-offset and zero-padding tensor::ExtractSliceOp, tensor::PadOp pair
     // exists.
     SmallVector<OpFoldResult> newOffsets(rank, rewriter.getIndexAttr(0));
-    for (auto &en : enumerate(newOffsets)) {
+    for (auto en : enumerate(newOffsets)) {
       OpFoldResult innerOffset = innerSliceOp.getMixedOffsets()[en.index()];
       OpFoldResult outerOffset = outerSliceOp.getMixedOffsets()[en.index()];
       if (!innerDims.test(en.index()) &&
@@ -2796,7 +2798,7 @@ struct FoldOrthogonalPaddings : public OpRewritePattern<PadOp> {
     // tensor::ExtractSliceOp does not match the size of the padded dimension.
     // Otherwise, take the size of the inner tensor::ExtractSliceOp.
     SmallVector<OpFoldResult> newSizes = innerSliceOp.getMixedSizes();
-    for (auto &en : enumerate(newSizes)) {
+    for (auto en : enumerate(newSizes)) {
       if (!outerDims.test(en.index()))
         continue;
       OpFoldResult sliceSize = innerSliceOp.getMixedSizes()[en.index()];
@@ -2813,7 +2815,7 @@ struct FoldOrthogonalPaddings : public OpRewritePattern<PadOp> {
 
     // Combine the high paddings of the two tensor::PadOps.
     SmallVector<OpFoldResult> newHighPad(rank, rewriter.getIndexAttr(0));
-    for (auto &en : enumerate(newHighPad)) {
+    for (auto en : enumerate(newHighPad)) {
       if (innerDims.test(en.index()))
         newHighPad[en.index()] = padOp.getMixedHighPad()[en.index()];
       if (outerDims.test(en.index()))
@@ -2827,7 +2829,8 @@ struct FoldOrthogonalPaddings : public OpRewritePattern<PadOp> {
         innerSliceOp.getMixedStrides());
     auto newPadOp = rewriter.create<PadOp>(
         padOp.getLoc(), padOp.getResultType(), newSliceOp.getResult(),
-        padOp.getMixedLowPad(), newHighPad, padOp.getNofold());
+        padOp.getMixedLowPad(), newHighPad, padOp.getNofold(),
+        getPrunedAttributeList(padOp, PadOp::getAttributeNames()));
     rewriter.inlineRegionBefore(padOp.getRegion(), newPadOp.getRegion(),
                                 newPadOp.getRegion().begin());
     rewriter.replaceOp(padOp, newPadOp.getResult());
@@ -2916,8 +2919,9 @@ struct FoldStaticPadding : public OpRewritePattern<PadOp> {
     auto newResultType = RankedTensorType::get(
         newOutDims, padTensorOp.getType().getElementType());
     auto newOp = rewriter.create<PadOp>(
-        padTensorOp->getLoc(), newResultType, input, padTensorOp.getLow(),
-        padTensorOp.getHigh(), staticLow, staticHigh, padTensorOp.getNofold());
+        padTensorOp->getLoc(), newResultType, input, staticLow, staticHigh,
+        padTensorOp.getLow(), padTensorOp.getHigh(), padTensorOp.getNofold(),
+        getPrunedAttributeList(padTensorOp, PadOp::getAttributeNames()));
 
     IRMapping mapper;
     padTensorOp.getRegion().cloneInto(&newOp.getRegion(), mapper);

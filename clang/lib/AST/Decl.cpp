@@ -600,25 +600,17 @@ static bool isExportedFromModuleInterfaceUnit(const NamedDecl *D) {
   llvm_unreachable("unexpected module ownership kind");
 }
 
+static bool isDeclaredInModuleInterfaceOrPartition(const NamedDecl *D) {
+  if (auto *M = D->getOwningModule())
+    return M->isInterfaceOrPartition();
+  return false;
+}
+
 static LinkageInfo getInternalLinkageFor(const NamedDecl *D) {
   return LinkageInfo::internal();
 }
 
 static LinkageInfo getExternalLinkageFor(const NamedDecl *D) {
-  // C++ [basic.link]p4.8:
-  //   - if the declaration of the name is attached to a named module and is not
-  //   exported
-  //     the name has module linkage;
-  //
-  // [basic.namespace.general]/p2
-  //   A namespace is never attached to a named module and never has a name with
-  //   module linkage.
-  if (isInModulePurview(D) &&
-      !isExportedFromModuleInterfaceUnit(
-          cast<NamedDecl>(D->getCanonicalDecl())) &&
-      !isa<NamespaceDecl>(D))
-    return LinkageInfo(ModuleLinkage, DefaultVisibility, false);
-
   return LinkageInfo::external();
 }
 
@@ -656,15 +648,15 @@ LinkageComputer::getLVForNamespaceScopeDecl(const NamedDecl *D,
   if (const auto *Var = dyn_cast<VarDecl>(D)) {
     // - a non-template variable of non-volatile const-qualified type, unless
     //   - it is explicitly declared extern, or
-    //   - it is inline or exported, or
+    //   - it is declared in the purview of a module interface unit
+    //     (outside the private-module-fragment, if any) or module partition, or
+    //   - it is inline, or
     //   - it was previously declared and the prior declaration did not have
     //     internal linkage
     // (There is no equivalent in C99.)
-    if (Context.getLangOpts().CPlusPlus &&
-        Var->getType().isConstQualified() &&
-        !Var->getType().isVolatileQualified() &&
-        !Var->isInline() &&
-        !isExportedFromModuleInterfaceUnit(Var) &&
+    if (Context.getLangOpts().CPlusPlus && Var->getType().isConstQualified() &&
+        !Var->getType().isVolatileQualified() && !Var->isInline() &&
+        !isDeclaredInModuleInterfaceOrPartition(Var) &&
         !isa<VarTemplateSpecializationDecl>(Var) &&
         !Var->getDescribedVarTemplate()) {
       const VarDecl *PrevVar = Var->getPreviousDecl();
@@ -1163,6 +1155,29 @@ Linkage NamedDecl::getLinkageInternal() const {
   return LinkageComputer{}
       .getLVForDecl(this, LVComputationKind::forLinkageOnly())
       .getLinkage();
+}
+
+/// Get the linkage from a semantic point of view. Entities in
+/// anonymous namespaces are external (in c++98).
+Linkage NamedDecl::getFormalLinkage() const {
+  Linkage InternalLinkage = getLinkageInternal();
+
+  // C++ [basic.link]p4.8:
+  //   - if the declaration of the name is attached to a named module and is not
+  //   exported
+  //     the name has module linkage;
+  //
+  // [basic.namespace.general]/p2
+  //   A namespace is never attached to a named module and never has a name with
+  //   module linkage.
+  if (isInModulePurview(this) &&
+      InternalLinkage == ExternalLinkage &&
+      !isExportedFromModuleInterfaceUnit(
+          cast<NamedDecl>(this->getCanonicalDecl())) &&
+      !isa<NamespaceDecl>(this))
+    InternalLinkage = ModuleLinkage;
+
+  return clang::getFormalLinkage(InternalLinkage);
 }
 
 LinkageInfo NamedDecl::getLinkageAndVisibility() const {

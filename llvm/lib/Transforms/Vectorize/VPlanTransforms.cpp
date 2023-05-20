@@ -106,7 +106,7 @@ void VPlanTransforms::VPInstructionsToVPRecipes(
   }
 }
 
-bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
+static bool sinkScalarOperands(VPlan &Plan) {
   auto Iter = vp_depth_first_deep(Plan.getEntry());
   bool Changed = false;
   // First, collect the operands of all recipes in replicate blocks as seeds for
@@ -223,7 +223,10 @@ static VPBasicBlock *getPredicatedThenBlock(VPRegionBlock *R) {
   return nullptr;
 }
 
-bool VPlanTransforms::mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
+// Merge replicate regions in their successor region, if a replicate region
+// is connected to a successor replicate region with the same predicate by a
+// single, empty VPBasicBlock.
+static bool mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
   SetVector<VPRegionBlock *> DeletedRegions;
 
   // Collect replicate regions followed by an empty block, followed by another
@@ -311,6 +314,81 @@ bool VPlanTransforms::mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
   return !DeletedRegions.empty();
 }
 
+static VPRegionBlock *createReplicateRegion(VPReplicateRecipe *PredRecipe,
+                                            VPlan &Plan) {
+  Instruction *Instr = PredRecipe->getUnderlyingInstr();
+  // Build the triangular if-then region.
+  std::string RegionName = (Twine("pred.") + Instr->getOpcodeName()).str();
+  assert(Instr->getParent() && "Predicated instruction not in any basic block");
+  auto *BlockInMask = PredRecipe->getMask();
+  auto *BOMRecipe = new VPBranchOnMaskRecipe(BlockInMask);
+  auto *Entry = new VPBasicBlock(Twine(RegionName) + ".entry", BOMRecipe);
+
+  // Replace predicated replicate recipe with a replicate recipe without a
+  // mask but in the replicate region.
+  auto *RecipeWithoutMask = new VPReplicateRecipe(
+      PredRecipe->getUnderlyingInstr(),
+      make_range(PredRecipe->op_begin(), std::prev(PredRecipe->op_end())),
+      PredRecipe->isUniform());
+  auto *Pred = new VPBasicBlock(Twine(RegionName) + ".if", RecipeWithoutMask);
+
+  VPPredInstPHIRecipe *PHIRecipe = nullptr;
+  if (PredRecipe->getNumUsers() != 0) {
+    PHIRecipe = new VPPredInstPHIRecipe(RecipeWithoutMask);
+    PredRecipe->replaceAllUsesWith(PHIRecipe);
+    PHIRecipe->setOperand(0, RecipeWithoutMask);
+  }
+  PredRecipe->eraseFromParent();
+  auto *Exiting = new VPBasicBlock(Twine(RegionName) + ".continue", PHIRecipe);
+  VPRegionBlock *Region = new VPRegionBlock(Entry, Exiting, RegionName, true);
+
+  // Note: first set Entry as region entry and then connect successors starting
+  // from it in order, to propagate the "parent" of each VPBasicBlock.
+  VPBlockUtils::insertTwoBlocksAfter(Pred, Exiting, Entry);
+  VPBlockUtils::connectBlocks(Pred, Exiting);
+
+  return Region;
+}
+
+static void addReplicateRegions(VPlan &Plan) {
+  SmallVector<VPReplicateRecipe *> WorkList;
+  for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(
+           vp_depth_first_deep(Plan.getEntry()))) {
+    for (VPRecipeBase &R : *VPBB)
+      if (auto *RepR = dyn_cast<VPReplicateRecipe>(&R)) {
+        if (RepR->isPredicated())
+          WorkList.push_back(RepR);
+      }
+  }
+
+  unsigned BBNum = 0;
+  for (VPReplicateRecipe *RepR : WorkList) {
+    VPBasicBlock *CurrentBlock = RepR->getParent();
+    VPBasicBlock *SplitBlock = CurrentBlock->splitAt(RepR->getIterator());
+
+    BasicBlock *OrigBB = RepR->getUnderlyingInstr()->getParent();
+    SplitBlock->setName(
+        OrigBB->hasName() ? OrigBB->getName() + "." + Twine(BBNum++) : "");
+    // Record predicated instructions for above packing optimizations.
+    VPBlockBase *Region = createReplicateRegion(RepR, Plan);
+    Region->setParent(CurrentBlock->getParent());
+    VPBlockUtils::disconnectBlocks(CurrentBlock, SplitBlock);
+    VPBlockUtils::connectBlocks(CurrentBlock, Region);
+    VPBlockUtils::connectBlocks(Region, SplitBlock);
+  }
+}
+
+void VPlanTransforms::createAndOptimizeReplicateRegions(VPlan &Plan) {
+  // Convert masked VPReplicateRecipes to if-then region blocks.
+  addReplicateRegions(Plan);
+
+  bool ShouldSimplify = true;
+  while (ShouldSimplify) {
+    ShouldSimplify = sinkScalarOperands(Plan);
+    ShouldSimplify |= mergeReplicateRegionsIntoSuccessors(Plan);
+    ShouldSimplify |= VPlanTransforms::mergeBlocksIntoPredecessors(Plan);
+  }
+}
 bool VPlanTransforms::mergeBlocksIntoPredecessors(VPlan &Plan) {
   SmallVector<VPBasicBlock *> WorkList;
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(
@@ -666,34 +744,5 @@ void VPlanTransforms::adjustFixedOrderRecurrences(VPlan &Plan,
     // Set the first operand of RecurSplice to FOR again, after replacing
     // all users.
     RecurSplice->setOperand(0, FOR);
-  }
-}
-
-void VPlanTransforms::addReplicateRegions(VPlan &Plan,
-                                          VPRecipeBuilder &Builder) {
-  SmallVector<VPReplicateRecipe *> WorkList;
-  for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(
-           vp_depth_first_deep(Plan.getEntry()))) {
-    for (VPRecipeBase &R : *VPBB)
-      if (auto *RepR = dyn_cast<VPReplicateRecipe>(&R)) {
-        if (RepR->isPredicated())
-          WorkList.push_back(RepR);
-      }
-  }
-
-  unsigned BBNum = 0;
-  for (VPReplicateRecipe *RepR : WorkList) {
-    VPBasicBlock *CurrentBlock = RepR->getParent();
-    VPBasicBlock *SplitBlock = CurrentBlock->splitAt(RepR->getIterator());
-
-    BasicBlock *OrigBB = RepR->getUnderlyingInstr()->getParent();
-    SplitBlock->setName(
-        OrigBB->hasName() ? OrigBB->getName() + "." + Twine(BBNum++) : "");
-    // Record predicated instructions for above packing optimizations.
-    VPBlockBase *Region = Builder.createReplicateRegion(RepR, Plan);
-    Region->setParent(CurrentBlock->getParent());
-    VPBlockUtils::disconnectBlocks(CurrentBlock, SplitBlock);
-    VPBlockUtils::connectBlocks(CurrentBlock, Region);
-    VPBlockUtils::connectBlocks(Region, SplitBlock);
   }
 }
