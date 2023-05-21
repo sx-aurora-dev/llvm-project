@@ -55,9 +55,9 @@ static OpFoldResult getCollapsedOutputDimFromInputShape(
     AffineExpr currExpr = builder.getAffineSymbolExpr(dim - startPos);
     expr = (expr ? expr * currExpr : currExpr);
   }
-  return applyMapToValues(builder, loc,
-                          AffineMap::get(0, endPos - startPos + 1, expr),
-                          dynamicDims)[0];
+  return affine::applyMapToValues(
+      builder, loc, AffineMap::get(0, endPos - startPos + 1, expr),
+      dynamicDims)[0];
 }
 
 /// Given the `src` of a collapsing reshape op and its reassociation maps,
@@ -93,7 +93,7 @@ static OpFoldResult getExpandedOutputDimFromInputShape(
                         .cast<AffineDimExpr>()
                         .getPosition();
   int64_t linearizedStaticDim = 1;
-  for (auto &d :
+  for (auto d :
        llvm::enumerate(dstStaticShape.slice(startPos, endPos - startPos + 1))) {
     if (d.index() + startPos == static_cast<unsigned>(dimIndex))
       continue;
@@ -103,7 +103,7 @@ static OpFoldResult getExpandedOutputDimFromInputShape(
     linearizedStaticDim *= d.value();
   }
   Value sourceDim = builder.create<tensor::DimOp>(loc, src, sourceDimPos);
-  return applyMapToValues(
+  return affine::applyMapToValues(
       builder, loc,
       AffineMap::get(
           0, 1, builder.getAffineSymbolExpr(0).floorDiv(linearizedStaticDim)),
@@ -190,7 +190,7 @@ struct ReifyPadOp
       };
       addOpFoldResult(lowPad[dim]);
       addOpFoldResult(highPad[dim]);
-      shapes.push_back(applyMapToValues(
+      shapes.push_back(affine::applyMapToValues(
           b, loc, AffineMap::get(1, numSymbols, expr), mapOperands)[0]);
     }
     reifiedReturnShapes.emplace_back(std::move(shapes));

@@ -2338,7 +2338,8 @@ function(llvm_setup_rpath name)
     # FIXME: update this when there is better solution.
     set(_install_rpath "${LLVM_LIBRARY_OUTPUT_INTDIR}" "${CMAKE_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
   elseif(UNIX)
-    set(_install_rpath "\$ORIGIN/../lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
+    set(_build_rpath "\$ORIGIN/../lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
+    set(_install_rpath "\$ORIGIN/../lib${LLVM_LIBDIR_SUFFIX}")
     if(${CMAKE_SYSTEM_NAME} MATCHES "(FreeBSD|DragonFly)")
       set_property(TARGET ${name} APPEND_STRING PROPERTY
                    LINK_FLAGS " -Wl,-z,origin ")
@@ -2352,9 +2353,16 @@ function(llvm_setup_rpath name)
     return()
   endif()
 
-  # Enable BUILD_WITH_INSTALL_RPATH unless CMAKE_BUILD_RPATH is set.
+  # Enable BUILD_WITH_INSTALL_RPATH unless CMAKE_BUILD_RPATH is set and not
+  # building for macOS or AIX, as those platforms seemingly require it.
+  # On AIX, the tool chain doesn't support modifying rpaths/libpaths for XCOFF
+  # on install at the moment, so BUILD_WITH_INSTALL_RPATH is required.
   if("${CMAKE_BUILD_RPATH}" STREQUAL "")
-    set_property(TARGET ${name} PROPERTY BUILD_WITH_INSTALL_RPATH ON)
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin|AIX")
+      set_property(TARGET ${name} PROPERTY BUILD_WITH_INSTALL_RPATH ON)
+    else()
+      set_property(TARGET ${name} APPEND PROPERTY BUILD_RPATH "${_build_rpath}")
+    endif()
   endif()
 
   set_target_properties(${name} PROPERTIES
@@ -2418,7 +2426,7 @@ endfunction()
 function(setup_host_tool tool_name setting_name exe_var_name target_var_name)
   set(${setting_name}_DEFAULT "${tool_name}")
 
-  if(LLVM_USE_HOST_TOOLS AND LLVM_NATIVE_TOOL_DIR)
+  if(LLVM_NATIVE_TOOL_DIR)
     if(EXISTS "${LLVM_NATIVE_TOOL_DIR}/${tool_name}${LLVM_HOST_EXECUTABLE_SUFFIX}")
       set(${setting_name}_DEFAULT "${LLVM_NATIVE_TOOL_DIR}/${tool_name}${LLVM_HOST_EXECUTABLE_SUFFIX}")
     endif()
@@ -2427,14 +2435,12 @@ function(setup_host_tool tool_name setting_name exe_var_name target_var_name)
   set(${setting_name} "${${setting_name}_DEFAULT}" CACHE
     STRING "Host ${tool_name} executable. Saves building if cross-compiling.")
 
-  if(LLVM_USE_HOST_TOOLS)
-    if(NOT ${setting_name} STREQUAL "${tool_name}")
-      set(exe_name ${${setting_name}})
-      set(target_name ${${setting_name}})
-    else()
-      build_native_tool(${tool_name} exe_name DEPENDS ${tool_name})
-      set(target_name ${exe_name})
-    endif()
+  if(NOT ${setting_name} STREQUAL "${tool_name}")
+    set(exe_name ${${setting_name}})
+    set(target_name ${${setting_name}})
+  elseif(LLVM_USE_HOST_TOOLS)
+    build_native_tool(${tool_name} exe_name DEPENDS ${tool_name})
+    set(target_name ${exe_name})
   else()
     set(exe_name $<TARGET_FILE:${tool_name}>)
     set(target_name ${tool_name})

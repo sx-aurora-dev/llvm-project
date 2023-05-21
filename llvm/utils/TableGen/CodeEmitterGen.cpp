@@ -16,7 +16,6 @@
 #include "CodeGenInstruction.h"
 #include "CodeGenTarget.h"
 #include "InfoByHwMode.h"
-#include "TableGenBackends.h"
 #include "VarLenCodeEmitterGen.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -57,8 +56,8 @@ private:
   void emitInstructionBaseValues(
       raw_ostream &o, ArrayRef<const CodeGenInstruction *> NumberedInstructions,
       CodeGenTarget &Target, int HwMode = -1);
-  unsigned BitWidth;
-  bool UseAPInt;
+  unsigned BitWidth = 0u;
+  bool UseAPInt = false;
 };
 
 // If the VarBitInit at position 'bit' matches the specified variable then
@@ -358,6 +357,8 @@ void CodeEmitterGen::emitInstructionBaseValues(
 }
 
 void CodeEmitterGen::run(raw_ostream &o) {
+  emitSourceFileHeader("Machine Code Emitter", o);
+
   CodeGenTarget Target(Records);
   std::vector<Record*> Insts = Records.getAllDerivedDefinitions("Instruction");
 
@@ -502,11 +503,5 @@ void CodeEmitterGen::run(raw_ostream &o) {
 
 } // end anonymous namespace
 
-namespace llvm {
-
-void EmitCodeEmitter(RecordKeeper &RK, raw_ostream &OS) {
-  emitSourceFileHeader("Machine Code Emitter", OS);
-  CodeEmitterGen(RK).run(OS);
-}
-
-} // end namespace llvm
+static TableGen::Emitter::OptClass<CodeEmitterGen>
+    X("gen-emitter", "Generate machine code emitter");

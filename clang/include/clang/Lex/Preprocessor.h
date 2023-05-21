@@ -499,7 +499,7 @@ private:
     };
 
   public:
-    ModuleDeclSeq() : State(NotAModuleDecl) {}
+    ModuleDeclSeq() = default;
 
     void handleExport() {
       if (State == NotAModuleDecl)
@@ -586,7 +586,7 @@ private:
     }
 
   private:
-    ModuleDeclState State;
+    ModuleDeclState State = NotAModuleDecl;
     std::string Name;
   };
 
@@ -729,7 +729,7 @@ private:
   /// Only one of CurLexer, or CurTokenLexer will be non-null.
   std::unique_ptr<Lexer> CurLexer;
 
-  /// The current top of the stack what we're lexing from
+  /// The current top of the stack that we're lexing from
   /// if not expanding a macro.
   ///
   /// This is an alias for CurLexer.
@@ -2842,6 +2842,11 @@ public:
                                       const LangOptions &LangOpts,
                                       const TargetInfo &TI);
 
+  static void processPathToFileName(SmallVectorImpl<char> &FileName,
+                                    const PresumedLoc &PLoc,
+                                    const LangOptions &LangOpts,
+                                    const TargetInfo &TI);
+
 private:
   void emitMacroDeprecationWarning(const Token &Identifier) const;
   void emitRestrictExpansionWarning(const Token &Identifier) const;
@@ -2850,7 +2855,7 @@ private:
   /// This boolean state keeps track if the current scanned token (by this PP)
   /// is in an "-Wunsafe-buffer-usage" opt-out region. Assuming PP scans a
   /// translation unit in a linear order.
-  bool InSafeBufferOptOutRegion = 0;
+  bool InSafeBufferOptOutRegion = false;
 
   /// Hold the start location of the current "-Wunsafe-buffer-usage" opt-out
   /// region if PP is currently in such a region.  Hold undefined value

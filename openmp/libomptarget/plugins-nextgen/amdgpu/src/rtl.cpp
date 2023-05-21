@@ -511,8 +511,14 @@ struct AMDGPUSignalTy {
   }
 
   /// Wait until the signal gets a zero value.
-  Error wait() const {
-    // TODO: Is it better to use busy waiting or blocking the thread?
+  Error wait(const uint64_t ActiveTimeout = 0) const {
+    if (ActiveTimeout) {
+      hsa_signal_value_t Got = 1;
+      Got = hsa_signal_wait_scacquire(Signal, HSA_SIGNAL_CONDITION_EQ, 0,
+                                      ActiveTimeout, HSA_WAIT_STATE_ACTIVE);
+      if (Got == 0)
+        return Plugin::success();
+    }
     while (hsa_signal_wait_scacquire(Signal, HSA_SIGNAL_CONDITION_EQ, 0,
                                      UINT64_MAX, HSA_WAIT_STATE_BLOCKED) != 0)
       ;
@@ -884,6 +890,9 @@ private:
   /// Mutex to protect stream's management.
   mutable std::mutex Mutex;
 
+  /// Timeout hint for HSA actively waiting for signal value to change
+  const uint64_t StreamBusyWaitMicroseconds;
+
   /// Return the current number of asychronous operations on the stream.
   uint32_t size() const { return NextSlot; }
 
@@ -1247,7 +1256,7 @@ public:
       return Plugin::success();
 
     // Wait until all previous operations on the stream have completed.
-    if (auto Err = Slots[last()].Signal->wait())
+    if (auto Err = Slots[last()].Signal->wait(StreamBusyWaitMicroseconds))
       return Err;
 
     // Reset the stream and perform all pending post actions.
@@ -1555,6 +1564,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                                1 * 1024 * 1024), // 1MB
         OMPX_InitialNumSignals("LIBOMPTARGET_AMDGPU_NUM_INITIAL_HSA_SIGNALS",
                                64),
+        OMPX_StreamBusyWait("LIBOMPTARGET_AMDGPU_STREAM_BUSYWAIT", 2000000),
         AMDGPUStreamManager(*this), AMDGPUEventManager(*this),
         AMDGPUSignalManager(*this), Agent(Agent), HostDevice(HostDevice),
         Queues() {}
@@ -1677,6 +1687,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     Agent = {0};
 
     return Plugin::success();
+  }
+
+  const uint64_t getStreamBusyWaitMicroseconds() const {
+    return OMPX_StreamBusyWait;
   }
 
   Expected<std::unique_ptr<MemoryBuffer>>
@@ -1863,7 +1877,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     hsa_status_t Status =
         hsa_amd_memory_lock(HstPtr, Size, nullptr, 0, &PinnedPtr);
     if (auto Err = Plugin::check(Status, "Error in hsa_amd_memory_lock: %s\n"))
-      return Err;
+      return std::move(Err);
 
     return PinnedPtr;
   }
@@ -1886,7 +1900,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                              /* Number of accessible agents (out) */ nullptr,
                              /* Accessible agents */ nullptr);
     if (auto Err = Plugin::check(Status, "Error in hsa_amd_pointer_info: %s"))
-      return Err;
+      return std::move(Err);
 
     // The buffer may be locked or allocated through HSA allocators. Assume that
     // the buffer is host pinned if the runtime reports a HSA type.
@@ -1941,7 +1955,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
               Plugin::check(Status, "Error in hsa_amd_memory_async_copy: %s"))
         return Err;
 
-      if (auto Err = Signal.wait())
+      if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
         return Err;
 
       if (auto Err = Signal.deinit())
@@ -1998,7 +2012,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
               Plugin::check(Status, "Error in hsa_amd_memory_async_copy: %s"))
         return Err;
 
-      if (auto Err = Signal.wait())
+      if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
         return Err;
 
       if (auto Err = Signal.deinit())
@@ -2173,6 +2187,12 @@ private:
   /// will be created.
   UInt32Envar OMPX_InitialNumSignals;
 
+  /// Environment variables to set the time to wait in active state before
+  /// switching to blocked state. The default 2000000 busywaits for 2 seconds
+  /// before going into a blocking HSA wait state. The unit for these variables
+  /// are microseconds.
+  UInt32Envar OMPX_StreamBusyWait;
+
   /// Stream manager for AMDGPU streams.
   AMDGPUStreamManagerTy AMDGPUStreamManager;
 
@@ -2267,7 +2287,8 @@ AMDGPUStreamTy::AMDGPUStreamTy(AMDGPUDeviceTy &Device)
     : Agent(Device.getAgent()), Queue(Device.getNextQueue()),
       SignalManager(Device.getSignalManager()),
       // Initialize the std::deque with some empty positions.
-      Slots(32), NextSlot(0), SyncCycle(0) {}
+      Slots(32), NextSlot(0), SyncCycle(0),
+      StreamBusyWaitMicroseconds(Device.getStreamBusyWaitMicroseconds()) {}
 
 /// Class implementing the AMDGPU-specific functionalities of the global
 /// handler.
@@ -2614,33 +2635,39 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
     return Plugin::success();
 
   // General Info
-  auto ConstWGSize = getDefaultNumThreads(GenericDevice);
   auto NumGroups = NumBlocks;
-  auto ThreadsPerGroup = getDefaultNumThreads(GenericDevice);
-  auto NumTeams = KernelArgs.NumTeams[0];       // Only first dimension
-  auto ThreadLimit = KernelArgs.ThreadLimit[0]; // Only first dimension
+  auto ThreadsPerGroup = NumThreads;
 
   // Kernel Arguments Info
   auto ArgNum = KernelArgs.NumArgs;
   auto LoopTripCount = KernelArgs.Tripcount;
 
-  // Details for AMDGPU kernels
+  // Details for AMDGPU kernels (read from image)
+  // https://www.llvm.org/docs/AMDGPUUsage.html#code-object-v4-metadata
   auto GroupSegmentSize = (*KernelInfo).GroupSegmentList;
   auto SGPRCount = (*KernelInfo).SGPRCount;
   auto VGPRCount = (*KernelInfo).VGPRCount;
   auto SGPRSpillCount = (*KernelInfo).SGPRSpillCount;
   auto VGPRSpillCount = (*KernelInfo).VGPRSpillCount;
+  auto MaxFlatWorkgroupSize = (*KernelInfo).MaxFlatWorkgroupSize;
 
-  // TODO set correctly once host services available
-  auto HostCallRequired = false;
+  // Prints additional launch info that contains the following.
+  // Num Args: The number of kernel arguments
+  // Teams x Thrds: The number of teams and the number of threads actually
+  // running.
+  // MaxFlatWorkgroupSize: Maximum flat work-group size supported by the
+  // kernel in work-items
+  // LDS Usage: Amount of bytes used in LDS storage
+  // S/VGPR Count: the number of S/V GPRs occupied by the kernel
+  // S/VGPR Spill Count: how many S/VGPRs are spilled by the kernel
+  // Tripcount: loop tripcount for the kernel
   INFO(OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
-       "SGN:%s ConstWGSize:%d args:%d teamsXthrds:(%4luX%4d) "
-       "reqd:(%4dX%4d) lds_usage:%uB sgpr_count:%u vgpr_count:%u "
-       "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d n:%s\n",
-       getExecutionModeName(), ConstWGSize, ArgNum, NumGroups, ThreadsPerGroup,
-       NumTeams, ThreadLimit, GroupSegmentSize, SGPRCount, VGPRCount,
-       SGPRSpillCount, VGPRSpillCount, LoopTripCount, HostCallRequired,
-       getName());
+       "#Args: %d Teams x Thrds: %4lux%4u (MaxFlatWorkGroupSize: %u) LDS "
+       "Usage: %uB #SGPRs/VGPRs: %u/%u #SGPR/VGPR Spills: %u/%u Tripcount: "
+       "%lu\n",
+       ArgNum, NumGroups, ThreadsPerGroup, MaxFlatWorkgroupSize,
+       GroupSegmentSize, SGPRCount, VGPRCount, SGPRSpillCount, VGPRSpillCount,
+       LoopTripCount);
 
   return Plugin::success();
 }

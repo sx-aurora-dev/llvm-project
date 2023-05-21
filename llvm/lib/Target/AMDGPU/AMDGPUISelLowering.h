@@ -173,7 +173,6 @@ public:
 
   bool isZExtFree(Type *Src, Type *Dest) const override;
   bool isZExtFree(EVT Src, EVT Dest) const override;
-  bool isZExtFree(SDValue Val, EVT VT2) const override;
 
   SDValue getNegatedExpression(SDValue Op, SelectionDAG &DAG,
                                bool LegalOperations, bool ForCodeSize,
@@ -368,6 +367,7 @@ enum NodeType : unsigned {
   // Function call.
   CALL,
   TC_RETURN,
+  TC_RETURN_GFX,
   TRAP,
 
   // Masked control flow nodes.
@@ -382,7 +382,7 @@ enum NodeType : unsigned {
   RETURN_TO_EPILOG,
 
   // Return with values from a non-entry function.
-  RET_FLAG,
+  RET_GLUE,
 
   DWORDADDR,
   FRACT,

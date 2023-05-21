@@ -1052,11 +1052,15 @@ Constant *ConstantFoldInstOperandsImpl(const Value *InstOrCE, unsigned Opcode,
     return ConstantFoldCastOperand(Opcode, Ops[0], DestTy, DL);
 
   if (auto *GEP = dyn_cast<GEPOperator>(InstOrCE)) {
+    Type *SrcElemTy = GEP->getSourceElementType();
+    if (!ConstantExpr::isSupportedGetElementPtr(SrcElemTy))
+      return nullptr;
+
     if (Constant *C = SymbolicallyEvaluateGEP(GEP, Ops, DL, TLI))
       return C;
 
-    return ConstantExpr::getGetElementPtr(GEP->getSourceElementType(), Ops[0],
-                                          Ops.slice(1), GEP->isInBounds(),
+    return ConstantExpr::getGetElementPtr(SrcElemTy, Ops[0], Ops.slice(1),
+                                          GEP->isInBounds(),
                                           GEP->getInRangeIndex());
   }
 
@@ -1322,7 +1326,11 @@ Constant *llvm::ConstantFoldCompareInstOperands(
   // Flush any denormal constant float input according to denormal handling
   // mode.
   Ops0 = FlushFPConstant(Ops0, I, /* IsOutput */ false);
+  if (!Ops0)
+    return nullptr;
   Ops1 = FlushFPConstant(Ops1, I, /* IsOutput */ false);
+  if (!Ops1)
+    return nullptr;
 
   return ConstantExpr::getCompare(Predicate, Ops0, Ops1);
 }
@@ -1357,6 +1365,10 @@ Constant *llvm::FlushFPConstant(Constant *Operand, const Instruction *I,
     return Operand;
 
   const APFloat &APF = CFP->getValueAPF();
+  // TODO: Should this canonicalize nans?
+  if (!APF.isDenormal())
+    return Operand;
+
   Type *Ty = CFP->getType();
   DenormalMode DenormMode =
       I->getFunction()->getDenormalMode(Ty->getFltSemantics());
@@ -1365,7 +1377,8 @@ Constant *llvm::FlushFPConstant(Constant *Operand, const Instruction *I,
   switch (Mode) {
   default:
     llvm_unreachable("unknown denormal mode");
-    return Operand;
+  case DenormalMode::Dynamic:
+    return nullptr;
   case DenormalMode::IEEE:
     return Operand;
   case DenormalMode::PreserveSign:
@@ -1391,7 +1404,11 @@ Constant *llvm::ConstantFoldFPInstOperands(unsigned Opcode, Constant *LHS,
   if (Instruction::isBinaryOp(Opcode)) {
     // Flush denormal inputs if needed.
     Constant *Op0 = FlushFPConstant(LHS, I, /* IsOutput */ false);
+    if (!Op0)
+      return nullptr;
     Constant *Op1 = FlushFPConstant(RHS, I, /* IsOutput */ false);
+    if (!Op1)
+      return nullptr;
 
     // Calculate constant result.
     Constant *C = ConstantFoldBinaryOpOperands(Opcode, Op0, Op1, DL);
@@ -1965,13 +1982,26 @@ static Constant *constantFoldCanonicalize(const Type *Ty, const CallBase *CI,
   if (Src.isDenormal() && CI->getParent() && CI->getFunction()) {
     DenormalMode DenormMode =
         CI->getFunction()->getDenormalMode(Src.getSemantics());
+
+    // TODO: Should allow folding for pure IEEE.
     if (DenormMode == DenormalMode::getIEEE())
+      return nullptr;
+
+    if (DenormMode == DenormalMode::getDynamic())
+      return nullptr;
+
+    // If we know if either input or output is flushed, we can fold.
+    if ((DenormMode.Input == DenormalMode::Dynamic &&
+         DenormMode.Output == DenormalMode::IEEE) ||
+        (DenormMode.Input == DenormalMode::IEEE &&
+         DenormMode.Output == DenormalMode::Dynamic))
       return nullptr;
 
     bool IsPositive =
         (!Src.isNegative() || DenormMode.Input == DenormalMode::PositiveZero ||
          (DenormMode.Output == DenormalMode::PositiveZero &&
           DenormMode.Input == DenormalMode::IEEE));
+
     return ConstantFP::get(CI->getContext(),
                            APFloat::getZero(Src.getSemantics(), !IsPositive));
   }
@@ -2579,7 +2609,7 @@ static Constant *ConstantFoldScalarCall2(StringRef Name,
         // The legacy behaviour is that multiplying +/- 0.0 by anything, even
         // NaN or infinity, gives +0.0.
         if (Op1V.isZero() || Op2V.isZero())
-          return ConstantFP::getNullValue(Ty);
+          return ConstantFP::getZero(Ty);
         return ConstantFP::get(Ty->getContext(), Op1V * Op2V);
       }
 
@@ -2632,18 +2662,18 @@ static Constant *ConstantFoldScalarCall2(StringRef Name,
     } else if (auto *Op2C = dyn_cast<ConstantInt>(Operands[1])) {
       switch (IntrinsicID) {
       case Intrinsic::is_fpclass: {
-        uint32_t Mask = Op2C->getZExtValue();
+        FPClassTest Mask = static_cast<FPClassTest>(Op2C->getZExtValue());
         bool Result =
           ((Mask & fcSNan) && Op1V.isNaN() && Op1V.isSignaling()) ||
           ((Mask & fcQNan) && Op1V.isNaN() && !Op1V.isSignaling()) ||
-          ((Mask & fcNegInf) && Op1V.isInfinity() && Op1V.isNegative()) ||
+          ((Mask & fcNegInf) && Op1V.isNegInfinity()) ||
           ((Mask & fcNegNormal) && Op1V.isNormal() && Op1V.isNegative()) ||
           ((Mask & fcNegSubnormal) && Op1V.isDenormal() && Op1V.isNegative()) ||
           ((Mask & fcNegZero) && Op1V.isZero() && Op1V.isNegative()) ||
           ((Mask & fcPosZero) && Op1V.isZero() && !Op1V.isNegative()) ||
           ((Mask & fcPosSubnormal) && Op1V.isDenormal() && !Op1V.isNegative()) ||
           ((Mask & fcPosNormal) && Op1V.isNormal() && !Op1V.isNegative()) ||
-          ((Mask & fcPosInf) && Op1V.isInfinity() && !Op1V.isNegative());
+          ((Mask & fcPosInf) && Op1V.isPosInfinity());
         return ConstantInt::get(Ty, Result);
       }
       default:

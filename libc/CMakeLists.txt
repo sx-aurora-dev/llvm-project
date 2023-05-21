@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.13.4)
 
+# Include LLVM's cmake policies.
+if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)
+  set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+endif()
+include(${LLVM_COMMON_CMAKE_UTILS}/Modules/CMakePolicy.cmake
+  NO_POLICY_SCOPE)
+
 # Default to C++17
 set(CMAKE_CXX_STANDARD 17)
 
@@ -11,7 +18,7 @@ set(LIBC_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 # The top-level directory in which libc is being built.
 set(LIBC_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
-if(LLVM_LIBC_FULL_BUILD)
+if(LLVM_LIBC_FULL_BUILD OR LIBC_GPU_BUILD OR LIBC_GPU_ARCHITECTURES)
   if(NOT LIBC_HDRGEN_EXE)
     # We need to set up hdrgen first since other targets depend on it.
     add_subdirectory(utils/LibcTableGenUtil)
@@ -68,11 +75,15 @@ option(LLVM_LIBC_ENABLE_LINTING "Enables linting of libc source files" OFF)
 option(LIBC_GPU_BUILD "Build libc for the GPU. All CPU build options will be ignored." OFF)
 set(LIBC_TARGET_TRIPLE "" CACHE STRING "The target triple for the libc build.")
 
+set(LIBC_ENABLE_UNITTESTS ON)
+set(LIBC_ENABLE_HERMETIC_TESTS ${LLVM_LIBC_FULL_BUILD})
+
 # Defines LIBC_TARGET_ARCHITECTURE and associated macros.
 include(LLVMLibCArchitectures)
 
 if(LIBC_TARGET_ARCHITECTURE_IS_GPU)
   include(prepare_libc_gpu_build)
+  set(LIBC_ENABLE_UNITTESTS OFF)
 endif()
 
 include(LLVMLibCCheckMPFR)
@@ -190,7 +201,7 @@ endif()
 # of the other directories.
 # TODO: Add testing support for the libc GPU target.
 add_subdirectory(lib)
-if(LLVM_INCLUDE_TESTS AND NOT LIBC_TARGET_ARCHITECTURE_IS_GPU)
+if(LLVM_INCLUDE_TESTS)
   add_subdirectory(test)
   add_subdirectory(fuzzing)
 endif()

@@ -44,6 +44,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/Attributes.h"
@@ -74,7 +75,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/NativeFormatting.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
@@ -91,6 +91,11 @@
 #include <vector>
 
 using namespace llvm;
+
+static cl::opt<bool>
+    LowerCtorDtor("nvptx-lower-global-ctor-dtor",
+                  cl::desc("Lower GPU ctor / dtors to globals on the device."),
+                  cl::init(false), cl::Hidden);
 
 #define DEPOTNAME "__local_depot"
 
@@ -429,7 +434,7 @@ bool NVPTXAsmPrinter::isLoopHeaderOfNoUnroll(
         if (MDNode *UnrollCountMD =
                 GetUnrollMetadata(LoopID, "llvm.loop.unroll.count")) {
           if (mdconst::extract<ConstantInt>(UnrollCountMD->getOperand(1))
-                  ->getZExtValue() == 1)
+                  ->isOne())
             return true;
         }
       }
@@ -700,7 +705,7 @@ static bool useFuncSeen(const Constant *C,
       const Function *caller = bb->getParent();
       if (!caller)
         continue;
-      if (seenMap.find(caller) != seenMap.end())
+      if (seenMap.contains(caller))
         return true;
     }
   }
@@ -753,7 +758,7 @@ void NVPTXAsmPrinter::emitDeclarations(const Module &M, raw_ostream &O) {
       // If a caller has already been seen, then the caller is
       // appearing in the module before the callee. so print out
       // a declaration for the callee.
-      if (seenMap.find(caller) != seenMap.end()) {
+      if (seenMap.contains(caller)) {
         emitDeclaration(&F, O);
         break;
       }
@@ -788,12 +793,14 @@ bool NVPTXAsmPrinter::doInitialization(Module &M) {
     report_fatal_error("Module has aliases, which NVPTX does not support.");
     return true; // error
   }
-  if (!isEmptyXXStructor(M.getNamedGlobal("llvm.global_ctors"))) {
+  if (!isEmptyXXStructor(M.getNamedGlobal("llvm.global_ctors")) &&
+      !LowerCtorDtor) {
     report_fatal_error(
         "Module has a nontrivial global ctor, which NVPTX does not support.");
     return true;  // error
   }
-  if (!isEmptyXXStructor(M.getNamedGlobal("llvm.global_dtors"))) {
+  if (!isEmptyXXStructor(M.getNamedGlobal("llvm.global_dtors")) &&
+      !LowerCtorDtor) {
     report_fatal_error(
         "Module has a nontrivial global dtor, which NVPTX does not support.");
     return true;  // error
@@ -1148,7 +1155,7 @@ void NVPTXAsmPrinter::printModuleLevelGV(const GlobalVariable *GVar,
       }
     }
   } else {
-    unsigned int ElementSize = 0;
+    uint64_t ElementSize = 0;
 
     // Although PTX has direct support for struct type and array type and
     // LLVM IR is very similar to PTX, the LLVM CodeGen does not support for

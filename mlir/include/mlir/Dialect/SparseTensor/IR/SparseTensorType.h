@@ -51,6 +51,7 @@ public:
       : rtp(rtp), enc(getSparseTensorEncoding(rtp)),
         lvlRank(enc ? enc.getLvlRank() : getDimRank()),
         dim2lvl(enc.hasIdDimOrdering() ? AffineMap() : enc.getDimOrdering()) {
+    assert(rtp && "got null RankedTensorType");
     assert((!isIdentity() || getDimRank() == lvlRank) && "Rank mismatch");
   }
 
@@ -61,6 +62,7 @@ public:
   // Copy-assignment would be implicitly deleted (because our fields
   // are const), so we explicitly delete it for clarity.
   SparseTensorType &operator=(const SparseTensorType &) = delete;
+  // So we must explicitly define the copy-ctor to silence -Wdeprecated-copy.
   SparseTensorType(const SparseTensorType &) = default;
 
   /// Constructs a new `SparseTensorType` with the same dimension-shape

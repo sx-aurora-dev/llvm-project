@@ -22,9 +22,6 @@
 #include <unistd.h>
 
 extern "C" int main(int, char **, char **);
-// The BFD linker requires a reference to __dso_handle to trigger creating
-// a symbol for it when -nostdlib is used..
-extern "C" void *__dso_handle = nullptr;
 
 namespace __llvm_libc {
 
@@ -33,7 +30,7 @@ static constexpr long mmapSyscallNumber = SYS_mmap2;
 #elif SYS_mmap
 static constexpr long mmapSyscallNumber = SYS_mmap;
 #else
-#error "Target platform does not have SYS_mmap or SYS_mmap2 defined"
+#error "mmap and mmap2 syscalls not available."
 #endif
 
 AppProperties app;

@@ -29,6 +29,8 @@ def err_drv_invalid_arch_name : Error<
   "invalid arch name '%0'">;
 def err_drv_invalid_riscv_arch_name : Error<
   "invalid arch name '%0', %1">;
+def err_drv_invalid_riscv_cpu_name_for_target : Error<
+  "cpu '%0' does not support rv%select{32|64}1">;
 def warn_drv_invalid_arch_name_with_suggestion : Warning<
   "ignoring invalid /arch: argument '%0'; for %select{64|32}1-bit expected one of %2">,
   InGroup<UnusedCommandLineArgument>;
@@ -253,6 +255,7 @@ def warn_drv_unknown_argument_clang_cl : Warning<
 def warn_drv_unknown_argument_clang_cl_with_suggestion : Warning<
   "unknown argument ignored in clang-cl '%0'; did you mean '%1'?">,
   InGroup<UnknownArgument>;
+def err_drv_unknown_target_triple : Error<"unknown target triple '%0'">;
 
 def warn_drv_ycyu_different_arg_clang_cl : Warning<
   "support for '/Yc' and '/Yu' with different filenames not implemented yet; flags ignored">,
@@ -716,4 +719,7 @@ def err_drv_riscv_unsupported_with_linker_relaxation : Error<
 
 def err_drv_loongarch_invalid_mfpu_EQ : Error<
   "invalid argument '%0' to -mfpu=; must be one of: 64, 32, none, 0 (alias for none)">;
+
+def err_drv_expand_response_file : Error<
+  "failed to expand response file: %0">;
 }

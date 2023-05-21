@@ -19,8 +19,10 @@ cc_test(
         "Debug/*.h",
     ]),
     deps = [
+        "//llvm:Support",
         "//llvm:TestingSupport",
         "//mlir:Debug",
+        "//mlir:IR",
         "//mlir:Support",
         "//third-party/unittest:gmock",
         "//third-party/unittest:gtest",
@@ -38,6 +40,7 @@ cc_test(
     deps = [
         "//llvm:Support",
         "//mlir:IR",
+        "//mlir:Parser",
         "//mlir:Support",
         "//mlir/test:TestDialect",
         "//third-party/unittest:gmock",
@@ -389,6 +392,7 @@ cc_test(
         "//mlir:AllPassesAndDialects",
         "//mlir:Analysis",
         "//mlir:ArithToLLVM",
+        "//mlir:BuiltinToLLVMIRTranslation",
         "//mlir:ExecutionEngine",
         "//mlir:FuncDialect",
         "//mlir:FuncToLLVM",

@@ -554,7 +554,8 @@ public:
                           bool assumeVerified);
 
   // Implement the bound 'writeBytecode' method.
-  void writeBytecode(const pybind11::object &fileObject);
+  void writeBytecode(const pybind11::object &fileObject,
+                     std::optional<int64_t> bytecodeVersion);
 
   /// Moves the operation before or after the other operation.
   void moveAfter(PyOperationBase &other);
@@ -808,7 +809,7 @@ class PyType : public BaseContextObject {
 public:
   PyType(PyMlirContextRef contextRef, MlirType type)
       : BaseContextObject(std::move(contextRef)), type(type) {}
-  bool operator==(const PyType &other);
+  bool operator==(const PyType &other) const;
   operator MlirType() const { return type; }
   MlirType get() const { return type; }
 
@@ -878,7 +879,7 @@ class PyAttribute : public BaseContextObject {
 public:
   PyAttribute(PyMlirContextRef contextRef, MlirAttribute attr)
       : BaseContextObject(std::move(contextRef)), attr(attr) {}
-  bool operator==(const PyAttribute &other);
+  bool operator==(const PyAttribute &other) const;
   operator MlirAttribute() const { return attr; }
   MlirAttribute get() const { return attr; }
 
@@ -1003,7 +1004,7 @@ class PyAffineExpr : public BaseContextObject {
 public:
   PyAffineExpr(PyMlirContextRef contextRef, MlirAffineExpr affineExpr)
       : BaseContextObject(std::move(contextRef)), affineExpr(affineExpr) {}
-  bool operator==(const PyAffineExpr &other);
+  bool operator==(const PyAffineExpr &other) const;
   operator MlirAffineExpr() const { return affineExpr; }
   MlirAffineExpr get() const { return affineExpr; }
 
@@ -1030,7 +1031,7 @@ class PyAffineMap : public BaseContextObject {
 public:
   PyAffineMap(PyMlirContextRef contextRef, MlirAffineMap affineMap)
       : BaseContextObject(std::move(contextRef)), affineMap(affineMap) {}
-  bool operator==(const PyAffineMap &other);
+  bool operator==(const PyAffineMap &other) const;
   operator MlirAffineMap() const { return affineMap; }
   MlirAffineMap get() const { return affineMap; }
 
@@ -1051,7 +1052,7 @@ class PyIntegerSet : public BaseContextObject {
 public:
   PyIntegerSet(PyMlirContextRef contextRef, MlirIntegerSet integerSet)
       : BaseContextObject(std::move(contextRef)), integerSet(integerSet) {}
-  bool operator==(const PyIntegerSet &other);
+  bool operator==(const PyIntegerSet &other) const;
   operator MlirIntegerSet() const { return integerSet; }
   MlirIntegerSet get() const { return integerSet; }
 

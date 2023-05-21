@@ -163,10 +163,11 @@ private:
   void handleAttributes();
   bool handleCppAttributes();
   bool isBlockBegin(const FormatToken &Tok) const;
-  FormatToken *parseIfThenElse(IfStmtKind *IfKind, bool KeepBraces = false);
+  FormatToken *parseIfThenElse(IfStmtKind *IfKind, bool KeepBraces = false,
+                               bool IsVerilogAssert = false);
   void parseTryCatch();
   void parseLoopBody(bool KeepBraces, bool WrapRightBrace);
-  void parseForOrWhileLoop();
+  void parseForOrWhileLoop(bool HasParens = true);
   void parseDoWhile();
   void parseLabel(bool LeftAlignLabel = false);
   void parseCaseLabel();

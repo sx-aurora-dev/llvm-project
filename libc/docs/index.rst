@@ -52,13 +52,14 @@ stages there is no ABI stability in any form.
    usage_modes
    overlay_mode
    fullbuild_mode
-   gpu_mode
+   gpu/index.rst
 
 .. toctree::
    :hidden:
    :maxdepth: 1
    :caption: Status
 
+   compiler_support
    date_and_time
    math/index.rst
    strings
@@ -69,7 +70,6 @@ stages there is no ABI stability in any form.
    :maxdepth: 1
    :caption: Development
 
-   compiler_support
    build_and_test
    dev/index.rst
    porting

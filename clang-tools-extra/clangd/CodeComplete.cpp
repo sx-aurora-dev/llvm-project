@@ -436,9 +436,8 @@ struct CodeCompletionBuilder {
     Bundled.emplace_back();
     BundledEntry &S = Bundled.back();
     if (C.SemaResult) {
-      bool IsPattern = C.SemaResult->Kind == CodeCompletionResult::RK_Pattern;
-      getSignature(*SemaCCS, &S.Signature, &S.SnippetSuffix,
-                   &Completion.RequiredQualifier, IsPattern);
+      getSignature(*SemaCCS, &S.Signature, &S.SnippetSuffix, C.SemaResult->Kind,
+                   C.SemaResult->CursorKind, &Completion.RequiredQualifier);
       if (!C.SemaResult->FunctionCanBeCall)
         S.SnippetSuffix.clear();
       S.ReturnType = getReturnType(*SemaCCS);
@@ -2243,7 +2242,7 @@ CompletionItem CodeCompletion::render(const CodeCompleteOptions &Opts) const {
   }
   LSP.sortText = sortText(Score.Total, FilterText);
   LSP.filterText = FilterText;
-  LSP.textEdit = {CompletionTokenRange, RequiredQualifier + Name};
+  LSP.textEdit = {CompletionTokenRange, RequiredQualifier + Name, ""};
   // Merge continuous additionalTextEdits into main edit. The main motivation
   // behind this is to help LSP clients, it seems most of them are confused when
   // they are provided with additionalTextEdits that are consecutive to main

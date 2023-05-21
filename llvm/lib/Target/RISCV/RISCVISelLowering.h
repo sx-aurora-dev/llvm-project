@@ -1,4 +1,4 @@
-//===-- RISCVISelLowering.h - RISCV DAG Lowering Interface ------*- C++ -*-===//
+//===-- RISCVISelLowering.h - RISC-V DAG Lowering Interface -----*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the interfaces that RISCV uses to lower LLVM code into a
+// This file defines the interfaces that RISC-V uses to lower LLVM code into a
 // selection DAG.
 //
 //===----------------------------------------------------------------------===//
@@ -27,10 +27,9 @@ struct RISCVRegisterInfo;
 namespace RISCVISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
-  RET_FLAG,
-  URET_FLAG,
-  SRET_FLAG,
-  MRET_FLAG,
+  RET_GLUE,
+  SRET_GLUE,
+  MRET_GLUE,
   CALL,
   /// Select with condition operator - This selects between a true value and
   /// a false value (ops #3 and #4) based on the boolean result of comparing
@@ -119,6 +118,7 @@ enum NodeType : unsigned {
   // inserter.
   FROUND,
 
+  FPCLASS,
   // READ_CYCLE_WIDE - A read of the 64-bit cycle CSR on a 32-bit target
   // (returns (Lo, Hi)). It takes a chain operand.
   READ_CYCLE_WIDE,
@@ -241,11 +241,11 @@ enum NodeType : unsigned {
   VFCVT_X_F_VL,
   VFCVT_XU_F_VL,
   VFROUND_NOEXCEPT_VL,
-  VFCVT_RM_X_F_VL, // Has a rounding mode operand.
+  VFCVT_RM_X_F_VL,  // Has a rounding mode operand.
   VFCVT_RM_XU_F_VL, // Has a rounding mode operand.
   SINT_TO_FP_VL,
   UINT_TO_FP_VL,
-  VFCVT_RM_F_X_VL, // Has a rounding mode operand.
+  VFCVT_RM_F_X_VL,  // Has a rounding mode operand.
   VFCVT_RM_F_XU_VL, // Has a rounding mode operand.
   FP_ROUND_VL,
   FP_EXTEND_VL,
@@ -330,7 +330,26 @@ enum NodeType : unsigned {
   // result being sign extended to 64 bit. These saturate out of range inputs.
   STRICT_FCVT_W_RV64 = ISD::FIRST_TARGET_STRICTFP_OPCODE,
   STRICT_FCVT_WU_RV64,
+  STRICT_FADD_VL,
+  STRICT_FSUB_VL,
+  STRICT_FMUL_VL,
+  STRICT_FDIV_VL,
+  STRICT_FSQRT_VL,
+  STRICT_VFMADD_VL,
+  STRICT_VFNMADD_VL,
+  STRICT_VFMSUB_VL,
+  STRICT_VFNMSUB_VL,
+  STRICT_FP_ROUND_VL,
   STRICT_FP_EXTEND_VL,
+  STRICT_VFNCVT_ROD_VL,
+  STRICT_SINT_TO_FP_VL,
+  STRICT_UINT_TO_FP_VL,
+  STRICT_VFCVT_RM_X_F_VL,
+  STRICT_VFCVT_RTZ_X_F_VL,
+  STRICT_VFCVT_RTZ_XU_F_VL,
+  STRICT_FSETCC_VL,
+  STRICT_FSETCCS_VL,
+  STRICT_VFROUND_NOEXCEPT_VL,
 
   // WARNING: Do not add anything in the end unless you want the node to
   // have memop! In fact, starting from FIRST_TARGET_MEMORY_OPCODE all
@@ -389,7 +408,7 @@ public:
                           SmallVectorImpl<Use *> &Ops) const override;
   bool shouldScalarizeBinop(SDValue VecOp) const override;
   bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
-  bool isLegalZfaFPImm(const APFloat &Imm, EVT VT) const;
+  int getLegalZfaFPImm(const APFloat &Imm, EVT VT) const;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
   bool isExtractSubvectorCheap(EVT ResVT, EVT SrcVT,
@@ -397,7 +416,7 @@ public:
 
   bool isIntDivCheap(EVT VT, AttributeList Attr) const override;
 
-  bool preferScalarizeSplat(unsigned Opc) const override;
+  bool preferScalarizeSplat(SDNode *N) const override;
 
   bool softPromoteHalfType() const override { return true; }
 
@@ -465,6 +484,16 @@ public:
   // This method returns the name of a target specific DAG node.
   const char *getTargetNodeName(unsigned Opcode) const override;
 
+  MachineMemOperand::Flags
+  getTargetMMOFlags(const Instruction &I) const override;
+
+  MachineMemOperand::Flags
+  getTargetMMOFlags(const MemSDNode &Node) const override;
+
+  bool
+  areTwoSDNodeTargetMMOFlagsMergeable(const MemSDNode &NodeX,
+                                      const MemSDNode &NodeY) const override;
+
   ConstraintType getConstraintType(StringRef Constraint) const override;
 
   unsigned getInlineAsmMemConstraint(StringRef ConstraintCode) const override;
@@ -486,6 +515,14 @@ public:
 
   EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                          EVT VT) const override;
+
+  bool shouldFormOverflowOp(unsigned Opcode, EVT VT,
+                            bool MathUsed) const override {
+    if (VT == MVT::i8 || VT == MVT::i16)
+      return false;
+
+    return TargetLowering::shouldFormOverflowOp(Opcode, VT, MathUsed);
+  }
 
   bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {
     return VT.isScalarInteger();
@@ -629,7 +666,7 @@ public:
 
   bool shouldRemoveExtendFromGSIndex(EVT IndexVT, EVT DataVT) const override;
 
-  bool isLegalElementTypeForRVV(Type *ScalarTy) const;
+  bool isLegalElementTypeForRVV(EVT ScalarTy) const;
 
   bool shouldConvertFpToSat(unsigned Op, EVT FPVT, EVT VT) const override;
 
@@ -661,6 +698,25 @@ public:
   /// If the target has a standard location for the stack protector cookie,
   /// returns the address of that location. Otherwise, returns nullptr.
   Value *getIRStackGuard(IRBuilderBase &IRB) const override;
+
+  /// Returns whether or not generating a fixed length interleaved load/store
+  /// intrinsic for this type will be legal.
+  bool isLegalInterleavedAccessType(FixedVectorType *, unsigned Factor,
+                                    const DataLayout &) const;
+
+  /// Return true if a stride load store of the given result type and
+  /// alignment is legal.
+  bool isLegalStridedLoadStore(EVT DataType, Align Alignment) const;
+
+  unsigned getMaxSupportedInterleaveFactor() const override { return 8; }
+
+  bool lowerInterleavedLoad(LoadInst *LI,
+                            ArrayRef<ShuffleVectorInst *> Shuffles,
+                            ArrayRef<unsigned> Indices,
+                            unsigned Factor) const override;
+
+  bool lowerInterleavedStore(StoreInst *SI, ShuffleVectorInst *SVI,
+                             unsigned Factor) const override;
 
 private:
   /// RISCVCCAssignFn - This target-specific function extends the default
@@ -760,7 +816,9 @@ private:
   SDValue lowerEH_DWARF_CFA(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerCTLZ_CTTZ_ZERO_UNDEF(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue lowerStrictFPExtend(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerStrictFPExtendOrRoundLike(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue lowerVectorStrictFSetcc(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue expandUnalignedRVVLoad(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandUnalignedRVVStore(SDValue Op, SelectionDAG &DAG) const;
@@ -790,7 +848,7 @@ private:
   /// Disable normalizing
   /// select(N0&N1, X, Y) => select(N0, select(N1, X, Y), Y) and
   /// select(N0|N1, X, Y) => select(N0, select(N1, X, Y, Y))
-  /// RISCV doesn't have flags so it's better to perform the and/or in a GPR.
+  /// RISC-V doesn't have flags so it's better to perform the and/or in a GPR.
   bool shouldNormalizeToSelectSequence(LLVMContext &, EVT) const override {
     return false;
   };
@@ -819,6 +877,7 @@ using namespace RISCV;
 
 #define GET_RISCVVIntrinsicsTable_DECL
 #include "RISCVGenSearchableTables.inc"
+#undef GET_RISCVVIntrinsicsTable_DECL
 
 } // end namespace RISCVVIntrinsicsTable
 

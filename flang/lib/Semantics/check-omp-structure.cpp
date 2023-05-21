@@ -284,7 +284,7 @@ void OmpStructureChecker::CheckPredefinedAllocatorRestriction(
     const auto &scope{context_.FindScope(symbol->name())};
     const Scope &containingScope{GetProgramUnitContaining(scope)};
     if (!isPredefinedAllocator &&
-        (IsSave(*symbol) || commonBlock ||
+        (IsSaved(*symbol) || commonBlock ||
             containingScope.kind() == Scope::Kind::Module)) {
       context_.Say(source,
           "If list items within the ALLOCATE directive have the "
@@ -1026,7 +1026,7 @@ void OmpStructureChecker::CheckThreadprivateOrDeclareTargetVar(
                           "%s "
                           "directive"_err_en_US,
                           ContextDirectiveAsFortran());
-                    } else if (!IsSave(*name->symbol) &&
+                    } else if (!IsSaved(*name->symbol) &&
                         declScope.kind() != Scope::Kind::MainProgram &&
                         declScope.kind() != Scope::Kind::Module) {
                       context_.Say(name->source,
@@ -2766,11 +2766,12 @@ const parser::OmpObjectList *OmpStructureChecker::GetOmpObjectList(
     const parser::OmpClause &clause) {
 
   // Clauses with OmpObjectList as its data member
-  using MemberObjectListClauses = std::tuple<parser::OmpClause::Copyprivate,
-      parser::OmpClause::Copyin, parser::OmpClause::Firstprivate,
-      parser::OmpClause::From, parser::OmpClause::Lastprivate,
-      parser::OmpClause::Link, parser::OmpClause::Private,
-      parser::OmpClause::Shared, parser::OmpClause::To>;
+  using MemberObjectListClauses =
+      std::tuple<parser::OmpClause::Copyprivate, parser::OmpClause::Copyin,
+          parser::OmpClause::Firstprivate, parser::OmpClause::From,
+          parser::OmpClause::Lastprivate, parser::OmpClause::Link,
+          parser::OmpClause::Private, parser::OmpClause::Shared,
+          parser::OmpClause::To, parser::OmpClause::UseDevicePtr>;
 
   // Clauses with OmpObjectList in the tuple
   using TupleObjectListClauses = std::tuple<parser::OmpClause::Allocate,

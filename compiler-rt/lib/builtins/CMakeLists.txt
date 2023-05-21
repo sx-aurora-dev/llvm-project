@@ -310,17 +310,27 @@ if (NOT MSVC)
     ${x86_ARCH_SOURCES}
     x86_64/floatdidf.c
     x86_64/floatdisf.c
-    x86_64/floatundidf.S
-    x86_64/floatundisf.S
   )
+  if (NOT WIN32)
+    set(x86_64_SOURCES
+      ${x86_64_SOURCES}
+      x86_64/floatundidf.S
+      x86_64/floatundisf.S
+    )
+  endif()
 
   if (NOT ANDROID)
     set(x86_64_SOURCES
       ${x86_64_SOURCES}
       ${x86_80_BIT_SOURCES}
       x86_64/floatdixf.c
-      x86_64/floatundixf.S
     )
+    if (NOT WIN32)
+      set(x86_64_SOURCES
+        ${x86_64_SOURCES}
+        x86_64/floatundixf.S
+      )
+    endif()
   endif()
 
   # Darwin x86_64 Haswell
@@ -605,6 +615,7 @@ set(arm64_32_SOURCES ${aarch64_SOURCES})
 set(armv6m_SOURCES ${thumb1_SOURCES})
 set(armv7m_SOURCES ${arm_SOURCES})
 set(armv7em_SOURCES ${arm_SOURCES})
+set(armv8m.base_SOURCES ${thumb1_SOURCES})
 set(armv8m.main_SOURCES ${arm_SOURCES})
 set(armv8.1m.main_SOURCES ${arm_SOURCES})
 

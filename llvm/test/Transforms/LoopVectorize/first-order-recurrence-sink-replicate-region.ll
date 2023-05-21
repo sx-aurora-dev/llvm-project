@@ -10,8 +10,8 @@ define void @sink_replicate_region_1(i32 %x, ptr %ptr, ptr noalias %dst) optsize
 ; CHECK-LABEL: sink_replicate_region_1
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: Live-in ir<20001> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop
@@ -53,7 +53,7 @@ define void @sink_replicate_region_1(i32 %x, ptr %ptr, ptr noalias %dst) optsize
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   pred.store.if:
 ; CHECK-NEXT:     REPLICATE ir<%rem> = srem vp<[[SPLICE]]>, ir<%x>
-; CHECK-NEXT:     REPLICATE ir<%gep.dst> = getelementptr ir<%dst>, vp<%6>
+; CHECK-NEXT:     REPLICATE ir<%gep.dst> = getelementptr ir<%dst>, vp<[[STEPS]]>
 ; CHECK-NEXT:     REPLICATE ir<%add> = add ir<%conv>, ir<%rem>
 ; CHECK-NEXT:     REPLICATE store ir<%add>, ir<%gep.dst>
 ; CHECK-NEXT:   Successor(s): pred.store.continue
@@ -100,8 +100,8 @@ define void @sink_replicate_region_2(i32 %x, i8 %y, ptr %ptr) optsize {
 ; CHECK-LABEL: sink_replicate_region_2
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: Live-in ir<20001> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop
@@ -169,8 +169,8 @@ define i32 @sink_replicate_region_3_reduction(i32 %x, i8 %y, ptr %ptr) optsize {
 ; CHECK-LABEL: sink_replicate_region_3_reduction
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: Live-in ir<20001> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop
@@ -243,8 +243,8 @@ define void @sink_replicate_region_4_requires_split_at_end_of_block(i32 %x, ptr 
 ; CHECK-LABEL: sink_replicate_region_4_requires_split_at_end_of_block
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: Live-in ir<20001> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop
@@ -289,7 +289,7 @@ define void @sink_replicate_region_4_requires_split_at_end_of_block(i32 %x, ptr 
 ; CHECK-NEXT:     REPLICATE ir<%lv.2> = load ir<%gep>
 ; CHECK-NEXT:     REPLICATE ir<%conv.lv.2> = sext ir<%lv.2>
 ; CHECK-NEXT:     REPLICATE ir<%add.1> = add ir<%conv>, ir<%rem>
-; CHECK-NEXT:     REPLICATE ir<%gep.dst> = getelementptr ir<%dst>, vp<%6>
+; CHECK-NEXT:     REPLICATE ir<%gep.dst> = getelementptr ir<%dst>, vp<[[STEPS]]>
 ; CHECK-NEXT:     REPLICATE ir<%add> = add ir<%add.1>, ir<%conv.lv.2>
 ; CHECK-NEXT:     REPLICATE store ir<%add>, ir<%gep.dst>
 ; CHECK-NEXT:   Successor(s): pred.store.continue
@@ -341,8 +341,12 @@ define void @sink_replicate_region_after_replicate_region(ptr %ptr, ptr noalias 
 ; CHECK-LABEL: sink_replicate_region_after_replicate_region
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: vp<[[TC:%.+]]> = original trip-count
+; CHECK-EMPTY:
+; CHECK-NEXT: ph:
+; CHECK-NEXT:  EMIT vp<[[TC]]> = EXPAND SCEV (1 smax (1 + (sext i8 %y to i32))<nsw>)
+; CHECK-NEXT: No successors
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop
@@ -415,8 +419,8 @@ define void @need_new_block_after_sinking_pr56146(i32 %x, ptr %src, ptr noalias 
 ; CHECK-LABEL: need_new_block_after_sinking_pr56146
 ; CHECK:      VPlan 'Initial VPlan for VF={2},UF>=1' {
 ; CHECK-NEXT: Live-in vp<[[VEC_TC:%.+]]> = vector-trip-count
-; CHECK-EMPTY:
 ; CHECK-NEXT: Live-in vp<[[BTC:%.+]]> = backedge-taken count
+; CHECK-NEXT: Live-in ir<3> = original trip-count
 ; CHECK-EMPTY:
 ; CHECK-NEXT: vector.ph:
 ; CHECK-NEXT: Successor(s): vector loop

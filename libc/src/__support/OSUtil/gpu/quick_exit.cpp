@@ -11,13 +11,20 @@
 
 #include "quick_exit.h"
 
+#include "src/__support/RPC/rpc_client.h"
 #include "src/__support/macros/properties/architectures.h"
 
 namespace __llvm_libc {
 
 void quick_exit(int status) {
+  rpc::Client::Port port = rpc::client.open(rpc::EXIT);
+  port.send([&](rpc::Buffer *buffer) {
+    reinterpret_cast<uint32_t *>(buffer->data)[0] = status;
+  });
+  port.close();
+
 #if defined(LIBC_TARGET_ARCH_IS_NVPTX)
-  asm("exit" ::: "memory");
+  asm("exit;" ::: "memory");
 #elif defined(LIBC_TARGET_ARCH_IS_AMDGPU)
   // This will terminate the entire wavefront, may not be valid with divergent
   // work items.

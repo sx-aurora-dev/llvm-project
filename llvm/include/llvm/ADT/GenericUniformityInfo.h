@@ -9,11 +9,7 @@
 #ifndef LLVM_ADT_GENERICUNIFORMITYINFO_H
 #define LLVM_ADT_GENERICUNIFORMITYINFO_H
 
-// #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GenericCycleInfo.h"
-// #include "llvm/ADT/SmallPtrSet.h"
-// #include "llvm/ADT/Uniformity.h"
-// #include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -36,6 +32,7 @@ public:
   using FunctionT = typename ContextT::FunctionT;
   using ValueRefT = typename ContextT::ValueRefT;
   using ConstValueRefT = typename ContextT::ConstValueRefT;
+  using UseT = typename ContextT::UseT;
   using InstructionT = typename ContextT::InstructionT;
   using DominatorTreeT = typename ContextT::DominatorTreeT;
   using ThisT = GenericUniformityInfo<ContextT>;
@@ -68,6 +65,10 @@ public:
   // a Value in LLVM IR.
   bool isUniform(const InstructionT *I) const { return !isDivergent(I); };
   bool isDivergent(const InstructionT *I) const;
+
+  /// \brief Whether \p U is divergent. Uses of a uniform value can be
+  /// divergent.
+  bool isDivergentUse(const UseT &U) const;
 
   bool hasDivergentTerminator(const BlockT &B);
 

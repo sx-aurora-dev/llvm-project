@@ -7668,6 +7668,11 @@ public:
 
       if (!CalleeLV.getLValueOffset().isZero())
         return Error(Callee);
+      if (CalleeLV.isNullPointer()) {
+        Info.FFDiag(Callee, diag::note_constexpr_null_callee)
+            << const_cast<Expr *>(Callee);
+        return false;
+      }
       FD = dyn_cast_or_null<FunctionDecl>(
           CalleeLV.getLValueBase().dyn_cast<const ValueDecl *>());
       if (!FD)
@@ -13137,12 +13142,12 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     if (LHSValue.getDecl() && LHSValue.getDecl()->isWeak()) {
       Info.FFDiag(E, diag::note_constexpr_mem_pointer_weak_comparison)
           << LHSValue.getDecl();
-      return true;
+      return false;
     }
     if (RHSValue.getDecl() && RHSValue.getDecl()->isWeak()) {
       Info.FFDiag(E, diag::note_constexpr_mem_pointer_weak_comparison)
           << RHSValue.getDecl();
-      return true;
+      return false;
     }
 
     // C++11 [expr.eq]p2:
@@ -14834,6 +14839,7 @@ public:
     switch (E->getCastKind()) {
     default:
       return ExprEvaluatorBaseTy::VisitCastExpr(E);
+    case CK_NullToPointer:
     case CK_NonAtomicToAtomic:
       return This ? EvaluateInPlace(Result, Info, *This, E->getSubExpr())
                   : Evaluate(Result, Info, E->getSubExpr());

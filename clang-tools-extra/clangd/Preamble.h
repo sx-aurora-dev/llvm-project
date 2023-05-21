@@ -30,6 +30,7 @@
 #include "clang-include-cleaner/Record.h"
 #include "index/CanonicalIncludes.h"
 #include "support/Path.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/PrecompiledPreamble.h"
 #include "clang/Lex/Lexer.h"
@@ -37,8 +38,11 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace clang {
@@ -135,6 +139,10 @@ public:
   static PreamblePatch createMacroPatch(llvm::StringRef FileName,
                                         const ParseInputs &Modified,
                                         const PreambleData &Baseline);
+  /// Returns the FileEntry for the preamble patch of MainFilePath in SM, if
+  /// any.
+  static const FileEntry *getPatchEntry(llvm::StringRef MainFilePath,
+                                        const SourceManager &SM);
 
   /// Adjusts CI (which compiles the modified inputs) to be used with the
   /// baseline preamble. This is done by inserting an artifical include to the
@@ -163,6 +171,9 @@ public:
 
   static constexpr llvm::StringLiteral HeaderName = "__preamble_patch__.h";
 
+  llvm::ArrayRef<PragmaMark> marks() const;
+  const MainFileMacros &mainFileMacros() const;
+
 private:
   static PreamblePatch create(llvm::StringRef FileName,
                               const ParseInputs &Modified,
@@ -178,6 +189,9 @@ private:
   // Diags that were attached to a line preserved in Modified contents.
   std::vector<Diag> PatchedDiags;
   PreambleBounds ModifiedBounds = {0, false};
+  const PreambleData *Baseline = nullptr;
+  std::vector<PragmaMark> PatchedMarks;
+  MainFileMacros PatchedMacros;
 };
 
 } // namespace clangd

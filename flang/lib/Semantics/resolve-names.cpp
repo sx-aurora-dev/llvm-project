@@ -740,12 +740,12 @@ public:
   bool BeginSubmodule(const parser::Name &, const parser::ParentIdentifier &);
   void ApplyDefaultAccess();
   Symbol &AddGenericUse(GenericDetails &, const SourceName &, const Symbol &);
-  void AddAndCheckExplicitIntrinsicUse(SourceName, bool isIntrinsic);
+  void AddAndCheckModuleUse(SourceName, bool isIntrinsic);
   void ClearUseRenames() { useRenames_.clear(); }
   void ClearUseOnly() { useOnly_.clear(); }
-  void ClearExplicitIntrinsicUses() {
-    explicitIntrinsicUses_.clear();
-    explicitNonIntrinsicUses_.clear();
+  void ClearModuleUses() {
+    intrinsicUses_.clear();
+    nonIntrinsicUses_.clear();
   }
 
 private:
@@ -759,10 +759,10 @@ private:
   std::set<std::pair<SourceName, Scope *>> useRenames_;
   // Names that have appeared in an ONLY clause of a USE statement
   std::set<std::pair<SourceName, Scope *>> useOnly_;
-  // Module names that have appeared in USE statements with explicit
-  // INTRINSIC or NON_INTRINSIC keywords
-  std::set<SourceName> explicitIntrinsicUses_;
-  std::set<SourceName> explicitNonIntrinsicUses_;
+  // Intrinsic and non-intrinsic (explicit or not) module names that
+  // have appeared in USE statements; used for C1406 warnings.
+  std::set<SourceName> intrinsicUses_;
+  std::set<SourceName> nonIntrinsicUses_;
 
   Symbol &SetAccess(const SourceName &, Attr attr, Symbol * = nullptr);
   // A rename in a USE statement: local => use
@@ -1097,10 +1097,8 @@ private:
   ParamValue GetParamValue(
       const parser::TypeParamValue &, common::TypeParamAttr attr);
   void CheckCommonBlockDerivedType(const SourceName &, const Symbol &);
-  std::optional<MessageFixedText> CheckSaveAttr(const Symbol &);
   Attrs HandleSaveName(const SourceName &, Attrs);
   void AddSaveName(std::set<SourceName> &, const SourceName &);
-  void SetSaveAttr(Symbol &);
   bool HandleUnrestrictedSpecificIntrinsicFunction(const parser::Name &);
   const parser::Name *FindComponent(const parser::Name *, const parser::Name &);
   void Initialization(const parser::Name &, const parser::Initialization &,
@@ -1416,7 +1414,6 @@ bool OmpVisitor::NeedsScope(const parser::OpenMPBlockConstruct &x) {
   const auto &beginBlockDir{std::get<parser::OmpBeginBlockDirective>(x.t)};
   const auto &beginDir{std::get<parser::OmpBlockDirective>(beginBlockDir.t)};
   switch (beginDir.v) {
-  case llvm::omp::Directive::OMPD_target_data:
   case llvm::omp::Directive::OMPD_master:
   case llvm::omp::Directive::OMPD_ordered:
   case llvm::omp::Directive::OMPD_taskgroup:
@@ -1507,6 +1504,7 @@ public:
   bool Pre(const parser::ProgramUnit &);
   void Post(const parser::AssignStmt &);
   void Post(const parser::AssignedGotoStmt &);
+  void Post(const parser::CompilerDirective &);
 
   // These nodes should never be reached: they are handled in ProgramUnit
   bool Pre(const parser::MainProgram &) {
@@ -2748,7 +2746,6 @@ bool ModuleVisitor::Pre(const parser::UseStmt &x) {
   std::optional<bool> isIntrinsic;
   if (x.nature) {
     isIntrinsic = *x.nature == parser::UseStmt::ModuleNature::Intrinsic;
-    AddAndCheckExplicitIntrinsicUse(x.moduleName.source, *isIntrinsic);
   } else if (currScope().IsModule() && currScope().symbol() &&
       currScope().symbol()->attrs().test(Attr::INTRINSIC)) {
     // Intrinsic modules USE only other intrinsic modules
@@ -2758,6 +2755,8 @@ bool ModuleVisitor::Pre(const parser::UseStmt &x) {
   if (!useModuleScope_) {
     return false;
   }
+  AddAndCheckModuleUse(x.moduleName.source,
+      useModuleScope_->parent().kind() == Scope::Kind::IntrinsicModules);
   // use the name from this source file
   useModuleScope_->symbol()->ReplaceName(x.moduleName.source);
   return true;
@@ -2876,7 +2875,7 @@ void ModuleVisitor::DoAddUse(SourceName location, SourceName localName,
   if (localSymbol.has<UnknownDetails>()) {
     localSymbol.set_details(UseDetails{localName, useSymbol});
     localSymbol.attrs() =
-        useSymbol.attrs() & ~Attrs{Attr::PUBLIC, Attr::PRIVATE};
+        useSymbol.attrs() & ~Attrs{Attr::PUBLIC, Attr::PRIVATE, Attr::SAVE};
     localSymbol.implicitAttrs() =
         localSymbol.attrs() & Attrs{Attr::ASYNCHRONOUS, Attr::VOLATILE};
     localSymbol.flags() = useSymbol.flags();
@@ -3062,27 +3061,25 @@ Symbol &ModuleVisitor::AddGenericUse(
   return newSymbol;
 }
 
-// Enforce C1406
-void ModuleVisitor::AddAndCheckExplicitIntrinsicUse(
-    SourceName name, bool isIntrinsic) {
+// Enforce C1406 as a warning
+void ModuleVisitor::AddAndCheckModuleUse(SourceName name, bool isIntrinsic) {
   if (isIntrinsic) {
-    if (auto iter{explicitNonIntrinsicUses_.find(name)};
-        iter != explicitNonIntrinsicUses_.end()) {
+    if (auto iter{nonIntrinsicUses_.find(name)};
+        iter != nonIntrinsicUses_.end()) {
       Say(name,
-          "Cannot USE,INTRINSIC module '%s' in the same scope as USE,NON_INTRINSIC"_err_en_US,
+          "Should not USE the intrinsic module '%s' in the same scope as a USE of the non-intrinsic module"_port_en_US,
           name)
           .Attach(*iter, "Previous USE of '%s'"_en_US, *iter);
     }
-    explicitIntrinsicUses_.insert(name);
+    intrinsicUses_.insert(name);
   } else {
-    if (auto iter{explicitIntrinsicUses_.find(name)};
-        iter != explicitIntrinsicUses_.end()) {
+    if (auto iter{intrinsicUses_.find(name)}; iter != intrinsicUses_.end()) {
       Say(name,
-          "Cannot USE,NON_INTRINSIC module '%s' in the same scope as USE,INTRINSIC"_err_en_US,
+          "Should not USE the non-intrinsic module '%s' in the same scope as a USE of the intrinsic module"_port_en_US,
           name)
           .Attach(*iter, "Previous USE of '%s'"_en_US, *iter);
     }
-    explicitNonIntrinsicUses_.insert(name);
+    nonIntrinsicUses_.insert(name);
   }
 }
 
@@ -5596,11 +5593,8 @@ void DeclarationVisitor::CheckSaveStmts() {
       Say2(name,
           "Explicit SAVE of '%s' is redundant due to global SAVE statement"_warn_en_US,
           *specPartState_.saveInfo.saveAll, "Global SAVE statement"_en_US);
-    } else if (auto msg{CheckSaveAttr(*symbol)}) {
-      Say(name, std::move(*msg));
-      context().SetError(*symbol);
-    } else {
-      SetSaveAttr(*symbol);
+    } else if (!IsSaved(*symbol)) {
+      SetExplicitAttr(*symbol, Attr::SAVE);
     }
   }
   for (const SourceName &name : specPartState_.saveInfo.commons) {
@@ -5618,38 +5612,14 @@ void DeclarationVisitor::CheckSaveStmts() {
         }
       } else {
         for (auto &object : symbol->get<CommonBlockDetails>().objects()) {
-          SetSaveAttr(*object);
+          if (!IsSaved(*object)) {
+            SetImplicitAttr(*object, Attr::SAVE);
+          }
         }
       }
     }
   }
-  if (specPartState_.saveInfo.saveAll) {
-    // Apply SAVE attribute to applicable symbols
-    for (auto pair : currScope()) {
-      auto &symbol{*pair.second};
-      if (!CheckSaveAttr(symbol)) {
-        SetSaveAttr(symbol);
-      }
-    }
-  }
   specPartState_.saveInfo = {};
-}
-
-// If SAVE attribute can't be set on symbol, return error message.
-std::optional<MessageFixedText> DeclarationVisitor::CheckSaveAttr(
-    const Symbol &symbol) {
-  if (IsDummy(symbol)) {
-    return "SAVE attribute may not be applied to dummy argument '%s'"_err_en_US;
-  } else if (symbol.IsFuncResult()) {
-    return "SAVE attribute may not be applied to function result '%s'"_err_en_US;
-  } else if (symbol.has<ProcEntityDetails>() &&
-      !symbol.attrs().test(Attr::POINTER)) {
-    return "Procedure '%s' with SAVE attribute must also have POINTER attribute"_err_en_US;
-  } else if (IsAutomatic(symbol)) {
-    return "SAVE attribute may not be applied to automatic data object '%s'"_err_en_US;
-  } else {
-    return std::nullopt;
-  }
 }
 
 // Record SAVEd names in specPartState_.saveInfo.entities.
@@ -5667,13 +5637,6 @@ void DeclarationVisitor::AddSaveName(
   if (!pair.second) {
     Say2(name, "SAVE attribute was already specified on '%s'"_warn_en_US,
         *pair.first, "Previous specification of SAVE attribute"_en_US);
-  }
-}
-
-// Set the SAVE attribute on symbol unless it is implicitly saved anyway.
-void DeclarationVisitor::SetSaveAttr(Symbol &symbol) {
-  if (!IsSaved(symbol)) {
-    SetImplicitAttr(symbol, Attr::SAVE);
   }
 }
 
@@ -6789,8 +6752,19 @@ bool ResolveNamesVisitor::Pre(const parser::ImportStmt &x) {
     Say(std::move(*error));
   }
   for (auto &name : x.names) {
-    if (FindSymbol(scope.parent(), name)) {
+    if (Symbol * outer{FindSymbol(scope.parent(), name)}) {
       scope.add_importName(name.source);
+      if (Symbol * symbol{FindInScope(name)}) {
+        if (outer->GetUltimate() == symbol->GetUltimate()) {
+          Say(name,
+              "The same '%s' is already present in this scope"_port_en_US);
+        } else {
+          Say(name,
+              "A distinct '%s' is already present in this scope"_err_en_US)
+              .Attach(symbol->name(), "Previous declaration of '%s'"_en_US)
+              .Attach(outer->name(), "Declaration of '%s' in host scope"_en_US);
+        }
+      }
     } else {
       Say(name, "'%s' not found in host scope"_err_en_US);
     }
@@ -7406,7 +7380,7 @@ bool ResolveNamesVisitor::Pre(const parser::SpecificationPart &x) {
   Walk(useStmts);
   ClearUseRenames();
   ClearUseOnly();
-  ClearExplicitIntrinsicUses();
+  ClearModuleUses();
   Walk(importStmts);
   Walk(implicitPart);
   for (const auto &decl : decls) {
@@ -7736,6 +7710,96 @@ void ResolveNamesVisitor::Post(const parser::AssignedGotoStmt &x) {
   if (auto *name{ResolveName(std::get<parser::Name>(x.t))}) {
     CheckEntryDummyUse(name->source, name->symbol);
     ConvertToObjectEntity(DEREF(name->symbol));
+  }
+}
+
+void ResolveNamesVisitor::Post(const parser::CompilerDirective &x) {
+  if (const auto *tkr{
+          std::get_if<std::list<parser::CompilerDirective::IgnoreTKR>>(&x.u)}) {
+    if (currScope().IsTopLevel() ||
+        GetProgramUnitContaining(currScope()).kind() !=
+            Scope::Kind::Subprogram) {
+      Say(x.source,
+          "!DIR$ IGNORE_TKR directive must appear in a subroutine or function"_err_en_US);
+      return;
+    }
+    if (!inSpecificationPart_) {
+      Say(x.source,
+          "!DIR$ IGNORE_TKR directive must appear in the specification part"_err_en_US);
+      return;
+    }
+    if (tkr->empty()) {
+      Symbol *symbol{currScope().symbol()};
+      if (SubprogramDetails *
+          subp{symbol ? symbol->detailsIf<SubprogramDetails>() : nullptr}) {
+        subp->set_defaultIgnoreTKR(true);
+      }
+    } else {
+      for (const parser::CompilerDirective::IgnoreTKR &item : *tkr) {
+        common::IgnoreTKRSet set;
+        if (const auto &maybeList{
+                std::get<std::optional<std::list<const char *>>>(item.t)}) {
+          for (const char *p : *maybeList) {
+            if (p) {
+              switch (*p) {
+              case 't':
+                set.set(common::IgnoreTKR::Type);
+                break;
+              case 'k':
+                set.set(common::IgnoreTKR::Kind);
+                break;
+              case 'r':
+                set.set(common::IgnoreTKR::Rank);
+                break;
+              case 'd':
+                set.set(common::IgnoreTKR::Device);
+                break;
+              case 'm':
+                set.set(common::IgnoreTKR::Managed);
+                break;
+              case 'c':
+                set.set(common::IgnoreTKR::Contiguous);
+                break;
+              case 'a':
+                set = common::ignoreTKRAll;
+                break;
+              default:
+                Say(x.source,
+                    "'%c' is not a valid letter for !DIR$ IGNORE_TKR directive"_err_en_US,
+                    *p);
+                set = common::ignoreTKRAll;
+                break;
+              }
+            }
+          }
+          if (set.empty()) {
+            Say(x.source,
+                "!DIR$ IGNORE_TKR directive may not have an empty parenthesized list of letters"_err_en_US);
+          }
+        } else { // no (list)
+          set = common::ignoreTKRAll;
+          ;
+        }
+        const auto &name{std::get<parser::Name>(item.t)};
+        Symbol *symbol{FindSymbol(name)};
+        if (!symbol) {
+          symbol = &MakeSymbol(name, Attrs{}, ObjectEntityDetails{});
+        }
+        if (symbol->owner() != currScope()) {
+          SayWithDecl(
+              name, *symbol, "'%s' must be local to this subprogram"_err_en_US);
+        } else {
+          ConvertToObjectEntity(*symbol);
+          if (auto *object{symbol->detailsIf<ObjectEntityDetails>()}) {
+            object->set_ignoreTKR(set);
+          } else {
+            SayWithDecl(name, *symbol, "'%s' must be an object"_err_en_US);
+          }
+        }
+      }
+    }
+  } else {
+    Say(x.source, "Compiler directive was ignored"_warn_en_US);
   }
 }
 

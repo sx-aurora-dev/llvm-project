@@ -721,9 +721,12 @@ static void deallocateIntentOut(Fortran::lower::AbstractConverter &converter,
     if (auto mutBox = extVal.getBoxOf<fir::MutableBoxValue>()) {
       // The dummy argument is not passed in the ENTRY so it should not be
       // deallocated.
-      if (mlir::Operation *op = mutBox->getAddr().getDefiningOp())
-        if (mlir::isa<fir::AllocaOp>(op))
+      if (mlir::Operation *op = mutBox->getAddr().getDefiningOp()) {
+        if (auto declOp = mlir::dyn_cast<hlfir::DeclareOp>(op))
+          op = declOp.getMemref().getDefiningOp();
+        if (op && mlir::isa<fir::AllocaOp>(op))
           return;
+      }
       mlir::Location loc = converter.getCurrentLocation();
       fir::FirOpBuilder &builder = converter.getFirOpBuilder();
       auto genDeallocateWithTypeDesc = [&]() {
@@ -1690,12 +1693,18 @@ void Fortran::lower::mapSymbolAttributes(
              "handled above");
       // The box is read right away because lowering code does not expect
       // a non pointer/allocatable symbol to be mapped to a MutableBox.
+      mlir::Type ty = converter.genType(var);
+      bool isPolymorphic = false;
+      if (auto boxTy = ty.dyn_cast<fir::BaseBoxType>()) {
+        isPolymorphic = ty.isa<fir::ClassType>();
+        ty = boxTy.getEleTy();
+      }
       Fortran::lower::genDeclareSymbol(
           converter, symMap, sym,
           fir::factory::genMutableBoxRead(
               builder, loc,
-              fir::factory::createTempMutableBox(builder, loc,
-                                                 converter.genType(var))));
+              fir::factory::createTempMutableBox(builder, loc, ty, {}, {},
+                                                 isPolymorphic)));
       return true;
     }
     return false;
@@ -1831,14 +1840,15 @@ void Fortran::lower::mapSymbolAttributes(
     }
   }
 
+  if (addr && addr.getDefiningOp<fir::UnboxCharOp>()) {
+    // Ensure proper type is given to array/scalar that transited via
+    // fir.boxchar arg.
+    mlir::Type castTy = builder.getRefType(converter.genType(var));
+    addr = builder.createConvert(loc, castTy, addr);
+  }
+
   // Compute array extents and lower bounds.
   if (ba.isArray()) {
-    if (addr && addr.getDefiningOp<fir::UnboxCharOp>()) {
-      // Ensure proper type is given to array that transited via fir.boxchar
-      // arg.
-      mlir::Type castTy = builder.getRefType(converter.genType(var));
-      addr = builder.createConvert(loc, castTy, addr);
-    }
     if (ba.isStaticArray()) {
       if (ba.lboundIsAllOnes()) {
         for (std::int64_t extent :

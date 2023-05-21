@@ -42,6 +42,10 @@ DebugVariable::DebugVariable(const DbgVariableIntrinsic *DII)
       Fragment(DII->getExpression()->getFragmentInfo()),
       InlinedAt(DII->getDebugLoc().getInlinedAt()) {}
 
+DebugVariableAggregate::DebugVariableAggregate(const DbgVariableIntrinsic *DVI)
+    : DebugVariable(DVI->getVariable(), std::nullopt,
+                    DVI->getDebugLoc()->getInlinedAt()) {}
+
 DILocation::DILocation(LLVMContext &C, StorageType Storage, unsigned Line,
                        unsigned Column, ArrayRef<Metadata *> MDs,
                        bool ImplicitCode)
@@ -1667,7 +1671,7 @@ bool DIExpression::hasAllLocationOps(unsigned N) const {
     if (ExprOp.getOp() == dwarf::DW_OP_LLVM_arg)
       SeenOps.insert(ExprOp.getArg(0));
   for (uint64_t Idx = 0; Idx < N; ++Idx)
-    if (!is_contained(SeenOps, Idx))
+    if (!SeenOps.contains(Idx))
       return false;
   return true;
 }
@@ -2089,7 +2093,7 @@ void DIArgList::handleChangedOperand(void *Ref, Metadata *New) {
       if (NewVM)
         VM = NewVM;
       else
-        VM = ValueAsMetadata::get(UndefValue::get(VM->getValue()->getType()));
+        VM = ValueAsMetadata::get(PoisonValue::get(VM->getValue()->getType()));
     }
   }
   if (Uniq) {

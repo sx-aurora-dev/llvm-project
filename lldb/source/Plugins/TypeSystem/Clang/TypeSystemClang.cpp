@@ -399,6 +399,7 @@ bool TypeSystemClang::IsOperator(llvm::StringRef name,
                 .Case("=", clang::OO_Equal)
                 .Case("==", clang::OO_EqualEqual)
                 .Case("<", clang::OO_Less)
+                .Case("<=>", clang::OO_Spaceship)
                 .Case("<<", clang::OO_LessLess)
                 .Case("<<=", clang::OO_LessLessEqual)
                 .Case("<=", clang::OO_LessEqual)
@@ -510,6 +511,9 @@ static void ParseLangArgs(LangOptions &Opts, InputKind IK, const char *triple) {
   Opts.C99 = Std.isC99();
   Opts.CPlusPlus = Std.isCPlusPlus();
   Opts.CPlusPlus11 = Std.isCPlusPlus11();
+  Opts.CPlusPlus14 = Std.isCPlusPlus14();
+  Opts.CPlusPlus17 = Std.isCPlusPlus17();
+  Opts.CPlusPlus20 = Std.isCPlusPlus20();
   Opts.Digraphs = Std.hasDigraphs();
   Opts.GNUMode = Std.isGNUMode();
   Opts.GNUInline = !Std.isC99();
@@ -627,6 +631,8 @@ LanguageSet TypeSystemClang::GetSupportedLanguagesForTypes() {
   languages.Insert(lldb::eLanguageTypeC_plus_plus_11);
   languages.Insert(lldb::eLanguageTypeC11);
   languages.Insert(lldb::eLanguageTypeC_plus_plus_14);
+  languages.Insert(lldb::eLanguageTypeC_plus_plus_17);
+  languages.Insert(lldb::eLanguageTypeC_plus_plus_20);
   return languages;
 }
 
@@ -637,6 +643,8 @@ LanguageSet TypeSystemClang::GetSupportedLanguagesForExpressions() {
   languages.Insert(lldb::eLanguageTypeC_plus_plus_03);
   languages.Insert(lldb::eLanguageTypeC_plus_plus_11);
   languages.Insert(lldb::eLanguageTypeC_plus_plus_14);
+  languages.Insert(lldb::eLanguageTypeC_plus_plus_17);
+  languages.Insert(lldb::eLanguageTypeC_plus_plus_20);
   return languages;
 }
 
@@ -3727,22 +3735,6 @@ bool TypeSystemClang::SupportsLanguage(lldb::LanguageType language) {
   return TypeSystemClangSupportsLanguage(language);
 }
 
-ConstString
-TypeSystemClang::GetInstanceVariableName(lldb::LanguageType language) {
-  switch (language) {
-  case LanguageType::eLanguageTypeC_plus_plus:
-  case LanguageType::eLanguageTypeC_plus_plus_03:
-  case LanguageType::eLanguageTypeC_plus_plus_11:
-  case LanguageType::eLanguageTypeC_plus_plus_14:
-    return ConstString("this");
-  case LanguageType::eLanguageTypeObjC:
-  case LanguageType::eLanguageTypeObjC_plus_plus:
-    return ConstString("self");
-  default:
-    return {};
-  }
-}
-
 std::optional<std::string>
 TypeSystemClang::GetCXXClassName(const CompilerType &type) {
   if (!type)
@@ -4990,10 +4982,10 @@ lldb::Encoding TypeSystemClang::GetEncoding(lldb::opaque_compiler_type_t type,
     case clang::BuiltinType::OCLIntelSubgroupAVCImeResult:
     case clang::BuiltinType::OCLIntelSubgroupAVCRefResult:
     case clang::BuiltinType::OCLIntelSubgroupAVCSicResult:
-    case clang::BuiltinType::OCLIntelSubgroupAVCImeResultSingleRefStreamout:
-    case clang::BuiltinType::OCLIntelSubgroupAVCImeResultDualRefStreamout:
-    case clang::BuiltinType::OCLIntelSubgroupAVCImeSingleRefStreamin:
-    case clang::BuiltinType::OCLIntelSubgroupAVCImeDualRefStreamin:
+    case clang::BuiltinType::OCLIntelSubgroupAVCImeResultSingleReferenceStreamout:
+    case clang::BuiltinType::OCLIntelSubgroupAVCImeResultDualReferenceStreamout:
+    case clang::BuiltinType::OCLIntelSubgroupAVCImeSingleReferenceStreamin:
+    case clang::BuiltinType::OCLIntelSubgroupAVCImeDualReferenceStreamin:
       break;
 
     // PowerPC -- Matrix Multiply Assist
@@ -5003,6 +4995,8 @@ lldb::Encoding TypeSystemClang::GetEncoding(lldb::opaque_compiler_type_t type,
 
     // ARM -- Scalable Vector Extension
     case clang::BuiltinType::SveBool:
+    case clang::BuiltinType::SveBoolx2:
+    case clang::BuiltinType::SveBoolx4:
     case clang::BuiltinType::SveCount:
     case clang::BuiltinType::SveInt8:
     case clang::BuiltinType::SveInt8x2:

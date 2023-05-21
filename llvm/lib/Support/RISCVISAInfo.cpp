@@ -1,4 +1,4 @@
-//===-- RISCVISAInfo.cpp - RISCV Arch String Parser -------------*- C++ -*-===//
+//===-- RISCVISAInfo.cpp - RISC-V Arch String Parser ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -39,13 +39,17 @@ struct RISCVSupportedExtension {
 
 static constexpr StringLiteral AllStdExts = "mafdqlcbkjtpvnh";
 
+static const char *RISCVGImplications[] = {
+  "i", "m", "a", "f", "d", "zicsr", "zifencei"
+};
+
 static const RISCVSupportedExtension SupportedExtensions[] = {
-    {"i", RISCVExtensionVersion{2, 0}},
-    {"e", RISCVExtensionVersion{1, 9}},
+    {"i", RISCVExtensionVersion{2, 1}},
+    {"e", RISCVExtensionVersion{2, 0}},
     {"m", RISCVExtensionVersion{2, 0}},
-    {"a", RISCVExtensionVersion{2, 0}},
-    {"f", RISCVExtensionVersion{2, 0}},
-    {"d", RISCVExtensionVersion{2, 0}},
+    {"a", RISCVExtensionVersion{2, 1}},
+    {"f", RISCVExtensionVersion{2, 2}},
+    {"d", RISCVExtensionVersion{2, 2}},
     {"c", RISCVExtensionVersion{2, 0}},
 
     {"h", RISCVExtensionVersion{1, 0}},
@@ -103,8 +107,10 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
     {"zicbom", RISCVExtensionVersion{1, 0}},
     {"zicboz", RISCVExtensionVersion{1, 0}},
     {"zicbop", RISCVExtensionVersion{1, 0}},
+    {"zicntr", RISCVExtensionVersion{1, 0}},
     {"zicsr", RISCVExtensionVersion{2, 0}},
     {"zifencei", RISCVExtensionVersion{2, 0}},
+    {"zihpm", RISCVExtensionVersion{1, 0}},
 
     {"zawrs", RISCVExtensionVersion{1, 0}},
 
@@ -113,6 +119,7 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
     {"svinval", RISCVExtensionVersion{1, 0}},
 
     // vendor-defined ('X') extensions
+    {"xsfvcp", RISCVExtensionVersion{1, 0}},
     {"xtheadba", RISCVExtensionVersion{1, 0}},
     {"xtheadbb", RISCVExtensionVersion{1, 0}},
     {"xtheadbs", RISCVExtensionVersion{1, 0}},
@@ -128,15 +135,35 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
 };
 
 static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {
+    {"smaia", RISCVExtensionVersion{1, 0}},
+    {"ssaia", RISCVExtensionVersion{1, 0}},
+
     {"zihintntl", RISCVExtensionVersion{0, 2}},
 
     {"zca", RISCVExtensionVersion{1, 0}},
     {"zcb", RISCVExtensionVersion{1, 0}},
     {"zcd", RISCVExtensionVersion{1, 0}},
     {"zcf", RISCVExtensionVersion{1, 0}},
-    {"zfa", RISCVExtensionVersion{0, 1}},
+    {"zcmt", RISCVExtensionVersion{1, 0}},
+    {"zfa", RISCVExtensionVersion{0, 2}},
+    {"zicond", RISCVExtensionVersion{1, 0}},
     {"zvfh", RISCVExtensionVersion{0, 1}},
     {"ztso", RISCVExtensionVersion{0, 1}},
+
+    // vector crypto
+    {"zvbb", RISCVExtensionVersion{0, 5}},
+    {"zvbc", RISCVExtensionVersion{0, 5}},
+    {"zvkg", RISCVExtensionVersion{0, 5}},
+    {"zvkn", RISCVExtensionVersion{0, 5}},
+    {"zvkned", RISCVExtensionVersion{0, 5}},
+    {"zvkng", RISCVExtensionVersion{0, 5}},
+    {"zvknha", RISCVExtensionVersion{0, 5}},
+    {"zvknhb", RISCVExtensionVersion{0, 5}},
+    {"zvks", RISCVExtensionVersion{0, 5}},
+    {"zvksed", RISCVExtensionVersion{0, 5}},
+    {"zvksg", RISCVExtensionVersion{0, 5}},
+    {"zvksh", RISCVExtensionVersion{0, 5}},
+    {"zvkt", RISCVExtensionVersion{0, 5}},
 };
 
 static bool stripExperimentalPrefix(StringRef &Ext) {
@@ -194,15 +221,12 @@ findDefaultVersion(StringRef ExtName) {
 void RISCVISAInfo::addExtension(StringRef ExtName, unsigned MajorVersion,
                                 unsigned MinorVersion) {
   RISCVExtensionInfo Ext;
-  Ext.ExtName = ExtName.str();
   Ext.MajorVersion = MajorVersion;
   Ext.MinorVersion = MinorVersion;
   Exts[ExtName.str()] = Ext;
 }
 
 static StringRef getExtensionTypeDesc(StringRef Ext) {
-  if (Ext.startswith("sx"))
-    return "non-standard supervisor-level extension";
   if (Ext.startswith("s"))
     return "standard supervisor-level extension";
   if (Ext.startswith("x"))
@@ -213,8 +237,6 @@ static StringRef getExtensionTypeDesc(StringRef Ext) {
 }
 
 static StringRef getExtensionType(StringRef Ext) {
-  if (Ext.startswith("sx"))
-    return "sx";
   if (Ext.startswith("s"))
     return "s";
   if (Ext.startswith("x"))
@@ -267,78 +289,71 @@ bool RISCVISAInfo::hasExtension(StringRef Ext) const {
   return Exts.count(Ext.str()) != 0;
 }
 
+// We rank extensions in the following order:
+// -Single letter extensions in canonical order.
+// -Unknown single letter extensions in alphabetical order.
+// -Multi-letter extensions starting with 'z' sorted by canonical order of
+//  the second letter then sorted alphabetically.
+// -Multi-letter extensions starting with 's' in alphabetical order.
+// -(TODO) Multi-letter extensions starting with 'zxm' in alphabetical order.
+// -X extensions in alphabetical order.
+// These flags are used to indicate the category. The first 6 bits store the
+// single letter extension rank for single letter and multi-letter extensions
+// starting with 'z'.
+enum RankFlags {
+  RF_Z_EXTENSION = 1 << 6,
+  RF_S_EXTENSION = 1 << 7,
+  RF_X_EXTENSION = 1 << 8,
+};
+
 // Get the rank for single-letter extension, lower value meaning higher
 // priority.
-static int singleLetterExtensionRank(char Ext) {
+static unsigned singleLetterExtensionRank(char Ext) {
+  assert(Ext >= 'a' && Ext <= 'z');
   switch (Ext) {
   case 'i':
-    return -2;
+    return 0;
   case 'e':
-    return -1;
-  default:
-    break;
+    return 1;
   }
 
   size_t Pos = AllStdExts.find(Ext);
-  int Rank;
-  if (Pos == StringRef::npos)
-    // If we got an unknown extension letter, then give it an alphabetical
-    // order, but after all known standard extensions.
-    Rank = AllStdExts.size() + (Ext - 'a');
-  else
-    Rank = Pos;
+  if (Pos != StringRef::npos)
+    return Pos + 2; // Skip 'e' and 'i' from above.
 
-  return Rank;
+  // If we got an unknown extension letter, then give it an alphabetical
+  // order, but after all known standard extensions.
+  return 2 + AllStdExts.size() + (Ext - 'a');
 }
 
 // Get the rank for multi-letter extension, lower value meaning higher
 // priority/order in canonical order.
-static int multiLetterExtensionRank(const std::string &ExtName) {
-  assert(ExtName.length() >= 2);
-  int HighOrder;
-  int LowOrder = 0;
-  // The order between multi-char extensions: s -> h -> z -> x.
-  char ExtClass = ExtName[0];
-  switch (ExtClass) {
+static unsigned getExtensionRank(const std::string &ExtName) {
+  assert(ExtName.size() >= 1);
+  switch (ExtName[0]) {
   case 's':
-    HighOrder = 0;
-    break;
+    return RF_S_EXTENSION;
   case 'z':
-    HighOrder = 1;
+    assert(ExtName.size() >= 2);
     // `z` extension must be sorted by canonical order of second letter.
     // e.g. zmx has higher rank than zax.
-    LowOrder = singleLetterExtensionRank(ExtName[1]);
-    break;
+    return RF_Z_EXTENSION | singleLetterExtensionRank(ExtName[1]);
   case 'x':
-    HighOrder = 2;
-    break;
+    return RF_X_EXTENSION;
   default:
-    llvm_unreachable("Unknown prefix for multi-char extension");
-    return -1;
+    assert(ExtName.size() == 1);
+    return singleLetterExtensionRank(ExtName[0]);
   }
-
-  return (HighOrder << 8) + LowOrder;
 }
 
 // Compare function for extension.
 // Only compare the extension name, ignore version comparison.
 bool RISCVISAInfo::compareExtension(const std::string &LHS,
                                     const std::string &RHS) {
-  size_t LHSLen = LHS.length();
-  size_t RHSLen = RHS.length();
-  if (LHSLen == 1 && RHSLen != 1)
-    return true;
+  unsigned LHSRank = getExtensionRank(LHS);
+  unsigned RHSRank = getExtensionRank(RHS);
 
-  if (LHSLen != 1 && RHSLen == 1)
-    return false;
-
-  if (LHSLen == 1 && RHSLen == 1)
-    return singleLetterExtensionRank(LHS[0]) <
-           singleLetterExtensionRank(RHS[0]);
-
-  // Both are multi-char ext here.
-  int LHSRank = multiLetterExtensionRank(LHS);
-  int RHSRank = multiLetterExtensionRank(RHS);
+  // If the ranks differ, pick the lower rank.
   if (LHSRank != RHSRank)
     return LHSRank < RHSRank;
 
@@ -593,8 +608,9 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
   bool HasRV64 = Arch.startswith("rv64");
   // ISA string must begin with rv32 or rv64.
   if (!(Arch.startswith("rv32") || HasRV64) || (Arch.size() < 5)) {
-    return createStringError(errc::invalid_argument,
-                             "string must begin with rv32{i,e,g} or rv64{i,g}");
+    return createStringError(
+        errc::invalid_argument,
+        "string must begin with rv32{i,e,g} or rv64{i,e,g}");
   }
 
   unsigned XLen = HasRV64 ? 64 : 32;
@@ -610,27 +626,27 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
   default:
     return createStringError(errc::invalid_argument,
                              "first letter should be 'e', 'i' or 'g'");
-  case 'e': {
-    // Extension 'e' is not allowed in rv64.
-    if (HasRV64)
-      return createStringError(
-          errc::invalid_argument,
-          "standard user-level extension 'e' requires 'rv32'");
-    break;
-  }
+  case 'e':
   case 'i':
     break;
   case 'g':
-    // g = imafd
+    // g expands to extensions in RISCVGImplications.
+    if (Arch.size() > 5 && isDigit(Arch[5]))
+      return createStringError(errc::invalid_argument,
+                               "version not supported for 'g'");
     StdExts = StdExts.drop_front(4);
     break;
   }
+
+  if (Arch.back() == '_')
+    return createStringError(errc::invalid_argument,
+                             "extension name missing after separator '_'");
 
   // Skip rvxxx
   StringRef Exts = Arch.substr(5);
 
   // Remove multi-letter standard extensions, non-standard extensions and
-  // supervisor-level extensions. They have 'z', 'x', 's', 'sx' prefixes.
+  // supervisor-level extensions. They have 'z', 'x', 's' prefixes.
   // Parse them at the end.
   // Find the very first occurrence of 's', 'x' or 'z'.
   StringRef OtherExts;
@@ -641,30 +657,41 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
   }
 
   unsigned Major, Minor, ConsumeLength;
-  if (auto E = getExtensionVersion(std::string(1, Baseline), Exts, Major, Minor,
-                                   ConsumeLength, EnableExperimentalExtension,
-                                   ExperimentalExtensionVersionCheck))
-    return std::move(E);
-
   if (Baseline == 'g') {
+    // Versions for g are disallowed, and this was checked for previously.
+    ConsumeLength = 0;
+
     // No matter which version is given to `g`, we always set imafd to default
     // version since the we don't have clear version scheme for that on
     // ISA spec.
-    for (const auto *Ext : {"i", "m", "a", "f", "d"})
+    for (const auto *Ext : RISCVGImplications) {
       if (auto Version = findDefaultVersion(Ext))
         ISAInfo->addExtension(Ext, Version->Major, Version->Minor);
       else
         llvm_unreachable("Default extension version not found?");
-  } else
+    }
+  } else {
     // Baseline is `i` or `e`
-    ISAInfo->addExtension(std::string(1, Baseline), Major, Minor);
+    if (auto E = getExtensionVersion(
+            StringRef(&Baseline, 1), Exts, Major, Minor, ConsumeLength,
+            EnableExperimentalExtension, ExperimentalExtensionVersionCheck)) {
+      if (!IgnoreUnknown)
+        return std::move(E);
+      // If IgnoreUnknown, then ignore an unrecognised version of the baseline
+      // ISA and just use the default supported version.
+      consumeError(std::move(E));
+      auto Version = findDefaultVersion(StringRef(&Baseline, 1));
+      Major = Version->Major;
+      Minor = Version->Minor;
+    }
+
+    ISAInfo->addExtension(StringRef(&Baseline, 1), Major, Minor);
+  }
 
   // Consume the base ISA version number and any '_' between rvxxx and the
   // first extension
   Exts = Exts.drop_front(ConsumeLength);
   Exts.consume_front("_");
-
-  // TODO: Use version number when setting target features
 
   auto StdExtsItr = StdExts.begin();
   auto StdExtsEnd = StdExts.end();
@@ -697,11 +724,11 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
     // Move to next char to prevent repeated letter.
     ++StdExtsItr;
 
-    std::string Next;
+    StringRef Next;
     unsigned Major, Minor, ConsumeLength;
     if (std::next(I) != E)
-      Next = std::string(std::next(I), E);
-    if (auto E = getExtensionVersion(std::string(1, C), Next, Major, Minor,
+      Next = StringRef(std::next(I), E - std::next(I));
+    if (auto E = getExtensionVersion(StringRef(&C, 1), Next, Major, Minor,
                                      ConsumeLength, EnableExperimentalExtension,
                                      ExperimentalExtensionVersionCheck)) {
       if (IgnoreUnknown) {
@@ -713,7 +740,6 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
     }
 
     // The order is OK, then push it into features.
-    // TODO: Use version number when setting target features
     // Currently LLVM supports only "mafdcvh".
     if (!isSupportedExtension(StringRef(&C, 1))) {
       if (IgnoreUnknown) {
@@ -724,7 +750,7 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
                                "unsupported standard user-level extension '%c'",
                                C);
     }
-    ISAInfo->addExtension(std::string(1, C), Major, Minor);
+    ISAInfo->addExtension(StringRef(&C, 1), Major, Minor);
 
     // Consume full extension name and version, including any optional '_'
     // between this extension and the next
@@ -736,7 +762,7 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
   // Parse the ISA string containing non-standard user-level
   // extensions, standard supervisor-level extensions and
   // non-standard supervisor-level extensions.
-  // These extensions start with 'z', 'x', 's', 'sx' prefixes, follow a
+  // These extensions start with 'z', 's', 'x' prefixes, follow a
   // canonical order, might have a version number (major, minor)
   // and are separated by a single underscore '_'.
   // Set the hardware features for the extensions that are supported.
@@ -747,7 +773,7 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
   OtherExts.split(Split, '_');
 
   SmallVector<StringRef, 8> AllExts;
-  std::array<StringRef, 4> Prefix{"z", "x", "s", "sx"};
+  std::array<StringRef, 4> Prefix{"z", "s", "x"};
   auto I = Prefix.begin();
   auto E = Prefix.end();
   if (Split.size() > 1 || Split[0] != "") {
@@ -804,6 +830,9 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
                                  Desc.str().c_str(), Name.str().c_str());
       }
 
+      if (IgnoreUnknown && !isSupportedExtension(Name))
+        continue;
+
       ISAInfo->addExtension(Name, Major, Minor);
       // Extension format is correct, keep parsing the extensions.
       // TODO: Save Type, Name, Major, Minor to avoid parsing them later.
@@ -823,8 +852,7 @@ RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
 }
 
 Error RISCVISAInfo::checkDependency() {
-  bool IsRv32 = XLen == 32;
-  bool HasE = Exts.count("e") != 0;
+  bool HasC = Exts.count("c") != 0;
   bool HasD = Exts.count("d") != 0;
   bool HasF = Exts.count("f") != 0;
   bool HasZfinx = Exts.count("zfinx") != 0;
@@ -833,11 +861,8 @@ Error RISCVISAInfo::checkDependency() {
   bool HasZve32f = Exts.count("zve32f") != 0;
   bool HasZve64d = Exts.count("zve64d") != 0;
   bool HasZvl = MinVLen != 0;
-
-  if (HasE && !IsRv32)
-    return createStringError(
-        errc::invalid_argument,
-        "standard user-level extension 'e' requires 'rv32'");
+  bool HasZcmt = Exts.count("zcmt") != 0;
+  bool HasZcd = Exts.count("zcd") != 0;
 
   if (HasF && HasZfinx)
     return createStringError(errc::invalid_argument,
@@ -865,6 +890,38 @@ Error RISCVISAInfo::checkDependency() {
         errc::invalid_argument,
         "'zvl*b' requires 'v' or 'zve*' extension to also be specified");
 
+  if (Exts.count("zvbb") && !HasVector)
+    return createStringError(
+        errc::invalid_argument,
+        "'zvbb' requires 'v' or 'zve*' extension to also be specified");
+
+  if (Exts.count("zvbc") && !Exts.count("zve64x"))
+    return createStringError(
+        errc::invalid_argument,
+        "'zvbc' requires 'v' or 'zve64*' extension to also be specified");
+
+  if ((Exts.count("zvkg") || Exts.count("zvkned") || Exts.count("zvknha") ||
+       Exts.count("zvksed") || Exts.count("zvksh")) &&
+      !HasVector)
+    return createStringError(
+        errc::invalid_argument,
+        "'zvk*' requires 'v' or 'zve*' extension to also be specified");
+
+  if (Exts.count("zvknhb") && !Exts.count("zve64x"))
+    return createStringError(
+        errc::invalid_argument,
+        "'zvknhb' requires 'v' or 'zve64*' extension to also be specified");
+
+  if (HasZcmt && HasD && HasC)
+    return createStringError(
+        errc::invalid_argument,
+        "'zcmt' is incompatible with 'c' extension when 'd' extension is set");
+
+  if (HasZcmt && HasD && HasZcd)
+    return createStringError(errc::invalid_argument,
+                             "'zcmt' is incompatible with 'zcd' extension when "
+                             "'d' extension is set");
+
   // Additional dependency checks.
   // TODO: The 'q' extension requires rv64.
   // TODO: It is illegal to specify 'e' extensions with 'f' and 'd'.
@@ -873,36 +930,49 @@ Error RISCVISAInfo::checkDependency() {
 }
 
 static const char *ImpliedExtsD[] = {"f"};
+static const char *ImpliedExtsF[] = {"zicsr"};
 static const char *ImpliedExtsV[] = {"zvl128b", "zve64d", "f", "d"};
-static const char *ImpliedExtsZfhmin[] = {"f"};
-static const char *ImpliedExtsZfh[] = {"f"};
+static const char *ImpliedExtsXTHeadVdot[] = {"v"};
+static const char *ImpliedExtsXsfvcp[] = {"zve32x"};
+static const char *ImpliedExtsZcb[] = {"zca"};
+static const char *ImpliedExtsZcmt[] = {"zca"};
 static const char *ImpliedExtsZdinx[] = {"zfinx"};
-static const char *ImpliedExtsZhinxmin[] = {"zfinx"};
+static const char *ImpliedExtsZfa[] = {"f"};
+static const char *ImpliedExtsZfh[] = {"f"};
+static const char *ImpliedExtsZfhmin[] = {"f"};
+static const char *ImpliedExtsZfinx[] = {"zicsr"};
 static const char *ImpliedExtsZhinx[] = {"zfinx"};
-static const char *ImpliedExtsZve64d[] = {"zve64f"};
-static const char *ImpliedExtsZve64f[] = {"zve64x", "zve32f"};
-static const char *ImpliedExtsZve64x[] = {"zve32x", "zvl64b"};
-static const char *ImpliedExtsZve32f[] = {"zve32x"};
-static const char *ImpliedExtsZve32x[] = {"zvl32b"};
-static const char *ImpliedExtsZvl65536b[] = {"zvl32768b"};
-static const char *ImpliedExtsZvl32768b[] = {"zvl16384b"};
-static const char *ImpliedExtsZvl16384b[] = {"zvl8192b"};
-static const char *ImpliedExtsZvl8192b[] = {"zvl4096b"};
-static const char *ImpliedExtsZvl4096b[] = {"zvl2048b"};
-static const char *ImpliedExtsZvl2048b[] = {"zvl1024b"};
-static const char *ImpliedExtsZvl1024b[] = {"zvl512b"};
-static const char *ImpliedExtsZvl512b[] = {"zvl256b"};
-static const char *ImpliedExtsZvl256b[] = {"zvl128b"};
-static const char *ImpliedExtsZvl128b[] = {"zvl64b"};
-static const char *ImpliedExtsZvl64b[] = {"zvl32b"};
+static const char *ImpliedExtsZhinxmin[] = {"zfinx"};
+static const char *ImpliedExtsZicntr[] = {"zicsr"};
+static const char *ImpliedExtsZihpm[] = {"zicsr"};
 static const char *ImpliedExtsZk[] = {"zkn", "zkt", "zkr"};
 static const char *ImpliedExtsZkn[] = {"zbkb", "zbkc", "zbkx",
                                        "zkne", "zknd", "zknh"};
 static const char *ImpliedExtsZks[] = {"zbkb", "zbkc", "zbkx", "zksed", "zksh"};
+static const char *ImpliedExtsZve32f[] = {"zve32x"};
+static const char *ImpliedExtsZve32x[] = {"zvl32b", "zicsr"};
+static const char *ImpliedExtsZve64d[] = {"zve64f"};
+static const char *ImpliedExtsZve64f[] = {"zve64x", "zve32f"};
+static const char *ImpliedExtsZve64x[] = {"zve32x", "zvl64b"};
 static const char *ImpliedExtsZvfh[] = {"zve32f"};
-static const char *ImpliedExtsXTHeadVdot[] = {"v"};
-static const char *ImpliedExtsZcb[] = {"zca"};
-static const char *ImpliedExtsZfa[] = {"f"};
+static const char *ImpliedExtsZvkn[] = {"zvbb", "zvbc", "zvkned", "zvknhb",
+                                        "zvkt"};
+static const char *ImpliedExtsZvkng[] = {"zvkg", "zvkn"};
+static const char *ImpliedExtsZvknhb[] = {"zvknha"};
+static const char *ImpliedExtsZvks[] = {"zvbb", "zvbc", "zvksed", "zvksh",
+                                        "zvkt"};
+static const char *ImpliedExtsZvksg[] = {"zvks", "zvkg"};
+static const char *ImpliedExtsZvl1024b[] = {"zvl512b"};
+static const char *ImpliedExtsZvl128b[] = {"zvl64b"};
+static const char *ImpliedExtsZvl16384b[] = {"zvl8192b"};
+static const char *ImpliedExtsZvl2048b[] = {"zvl1024b"};
+static const char *ImpliedExtsZvl256b[] = {"zvl128b"};
+static const char *ImpliedExtsZvl32768b[] = {"zvl16384b"};
+static const char *ImpliedExtsZvl4096b[] = {"zvl2048b"};
+static const char *ImpliedExtsZvl512b[] = {"zvl256b"};
+static const char *ImpliedExtsZvl64b[] = {"zvl32b"};
+static const char *ImpliedExtsZvl65536b[] = {"zvl32768b"};
+static const char *ImpliedExtsZvl8192b[] = {"zvl4096b"};
 
 struct ImpliedExtsEntry {
   StringLiteral Name;
@@ -918,15 +988,21 @@ struct ImpliedExtsEntry {
 // Note: The table needs to be sorted by name.
 static constexpr ImpliedExtsEntry ImpliedExts[] = {
     {{"d"}, {ImpliedExtsD}},
+    {{"f"}, {ImpliedExtsF}},
     {{"v"}, {ImpliedExtsV}},
+    {{"xsfvcp"}, {ImpliedExtsXsfvcp}},
     {{"xtheadvdot"}, {ImpliedExtsXTHeadVdot}},
     {{"zcb"}, {ImpliedExtsZcb}},
+    {{"zcmt"}, {ImpliedExtsZcmt}},
     {{"zdinx"}, {ImpliedExtsZdinx}},
     {{"zfa"}, {ImpliedExtsZfa}},
     {{"zfh"}, {ImpliedExtsZfh}},
     {{"zfhmin"}, {ImpliedExtsZfhmin}},
+    {{"zfinx"}, {ImpliedExtsZfinx}},
     {{"zhinx"}, {ImpliedExtsZhinx}},
     {{"zhinxmin"}, {ImpliedExtsZhinxmin}},
+    {{"zicntr"}, {ImpliedExtsZicntr}},
+    {{"zihpm"}, {ImpliedExtsZihpm}},
     {{"zk"}, {ImpliedExtsZk}},
     {{"zkn"}, {ImpliedExtsZkn}},
     {{"zks"}, {ImpliedExtsZks}},
@@ -936,6 +1012,11 @@ static constexpr ImpliedExtsEntry ImpliedExts[] = {
     {{"zve64f"}, {ImpliedExtsZve64f}},
     {{"zve64x"}, {ImpliedExtsZve64x}},
     {{"zvfh"}, {ImpliedExtsZvfh}},
+    {{"zvkn"}, {ImpliedExtsZvkn}},
+    {{"zvkng"}, {ImpliedExtsZvkng}},
+    {{"zvknhb"}, {ImpliedExtsZvknhb}},
+    {{"zvks"}, {ImpliedExtsZvks}},
+    {{"zvksg"}, {ImpliedExtsZvksg}},
     {{"zvl1024b"}, {ImpliedExtsZvl1024b}},
     {{"zvl128b"}, {ImpliedExtsZvl128b}},
     {{"zvl16384b"}, {ImpliedExtsZvl16384b}},
@@ -1079,6 +1160,8 @@ std::vector<std::string> RISCVISAInfo::toFeatureVector() const {
     std::string ExtName = Ext.first;
     if (ExtName == "i") // i is not recognized in clang -cc1
       continue;
+    if (!isSupportedExtension(ExtName))
+      continue;
     std::string Feature = isExperimentalExtension(ExtName)
                               ? "+experimental-" + ExtName
                               : "+" + ExtName;
@@ -1110,6 +1193,8 @@ StringRef RISCVISAInfo::computeDefaultABI() const {
   } else if (XLen == 64) {
     if (hasExtension("d"))
       return "lp64d";
+    if (hasExtension("e"))
+      return "lp64e";
     return "lp64";
   }
   llvm_unreachable("Invalid XLEN");

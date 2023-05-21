@@ -50,17 +50,6 @@ static cl::opt<bool> X86StripRedundantAddressSize(
 
 namespace {
 
-unsigned getShortBranchOpcode(unsigned Opcode) {
-  switch (Opcode) {
-  default:
-    return Opcode;
-  case X86::JMP_2: return X86::JMP_1;
-  case X86::JMP_4: return X86::JMP_1;
-  case X86::JCC_2: return X86::JCC_1;
-  case X86::JCC_4: return X86::JCC_1;
-  }
-}
-
 unsigned getShortArithOpcode(unsigned Opcode) {
   return X86::getShortOpcodeArith(Opcode);
 }
@@ -386,6 +375,29 @@ public:
   bool isPacked(const MCInst &Inst) const override {
     const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
     return (Desc.TSFlags & X86II::OpPrefixMask) == X86II::PD;
+  }
+
+  bool shouldRecordCodeRelocation(uint64_t RelType) const override {
+    switch (RelType) {
+    case ELF::R_X86_64_8:
+    case ELF::R_X86_64_16:
+    case ELF::R_X86_64_32:
+    case ELF::R_X86_64_32S:
+    case ELF::R_X86_64_64:
+    case ELF::R_X86_64_PC8:
+    case ELF::R_X86_64_PC32:
+    case ELF::R_X86_64_PC64:
+    case ELF::R_X86_64_GOTPCRELX:
+    case ELF::R_X86_64_REX_GOTPCRELX:
+      return true;
+    case ELF::R_X86_64_PLT32:
+    case ELF::R_X86_64_GOTPCREL:
+    case ELF::R_X86_64_TPOFF32:
+    case ELF::R_X86_64_GOTTPOFF:
+      return false;
+    default:
+      llvm_unreachable("Unexpected x86 relocation type in code");
+    }
   }
 
   unsigned getTrapFillValue() const override { return 0xCC; }
@@ -2844,6 +2856,21 @@ public:
 
   MCPhysReg getX86R11() const override { return X86::R11; }
 
+  unsigned getShortBranchOpcode(unsigned Opcode) const override {
+    switch (Opcode) {
+    default:
+      return Opcode;
+    case X86::JMP_2:
+      return X86::JMP_1;
+    case X86::JMP_4:
+      return X86::JMP_1;
+    case X86::JCC_2:
+      return X86::JCC_1;
+    case X86::JCC_4:
+      return X86::JCC_1;
+    }
+  }
+
   MCPhysReg getIntArgRegister(unsigned ArgNo) const override {
     // FIXME: this should depend on the calling convention.
     switch (ArgNo) {
@@ -3030,11 +3057,12 @@ public:
     Inst.clear();
   }
 
-  void createInstrIncMemory(InstructionListType &Instrs, const MCSymbol *Target,
-                            MCContext *Ctx, bool IsLeaf) const override {
+  InstructionListType createInstrIncMemory(const MCSymbol *Target,
+                                           MCContext *Ctx,
+                                           bool IsLeaf) const override {
+    InstructionListType Instrs(IsLeaf ? 13 : 11);
     unsigned int I = 0;
 
-    Instrs.resize(IsLeaf ? 13 : 11);
     // Don't clobber application red zone (ABI dependent)
     if (IsLeaf)
       createStackPointerIncrement(Instrs[I++], 128,
@@ -3061,6 +3089,7 @@ public:
     if (IsLeaf)
       createStackPointerDecrement(Instrs[I], 128,
                                   /*NoFlagsClobber=*/true);
+    return Instrs;
   }
 
   void createSwap(MCInst &Inst, MCPhysReg Source, MCPhysReg MemBaseReg,

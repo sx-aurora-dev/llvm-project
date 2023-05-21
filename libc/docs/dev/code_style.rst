@@ -15,11 +15,11 @@ differences are as follows:
 #. **Non-const variables** - This includes function arguments, struct and
    class data members, non-const globals and local variables. They all use the
    ``snake_case`` style.
-#. **const and constexpr variables** - They use the capitlized
+#. **const and constexpr variables** - They use the capitalized
    ``SNAKE_CASE`` irrespective of whether they are local or global.
 #. **Function and methods** - They use the ``snake_case`` style like the
    non-const variables.
-#. **Internal type names** - These are types which are interal to the libc
+#. **Internal type names** - These are types which are internal to the libc
    implementation. They use the ``CaptilizedCamelCase`` style.
 #. **Public names** - These are the names as prescribed by the standards and
    will follow the style as prescribed by the standards.
@@ -39,7 +39,7 @@ We define two kinds of macros: **code defined** and **build defined** macros.
 
    * **Properties** - Build related properties like used compiler, target
      architecture or enabled CPU features defined by introspecting compiler
-     defined preprocessor defininitions. e.g., ``LIBC_TARGET_ARCH_IS_ARM``,
+     defined preprocessor definitions. e.g., ``LIBC_TARGET_ARCH_IS_ARM``,
      ``LIBC_TARGET_CPU_HAS_AVX2``, ``LIBC_COMPILER_IS_CLANG``, ...
    * **Attributes** - Compiler agnostic attributes or functions to handle
      specific operations. e.g., ``LIBC_INLINE``, ``LIBC_NO_LOOP_UNROLL``,
@@ -98,7 +98,7 @@ followed:
 
 #. The header file ``src/errno/libc_errno.h`` is shipped as part of the target
    corresponding to the ``errno`` entrypoint ``libc.src.errno.errno``. We do
-   not in general allow dependecies between entrypoints. However, the ``errno``
+   not in general allow dependencies between entrypoints. However, the ``errno``
    entrypoint is the only exceptional entrypoint on which other entrypoints
    should explicitly depend on if they set ``errno`` to indicate error
    conditions.
@@ -114,3 +114,46 @@ print the assertion expression and exit. It does not implement the semantics
 of the standard ``assert`` macro. Hence, it can be used from any where in the
 libc runtime code without causing any recursive calls or chicken-and-egg
 situations.
+
+Allocations in the libc runtime code
+====================================
+
+Some libc functions allocate memory. For example, the ``strdup`` function
+allocates new memory into which the input string is duplicated. Allocations
+are typically done by calling a function from the ``malloc`` family of
+functions. Such functions can fail and return an error value to indicate
+allocation failure. To conform to standards, the libc should handle
+allocation failures gracefully and surface the error conditions to the user
+code as appropriate. Since LLVM's libc is implemented in C++, we want
+allocations and deallocations to employ C++ operators ``new`` and ``delete``
+as they implicitly invoke constructors and destructors respectively. However,
+if we use the default ``new`` and ``delete`` operators, the libc will end up
+depending on the C++ runtime. To avoid such a dependence, and to handle
+allocation failures gracefully, we use special ``new`` and ``delete`` operators
+defined in
+`src/__support/CPP/new.h <https://github.com/llvm/llvm-project/blob/main/libc/src/__support/CPP/new.h>`_.
+Allocations and deallocations using these operators employ a pattern like
+this:
+
+.. code-block:: c++
+
+   #include "src/__support/CPP/new.h"
+
+   ...
+
+     __llvm_libc::AllocChecker ac;
+     auto *obj = new (ac) Type(...);
+     if (!ac) {
+       // handle allocator failure.
+     }
+     ...
+     delete obj;
+
+The only exception to using the above pattern is if allocating using the
+``realloc`` function is of value. In such cases, prefer to use only the
+``malloc`` family of functions for allocations and deallocations. Allocation
+failures will still need to be handled gracefully. Further, keep in mind that
+these functions do not call the constructors and destructors of the
+allocated/deallocated objects. So, use these functions carefully and only
+when it is absolutely clear that constructor and destructor invocation is
+not required.

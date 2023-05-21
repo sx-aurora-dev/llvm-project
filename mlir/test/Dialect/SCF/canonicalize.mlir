@@ -1019,30 +1019,6 @@ func.func @while_cond_true() -> i1 {
 
 // -----
 
-// CHECK-LABEL: @while_unused_arg
-func.func @while_unused_arg(%x : i32, %y : f64) -> i32 {
-  %0 = scf.while (%arg1 = %x, %arg2 = %y) : (i32, f64) -> (i32) {
-    %condition = "test.condition"(%arg1) : (i32) -> i1
-    scf.condition(%condition) %arg1 : i32
-  } do {
-  ^bb0(%arg1: i32):
-    %next = "test.use"(%arg1) : (i32) -> (i32)
-    scf.yield %next, %y : i32, f64
-  }
-  return %0 : i32
-}
-// CHECK-NEXT:         %[[res:.*]] = scf.while (%[[arg2:.+]] = %{{.*}}) : (i32) -> i32 {
-// CHECK-NEXT:           %[[cmp:.*]] = "test.condition"(%[[arg2]]) : (i32) -> i1
-// CHECK-NEXT:           scf.condition(%[[cmp]]) %[[arg2]] : i32
-// CHECK-NEXT:         } do {
-// CHECK-NEXT:         ^bb0(%[[post:.+]]: i32):
-// CHECK-NEXT:           %[[next:.+]] = "test.use"(%[[post]]) : (i32) -> i32
-// CHECK-NEXT:           scf.yield %[[next]] : i32
-// CHECK-NEXT:         }
-// CHECK-NEXT:         return %[[res]] : i32
-
-// -----
-
 // CHECK-LABEL: @invariant_loop_args_in_same_order
 // CHECK-SAME: (%[[FUNC_ARG0:.*]]: tensor<i32>)
 func.func @invariant_loop_args_in_same_order(%f_arg0: tensor<i32>) -> (tensor<i32>, tensor<i32>, tensor<i32>, tensor<i32>, tensor<i32>) {
@@ -1194,6 +1170,86 @@ func.func @while_cmp_rhs(%arg0 : i32) {
 // CHECK-NEXT:           "test.use"(%[[true]], %[[false]], %arg1) : (i1, i1, i32) -> ()
 // CHECK-NEXT:           scf.yield
 // CHECK-NEXT:         }
+
+// -----
+
+// CHECK-LABEL: @while_duplicated_res
+func.func @while_duplicated_res() -> (i32, i32) {
+  %0:2 = scf.while () : () -> (i32, i32) {
+    %val = "test.val"() : () -> i32
+    %condition = "test.condition"() : () -> i1
+    scf.condition(%condition) %val, %val : i32, i32
+  } do {
+  ^bb0(%val2: i32, %val3: i32):
+    "test.use"(%val2, %val3) : (i32, i32) -> ()
+    scf.yield
+  }
+  return %0#0, %0#1: i32, i32
+}
+// CHECK:         %[[RES:.*]] = scf.while : () -> i32 {
+// CHECK:         %[[VAL:.*]] = "test.val"() : () -> i32
+// CHECK:         %[[COND:.*]] = "test.condition"() : () -> i1
+// CHECK:           scf.condition(%[[COND]]) %[[VAL]] : i32
+// CHECK:         } do {
+// CHECK:         ^bb0(%[[ARG:.*]]: i32):
+// CHECK:           "test.use"(%[[ARG]], %[[ARG]]) : (i32, i32) -> ()
+// CHECK:           scf.yield
+// CHECK:         }
+// CHECK:         return %[[RES]], %[[RES]] : i32, i32
+
+
+// -----
+
+// CHECK-LABEL: @while_unused_arg1
+func.func @while_unused_arg1(%x : i32, %y : f64) -> i32 {
+  %0 = scf.while (%arg1 = %x, %arg2 = %y) : (i32, f64) -> (i32) {
+    %condition = "test.condition"(%arg1) : (i32) -> i1
+    scf.condition(%condition) %arg1 : i32
+  } do {
+  ^bb0(%arg1: i32):
+    %next = "test.use"(%arg1) : (i32) -> (i32)
+    scf.yield %next, %y : i32, f64
+  }
+  return %0 : i32
+}
+// CHECK-NEXT:         %[[res:.*]] = scf.while (%[[arg2:.*]] = %{{.*}}) : (i32) -> i32 {
+// CHECK-NEXT:           %[[cmp:.*]] = "test.condition"(%[[arg2]]) : (i32) -> i1
+// CHECK-NEXT:           scf.condition(%[[cmp]]) %[[arg2]] : i32
+// CHECK-NEXT:         } do {
+// CHECK-NEXT:         ^bb0(%[[post:.*]]: i32):
+// CHECK-NEXT:           %[[next:.*]] = "test.use"(%[[post]]) : (i32) -> i32
+// CHECK-NEXT:           scf.yield %[[next]] : i32
+// CHECK-NEXT:         }
+// CHECK-NEXT:         return %[[res]] : i32
+
+
+// -----
+
+// CHECK-LABEL: @while_unused_arg2
+func.func @while_unused_arg2(%val0: i32) -> i32 {
+  %0 = scf.while (%val1 = %val0) : (i32) -> i32 {
+    %val = "test.val"() : () -> i32
+    %condition = "test.condition"() : () -> i1
+    scf.condition(%condition) %val: i32
+  } do {
+  ^bb0(%val2: i32):
+    "test.use"(%val2) : (i32) -> ()
+    %val1 = "test.val1"() : () -> i32
+    scf.yield %val1 : i32
+  }
+  return %0 : i32
+}
+// CHECK:         %[[RES:.*]] = scf.while : () -> i32 {
+// CHECK:         %[[VAL:.*]] = "test.val"() : () -> i32
+// CHECK:         %[[COND:.*]] = "test.condition"() : () -> i1
+// CHECK:           scf.condition(%[[COND]]) %[[VAL]] : i32
+// CHECK:         } do {
+// CHECK:         ^bb0(%[[ARG:.*]]: i32):
+// CHECK:           "test.use"(%[[ARG]]) : (i32) -> ()
+// CHECK:           scf.yield
+// CHECK:         }
+// CHECK:         return %[[RES]] : i32
+
 
 // -----
 
@@ -1544,3 +1600,159 @@ func.func @forall_fold_control_operands(
   return %result : tensor<?x10xf32>
 }
 // CHECK: forall (%{{.*}}, %{{.*}}) in (%{{.*}}, 10)
+
+// -----
+
+func.func @inline_forall_loop(%in: tensor<8x8xf32>) -> tensor<8x8xf32> {
+  %c8 = arith.constant 8 : index
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %cst = arith.constant 0.000000e+00 : f32
+  %0 = tensor.empty() : tensor<8x8xf32>
+  %1 = scf.forall (%i, %j) = (%c0, %c0) to (%c1, %c1)
+        step (%c8, %c8) shared_outs (%out_ = %0) -> (tensor<8x8xf32>) {
+    %slice = tensor.extract_slice %out_[%i, %j] [2, 3] [1, 1]
+      : tensor<8x8xf32> to tensor<2x3xf32>
+    %fill = linalg.fill ins(%cst : f32) outs(%slice : tensor<2x3xf32>)
+          -> tensor<2x3xf32>
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %fill into %out_[%i, %j] [2, 3] [1, 1]
+        : tensor<2x3xf32> into tensor<8x8xf32>
+    }
+  }
+  return %1 : tensor<8x8xf32>
+}
+// CHECK-LABEL: @inline_forall_loop
+// CHECK-NOT:     scf.forall
+// CHECK:         %[[OUT:.*]] = tensor.empty
+
+// CHECK-NEXT:    %[[SLICE:.*]] = tensor.extract_slice %[[OUT]]
+// CHECK-SAME:      : tensor<8x8xf32> to tensor<2x3xf32>
+
+// CHECK-NEXT:    %[[FILL:.*]] = linalg.fill
+// CHECK-SAME:      outs(%[[SLICE]]
+
+// CHECK-NEXT:    tensor.insert_slice %[[FILL]]
+// CHECK-SAME:      : tensor<2x3xf32> into tensor<8x8xf32>
+
+// -----
+
+func.func @do_not_inline_distributed_forall_loop(
+    %in: tensor<8x8xf32>) -> tensor<8x8xf32> {
+  %cst = arith.constant 0.000000e+00 : f32
+  %0 = tensor.empty() : tensor<8x8xf32>
+  %1 = scf.forall (%i, %j) = (0, 0) to (1, 1) step (8, 8)
+      shared_outs (%out_ = %0) -> (tensor<8x8xf32>) {
+    %slice = tensor.extract_slice %out_[%i, %j] [2, 3] [1, 1]
+      : tensor<8x8xf32> to tensor<2x3xf32>
+    %fill = linalg.fill ins(%cst : f32) outs(%slice : tensor<2x3xf32>)
+          -> tensor<2x3xf32>
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %fill into %out_[%i, %j] [2, 3] [1, 1]
+        : tensor<2x3xf32> into tensor<8x8xf32>
+    }
+  }{ mapping = [#gpu.thread<y>, #gpu.thread<x>] }
+  return %1 : tensor<8x8xf32>
+}
+// CHECK-LABEL: @do_not_inline_distributed_forall_loop
+// CHECK: scf.forall
+
+// -----
+
+func.func @collapse_one_dim_parallel(%in: tensor<8x8xf32>) -> tensor<8x8xf32> {
+  %c8 = arith.constant 8 : index
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c16 = arith.constant 16 : index
+  %cst = arith.constant 0.000000e+00 : f32
+  %0 = tensor.empty() : tensor<8x8xf32>
+  %1 = scf.forall (%i, %j) = (0, %c0) to (1, %c16)
+        step (8, %c8) shared_outs (%out_ = %0) -> (tensor<8x8xf32>) {
+    %fill = linalg.fill ins(%cst : f32) outs(%out_ : tensor<8x8xf32>)
+          -> tensor<8x8xf32>
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %fill into %out_[%i, %j] [8, 8] [1, 1]
+        : tensor<8x8xf32> into tensor<8x8xf32>
+    }
+  }
+  return %1 : tensor<8x8xf32>
+}
+// CHECK-LABEL: @collapse_one_dim_parallel
+// CHECK:         scf.forall (%[[ARG:.*]]) = (0) to (16) step (8)
+// CHECK:           linalg.fill
+// CHECK:           tensor.parallel_insert_slice
+
+// -----
+
+func.func @remove_empty_forall(%in: tensor<8x8xf32>) -> tensor<8x8xf32> {
+  %c8 = arith.constant 8 : index
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c16 = arith.constant 16 : index
+  %cst = arith.constant 0.000000e+00 : f32
+  %0 = tensor.empty() : tensor<8x8xf32>
+  %1 = scf.forall (%i, %j) = (%c0, %c16) to (%c1, %c16)
+        step (%c8, %c8) shared_outs (%out_ = %0) -> (tensor<8x8xf32>) {
+    %fill = linalg.fill ins(%cst : f32) outs(%out_ : tensor<8x8xf32>)
+          -> tensor<8x8xf32>
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %fill into %out_[%i, %j] [8, 8] [1, 1]
+        : tensor<8x8xf32> into tensor<8x8xf32>
+    }
+  }
+  return %1 : tensor<8x8xf32>
+}
+// CHECK-LABEL: @remove_empty_forall
+// CHECK-NOT:   scf.forall
+// CHECK:       %[[EMPTY:.*]] = tensor.empty
+// CHECK:       return %[[EMPTY]]
+
+// -----
+
+func.func @fold_tensor_cast_into_forall(
+    %in: tensor<2xi32>, %out: tensor<2xi32>) -> tensor<2xi32> {
+  %cst = arith.constant dense<[100500]> : tensor<1xi32>
+
+
+  %out_cast = tensor.cast %out : tensor<2xi32> to tensor<?xi32>
+  %result = scf.forall (%i) = (0) to (2) step (1)
+      shared_outs (%out_ = %out_cast) -> tensor<?xi32> {
+
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %cst into %out_[%i] [1] [1]
+        : tensor<1xi32> into tensor<?xi32>
+    }
+  }
+  %result_cast = tensor.cast %result : tensor<?xi32> to tensor<2xi32>
+  func.return %result_cast : tensor<2xi32>
+}
+// CHECK-LABEL: @fold_tensor_cast_into_forall
+// CHECK-NOT:     tensor.cast
+// CHECK:         parallel_insert_slice
+// CHECK-SAME:      : tensor<1xi32> into tensor<2xi32>
+// CHECK-NOT:     tensor.cast
+
+// -----
+
+func.func @do_not_fold_tensor_cast_from_dynamic_to_static_type_into_forall(
+    %in: tensor<?xi32>, %out: tensor<?xi32>) -> tensor<?xi32> {
+  %cst = arith.constant dense<[100500]> : tensor<1xi32>
+
+
+  %out_cast = tensor.cast %out : tensor<?xi32> to tensor<2xi32>
+  %result = scf.forall (%i) = (0) to (2) step (1)
+      shared_outs (%out_ = %out_cast) -> tensor<2xi32> {
+
+    scf.forall.in_parallel {
+      tensor.parallel_insert_slice %cst into %out_[%i] [1] [1]
+        : tensor<1xi32> into tensor<2xi32>
+    }
+  }
+  %result_cast = tensor.cast %result : tensor<2xi32> to tensor<?xi32>
+  func.return %result_cast : tensor<?xi32>
+}
+// CHECK-LABEL: @do_not_fold_tensor_cast_
+// CHECK:         tensor.cast
+// CHECK:         parallel_insert_slice
+// CHECK-SAME:      : tensor<1xi32> into tensor<2xi32>
+// CHECK:         tensor.cast

@@ -370,6 +370,9 @@ added in the future:
       Floating-point registers (XMMs/YMMs) are not preserved and need to be
       saved by the caller.
 
+    - On AArch64 the callee preserve all general purpose registers, except X0-X8
+      and X16-X18.
+
     The idea behind this convention is to support calls to runtime functions
     that have a hot path and a cold path. The hot path is usually a small piece
     of code that doesn't use many registers. The cold path might need to call out to
@@ -403,6 +406,10 @@ added in the future:
     - On X86-64 the callee preserves all general purpose registers, except for
       R11. R11 can be used as a scratch register. Furthermore it also preserves
       all floating-point registers (XMMs/YMMs).
+
+    - On AArch64 the callee preserve all general purpose registers, except X0-X8
+      and X16-X18. Furthermore it also preserves lower 128 bits of V8-V31 SIMD -
+      floating point registers.
 
     The idea behind this convention is to support calls to runtime functions
     that don't need to call out to any other functions.
@@ -2226,31 +2233,36 @@ example:
     This indicates the denormal (subnormal) handling that may be
     assumed for the default floating-point environment. This is a
     comma separated pair. The elements may be one of ``"ieee"``,
-    ``"preserve-sign"``, or ``"positive-zero"``. The first entry
-    indicates the flushing mode for the result of floating point
-    operations. The second indicates the handling of denormal inputs
+    ``"preserve-sign"``, ``"positive-zero"``, or ``"dynamic"``. The
+    first entry indicates the flushing mode for the result of floating
+    point operations. The second indicates the handling of denormal inputs
     to floating point instructions. For compatibility with older
     bitcode, if the second value is omitted, both input and output
     modes will assume the same mode.
 
-    If this is attribute is not specified, the default is
-    ``"ieee,ieee"``.
+    If this is attribute is not specified, the default is ``"ieee,ieee"``.
 
     If the output mode is ``"preserve-sign"``, or ``"positive-zero"``,
     denormal outputs may be flushed to zero by standard floating-point
     operations. It is not mandated that flushing to zero occurs, but if
     a denormal output is flushed to zero, it must respect the sign
-    mode. Not all targets support all modes. While this indicates the
-    expected floating point mode the function will be executed with,
-    this does not make any attempt to ensure the mode is
-    consistent. User or platform code is expected to set the floating
-    point mode appropriately before function entry.
+    mode. Not all targets support all modes.
 
-   If the input mode is ``"preserve-sign"``, or ``"positive-zero"``, a
-   floating-point operation must treat any input denormal value as
-   zero. In some situations, if an instruction does not respect this
-   mode, the input may need to be converted to 0 as if by
-   ``@llvm.canonicalize`` during lowering for correctness.
+    If the mode is ``"dynamic"``, the behavior is derived from the
+    dynamic state of the floating-point environment. Transformations
+    which depend on the behavior of denormal values should not be
+    performed.
+
+    While this indicates the expected floating point mode the function
+    will be executed with, this does not make any attempt to ensure
+    the mode is consistent. User or platform code is expected to set
+    the floating point mode appropriately before function entry.
+
+    If the input mode is ``"preserve-sign"``, or ``"positive-zero"``,
+    a floating-point operation must treat any input denormal value as
+    zero. In some situations, if an instruction does not respect this
+    mode, the input may need to be converted to 0 as if by
+    ``@llvm.canonicalize`` during lowering for correctness.
 
 ``"denormal-fp-math-f32"``
     Same as ``"denormal-fp-math"``, but only controls the behavior of
@@ -4568,9 +4580,9 @@ The following is the syntax for constant expressions:
     Perform the :ref:`getelementptr operation <i_getelementptr>` on
     constants. As with the :ref:`getelementptr <i_getelementptr>`
     instruction, the index list may have one or more indexes, which are
-    required to make sense for the type of "pointer to TY".
-``select (COND, VAL1, VAL2)``
-    Perform the :ref:`select operation <i_select>` on constants.
+    required to make sense for the type of "pointer to TY". These indexes
+    may be implicitly sign-extended or truncated to match the index size
+    of CSTPTR's address space.
 ``icmp COND (VAL1, VAL2)``
     Perform the :ref:`icmp operation <i_icmp>` on constants.
 ``fcmp COND (VAL1, VAL2)``
@@ -4584,22 +4596,24 @@ The following is the syntax for constant expressions:
 ``shufflevector (VEC1, VEC2, IDXMASK)``
     Perform the :ref:`shufflevector operation <i_shufflevector>` on
     constants.
-``extractvalue (VAL, IDX0, IDX1, ...)``
-    Perform the :ref:`extractvalue operation <i_extractvalue>` on
-    constants. The index list is interpreted in a similar manner as
-    indices in a ':ref:`getelementptr <i_getelementptr>`' operation. At
-    least one index value must be specified.
-``insertvalue (VAL, ELT, IDX0, IDX1, ...)``
-    Perform the :ref:`insertvalue operation <i_insertvalue>` on constants.
-    The index list is interpreted in a similar manner as indices in a
-    ':ref:`getelementptr <i_getelementptr>`' operation. At least one index
-    value must be specified.
-``OPCODE (LHS, RHS)``
-    Perform the specified operation of the LHS and RHS constants. OPCODE
-    may be any of the :ref:`binary <binaryops>` or :ref:`bitwise
-    binary <bitwiseops>` operations. The constraints on operands are
-    the same as those for the corresponding instruction (e.g. no bitwise
-    operations on floating-point values are allowed).
+``add (LHS, RHS)``
+    Perform an addition on constants.
+``sub (LHS, RHS)``
+    Perform a subtraction on constants.
+``mul (LHS, RHS)``
+    Perform a multiplication on constants.
+``shl (LHS, RHS)``
+    Perform a left shift on constants.
+``lshr (LHS, RHS)``
+    Perform a logical right shift on constants.
+``ashr (LHS, RHS)``
+    Perform an arithmetic right shift on constants.
+``and (LHS, RHS)``
+    Perform a bitwise and on constants.
+``or (LHS, RHS)``
+    Perform a bitwise or on constants.
+``xor (LHS, RHS)``
+    Perform a bitwise xor on constants.
 
 Other Values
 ============
@@ -5976,28 +5990,32 @@ The current supported opcode vocabulary is limited:
   of the stack is treated as an address. The second stack entry is treated as an
   address space identifier.
 - ``DW_OP_stack_value`` marks a constant value.
-- ``DW_OP_LLVM_entry_value, N`` may only appear in MIR and at the
-  beginning of a ``DIExpression``. In DWARF a ``DBG_VALUE``
-  instruction binding a ``DIExpression(DW_OP_LLVM_entry_value`` to a
-  register is lowered to a ``DW_OP_entry_value [reg]``, pushing the
-  value the register had upon function entry onto the stack.  The next
-  ``(N - 1)`` operations will be part of the ``DW_OP_entry_value``
-  block argument. For example, ``!DIExpression(DW_OP_LLVM_entry_value,
-  1, DW_OP_plus_uconst, 123, DW_OP_stack_value)`` specifies an
-  expression where the entry value of the debug value instruction's
-  value/address operand is pushed to the stack, and is added
-  with 123. Due to framework limitations ``N`` can currently only
-  be 1.
+- ``DW_OP_LLVM_entry_value, N`` refers to the value a register had upon
+  function entry. When targeting DWARF, a ``DBG_VALUE(reg, ...,
+  DIExpression(DW_OP_LLVM_entry_value, 1, ...)`` is lowered to
+  ``DW_OP_entry_value [reg], ...``, which pushes the value ``reg`` had upon
+  function entry onto the DWARF expression stack.
 
-  The operation is introduced by the ``LiveDebugValues`` pass, which
-  applies it only to function parameters that are unmodified
-  throughout the function. Support is limited to simple register
-  location descriptions, or as indirect locations (e.g., when a struct
-  is passed-by-value to a callee via a pointer to a temporary copy
-  made in the caller). The entry value op is also introduced by the
-  ``AsmPrinter`` pass when a call site parameter value
-  (``DW_AT_call_site_parameter_value``) is represented as entry value
-  of the parameter.
+  The next ``(N - 1)`` operations will be part of the ``DW_OP_entry_value``
+  block argument. For example, ``!DIExpression(DW_OP_LLVM_entry_value, 1,
+  DW_OP_plus_uconst, 123, DW_OP_stack_value)`` specifies an expression where
+  the entry value of ``reg`` is pushed onto the stack, and is added with 123.
+  Due to framework limitations ``N`` must be 1, in other words,
+  ``DW_OP_entry_value`` always refers to the value/address operand of the
+  instruction.
+
+  Because ``DW_OP_LLVM_entry_value`` is defined in terms of registers, it is
+  only allowed in MIR. The operation is introduced by:
+
+    - ``LiveDebugValues`` pass, which applies it to function parameters that
+      are unmodified throughout the function. Support is limited to simple
+      register location descriptions, or as indirect locations (e.g.,
+      parameters passed-by-value to a callee via a pointer to a temporary copy
+      made in the caller).
+    - ``AsmPrinter`` pass when a call site parameter value
+      (``DW_AT_call_site_parameter_value``) is represented as entry value of
+      the parameter.
+
 - ``DW_OP_LLVM_arg, N`` is used in debug intrinsics that refer to more than one
   value, such as one that calculates the sum of two registers. This is always
   used in combination with an ordered list of values, such that
@@ -6472,14 +6490,14 @@ representing the maximum relative error, for example:
 ^^^^^^^^^^^^^^^^^^^^
 
 ``range`` metadata may be attached only to ``load``, ``call`` and ``invoke`` of
-integer types. It expresses the possible ranges the loaded value or the value
-returned by the called function at this call site is in. If the loaded or
-returned value is not in the specified range, a poison value is returned
-instead. The ranges are represented with a flattened list of integers. The
-loaded value or the value returned is known to be in the union of the ranges
+integer or vector of integer types. It expresses the possible ranges the loaded
+value or the value returned by the called function at this call site is in. If
+the loaded or returned value is not in the specified range, a poison value is
+returned instead. The ranges are represented with a flattened list of integers.
+The loaded value or the value returned is known to be in the union of the ranges
 defined by each consecutive pair. Each pair has the following properties:
 
--  The type must match the type loaded by the instruction.
+-  The type must match the scalar type of the instruction.
 -  The pair ``a,b`` represents the range ``[a,b)``.
 -  Both ``a`` and ``b`` are constants.
 -  The range is allowed to wrap.
@@ -6488,6 +6506,8 @@ defined by each consecutive pair. Each pair has the following properties:
 
 In addition, the pairs must be in signed order of the lower bound and
 they must be non-contiguous.
+
+For vector-typed instructions, the range is applied element-wise.
 
 Examples:
 
@@ -6498,6 +6518,7 @@ Examples:
       %c = call i8 @foo(),       !range !2 ; Can only be 0, 1, 3, 4 or 5
       %d = invoke i8 @bar() to label %cont
              unwind label %lpad, !range !3 ; Can only be -2, -1, 3, 4 or 5
+      %e = load <2 x i8>, ptr %x, !range 0 ; Can only be <0 or 1, 0 or 1>
     ...
     !0 = !{ i8 0, i8 2 }
     !1 = !{ i8 255, i8 2 }
@@ -6651,7 +6672,8 @@ or switch that it is attached to is completely unpredictable.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The existence of the ``!dereferenceable`` metadata on the instruction
-tells the optimizer that the value loaded is known to be dereferenceable.
+tells the optimizer that the value loaded is known to be dereferenceable,
+otherwise the behavior is undefined.
 The number of bytes known to be dereferenceable is specified by the integer
 value in the metadata node. This is analogous to the ''dereferenceable''
 attribute on parameters and return values.
@@ -6663,7 +6685,7 @@ attribute on parameters and return values.
 
 The existence of the ``!dereferenceable_or_null`` metadata on the
 instruction tells the optimizer that the value loaded is known to be either
-dereferenceable or null.
+dereferenceable or null, otherwise the behavior is undefined.
 The number of bytes known to be dereferenceable is specified by the integer
 value in the metadata node. This is analogous to the ''dereferenceable_or_null''
 attribute on parameters and return values.
@@ -7455,6 +7477,72 @@ Example:
 
 Clang emits ``kcfi_type`` metadata nodes for address-taken functions with
 ``-fsanitize=kcfi``.
+
+.. _md_memprof:
+
+'``memprof``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``memprof`` metadata is used to record memory profile data on heap
+allocation calls. Multiple context-sensitive profiles can be represented
+with a single ``memprof`` metadata attachment.
+
+Example:
+
+.. code-block:: text
+
+    %call = call ptr @_Znam(i64 10), !memprof !0, !callsite !5
+    !0 = !{!1, !3}
+    !1 = !{!2, !"cold"}
+    !2 = !{i64 4854880825882961848, i64 1905834578520680781}
+    !3 = !{!4, !"notcold"}
+    !4 = !{i64 4854880825882961848, i64 -6528110295079665978}
+    !5 = !{i64 4854880825882961848}
+
+Each operand in the ``memprof`` metadata attachment describes the profiled
+behavior of memory allocated by the associated allocation for a given context.
+In the above example, there were 2 profiled contexts, one allocating memory
+that was typically cold and one allocating memory that was typically not cold.
+
+The format of the metadata describing a context specific profile (e.g.
+``!1`` and ``!3`` above) requires a first operand that is a metadata node
+describing the context, followed by a list of string metadata tags describing
+the profile behavior (e.g. ``cold`` and ``notcold``) above. The metadata nodes
+describing the context (e.g. ``!2`` and ``!4`` above) are unique ids
+corresponding to callsites, which can be matched to associated IR calls via
+:ref:`callsite metadata<md_callsite>`. In practice these ids are formed via
+a hash of the callsite's debug info, and the associated call may be in a
+different module. The contexts are listed in order from leaf-most call (the
+allocation itself) to the outermost callsite context required for uniquely
+identifying the described profile behavior (note this may not be the top of
+the profiled call stack).
+
+.. _md_callsite:
+
+'``callsite``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``callsite`` metadata is used to identify callsites involved in memory
+profile contexts described in :ref:`memprof metadata<md_memprof>`.
+
+It is attached both to the profile allocation calls (see the example in
+:ref:`memprof metadata<md_memprof>`), as well as to other callsites
+in profiled contexts described in heap allocation ``memprof`` metadata.
+
+Example:
+
+.. code-block:: text
+
+    %call = call ptr @_Z1Bb(void), !callsite !0
+    !0 = !{i64 -6528110295079665978, i64 5462047985461644151}
+
+Each operand in the ``callsite`` metadata attachment is a unique id
+corresponding to a callsite (possibly inlined). In practice these ids are
+formed via a hash of the callsite's debug info. If the call was not inlined
+into any callers it will contain a single operand (id). If it was inlined
+it will contain a list of ids, including the ids of the callsites in the
+full inline sequence, in order from the leaf-most call's id to the outermost
+inlined call.
 
 Module Flags Metadata
 =====================
@@ -9514,7 +9602,13 @@ Overview:
 """""""""
 
 The '``frem``' instruction returns the remainder from the division of
-its two operands.
+its two operands. 
+
+.. note::
+
+	The instruction is implemented as a call to libm's '``fmod``'
+	for some targets, and using the instruction may thus require linking libm.
+
 
 Arguments:
 """"""""""
@@ -9993,7 +10087,7 @@ Arguments:
 The first two operands of a '``shufflevector``' instruction are vectors
 with the same type. The third argument is a shuffle mask vector constant
 whose element type is ``i32``. The mask vector elements must be constant
-integers or ``undef`` values. The result of the instruction is a vector
+integers or ``poison`` values. The result of the instruction is a vector
 whose length is the same as the shuffle mask and whose element type is the
 same as the element type of the first two operands.
 
@@ -10006,15 +10100,15 @@ shuffle mask selects an element from one of the input vectors to copy
 to the result. Non-negative elements in the mask represent an index
 into the concatenated pair of input vectors.
 
-If the shuffle mask is undefined, the result vector is undefined. If
-the shuffle mask selects an undefined element from one of the input
-vectors, the resulting element is undefined. An undefined element
-in the mask vector specifies that the resulting element is undefined.
-An undefined element in the mask vector prevents a poisoned vector
-element from propagating.
+A ``poison`` element in the mask vector specifies that the resulting element
+is ``poison``.
+For backwards-compatibility reasons, LLVM temporarily also accepts ``undef``
+mask elements, which will be interpreted the same way as ``poison`` elements.
+If the shuffle mask selects an ``undef`` element from one of the input
+vectors, the resulting element is ``undef``.
 
 For scalable vectors, the only valid mask values at present are
-``zeroinitializer`` and ``undef``, since we cannot write all indices as
+``zeroinitializer``, ``undef`` and ``poison``, since we cannot write all indices as
 literals for a vector with a length unknown at compile time.
 
 Example:
@@ -10024,9 +10118,9 @@ Example:
 
       <result> = shufflevector <4 x i32> %v1, <4 x i32> %v2,
                               <4 x i32> <i32 0, i32 4, i32 1, i32 5>  ; yields <4 x i32>
-      <result> = shufflevector <4 x i32> %v1, <4 x i32> undef,
+      <result> = shufflevector <4 x i32> %v1, <4 x i32> poison,
                               <4 x i32> <i32 0, i32 1, i32 2, i32 3>  ; yields <4 x i32> - Identity shuffle.
-      <result> = shufflevector <8 x i32> %v1, <8 x i32> undef,
+      <result> = shufflevector <8 x i32> %v1, <8 x i32> poison,
                               <4 x i32> <i32 0, i32 1, i32 2, i32 3>  ; yields <4 x i32>
       <result> = shufflevector <4 x i32> %v1, <4 x i32> %v2,
                               <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7 >  ; yields <8 x i32>
@@ -10256,11 +10350,11 @@ alignment is not set to a value which is at least the size in bytes of the
 pointee. ``!nontemporal`` does not have any defined semantics for atomic loads.
 
 The optional constant ``align`` argument specifies the alignment of the
-operation (that is, the alignment of the memory address). It is the 
+operation (that is, the alignment of the memory address). It is the
 responsibility of the code emitter to ensure that the alignment information is
-correct. Overestimating the alignment results in undefined behavior. 
+correct. Overestimating the alignment results in undefined behavior.
 Underestimating the alignment may produce less efficient code. An alignment of
-1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment 
+1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment
 value higher than the size of the loaded type implies memory up to the
 alignment value bytes can be safely loaded without trapping in the default
 address space. Access of the high bytes can interfere with debugging tools, so
@@ -10396,11 +10490,11 @@ the alignment is not set to a value which is at least the size in bytes of the
 pointee. ``!nontemporal`` does not have any defined semantics for atomic stores.
 
 The optional constant ``align`` argument specifies the alignment of the
-operation (that is, the alignment of the memory address). It is the 
+operation (that is, the alignment of the memory address). It is the
 responsibility of the code emitter to ensure that the alignment information is
-correct. Overestimating the alignment results in undefined behavior. 
+correct. Overestimating the alignment results in undefined behavior.
 Underestimating the alignment may produce less efficient code. An alignment of
-1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment 
+1 is always safe. The maximum possible alignment is ``1 << 32``. An alignment
 value higher than the size of the loaded type implies memory up to the
 alignment value bytes can be safely loaded without trapping in the default
 address space. Access of the high bytes can interfere with debugging tools, so
@@ -10828,9 +10922,9 @@ than half the pointer index type space.
 
 If the ``inbounds`` keyword is not present, the offsets are added to the
 base address with silently-wrapping two's complement arithmetic. If the
-offsets have a different width from the pointer, they are sign-extended
-or truncated to the width of the pointer. The result value of the
-``getelementptr`` may be outside the object pointed to by the base
+offsets have a different width from the pointer's index type, they are
+sign-extended or truncated to the width of the pointer's index type. The result
+value of the ``getelementptr`` may be outside the object pointed to by the base
 pointer. The result value may not necessarily be used to access memory
 though, even if it happens to point into allocated storage. See the
 :ref:`Pointer Aliasing Rules <pointeraliasing>` section for more
@@ -11935,10 +12029,11 @@ This instruction requires several arguments:
 
 #. The optional ``tail`` and ``musttail`` markers indicate that the optimizers
    should perform tail call optimization. The ``tail`` marker is a hint that
-   `can be ignored <CodeGenerator.html#sibcallopt>`_. The ``musttail`` marker
-   means that the call must be tail call optimized in order for the program to
-   be correct. This is true even in the presence of attributes like
-   "disable-tail-calls". The ``musttail`` marker provides these guarantees:
+   `can be ignored <CodeGenerator.html#tail-call-optimization>`_. The
+   ``musttail`` marker means that the call must be tail call optimized in order
+   for the program to be correct. This is true even in the presence of
+   attributes like "disable-tail-calls". The ``musttail`` marker provides these
+   guarantees:
 
    #. The call will not cause unbounded stack growth if it is part of a
       recursive cycle in the call graph.
@@ -13576,6 +13671,33 @@ The last argument specifies the value of the increment of the counter variable.
 Semantics:
 """"""""""
 See description of '``llvm.instrprof.increment``' intrinsic.
+
+'``llvm.instrprof.timestamp``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare void @llvm.instrprof.timestamp(i8* <name>, i64 <hash>,
+                                             i32 <num-counters>, i32 <index>)
+
+Overview:
+"""""""""
+
+The '``llvm.instrprof.timestamp``' intrinsic is used to implement temporal
+profiling.
+
+Arguments:
+""""""""""
+The arguments are the same as '``llvm.instrprof.increment``'. The ``index`` is
+expected to always be zero.
+
+Semantics:
+""""""""""
+Similar to the '``llvm.instrprof.increment``' intrinsic, but it stores a
+timestamp representing when this function was executed for the first time.
 
 '``llvm.instrprof.cover``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -23414,7 +23536,9 @@ Proper :ref:`function attributes <fnattrs>` usage is required for the
 constrained intrinsics to function correctly.
 
 All function *calls* done in a function that uses constrained floating
-point intrinsics must have the ``strictfp`` attribute.
+point intrinsics must have the ``strictfp`` attribute either on the
+calling instruction or on the declaration or definition of the function
+being called.
 
 All function *definitions* that use constrained floating point intrinsics
 must have the ``strictfp`` attribute.

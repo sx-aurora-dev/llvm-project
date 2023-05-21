@@ -30,7 +30,8 @@
 #include "llvm/CodeGen/ComplexDeinterleavingPass.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
-#include "llvm/CodeGen/LowLevelType.h"
+#include "llvm/CodeGen/LowLevelTypeUtils.h"
+#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
@@ -49,7 +50,6 @@
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MachineValueType.h"
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -75,7 +75,6 @@ class GISelKnownBits;
 class IntrinsicInst;
 class IRBuilderBase;
 struct KnownBits;
-class LegacyDivergenceAnalysis;
 class LLVMContext;
 class MachineBasicBlock;
 class MachineFunction;
@@ -435,6 +434,13 @@ public:
     return MachineMemOperand::MONone;
   }
 
+  /// This callback is used to inspect load/store SDNode.
+  /// The default implementation does nothing.
+  virtual MachineMemOperand::Flags
+  getTargetMMOFlags(const MemSDNode &Node) const {
+    return MachineMemOperand::MONone;
+  }
+
   MachineMemOperand::Flags
   getLoadMemOperandFlags(const LoadInst &LI, const DataLayout &DL,
                          AssumptionCache *AC = nullptr,
@@ -674,6 +680,13 @@ public:
     return false;
   }
 
+  /// Return true if it is valid to merge the TargetMMOFlags in two SDNodes.
+  virtual bool
+  areTwoSDNodeTargetMMOFlagsMergeable(const MemSDNode &NodeX,
+                                      const MemSDNode &NodeY) const {
+    return true;
+  }
+
   /// Use bitwise logic to make pairs of compares more efficient. For example:
   /// and (seteq A, B), (seteq C, D) --> seteq (or (xor A, B), (xor C, D)), 0
   /// This should be true when it takes more than one instruction to lower
@@ -804,7 +817,7 @@ public:
   }
 
   // Return true if the target wants to transform Op(Splat(X)) -> Splat(Op(X))
-  virtual bool preferScalarizeSplat(unsigned Opc) const { return true; }
+  virtual bool preferScalarizeSplat(SDNode *N) const { return true; }
 
   /// Return true if the target wants to use the optimization that
   /// turns ext(promotableInst1(...(promotableInstN(load)))) into
@@ -1541,15 +1554,16 @@ public:
   EVT getMemValueType(const DataLayout &DL, Type *Ty,
                       bool AllowUnknown = false) const {
     // Lower scalar pointers to native pointer types.
-    if (PointerType *PTy = dyn_cast<PointerType>(Ty))
+    if (auto *PTy = dyn_cast<PointerType>(Ty))
       return getPointerMemTy(DL, PTy->getAddressSpace());
-    else if (VectorType *VTy = dyn_cast<VectorType>(Ty)) {
-      Type *Elm = VTy->getElementType();
-      if (PointerType *PT = dyn_cast<PointerType>(Elm)) {
-        EVT PointerTy(getPointerMemTy(DL, PT->getAddressSpace()));
-        Elm = PointerTy.getTypeForEVT(Ty->getContext());
+
+    if (auto *VTy = dyn_cast<VectorType>(Ty)) {
+      Type *EltTy = VTy->getElementType();
+      if (auto *PTy = dyn_cast<PointerType>(EltTy)) {
+        EVT PointerTy(getPointerMemTy(DL, PTy->getAddressSpace()));
+        EltTy = PointerTy.getTypeForEVT(Ty->getContext());
       }
-      return EVT::getVectorVT(Ty->getContext(), EVT::getEVT(Elm, false),
+      return EVT::getVectorVT(Ty->getContext(), EVT::getEVT(EltTy, false),
                               VTy->getElementCount());
     }
 
@@ -2298,11 +2312,11 @@ public:
   /// considered beneficial.
   /// If optimizing for size, expansion is only considered beneficial for upto
   /// 5 multiplies and a divide (if the exponent is negative).
-  bool isBeneficialToExpandPowI(int Exponent, bool OptForSize) const {
+  bool isBeneficialToExpandPowI(int64_t Exponent, bool OptForSize) const {
     if (Exponent < 0)
       Exponent = -Exponent;
-    return !OptForSize ||
-           (llvm::popcount((unsigned int)Exponent) + Log2_32(Exponent) < 7);
+    uint64_t E = static_cast<uint64_t>(Exponent);
+    return !OptForSize || (llvm::popcount(E) + Log2_64(E) < 7);
   }
 
   //===--------------------------------------------------------------------===//
@@ -2861,6 +2875,13 @@ public:
                       getApproximateEVTForLLT(ToTy, DL, Ctx));
   }
 
+  /// Return true if zero-extending the specific node Val to type VT2 is free
+  /// (either because it's implicitly zero-extended such as ARM ldrb / ldrh or
+  /// because it's folded such as X86 zero-extending loads).
+  virtual bool isZExtFree(SDValue Val, EVT VT2) const {
+    return isZExtFree(Val.getValueType(), VT2);
+  }
+
   /// Return true if sign-extension from FromTy to ToTy is cheaper than
   /// zero-extension.
   virtual bool isSExtCheaperThanZExt(EVT FromTy, EVT ToTy) const {
@@ -2944,13 +2965,6 @@ public:
   virtual bool lowerInterleavedStore(StoreInst *SI, ShuffleVectorInst *SVI,
                                      unsigned Factor) const {
     return false;
-  }
-
-  /// Return true if zero-extending the specific node Val to type VT2 is free
-  /// (either because it's implicitly zero-extended such as ARM ldrb / ldrh or
-  /// because it's folded such as X86 zero-extending loads).
-  virtual bool isZExtFree(SDValue Val, EVT VT2) const {
-    return isZExtFree(Val.getValueType(), VT2);
   }
 
   /// Return true if an fpext operation is free (for instance, because
@@ -3332,7 +3346,7 @@ private:
   /// register class is the largest legal super-reg register class of the
   /// register class of the specified type. e.g. On x86, i8, i16, and i32's
   /// representative class would be GR32.
-  const TargetRegisterClass *RepRegClassForVT[MVT::VALUETYPE_SIZE];
+  const TargetRegisterClass *RepRegClassForVT[MVT::VALUETYPE_SIZE] = {0};
 
   /// This indicates the "cost" of the "representative" register class for each
   /// ValueType. The cost is used by the scheduler to approximate register
@@ -3551,7 +3565,7 @@ public:
 
   virtual bool isSDNodeSourceOfDivergence(const SDNode *N,
                                           FunctionLoweringInfo *FLI,
-                                          LegacyDivergenceAnalysis *DA) const {
+                                          UniformityInfo *UA) const {
     return false;
   }
 
@@ -3732,7 +3746,8 @@ public:
   /// Convert x+y to (VT)((SmallVT)x+(SmallVT)y) if the casts are free.  This
   /// uses isZExtFree and ZERO_EXTEND for the widening cast, but it could be
   /// generalized for targets with other types of implicit widening casts.
-  bool ShrinkDemandedOp(SDValue Op, unsigned BitWidth, const APInt &Demanded,
+  bool ShrinkDemandedOp(SDValue Op, unsigned BitWidth,
+                        const APInt &DemandedBits,
                         TargetLoweringOpt &TLO) const;
 
   /// Look at Op.  At this point, we know that only the DemandedBits bits of the
@@ -4775,7 +4790,7 @@ public:
                                             SelectionDAG &DAG) const;
 
   // Lower custom output constraints. If invalid, return SDValue().
-  virtual SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue &Flag,
+  virtual SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue &Glue,
                                               const SDLoc &DL,
                                               const AsmOperandInfo &OpInfo,
                                               SelectionDAG &DAG) const;

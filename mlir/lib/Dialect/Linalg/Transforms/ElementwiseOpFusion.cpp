@@ -179,7 +179,7 @@ static void generateFusedElementwiseOpRegion(
                     });
     for (IndexOp indexOp :
          llvm::make_early_inc_range(producerBlock.getOps<IndexOp>())) {
-      Value newIndex = rewriter.create<mlir::AffineApplyOp>(
+      Value newIndex = rewriter.create<affine::AffineApplyOp>(
           producer.getLoc(),
           consumerToProducerLoopsMap.getSubMap(indexOp.getDim()), fusedIndices);
       mapper.map(indexOp.getResult(), newIndex);
@@ -719,7 +719,7 @@ static void updateExpandedGenericOpRegion(PatternRewriter &rewriter,
       assert(!ShapedType::isDynamic(std::get<0>(it)));
       AffineExpr idx, acc;
       bindDims(rewriter.getContext(), idx, acc);
-      newIndex = rewriter.create<AffineApplyOp>(
+      newIndex = rewriter.create<affine::AffineApplyOp>(
           indexOp.getLoc(), idx + acc * std::get<0>(it),
           ValueRange{std::get<1>(it), newIndex});
     }
@@ -1394,7 +1394,7 @@ void generateCollapsedIndexingRegion(Location loc, Block *block,
   //   i1 = (i_{folded} / d2) % d1
   //   i0 = i_{folded} / (d1 * d2)
   llvm::DenseMap<unsigned, Value> indexReplacementVals;
-  for (auto &foldedDims :
+  for (auto foldedDims :
        enumerate(collapsingInfo.getCollapsedOpToOrigOpMapping())) {
     ReassociationIndicesRef foldedDimsRef(foldedDims.value());
     Value newIndexVal =
@@ -1688,8 +1688,8 @@ public:
       }
 
       // Create a constant scalar value from the splat constant.
-      Value scalarConstant = rewriter.create<arith::ConstantOp>(
-          def->getLoc(), constantAttr, constantAttr.getType());
+      Value scalarConstant =
+          rewriter.create<arith::ConstantOp>(def->getLoc(), constantAttr);
 
       SmallVector<Value> outputOperands = genericOp.getOutputs();
       auto fusedOp = rewriter.create<GenericOp>(
@@ -1871,7 +1871,7 @@ struct LinalgElementwiseOpFusionPass
     populateFoldReshapeOpsByExpansionPatterns(patterns, defaultControlFn);
 
     // General canonicalization patterns.
-    AffineApplyOp::getCanonicalizationPatterns(patterns, context);
+    affine::AffineApplyOp::getCanonicalizationPatterns(patterns, context);
     GenericOp::getCanonicalizationPatterns(patterns, context);
     tensor::ExpandShapeOp::getCanonicalizationPatterns(patterns, context);
     tensor::CollapseShapeOp::getCanonicalizationPatterns(patterns, context);

@@ -11,7 +11,9 @@ add_flang_unittest(FlangRuntimeTests
   Format.cpp
   Inquiry.cpp
   ListInputTest.cpp
+  LogicalFormatTest.cpp
   Matmul.cpp
+  MatmulTranspose.cpp
   MiscIntrinsic.cpp
   Namelist.cpp
   Numeric.cpp

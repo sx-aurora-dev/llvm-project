@@ -878,7 +878,7 @@ private:
     if ((obj.type.attrs() & shapeRequiringBox).any())
       // Need to pass shape/coshape info in fir.box.
       return true;
-    if (obj.type.type().IsPolymorphic())
+    if (obj.type.type().IsPolymorphic() && !obj.type.type().IsAssumedType())
       // Need to pass dynamic type info in fir.box.
       return true;
     if (const Fortran::semantics::DerivedTypeSpec *derived =

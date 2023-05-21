@@ -30,8 +30,6 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/TypeFinder.h"
 #include "llvm/IR/ValueSymbolTable.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/StripSymbols.h"
 #include "llvm/Transforms/Utils/Local.h"
@@ -265,23 +263,31 @@ static bool stripDeadDebugInfoImpl(Module &M) {
 PreservedAnalyses StripSymbolsPass::run(Module &M, ModuleAnalysisManager &AM) {
   StripDebugInfo(M);
   StripSymbolNames(M, false);
-  return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }
 
 PreservedAnalyses StripNonDebugSymbolsPass::run(Module &M,
                                                 ModuleAnalysisManager &AM) {
   StripSymbolNames(M, true);
-  return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }
 
 PreservedAnalyses StripDebugDeclarePass::run(Module &M,
                                              ModuleAnalysisManager &AM) {
   stripDebugDeclareImpl(M);
-  return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }
 
 PreservedAnalyses StripDeadDebugInfoPass::run(Module &M,
                                               ModuleAnalysisManager &AM) {
   stripDeadDebugInfoImpl(M);
-  return PreservedAnalyses::all();
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
 }

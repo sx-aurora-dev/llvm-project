@@ -181,6 +181,7 @@ template <class T, class Allocator, class Predicate>
 #include <__iterator/prev.h>
 #include <__iterator/reverse_iterator.h>
 #include <__iterator/segmented_iterator.h>
+#include <__memory/addressof.h>
 #include <__memory/allocator_destructor.h>
 #include <__memory/pointer_traits.h>
 #include <__memory/temp_value.h>
@@ -188,6 +189,7 @@ template <class T, class Allocator, class Predicate>
 #include <__memory_resource/polymorphic_allocator.h>
 #include <__split_buffer>
 #include <__type_traits/is_allocator.h>
+#include <__type_traits/is_convertible.h>
 #include <__type_traits/is_same.h>
 #include <__type_traits/type_identity.h>
 #include <__utility/forward.h>
@@ -2397,7 +2399,7 @@ __synth_three_way_result<_Tp>
 operator<=>(const deque<_Tp, _Allocator>& __x, const deque<_Tp, _Allocator>& __y)
 {
     return std::lexicographical_compare_three_way(
-        __x.begin(), __x.end(), __y.begin(), __y.end(), __synth_three_way);
+        __x.begin(), __x.end(), __y.begin(), __y.end(), std::__synth_three_way<_Tp, _Tp>);
 }
 
 #endif // _LIBCPP_STD_VER <= 17
@@ -2454,6 +2456,7 @@ _LIBCPP_POP_MACROS
 #  include <algorithm>
 #  include <atomic>
 #  include <concepts>
+#  include <cstdlib>
 #  include <functional>
 #  include <iosfwd>
 #  include <iterator>

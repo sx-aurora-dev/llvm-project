@@ -103,7 +103,15 @@ def TimeAPI : PublicAPI<"time.h"> {
 }
 
 def SchedAPI : PublicAPI<"sched.h"> {
-  let Types = ["pid_t", "size_t", "cpu_set_t"];
+  let Types = [
+    "pid_t",
+    "size_t",
+    "cpu_set_t",
+    "struct sched_param",
+    // Needed according to posix standard
+    "time_t",
+    "struct timespec",
+  ];
 }
 
 def SysMManAPI : PublicAPI<"sys/mman.h"> {
@@ -178,6 +186,14 @@ def UniStdAPI : PublicAPI<"unistd.h"> {
                "ssize_t", "uid_t", "__getoptargv_t"];
 }
 
+def WCharAPI : PublicAPI<"wchar.h"> {
+  let Types = [
+    "wchar_t",
+    "wint_t",
+    "size_t",
+  ];
+}
+
 def SysRandomAPI : PublicAPI<"sys/random.h"> {
   let Types = ["size_t", "ssize_t"];
 }
@@ -185,6 +201,10 @@ def SysRandomAPI : PublicAPI<"sys/random.h"> {
 def SysSelectAPI : PublicAPI<"sys/select.h"> {
   let Types = ["fd_set", "sigset_t", "suseconds_t", "time_t", "struct timespec",
                "struct timeval"];
+}
+
+def SysSocketAPI : PublicAPI<"sys/socket.h"> {
+  let Types = ["struct sockaddr", "sa_family_t"];
 }
 
 def SysResourceAPI : PublicAPI<"sys/resource.h"> {

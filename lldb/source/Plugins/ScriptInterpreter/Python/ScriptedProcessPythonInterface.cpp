@@ -81,21 +81,8 @@ Status ScriptedProcessPythonInterface::Launch() {
 }
 
 Status ScriptedProcessPythonInterface::Resume() {
-  return GetStatusFromMethod("resume");
-}
-
-bool ScriptedProcessPythonInterface::ShouldStop() {
-  Status error;
-  StructuredData::ObjectSP obj = Dispatch("is_alive", error);
-
-  if (!CheckStructuredDataObject(LLVM_PRETTY_FUNCTION, obj, error))
-    return {};
-
-  return obj->GetBooleanValue();
-}
-
-Status ScriptedProcessPythonInterface::Stop() {
-  return GetStatusFromMethod("stop");
+  // When calling ScriptedProcess.Resume from lldb we should always stop.
+  return GetStatusFromMethod("resume", /*should_stop=*/true);
 }
 
 std::optional<MemoryRegionInfo>
@@ -123,6 +110,22 @@ StructuredData::DictionarySP ScriptedProcessPythonInterface::GetThreadsInfo() {
   return dict;
 }
 
+bool ScriptedProcessPythonInterface::CreateBreakpoint(lldb::addr_t addr,
+                                                      Status &error) {
+  Status py_error;
+  StructuredData::ObjectSP obj =
+      Dispatch("create_breakpoint", py_error, addr, error);
+
+  // If there was an error on the python call, surface it to the user.
+  if (py_error.Fail())
+    error = py_error;
+
+  if (!CheckStructuredDataObject(LLVM_PRETTY_FUNCTION, obj, error))
+    return {};
+
+  return obj->GetBooleanValue();
+}
+
 lldb::DataExtractorSP ScriptedProcessPythonInterface::ReadMemoryAtAddress(
     lldb::addr_t address, size_t size, Status &error) {
   Status py_error;
@@ -136,7 +139,7 @@ lldb::DataExtractorSP ScriptedProcessPythonInterface::ReadMemoryAtAddress(
   return data_sp;
 }
 
-size_t ScriptedProcessPythonInterface::WriteMemoryAtAddress(
+lldb::offset_t ScriptedProcessPythonInterface::WriteMemoryAtAddress(
     lldb::addr_t addr, lldb::DataExtractorSP data_sp, Status &error) {
   Status py_error;
   StructuredData::ObjectSP obj =

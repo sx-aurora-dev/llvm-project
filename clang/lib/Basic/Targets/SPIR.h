@@ -46,6 +46,9 @@ static const unsigned SPIRDefIsPrivMap[] = {
     0, // ptr32_uptr
     0, // ptr64
     0, // hlsl_groupshared
+    // Wasm address space values for this target are dummy values,
+    // as it is only enabled for Wasm targets.
+    20, // wasm_funcref
 };
 
 // Used by both the SPIR and SPIR-V targets.
@@ -76,6 +79,9 @@ static const unsigned SPIRDefIsGenMap[] = {
     0, // ptr32_uptr
     0, // ptr64
     0, // hlsl_groupshared
+    // Wasm address space values for this target are dummy values,
+    // as it is only enabled for Wasm targets.
+    20, // wasm_funcref
 };
 
 // Base class for SPIR and SPIR-V target info.
@@ -105,7 +111,7 @@ protected:
     llvm::Triple HostTriple(Opts.HostTriple);
     if (!HostTriple.isSPIR() && !HostTriple.isSPIRV() &&
         HostTriple.getArch() != llvm::Triple::UnknownArch) {
-      HostTarget.reset(AllocateTarget(llvm::Triple(Opts.HostTriple), Opts));
+      HostTarget = AllocateTarget(llvm::Triple(Opts.HostTriple), Opts);
 
       // Copy properties from host target.
       BoolWidth = HostTarget->getBoolWidth();
@@ -158,7 +164,7 @@ public:
     return std::nullopt;
   }
 
-  const char *getClobbers() const override { return ""; }
+  std::string_view getClobbers() const override { return ""; }
 
   ArrayRef<const char *> getGCCRegNames() const override {
     return std::nullopt;

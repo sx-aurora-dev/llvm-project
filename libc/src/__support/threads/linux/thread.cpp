@@ -33,10 +33,10 @@ namespace __llvm_libc {
 
 #ifdef SYS_mmap2
 static constexpr long MMAP_SYSCALL_NUMBER = SYS_mmap2;
-#elif SYS_mmap
+#elif defined(SYS_mmap)
 static constexpr long MMAP_SYSCALL_NUMBER = SYS_mmap;
 #else
-#error "SYS_mmap or SYS_mmap2 not available on the target platform"
+#error "mmap or mmap2 syscalls not available."
 #endif
 
 static constexpr size_t NAME_SIZE_MAX = 16; // Includes the null terminator
@@ -116,12 +116,15 @@ __attribute__((always_inline)) inline uintptr_t get_start_args_addr() {
          // on to the stack. So, we have to step past two 64-bit values to get
          // to the start args.
          + sizeof(uintptr_t) * 2;
-#elif defined(LIBC_TARGET_ARCH_IS_AARCH64) ||                                  \
-    defined(LIBC_TARGET_ARCH_IS_RISCV64)
+#elif defined(LIBC_TARGET_ARCH_IS_AARCH64)
   // The frame pointer after cloning the new thread in the Thread::run method
   // is set to the stack pointer where start args are stored. So, we fetch
   // from there.
   return reinterpret_cast<uintptr_t>(__builtin_frame_address(1));
+#elif defined(LIBC_TARGET_ARCH_IS_RISCV64)
+  // The current frame pointer is the previous stack pointer where the start
+  // args are stored.
+  return reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
 #endif
 }
 
@@ -355,7 +358,7 @@ int Thread::get_name(cpp::StringStream &name) const {
     int retval = __llvm_libc::syscall_impl(SYS_prctl, PR_GET_NAME, name_buffer);
     if (retval < 0)
       return -retval;
-    name << name_buffer;
+    name << name_buffer << cpp::StringStream::ENDS;
     return 0;
   }
 
@@ -382,7 +385,7 @@ int Thread::get_name(cpp::StringStream &name) const {
     name_buffer[retval - 1] = '\0';
   else
     name_buffer[retval] = '\0';
-  name << name_buffer;
+  name << name_buffer << cpp::StringStream::ENDS;
   return 0;
 }
 

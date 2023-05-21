@@ -13,11 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Scalar.h"
-#include "llvm-c/Initialization.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -29,8 +27,6 @@ using namespace llvm;
 /// initializeScalarOptsPasses - Initialize all passes linked into the
 /// ScalarOpts library.
 void llvm::initializeScalarOpts(PassRegistry &Registry) {
-  initializeBDCELegacyPassPass(Registry);
-  initializeAlignmentFromAssumptionsPass(Registry);
   initializeCallSiteSplittingLegacyPassPass(Registry);
   initializeConstantHoistingLegacyPassPass(Registry);
   initializeDCELegacyPassPass(Registry);
@@ -38,14 +34,10 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeGuardWideningLegacyPassPass(Registry);
   initializeLoopGuardWideningLegacyPassPass(Registry);
   initializeGVNLegacyPassPass(Registry);
-  initializeNewGVNLegacyPassPass(Registry);
   initializeEarlyCSELegacyPassPass(Registry);
   initializeEarlyCSEMemSSALegacyPassPass(Registry);
   initializeMakeGuardsExplicitLegacyPassPass(Registry);
-  initializeGVNHoistLegacyPassPass(Registry);
-  initializeGVNSinkLegacyPassPass(Registry);
   initializeFlattenCFGLegacyPassPass(Registry);
-  initializeIRCELegacyPassPass(Registry);
   initializeInferAddressSpacesPass(Registry);
   initializeInstSimplifyLegacyPassPass(Registry);
   initializeLegacyLICMPassPass(Registry);
@@ -64,7 +56,6 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeLowerMatrixIntrinsicsLegacyPassPass(Registry);
   initializeLowerMatrixIntrinsicsMinimalLegacyPassPass(Registry);
   initializeLowerWidenableConditionLegacyPassPass(Registry);
-  initializeMemCpyOptLegacyPassPass(Registry);
   initializeMergeICmpsLegacyPassPass(Registry);
   initializeMergedLoadStoreMotionLegacyPassPass(Registry);
   initializeNaryReassociateLegacyPassPass(Registry);
@@ -86,10 +77,5 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeStraightLineStrengthReduceLegacyPassPass(Registry);
   initializePlaceBackedgeSafepointsLegacyPassPass(Registry);
   initializePlaceSafepointsLegacyPassPass(Registry);
-  initializeFloat2IntLegacyPassPass(Registry);
   initializeLoopSimplifyCFGLegacyPassPass(Registry);
-}
-
-void LLVMInitializeScalarOpts(LLVMPassRegistryRef R) {
-  initializeScalarOpts(*unwrap(R));
 }

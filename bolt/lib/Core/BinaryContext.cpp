@@ -391,8 +391,18 @@ BinaryContext::handleAddressRef(uint64_t Address, BinaryFunction &BF,
       --IslandIter;
 
     if (IslandIter != AddressToConstantIslandMap.end()) {
-      if (MCSymbol *IslandSym =
-              IslandIter->second->getOrCreateProxyIslandAccess(Address, BF)) {
+      // Fall-back to referencing the original constant island in the presence
+      // of dynamic relocs, as we currently do not support cloning them.
+      // Notice: we might fail to link because of this, if the original constant
+      // island we are referring would be emitted too far away.
+      if (IslandIter->second->hasDynamicRelocationAtIsland()) {
+        MCSymbol *IslandSym =
+            IslandIter->second->getOrCreateIslandAccess(Address);
+        if (IslandSym)
+          return std::make_pair(IslandSym, 0);
+      } else if (MCSymbol *IslandSym =
+                     IslandIter->second->getOrCreateProxyIslandAccess(Address,
+                                                                      BF)) {
         BF.createIslandDependency(IslandSym, IslandIter->second);
         return std::make_pair(IslandSym, 0);
       }
@@ -2279,9 +2289,8 @@ bool BinaryContext::validateInstructionEncoding(
 
   SmallString<256> Code;
   SmallVector<MCFixup, 4> Fixups;
-  raw_svector_ostream VecOS(Code);
 
-  MCE->encodeInstruction(Inst, VecOS, Fixups, *STI);
+  MCE->encodeInstruction(Inst, Code, Fixups, *STI);
   auto OutputSequence = ArrayRef<uint8_t>((uint8_t *)Code.data(), Code.size());
   if (InputSequence != OutputSequence) {
     if (opts::Verbosity > 1) {

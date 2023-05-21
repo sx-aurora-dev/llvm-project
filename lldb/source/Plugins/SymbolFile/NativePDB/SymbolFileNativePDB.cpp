@@ -57,6 +57,7 @@
 #include "PdbUtil.h"
 #include "UdtRecordCompleter.h"
 #include <optional>
+#include <string_view>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -76,6 +77,10 @@ static lldb::LanguageType TranslateLanguage(PDB_Lang lang) {
     return lldb::LanguageType::eLanguageTypeSwift;
   case PDB_Lang::Rust:
     return lldb::LanguageType::eLanguageTypeRust;
+  case PDB_Lang::ObjC:
+    return lldb::LanguageType::eLanguageTypeObjC;
+  case PDB_Lang::ObjCpp:
+    return lldb::LanguageType::eLanguageTypeObjC_plus_plus;
   default:
     return lldb::LanguageType::eLanguageTypeUnknown;
   }
@@ -627,7 +632,7 @@ static std::string GetUnqualifiedTypeName(const TagRecord &record) {
   }
 
   llvm::ms_demangle::Demangler demangler;
-  StringView sv(record.UniqueName.begin(), record.UniqueName.size());
+  std::string_view sv(record.UniqueName.begin(), record.UniqueName.size());
   llvm::ms_demangle::TagTypeNode *ttn = demangler.parseTagUniqueName(sv);
   if (demangler.Error)
     return std::string(record.Name);
@@ -1392,7 +1397,7 @@ bool SymbolFileNativePDB::ParseImportedModules(
 void SymbolFileNativePDB::ParseInlineSite(PdbCompilandSymId id,
                                           Address func_addr) {
   lldb::user_id_t opaque_uid = toOpaqueUid(id);
-  if (m_inline_sites.find(opaque_uid) != m_inline_sites.end())
+  if (m_inline_sites.contains(opaque_uid))
     return;
 
   addr_t func_base = func_addr.GetFileAddress();
@@ -2129,9 +2134,8 @@ void SymbolFileNativePDB::GetTypes(lldb_private::SymbolContextScope *sc_scope,
                                    TypeClass type_mask,
                                    lldb_private::TypeList &type_list) {}
 
-CompilerDeclContext
-SymbolFileNativePDB::FindNamespace(ConstString name,
-                                   const CompilerDeclContext &parent_decl_ctx) {
+CompilerDeclContext SymbolFileNativePDB::FindNamespace(
+    ConstString name, const CompilerDeclContext &parent_decl_ctx, bool) {
   return {};
 }
 

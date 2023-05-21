@@ -333,6 +333,8 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
                                          MacroBuilder &Builder) const {
   // Target identification.
   Builder.defineMacro("__aarch64__");
+  // Inline assembly supports AArch64 flag outputs.
+  Builder.defineMacro("__GCC_ASM_FLAG_OUTPUTS__");
   // For bare-metal.
   if (getTriple().getOS() == llvm::Triple::UnknownOS &&
       getTriple().isOSBinFormatELF())
@@ -373,7 +375,8 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__ARM_ALIGN_MAX_STACK_PWR", "4");
 
   // 0xe implies support for half, single and double precision operations.
-  Builder.defineMacro("__ARM_FP", "0xE");
+  if (FPU & FPUMode)
+    Builder.defineMacro("__ARM_FP", "0xE");
 
   // PCS specifies this for SysV variants, which is all we support. Other ABIs
   // may choose __ARM_FP16_FORMAT_ALTERNATIVE.
@@ -709,6 +712,8 @@ void AArch64TargetInfo::setFeatureEnabled(llvm::StringMap<bool> &Features,
 bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
                                              DiagnosticsEngine &Diags) {
   for (const auto &Feature : Features) {
+    if (Feature == "-fp-armv8")
+      HasNoFP = true;
     if (Feature == "-neon")
       HasNoNeon = true;
     if (Feature == "-sve")
@@ -924,6 +929,8 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasMOPS = true;
     if (Feature == "+d128")
       HasD128 = true;
+    if (Feature == "+gcs")
+      HasGCS = true;
   }
 
   // Check features that are manually disabled by command line options.
@@ -937,6 +944,11 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
   setDataLayout();
   setArchFeatures();
 
+  if (HasNoFP) {
+    FPU &= ~FPUMode;
+    FPU &= ~NeonMode;
+    FPU &= ~SveMode;
+  }
   if (HasNoNeon) {
     FPU &= ~NeonMode;
     FPU &= ~SveMode;
@@ -1200,6 +1212,52 @@ ArrayRef<TargetInfo::GCCRegAlias> AArch64TargetInfo::getGCCRegAliases() const {
   return llvm::ArrayRef(GCCRegAliases);
 }
 
+// Returns the length of cc constraint.
+static unsigned matchAsmCCConstraint(const char *Name) {
+  constexpr unsigned len = 5;
+  auto RV = llvm::StringSwitch<unsigned>(Name)
+                .Case("@cceq", len)
+                .Case("@ccne", len)
+                .Case("@cchs", len)
+                .Case("@cccs", len)
+                .Case("@cccc", len)
+                .Case("@cclo", len)
+                .Case("@ccmi", len)
+                .Case("@ccpl", len)
+                .Case("@ccvs", len)
+                .Case("@ccvc", len)
+                .Case("@cchi", len)
+                .Case("@ccls", len)
+                .Case("@ccge", len)
+                .Case("@cclt", len)
+                .Case("@ccgt", len)
+                .Case("@ccle", len)
+                .Default(0);
+  return RV;
+}
+
+std::string
+AArch64TargetInfo::convertConstraint(const char *&Constraint) const {
+  std::string R;
+  switch (*Constraint) {
+  case 'U': // Three-character constraint; add "@3" hint for later parsing.
+    R = std::string("@3") + std::string(Constraint, 3);
+    Constraint += 2;
+    break;
+  case '@':
+    if (const unsigned Len = matchAsmCCConstraint(Constraint)) {
+      std::string Converted = "{" + std::string(Constraint, Len) + "}";
+      Constraint += Len - 1;
+      return Converted;
+    }
+    return std::string(1, *Constraint);
+  default:
+    R = TargetInfo::convertConstraint(Constraint);
+    break;
+  }
+  return R;
+}
+
 bool AArch64TargetInfo::validateAsmConstraint(
     const char *&Name, TargetInfo::ConstraintInfo &Info) const {
   switch (*Name) {
@@ -1247,6 +1305,13 @@ bool AArch64TargetInfo::validateAsmConstraint(
   case 'y': // SVE registers (V0-V7)
     Info.setAllowsRegister();
     return true;
+  case '@':
+    // CC condition
+    if (const unsigned Len = matchAsmCCConstraint(Name)) {
+      Name += Len - 1;
+      Info.setAllowsRegister();
+      return true;
+    }
   }
   return false;
 }
@@ -1285,7 +1350,7 @@ bool AArch64TargetInfo::validateConstraintModifier(
   }
 }
 
-const char *AArch64TargetInfo::getClobbers() const { return ""; }
+std::string_view AArch64TargetInfo::getClobbers() const { return ""; }
 
 int AArch64TargetInfo::getEHDataRegisterNumber(unsigned RegNo) const {
   if (RegNo == 0)

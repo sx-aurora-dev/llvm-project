@@ -174,7 +174,7 @@ CodeGenModule::CodeGenModule(ASTContext &C,
 
   // If debug info or coverage generation is enabled, create the CGDebugInfo
   // object.
-  if (CodeGenOpts.getDebugInfo() != codegenoptions::NoDebugInfo ||
+  if (CodeGenOpts.getDebugInfo() != llvm::codegenoptions::NoDebugInfo ||
       CodeGenOpts.EmitGcovArcs || CodeGenOpts.EmitGcovNotes)
     DebugInfo.reset(new CGDebugInfo(*this));
 
@@ -548,6 +548,8 @@ void CodeGenModule::Release() {
     GlobalTopLevelStmtBlockInFlight = {nullptr, nullptr};
   }
 
+  // Module implementations are initialized the same way as a regular TU that
+  // imports one or more modules.
   if (CXX20ModuleInits && Primary && Primary->isInterfaceOrPartition())
     EmitCXXModuleInitFunc(Primary);
   else
@@ -988,7 +990,7 @@ void CodeGenModule::EmitOpenCLMetadata() {
 }
 
 void CodeGenModule::EmitBackendOptionsMetadata(
-    const CodeGenOptions CodeGenOpts) {
+    const CodeGenOptions &CodeGenOpts) {
   if (getTriple().isRISCV()) {
     getModule().addModuleFlag(llvm::Module::Min, "SmallDataLimit",
                               CodeGenOpts.SmallDataLimit);
@@ -3130,7 +3132,7 @@ bool CodeGenModule::MayBeEmittedEagerly(const ValueDecl *Global) {
   // codegen for global variables, because they may be marked as threadprivate.
   if (LangOpts.OpenMP && LangOpts.OpenMPUseTLS &&
       getContext().getTargetInfo().isTLSSupported() && isa<VarDecl>(Global) &&
-      !isTypeConstant(Global->getType(), false) &&
+      !isTypeConstant(Global->getType(), false, false) &&
       !OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(Global))
     return false;
 
@@ -3238,9 +3240,13 @@ ConstantAddress CodeGenModule::GetAddrOfTemplateParamObject(
     return ConstantAddress::invalid();
   }
 
-  auto *GV = new llvm::GlobalVariable(
-      getModule(), Init->getType(),
-      /*isConstant=*/true, llvm::GlobalValue::LinkOnceODRLinkage, Init, Name);
+  llvm::GlobalValue::LinkageTypes Linkage =
+      isExternallyVisible(TPO->getLinkageAndVisibility().getLinkage())
+          ? llvm::GlobalValue::LinkOnceODRLinkage
+          : llvm::GlobalValue::InternalLinkage;
+  auto *GV = new llvm::GlobalVariable(getModule(), Init->getType(),
+                                      /*isConstant=*/true, Linkage, Init, Name);
+  setGVProperties(GV, TPO);
   if (supportsCOMDAT())
     GV->setComdat(TheModule.getOrInsertComdat(GV->getName()));
   Emitter.finalize(GV);
@@ -4331,8 +4337,9 @@ CodeGenModule::CreateRuntimeFunction(llvm::FunctionType *FTy, StringRef Name,
 ///
 /// If ExcludeCtor is true, the duration when the object's constructor runs
 /// will not be considered. The caller will need to verify that the object is
-/// not written to during its construction.
-bool CodeGenModule::isTypeConstant(QualType Ty, bool ExcludeCtor) {
+/// not written to during its construction. ExcludeDtor works similarly.
+bool CodeGenModule::isTypeConstant(QualType Ty, bool ExcludeCtor,
+                                   bool ExcludeDtor) {
   if (!Ty.isConstant(Context) && !Ty->isReferenceType())
     return false;
 
@@ -4340,7 +4347,7 @@ bool CodeGenModule::isTypeConstant(QualType Ty, bool ExcludeCtor) {
     if (const CXXRecordDecl *Record
           = Context.getBaseElementType(Ty)->getAsCXXRecordDecl())
       return ExcludeCtor && !Record->hasMutableFields() &&
-             Record->hasTrivialDestructor();
+             (Record->hasTrivialDestructor() || ExcludeDtor);
   }
 
   return true;
@@ -4453,7 +4460,7 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName, llvm::Type *Ty,
 
     // FIXME: This code is overly simple and should be merged with other global
     // handling.
-    GV->setConstant(isTypeConstant(D->getType(), false));
+    GV->setConstant(isTypeConstant(D->getType(), false, false));
 
     GV->setAlignment(getContext().getDeclAlign(D).getAsAlign());
 
@@ -5009,7 +5016,7 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
 
   // If it is safe to mark the global 'constant', do so now.
   GV->setConstant(!NeedsGlobalCtor && !NeedsGlobalDtor &&
-                  isTypeConstant(D->getType(), true));
+                  isTypeConstant(D->getType(), true, true));
 
   // If it is in a read-only section, mark it 'constant'.
   if (const SectionAttr *SA = D->getAttr<SectionAttr>()) {
@@ -6083,7 +6090,8 @@ ConstantAddress CodeGenModule::GetAddrOfGlobalTemporary(
     emitter.emplace(*this);
     InitialValue = emitter->emitForInitializer(*Value, AddrSpace,
                                                MaterializedType);
-    Constant = isTypeConstant(MaterializedType, /*ExcludeCtor*/Value);
+    Constant = isTypeConstant(MaterializedType, /*ExcludeCtor*/ Value,
+                              /*ExcludeDtor*/ false);
     Type = InitialValue->getType();
   } else {
     // No initializer, the initialization will be provided when we
@@ -6528,16 +6536,14 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
         EmitTopLevelDecl(D);
 
       // Visit the submodules of this module.
-      for (clang::Module::submodule_iterator Sub = Mod->submodule_begin(),
-                                             SubEnd = Mod->submodule_end();
-           Sub != SubEnd; ++Sub) {
+      for (auto *Submodule : Mod->submodules()) {
         // Skip explicit children; they need to be explicitly imported to emit
         // the initializers.
-        if ((*Sub)->IsExplicit)
+        if (Submodule->IsExplicit)
           continue;
 
-        if (Visited.insert(*Sub).second)
-          Stack.push_back(*Sub);
+        if (Visited.insert(Submodule).second)
+          Stack.push_back(Submodule);
       }
     }
     break;

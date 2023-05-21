@@ -208,6 +208,10 @@ def AArch64fadd_p_nsz : PatFrag<(ops node:$op1, node:$op2, node:$op3),
                                 (AArch64fadd_p node:$op1, node:$op2, node:$op3), [{
   return N->getFlags().hasNoSignedZeros();
 }]>;
+def AArch64fsub_p_nsz : PatFrag<(ops node:$op1, node:$op2, node:$op3),
+                                (AArch64fsub_p node:$op1, node:$op2, node:$op3), [{
+  return N->getFlags().hasNoSignedZeros();
+}]>;
 
 def SDT_AArch64Arith_Imm : SDTypeProfile<1, 3, [
   SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisVT<3,i32>,
@@ -260,12 +264,14 @@ def AArch64fmul_m1 : EitherVSelectOrPassthruPatFrags<int_aarch64_sve_fmul, AArch
 def AArch64fadd_m1 : PatFrags<(ops node:$pg, node:$op1, node:$op2), [
     (int_aarch64_sve_fadd node:$pg, node:$op1, node:$op2),
     (vselect node:$pg, (AArch64fadd_p (SVEAllActive), node:$op1, node:$op2), node:$op1),
-    (AArch64fadd_p_nsz (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDup0)))
+    (AArch64fadd_p_nsz (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDup0))),
+    (AArch64fadd_p (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDupNeg0)))
 ]>;
 def AArch64fsub_m1 : PatFrags<(ops node:$pg, node:$op1, node:$op2), [
     (int_aarch64_sve_fsub node:$pg, node:$op1, node:$op2),
     (vselect node:$pg, (AArch64fsub_p (SVEAllActive), node:$op1, node:$op2), node:$op1),
-    (AArch64fsub_p (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDup0)))
+    (AArch64fsub_p (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDup0))),
+    (AArch64fsub_p_nsz (SVEAllActive), node:$op1, (vselect node:$pg, node:$op2, (SVEDupNeg0)))
 ]>;
 
 def AArch64shadd : PatFrags<(ops node:$pg, node:$op1, node:$op2),
@@ -416,10 +422,11 @@ def AArch64eor3 : PatFrags<(ops node:$op1, node:$op2, node:$op3),
                            [(int_aarch64_sve_eor3 node:$op1, node:$op2, node:$op3),
                             (xor node:$op1, (xor node:$op2, node:$op3))]>;
 
-class fma_patfrags<SDPatternOperator intrinsic, SDPatternOperator sdnode>
+class fma_patfrags<SDPatternOperator intrinsic, SDPatternOperator add_zero, SDPatternOperator add_negzero>
     : PatFrags<(ops node:$pred, node:$op1, node:$op2, node:$op3),
                [(intrinsic node:$pred, node:$op1, node:$op2, node:$op3),
-                (sdnode (SVEAllActive), node:$op1, (vselect node:$pred, (AArch64fmul_p_oneuse (SVEAllActive), node:$op2, node:$op3), (SVEDup0)))],
+                (add_zero (SVEAllActive), node:$op1, (vselect node:$pred, (AArch64fmul_p_oneuse (SVEAllActive), node:$op2, node:$op3), (SVEDup0))),
+                (add_negzero (SVEAllActive), node:$op1, (vselect node:$pred, (AArch64fmul_p_oneuse (SVEAllActive), node:$op2, node:$op3), (SVEDupNeg0)))],
                [{
   if ((N->getOpcode() != AArch64ISD::FADD_PRED) &&
       (N->getOpcode() != AArch64ISD::FSUB_PRED))
@@ -427,8 +434,8 @@ class fma_patfrags<SDPatternOperator intrinsic, SDPatternOperator sdnode>
   return N->getFlags().hasAllowContract();
 }]>;
 
-def AArch64fmla_m1 : fma_patfrags<int_aarch64_sve_fmla, AArch64fadd_p_nsz>;
-def AArch64fmls_m1 : fma_patfrags<int_aarch64_sve_fmls, AArch64fsub_p>;
+def AArch64fmla_m1 : fma_patfrags<int_aarch64_sve_fmla, AArch64fadd_p_nsz, AArch64fadd_p>;
+def AArch64fmls_m1 : fma_patfrags<int_aarch64_sve_fmls, AArch64fsub_p, AArch64fsub_p_nsz>;
 
 def AArch64smax_m1 : EitherVSelectOrPassthruPatFrags<int_aarch64_sve_smax, AArch64smax_p>;
 def AArch64umax_m1 : EitherVSelectOrPassthruPatFrags<int_aarch64_sve_umax, AArch64umax_p>;
@@ -2060,6 +2067,10 @@ let Predicates = [HasSVEorSME, UseExperimentalZeroingPseudos] in {
   defm LSR_ZPZZ  : sve_int_bin_pred_zeroing_bhsd<int_aarch64_sve_lsr>;
   defm LSL_ZPZZ  : sve_int_bin_pred_zeroing_bhsd<int_aarch64_sve_lsl>;
   defm ASRD_ZPZI : sve_int_bin_pred_shift_imm_right_zeroing_bhsd<AArch64asrd_m1>;
+
+  defm ASR_ZPZI  : sve_int_bin_pred_imm_zeroing_bhsd<int_aarch64_sve_asr, SVEShiftImmR8, SVEShiftImmR16, SVEShiftImmR32, SVEShiftImmR64>;
+  defm LSR_ZPZI  : sve_int_bin_pred_imm_zeroing_bhsd<int_aarch64_sve_lsr, SVEShiftImmR8, SVEShiftImmR16, SVEShiftImmR32, SVEShiftImmR64>;
+  defm LSL_ZPZI  : sve_int_bin_pred_imm_zeroing_bhsd<int_aarch64_sve_lsl, SVEShiftImmL8, SVEShiftImmL16, SVEShiftImmL32, SVEShiftImmL64>;
 } // End HasSVEorSME, UseExperimentalZeroingPseudos
 
 let Predicates = [HasSVEorSME] in {
@@ -3162,15 +3173,15 @@ let Predicates = [HasSVEorSME] in {
   let Predicates = [NotInStreamingSVEMode] in {
   def : Pat<(sext_inreg (vector_extract (nxv16i8 ZPR:$vec), VectorIndexB:$index), i8),
             (i32 (SMOVvi8to32 (v16i8 (EXTRACT_SUBREG ZPR:$vec, zsub)), VectorIndexB:$index))>;
-  def : Pat<(sext_inreg (anyext (vector_extract (nxv16i8 ZPR:$vec), VectorIndexB:$index)), i8),
+  def : Pat<(sext_inreg (anyext (i32 (vector_extract (nxv16i8 ZPR:$vec), VectorIndexB:$index))), i8),
             (i64 (SMOVvi8to64 (v16i8 (EXTRACT_SUBREG ZPR:$vec, zsub)), VectorIndexB:$index))>;
 
   def : Pat<(sext_inreg (vector_extract (nxv8i16 ZPR:$vec), VectorIndexH:$index), i16),
             (i32 (SMOVvi16to32 (v8i16 (EXTRACT_SUBREG ZPR:$vec, zsub)), VectorIndexH:$index))>;
-  def : Pat<(sext_inreg (anyext (vector_extract (nxv8i16 ZPR:$vec), VectorIndexH:$index)), i16),
+  def : Pat<(sext_inreg (anyext (i32 (vector_extract (nxv8i16 ZPR:$vec), VectorIndexH:$index))), i16),
             (i64 (SMOVvi16to64 (v8i16 (EXTRACT_SUBREG ZPR:$vec, zsub)), VectorIndexH:$index))>;
 
-  def : Pat<(sext (vector_extract (nxv4i32 ZPR:$vec), VectorIndexS:$index)),
+  def : Pat<(sext (i32 (vector_extract (nxv4i32 ZPR:$vec), VectorIndexS:$index))),
             (i64 (SMOVvi32to64 (v4i32 (EXTRACT_SUBREG ZPR:$vec, zsub)), VectorIndexS:$index))>;
   } // End NotInStreamingSVEMode
 
@@ -3840,6 +3851,25 @@ defm WHILEHS_CXX  : sve2p1_int_while_rr_pn<"whilehs", 0b100>;
 defm WHILEHI_CXX  : sve2p1_int_while_rr_pn<"whilehi", 0b101>;
 defm WHILELO_CXX  : sve2p1_int_while_rr_pn<"whilelo", 0b110>;
 defm WHILELS_CXX  : sve2p1_int_while_rr_pn<"whilels", 0b111>;
+
+
+// Aliases for existing SVE instructions for which predicate-as-counter are
+// accepted as an operand to the instruction
+def : InstAlias<"ldr $Pt, [$Rn, $imm9, mul vl]",
+               (LDR_PXI PNRAny:$Pt, GPR64sp:$Rn, simm9:$imm9), 0>;
+def : InstAlias<"ldr $Pt, [$Rn]",
+               (LDR_PXI PNRAny:$Pt, GPR64sp:$Rn, 0), 0>;
+
+def : InstAlias<"str $Pt, [$Rn, $imm9, mul vl]",
+               (STR_PXI PNRAny:$Pt, GPR64sp:$Rn, simm9:$imm9), 0>;
+def : InstAlias<"str $Pt, [$Rn]",
+               (STR_PXI PNRAny:$Pt, GPR64sp:$Rn, 0), 0>;
+
+def : InstAlias<"mov $Pd, $Pn",
+               (ORR_PPzPP PNR8:$Pd, PNR8:$Pn, PNR8:$Pn, PNR8:$Pn), 0>;
+
+def : InstAlias<"pfalse\t$Pd", (PFALSE PNR8:$Pd), 0>;
+
 } // End HasSVE2p1_or_HasSME2
 
 //===----------------------------------------------------------------------===//

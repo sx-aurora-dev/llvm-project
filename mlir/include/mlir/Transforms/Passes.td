@@ -92,6 +92,9 @@ def PrintIRPass : Pass<"print-ir"> {
     purposes to inspect the IR at a specific point in the pipeline.
   }];
   let constructor = "mlir::createPrintIRPass()";
+  let options = [
+    Option<"label", "label", "std::string", /*default=*/"", "Label">,
+  ];
 }
 
 def GenerateRuntimeVerification : Pass<"generate-runtime-verification"> {
@@ -109,7 +112,7 @@ def Inliner : Pass<"inline"> {
   let constructor = "mlir::createInlinerPass()";
   let options = [
     Option<"defaultPipelineStr", "default-pipeline", "std::string",
-           /*default=*/"", "The default optimizer pipeline used for callables">,
+           /*default=*/"\"canonicalize\"", "The default optimizer pipeline used for callables">,
     ListOption<"opPipelineList", "op-pipelines", "OpPassManager",
                "Callable operation specific optimizer pipelines (in the form "
                "of `dialect.op(pipeline)`)">,
@@ -167,6 +170,25 @@ def LocationSnapshot : Pass<"snapshot-op-locations"> {
 def LoopInvariantCodeMotion : Pass<"loop-invariant-code-motion"> {
   let summary = "Hoist loop invariant instructions outside of the loop";
   let constructor = "mlir::createLoopInvariantCodeMotionPass()";
+}
+
+def Mem2Reg : Pass<"mem2reg"> {
+  let summary = "Promotes memory slots into values.";
+  let description = [{
+    This pass removes loads out of and stores into a memory slot, and turns
+    them into direct uses of SSA values. This is done generically using the
+    `PromoteAllocationOpInterface`, `PromoteOpInterface` and
+    `PromoteMemOpInterface` interfaces.
+
+    This pass will attempt to compute which definitions of the content of
+    the memory slot reach operations that use the memory slot pointer. It
+    will rewire or remove operations that use the slot pointer so they no
+    longer use it. If any of this is not possible, the IR will be left
+    without mutation.
+
+    This pass only supports unstructured control-flow. Promotion of operations
+    within subregions will not happen.
+  }];
 }
 
 def PrintOpStats : Pass<"print-op-stats"> {

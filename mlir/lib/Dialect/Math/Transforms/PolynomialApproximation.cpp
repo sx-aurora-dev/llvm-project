@@ -134,7 +134,7 @@ handleMultidimensionalVectors(ImplicitLocOpBuilder &builder,
   SmallVector<Value> results(maxIndex);
 
   for (int64_t i = 0; i < maxIndex; ++i) {
-    auto offsets = delinearize(strides, i);
+    auto offsets = delinearize(i, strides);
 
     SmallVector<Value> extracted(expandedOperands.size());
     for (const auto &tuple : llvm::enumerate(expandedOperands))
@@ -152,7 +152,7 @@ handleMultidimensionalVectors(ImplicitLocOpBuilder &builder,
 
   for (int64_t i = 0; i < maxIndex; ++i)
     result = builder.create<vector::InsertOp>(results[i], result,
-                                              delinearize(strides, i));
+                                              delinearize(i, strides));
 
   // Reshape back to the original vector shape.
   return builder.create<vector::ShapeCastOp>(
@@ -331,7 +331,8 @@ LogicalResult insertCasts(Operation *op, PatternRewriter &rewriter) {
   SmallVector<Value> operands;
   for (auto operand : op->getOperands())
     operands.push_back(rewriter.create<arith::ExtFOp>(loc, newType, operand));
-  auto result = rewriter.create<math::Atan2Op>(loc, newType, operands);
+  auto result =
+      rewriter.create<T>(loc, TypeRange{newType}, operands, op->getAttrs());
   rewriter.replaceOpWithNewOp<arith::TruncFOp>(op, origType, result);
   return success();
 }
@@ -1244,7 +1245,7 @@ CbrtApproximation::matchAndRewrite(math::CbrtOp op,
   floatTy = broadcast(floatTy, shape);
   intTy = broadcast(intTy, shape);
 
-  auto bconst = [&](Attribute attr) -> Value {
+  auto bconst = [&](TypedAttr attr) -> Value {
     Value value = b.create<arith::ConstantOp>(attr);
     return broadcast(b, value, shape);
   };
@@ -1381,13 +1382,24 @@ RsqrtApproximation::matchAndRewrite(math::RsqrtOp op,
 void mlir::populateMathPolynomialApproximationPatterns(
     RewritePatternSet &patterns,
     const MathPolynomialApproximationOptions &options) {
+  // Patterns for leveraging existing f32 lowerings on other data types.
+  patterns
+      .add<ReuseF32Expansion<math::AtanOp>, ReuseF32Expansion<math::Atan2Op>,
+           ReuseF32Expansion<math::TanhOp>, ReuseF32Expansion<math::LogOp>,
+           ReuseF32Expansion<math::Log2Op>, ReuseF32Expansion<math::Log1pOp>,
+           ReuseF32Expansion<math::ErfOp>, ReuseF32Expansion<math::ExpOp>,
+           ReuseF32Expansion<math::ExpM1Op>, ReuseF32Expansion<math::CbrtOp>,
+           ReuseF32Expansion<math::SinOp>, ReuseF32Expansion<math::CosOp>>(
+          patterns.getContext());
+
   patterns.add<AtanApproximation, Atan2Approximation, TanhApproximation,
                LogApproximation, Log2Approximation, Log1pApproximation,
                ErfPolynomialApproximation, ExpApproximation, ExpM1Approximation,
-               CbrtApproximation, ReuseF32Expansion<math::Atan2Op>,
-               SinAndCosApproximation<true, math::SinOp>,
+               CbrtApproximation, SinAndCosApproximation<true, math::SinOp>,
                SinAndCosApproximation<false, math::CosOp>>(
       patterns.getContext());
-  if (options.enableAvx2)
-    patterns.add<RsqrtApproximation>(patterns.getContext());
+  if (options.enableAvx2) {
+    patterns.add<RsqrtApproximation, ReuseF32Expansion<math::RsqrtOp>>(
+        patterns.getContext());
+  }
 }

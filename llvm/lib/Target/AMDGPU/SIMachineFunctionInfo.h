@@ -276,6 +276,10 @@ struct SIMachineFunctionInfo final : public yaml::MachineFunctionInfo {
   bool ReturnsVoid = true;
 
   std::optional<SIArgumentInfo> ArgInfo;
+
+  unsigned PSInputAddr = 0;
+  unsigned PSInputEnable = 0;
+
   SIMode Mode;
   std::optional<FrameIndex> ScavengeFI;
   StringValue VGPRForAGPRCopy;
@@ -312,6 +316,8 @@ template <> struct MappingTraits<SIMachineFunctionInfo> {
     YamlIO.mapOptional("bytesInStackArgArea", MFI.BytesInStackArgArea, 0u);
     YamlIO.mapOptional("returnsVoid", MFI.ReturnsVoid, true);
     YamlIO.mapOptional("argumentInfo", MFI.ArgInfo);
+    YamlIO.mapOptional("psInputAddr", MFI.PSInputAddr, 0u);
+    YamlIO.mapOptional("psInputEnable", MFI.PSInputEnable, 0u);
     YamlIO.mapOptional("mode", MFI.Mode, SIMode());
     YamlIO.mapOptional("highBitsOf32BitAddress",
                        MFI.HighBitsOf32BitAddress, 0u);
@@ -578,7 +584,7 @@ public:
   // Check if an entry created for \p Reg in PrologEpilogSGPRSpills. Return true
   // on success and false otherwise.
   bool hasPrologEpilogSGPRSpillEntry(Register Reg) const {
-    return PrologEpilogSGPRSpills.find(Reg) != PrologEpilogSGPRSpills.end();
+    return PrologEpilogSGPRSpills.contains(Reg);
   }
 
   // Get the scratch SGPR if allocated to save/restore \p Reg.

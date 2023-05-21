@@ -529,6 +529,8 @@ Value *Mapper::mapValue(const Value *V) {
     return getVM()[V] = UndefValue::get(NewTy);
   if (isa<ConstantAggregateZero>(C))
     return getVM()[V] = ConstantAggregateZero::get(NewTy);
+  if (isa<ConstantTargetNone>(C))
+    return getVM()[V] = Constant::getNullValue(NewTy);
   assert(isa<ConstantPointerNull>(C));
   return getVM()[V] = ConstantPointerNull::get(cast<PointerType>(NewTy));
 }
@@ -1179,6 +1181,10 @@ void ValueMapper::remapInstruction(Instruction &I) {
 
 void ValueMapper::remapFunction(Function &F) {
   FlushingMapper(pImpl)->remapFunction(F);
+}
+
+void ValueMapper::remapGlobalObjectMetadata(GlobalObject &GO) {
+  FlushingMapper(pImpl)->remapGlobalObjectMetadata(GO);
 }
 
 void ValueMapper::scheduleMapGlobalInitializer(GlobalVariable &GV,

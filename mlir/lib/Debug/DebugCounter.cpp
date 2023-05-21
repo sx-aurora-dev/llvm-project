@@ -110,10 +110,13 @@ void DebugCounter::print(raw_ostream &os) const {
 /// various flags within the DebugCounter. These flags are used when
 /// constructing a DebugCounter for initialization.
 void DebugCounter::registerCLOptions() {
-#ifndef NDEBUG
   // Make sure that the options struct has been initialized.
   *clOptions;
-#endif
+}
+
+bool DebugCounter::isActivated() {
+  return clOptions->counters.getNumOccurrences() ||
+         clOptions->printCounterInfo.getNumOccurrences();
 }
 
 // This is called by the command line parser when it sees a value for the

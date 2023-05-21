@@ -976,7 +976,8 @@ ASTNodeImporter::import(const Designator &D) {
     if (!ToFieldLocOrErr)
       return ToFieldLocOrErr.takeError();
 
-    return Designator(ToFieldName, *ToDotLocOrErr, *ToFieldLocOrErr);
+    return DesignatedInitExpr::Designator::CreateFieldDesignator(
+        ToFieldName, *ToDotLocOrErr, *ToFieldLocOrErr);
   }
 
   ExpectedSLoc ToLBracketLocOrErr = import(D.getLBracketLoc());
@@ -988,16 +989,17 @@ ASTNodeImporter::import(const Designator &D) {
     return ToRBracketLocOrErr.takeError();
 
   if (D.isArrayDesignator())
-    return Designator(D.getFirstExprIndex(),
-                      *ToLBracketLocOrErr, *ToRBracketLocOrErr);
+    return Designator::CreateArrayDesignator(D.getArrayIndex(),
+                                             *ToLBracketLocOrErr,
+                                             *ToRBracketLocOrErr);
 
   ExpectedSLoc ToEllipsisLocOrErr = import(D.getEllipsisLoc());
   if (!ToEllipsisLocOrErr)
     return ToEllipsisLocOrErr.takeError();
 
   assert(D.isArrayRangeDesignator());
-  return Designator(
-      D.getFirstExprIndex(), *ToLBracketLocOrErr, *ToEllipsisLocOrErr,
+  return Designator::CreateArrayRangeDesignator(
+      D.getArrayIndex(), *ToLBracketLocOrErr, *ToEllipsisLocOrErr,
       *ToRBracketLocOrErr);
 }
 
@@ -1363,12 +1365,16 @@ ExpectedType ASTNodeImporter::VisitTypedefType(const TypedefType *T) {
   Expected<TypedefNameDecl *> ToDeclOrErr = import(T->getDecl());
   if (!ToDeclOrErr)
     return ToDeclOrErr.takeError();
+
+  TypedefNameDecl *ToDecl = *ToDeclOrErr;
+  if (ToDecl->getTypeForDecl())
+    return QualType(ToDecl->getTypeForDecl(), 0);
+
   ExpectedType ToUnderlyingTypeOrErr = import(T->desugar());
   if (!ToUnderlyingTypeOrErr)
     return ToUnderlyingTypeOrErr.takeError();
 
-  return Importer.getToContext().getTypedefType(*ToDeclOrErr,
-                                                *ToUnderlyingTypeOrErr);
+  return Importer.getToContext().getTypedefType(ToDecl, *ToUnderlyingTypeOrErr);
 }
 
 ExpectedType ASTNodeImporter::VisitTypeOfExprType(const TypeOfExprType *T) {
@@ -2509,6 +2515,22 @@ ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
         QualType FromUT = D->getUnderlyingType();
         QualType FoundUT = FoundTypedef->getUnderlyingType();
         if (Importer.IsStructurallyEquivalent(FromUT, FoundUT)) {
+          // If the underlying declarations are unnamed records these can be
+          // imported as different types. We should create a distinct typedef
+          // node in this case.
+          // If we found an existing underlying type with a record in a
+          // different context (than the imported), this is already reason for
+          // having distinct typedef nodes for these.
+          // Again this can create situation like
+          // 'typedef int T; typedef int T;' but this is hard to avoid without
+          // a rename strategy at import.
+          if (!FromUT.isNull() && !FoundUT.isNull()) {
+            RecordDecl *FromR = FromUT->getAsRecordDecl();
+            RecordDecl *FoundR = FoundUT->getAsRecordDecl();
+            if (FromR && FoundR &&
+                !hasSameVisibilityContextAndLinkage(FoundR, FromR))
+              continue;
+          }
           // If the "From" context has a complete underlying type but we
           // already have a complete underlying type then return with that.
           if (!FromUT->isIncompleteType() && !FoundUT->isIncompleteType())
@@ -2903,13 +2925,12 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
               DC, *TInfoOrErr, Loc, DCXX->getLambdaDependencyKind(),
               DCXX->isGenericLambda(), DCXX->getLambdaCaptureDefault()))
         return D2CXX;
-      ExpectedDecl CDeclOrErr = import(DCXX->getLambdaContextDecl());
+      CXXRecordDecl::LambdaNumbering Numbering = DCXX->getLambdaNumbering();
+      ExpectedDecl CDeclOrErr = import(Numbering.ContextDecl);
       if (!CDeclOrErr)
         return CDeclOrErr.takeError();
-      D2CXX->setLambdaMangling(DCXX->getLambdaManglingNumber(), *CDeclOrErr,
-                               DCXX->hasKnownLambdaInternalLinkage());
-      D2CXX->setDeviceLambdaManglingNumber(
-          DCXX->getDeviceLambdaManglingNumber());
+      Numbering.ContextDecl = *CDeclOrErr;
+      D2CXX->setLambdaNumbering(Numbering);
    } else if (DCXX->isInjectedClassName()) {
       // We have to be careful to do a similar dance to the one in
       // Sema::ActOnStartCXXMemberDeclarations
@@ -3895,6 +3916,12 @@ ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {
                               D->getInClassInitStyle()))
     return ToField;
 
+  // We need [[no_unqiue_address]] attributes to be added to FieldDecl, before
+  // we add fields in CXXRecordDecl::addedMember, otherwise record will be
+  // marked as having non-zero size.
+  Err = Importer.ImportAttrs(ToField, D);
+  if (Err)
+    return std::move(Err);
   ToField->setAccess(D->getAccess());
   ToField->setLexicalDeclContext(LexicalDC);
   if (ToInitializer)
@@ -6771,8 +6798,8 @@ ExpectedStmt ASTNodeImporter::VisitCXXTryStmt(CXXTryStmt *S) {
       return ToHandlerOrErr.takeError();
   }
 
-  return CXXTryStmt::Create(
-      Importer.getToContext(), *ToTryLocOrErr,*ToTryBlockOrErr, ToHandlers);
+  return CXXTryStmt::Create(Importer.getToContext(), *ToTryLocOrErr,
+                            cast<CompoundStmt>(*ToTryBlockOrErr), ToHandlers);
 }
 
 ExpectedStmt ASTNodeImporter::VisitCXXForRangeStmt(CXXForRangeStmt *S) {
@@ -8120,7 +8147,7 @@ ExpectedStmt ASTNodeImporter::VisitCXXUnresolvedConstructExpr(
 
   return CXXUnresolvedConstructExpr::Create(
       Importer.getToContext(), ToType, ToTypeSourceInfo, ToLParenLoc,
-      llvm::ArrayRef(ToArgs), ToRParenLoc);
+      llvm::ArrayRef(ToArgs), ToRParenLoc, E->isListInitialization());
 }
 
 ExpectedStmt
@@ -8788,8 +8815,7 @@ public:
       return;
 
     AttributeCommonInfo ToI(ToAttrName, ToScopeName, ToAttrRange, ToScopeLoc,
-                            FromAttr->getParsedKind(), FromAttr->getSyntax(),
-                            FromAttr->getAttributeSpellingListIndex());
+                            FromAttr->getParsedKind(), FromAttr->getForm());
     // The "SemanticSpelling" is not needed to be passed to the constructor.
     // That value is recalculated from the SpellingListIndex if needed.
     ToAttr = T::Create(Importer.getToContext(),
@@ -8981,6 +9007,19 @@ TranslationUnitDecl *ASTImporter::GetFromTU(Decl *ToD) {
   return FromDPos->second->getTranslationUnitDecl();
 }
 
+Error ASTImporter::ImportAttrs(Decl *ToD, Decl *FromD) {
+  if (!FromD->hasAttrs() || ToD->hasAttrs())
+    return Error::success();
+  for (const Attr *FromAttr : FromD->getAttrs()) {
+    auto ToAttrOrErr = Import(FromAttr);
+    if (ToAttrOrErr)
+      ToD->addAttr(*ToAttrOrErr);
+    else
+      return ToAttrOrErr.takeError();
+  }
+  return Error::success();
+}
+
 Expected<Decl *> ASTImporter::Import(Decl *FromD) {
   if (!FromD)
     return nullptr;
@@ -9115,15 +9154,8 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
 
   // Make sure that ImportImpl registered the imported decl.
   assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
-
-  if (FromD->hasAttrs())
-    for (const Attr *FromAttr : FromD->getAttrs()) {
-      auto ToAttrOrErr = Import(FromAttr);
-      if (ToAttrOrErr)
-        ToD->addAttr(*ToAttrOrErr);
-      else
-        return ToAttrOrErr.takeError();
-    }
+  if (auto Error = ImportAttrs(ToD, FromD))
+    return std::move(Error);
 
   // Notify subclasses.
   Imported(FromD, ToD);

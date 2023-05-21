@@ -54,6 +54,9 @@ module __Fortran_PPC_intrinsics
 
 ! fctid, fctidz, fctiw, fctiwz, fctudz, fctuwz
   abstract interface
+    elemental real(4) function func_r4r4x(x)
+      real(4), intent(in) :: x
+    end function func_r4r4x
     elemental real(8) function func_r8r8x(x)
       real(8), intent(in) :: x
     end function func_r8r8x
@@ -120,4 +123,55 @@ module __Fortran_PPC_intrinsics
   end interface fcfud
   public :: fcfud
 
+! fnabs
+  procedure(func_r4r4x) :: __ppc_fnabs_r4
+  procedure(func_r8r8x) :: __ppc_fnabs_r8
+  interface fnabs
+    procedure :: __ppc_fnabs_r4
+    procedure :: __ppc_fnabs_r8
+  end interface fnabs
+  public :: fnabs
+
+! fre, fres
+  procedure(func_r8r8x) :: __ppc_fre
+  interface fre
+    procedure :: __ppc_fre
+  end interface fre
+  public :: fre
+
+  procedure(func_r4r4x) :: __ppc_fres
+  interface fres
+    procedure :: __ppc_fres
+  end interface fres
+  public :: fres
+
+! frsqrte, frsqrtes
+  procedure(func_r8r8x) :: __ppc_frsqrte
+  interface frsqrte
+    procedure :: __ppc_frsqrte
+  end interface frsqrte
+  public :: frsqrte
+
+  procedure(func_r4r4x) :: __ppc_frsqrtes
+  interface frsqrtes
+    procedure :: __ppc_frsqrtes
+  end interface frsqrtes
+  public :: frsqrtes
+
+! mtfsf, mtfsfi
+  interface mtfsf
+    subroutine __ppc_mtfsf(mask, r)
+      integer(4), intent(in) :: mask
+      real(8), intent(in) :: r
+    end subroutine __ppc_mtfsf
+  end interface mtfsf
+  public :: mtfsf
+
+  interface mtfsfi
+    subroutine __ppc_mtfsfi(bf, i)
+      integer(4), intent(in) :: bf
+      integer(4), intent(in) :: i
+    end subroutine __ppc_mtfsfi
+  end interface mtfsfi
+  public :: mtfsfi
 end module __Fortran_PPC_intrinsics

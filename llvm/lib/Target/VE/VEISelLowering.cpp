@@ -409,7 +409,7 @@ void VETargetLowering::initVPUActions() {
       // TODO
       ISD::ROTL, ISD::ROTR, ISD::BSWAP, ISD::BITREVERSE, ISD::CTLZ,
       ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ, ISD::CTTZ_ZERO_UNDEF, ISD::ADDC,
-      ISD::ADDCARRY, ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
+      ISD::UADDO_CARRY, ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
 
       // genuinely  unsupported
       ISD::FP_TO_UINT, ISD::UINT_TO_FP, ISD::UREM, ISD::SREM, ISD::SDIVREM,
@@ -702,7 +702,7 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   // Analyze return values.
   CCInfo.AnalyzeReturn(Outs, getReturnCC(CallConv));
 
-  SDValue Flag;
+  SDValue Glue;
   SmallVector<SDValue, 4> RetOps(1, Chain);
 
   // Copy the result values into the output registers.
@@ -745,20 +745,20 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       llvm_unreachable("Unknown loc info!");
     }
 
-    Chain = DAG.getCopyToReg(Chain, DL, VA.getLocReg(), OutVal, Flag);
+    Chain = DAG.getCopyToReg(Chain, DL, VA.getLocReg(), OutVal, Glue);
 
     // Guarantee that all emitted copies are stuck together with flags.
-    Flag = Chain.getValue(1);
+    Glue = Chain.getValue(1);
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
   RetOps[0] = Chain; // Update chain.
 
-  // Add the flag if we have it.
-  if (Flag.getNode())
-    RetOps.push_back(Flag);
+  // Add the glue if we have it.
+  if (Glue.getNode())
+    RetOps.push_back(Glue);
 
-  return DAG.getNode(VEISD::RET_FLAG, DL, MVT::Other, RetOps);
+  return DAG.getNode(VEISD::RET_GLUE, DL, MVT::Other, RetOps);
 }
 
 SDValue VETargetLowering::LowerFormalArguments(
@@ -1341,7 +1341,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(Hi)
     TARGET_NODE_CASE(Lo)
-    TARGET_NODE_CASE(RET_FLAG)
+    TARGET_NODE_CASE(RET_GLUE)
     TARGET_NODE_CASE(TS1AM)
     TARGET_NODE_CASE(EQV)
     TARGET_NODE_CASE(XOR)

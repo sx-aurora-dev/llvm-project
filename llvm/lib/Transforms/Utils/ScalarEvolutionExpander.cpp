@@ -174,7 +174,7 @@ Value *SCEVExpander::InsertNoopCastOfTo(Value *V, Type *Ty) {
       assert(DL.getTypeAllocSize(Builder.getInt8Ty()) == 1 &&
              "alloc size of i8 must by 1 byte for the GEP to be correct");
       auto *GEP = Builder.CreateGEP(
-          Builder.getInt8Ty(), Constant::getNullValue(Int8PtrTy), V, "uglygep");
+          Builder.getInt8Ty(), Constant::getNullValue(Int8PtrTy), V, "scevgep");
       return Builder.CreateBitCast(GEP, Ty);
     }
   }
@@ -613,7 +613,7 @@ Value *SCEVExpander::expandAddToGEP(const SCEV *const *op_begin,
     }
 
     // Emit a GEP.
-    return Builder.CreateGEP(Builder.getInt8Ty(), V, Idx, "uglygep");
+    return Builder.CreateGEP(Builder.getInt8Ty(), V, Idx, "scevgep");
   }
 
   {
@@ -2558,7 +2558,7 @@ Value *SCEVExpander::fixupLCSSAFormFor(Value *V) {
   SmallVector<Instruction *, 1> ToUpdate;
   ToUpdate.push_back(DefI);
   SmallVector<PHINode *, 16> PHIsToRemove;
-  formLCSSAForInstructions(ToUpdate, SE.DT, SE.LI, &SE, Builder, &PHIsToRemove);
+  formLCSSAForInstructions(ToUpdate, SE.DT, SE.LI, Builder, &PHIsToRemove);
   for (PHINode *PN : PHIsToRemove) {
     if (!PN->use_empty())
       continue;

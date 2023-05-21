@@ -21,7 +21,6 @@ using namespace mlir;
 using namespace mlir::python;
 
 using llvm::SmallVector;
-using llvm::Twine;
 
 //------------------------------------------------------------------------------
 // Docstrings (trivial, non-duplicated docstrings are included inline).
@@ -490,9 +489,9 @@ public:
         "data",
         [](PyOpaqueAttribute &self) {
           MlirStringRef stringRef = mlirOpaqueAttrGetData(self);
-          return py::str(stringRef.data, stringRef.length);
+          return py::bytes(stringRef.data, stringRef.length);
         },
-        "Returns the data for the Opaqued attributes as a string");
+        "Returns the data for the Opaqued attributes as `bytes`");
   }
 };
 
@@ -528,6 +527,13 @@ public:
           return py::str(stringRef.data, stringRef.length);
         },
         "Returns the value of the string attribute");
+    c.def_property_readonly(
+        "value_bytes",
+        [](PyStringAttribute &self) {
+          MlirStringRef stringRef = mlirStringAttrGetValue(self);
+          return py::bytes(stringRef.data, stringRef.length);
+        },
+        "Returns the value of the string attribute as `bytes`");
   }
 };
 
@@ -688,13 +694,6 @@ public:
   intptr_t dunderLen() { return mlirElementsAttrGetNumElements(*this); }
 
   py::buffer_info accessBuffer() {
-    if (mlirDenseElementsAttrIsSplat(*this)) {
-      // TODO: Currently crashes the program.
-      // Reported as https://github.com/pybind/pybind11/issues/3336
-      throw std::invalid_argument(
-          "unsupported data type for conversion to Python buffer");
-    }
-
     MlirType shapedType = mlirAttributeGetType(*this);
     MlirType elementType = mlirShapedTypeGetElementType(shapedType);
     std::string format;
@@ -710,6 +709,10 @@ public:
     if (mlirTypeIsAF16(elementType)) {
       // f16
       return bufferInfo<uint16_t>(shapedType, "e");
+    }
+    if (mlirTypeIsAIndex(elementType)) {
+      // Same as IndexType::kInternalStorageBitWidth
+      return bufferInfo<int64_t>(shapedType);
     }
     if (mlirTypeIsAInteger(elementType) &&
         mlirIntegerTypeGetWidth(elementType) == 32) {
@@ -777,6 +780,16 @@ public:
                                [](PyDenseElementsAttribute &self) -> bool {
                                  return mlirDenseElementsAttrIsSplat(self);
                                })
+        .def("get_splat_value",
+             [](PyDenseElementsAttribute &self) -> PyAttribute {
+               if (!mlirDenseElementsAttrIsSplat(self)) {
+                 throw SetPyError(
+                     PyExc_ValueError,
+                     "get_splat_value called on a non-splat attribute");
+               }
+               return PyAttribute(self.getContext(),
+                                  mlirDenseElementsAttrGetSplatValue(self));
+             })
         .def_buffer(&PyDenseElementsAttribute::accessBuffer);
   }
 
@@ -811,15 +824,18 @@ private:
       shape.push_back(mlirShapedTypeGetDimSize(shapedType, i));
     // Prepare the strides for the buffer_info.
     SmallVector<intptr_t, 4> strides;
-    intptr_t strideFactor = 1;
-    for (intptr_t i = 1; i < rank; ++i) {
-      strideFactor = 1;
-      for (intptr_t j = i; j < rank; ++j) {
-        strideFactor *= mlirShapedTypeGetDimSize(shapedType, j);
+    if (mlirDenseElementsAttrIsSplat(*this)) {
+      // Splats are special, only the single value is stored.
+      strides.assign(rank, 0);
+    } else {
+      for (intptr_t i = 1; i < rank; ++i) {
+        intptr_t strideFactor = 1;
+        for (intptr_t j = i; j < rank; ++j)
+          strideFactor *= mlirShapedTypeGetDimSize(shapedType, j);
+        strides.push_back(sizeof(Type) * strideFactor);
       }
-      strides.push_back(sizeof(Type) * strideFactor);
+      strides.push_back(sizeof(Type));
     }
-    strides.push_back(sizeof(Type));
     std::string format;
     if (explicitFormat) {
       format = explicitFormat;

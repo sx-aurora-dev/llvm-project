@@ -392,7 +392,13 @@ public:
   Expected<ArrayRef<T>> getSectionContentsAsArray(const Elf_Shdr &Sec) const;
   Expected<ArrayRef<uint8_t>> getSectionContents(const Elf_Shdr &Sec) const;
   Expected<ArrayRef<uint8_t>> getSegmentContents(const Elf_Phdr &Phdr) const;
-  Expected<std::vector<BBAddrMap>> decodeBBAddrMap(const Elf_Shdr &Sec) const;
+
+  /// Returns a vector of BBAddrMap structs corresponding to each function
+  /// within the text section that the SHT_LLVM_BB_ADDR_MAP section \p Sec
+  /// is associated with. If the current ELFFile is relocatable, a corresponding
+  /// \p RelaSec must be passed in as an argument.
+  Expected<std::vector<BBAddrMap>>
+  decodeBBAddrMap(const Elf_Shdr &Sec, const Elf_Shdr *RelaSec = nullptr) const;
 
   /// Returns a map from every section matching \p IsMatch to its relocation
   /// section, or \p nullptr if it has no relocation section. This function
@@ -1230,16 +1236,13 @@ Expected<StringRef> ELFFile<ELFT>::getSectionName(const Elf_Shdr &Section,
 /// This function returns the hash value for a symbol in the .dynsym section
 /// Name of the API remains consistent as specified in the libelf
 /// REF : http://www.sco.com/developers/gabi/latest/ch5.dynamic.html#hash
-inline unsigned hashSysV(StringRef SymbolName) {
-  unsigned h = 0, g;
-  for (char C : SymbolName) {
-    h = (h << 4) + C;
-    g = h & 0xf0000000L;
-    if (g != 0)
-      h ^= g >> 24;
-    h &= ~g;
+inline uint32_t hashSysV(StringRef SymbolName) {
+  uint32_t H = 0;
+  for (uint8_t C : SymbolName) {
+    H = (H << 4) + C;
+    H ^= (H >> 24) & 0xf0;
   }
-  return h;
+  return H & 0x0fffffff;
 }
 
 /// This function returns the hash value for a symbol in the .dynsym section

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/AutoUpgrade.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/Constants.h"
@@ -27,16 +28,23 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAArch64.h"
 #include "llvm/IR/IntrinsicsARM.h"
+#include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/TargetParser/Triple.h"
 #include <cstring>
+
 using namespace llvm;
+
+static cl::opt<bool>
+    DisableAutoUpgradeDebugInfo("disable-auto-upgrade-debug-info",
+                                cl::desc("Disable autoupgrade of debug info"));
 
 static void rename(GlobalValue *GV) { GV->setName(GV->getName() + ".old"); }
 
@@ -1136,6 +1144,40 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
     }
     break;
   }
+
+  case 'w':
+    if (Name.startswith("wasm.fma.")) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(
+          F->getParent(), Intrinsic::wasm_relaxed_madd, F->getReturnType());
+      return true;
+    }
+    if (Name.startswith("wasm.fms.")) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(
+          F->getParent(), Intrinsic::wasm_relaxed_nmadd, F->getReturnType());
+      return true;
+    }
+    if (Name.startswith("wasm.laneselect.")) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(
+          F->getParent(), Intrinsic::wasm_relaxed_laneselect,
+          F->getReturnType());
+      return true;
+    }
+    if (Name == "wasm.dot.i8x16.i7x16.signed") {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(
+          F->getParent(), Intrinsic::wasm_relaxed_dot_i8x16_i7x16_signed);
+      return true;
+    }
+    if (Name == "wasm.dot.i8x16.i7x16.add.signed") {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(
+          F->getParent(), Intrinsic::wasm_relaxed_dot_i8x16_i7x16_add_signed);
+      return true;
+    }
+    break;
 
   case 'x':
     if (UpgradeX86IntrinsicFunction(F, Name, NewFn))
@@ -4480,6 +4522,9 @@ Constant *llvm::UpgradeBitCastExpr(unsigned Opc, Constant *C, Type *DestTy) {
 /// Check the debug info version number, if it is out-dated, drop the debug
 /// info. Return true if module is modified.
 bool llvm::UpgradeDebugInfo(Module &M) {
+  if (DisableAutoUpgradeDebugInfo)
+    return false;
+
   unsigned Version = getDebugMetadataVersionFromModule(M);
   if (Version == DEBUG_METADATA_VERSION) {
     bool BrokenDebugInfo = false;
@@ -4919,9 +4964,10 @@ MDNode *llvm::upgradeInstructionLoopAttachment(MDNode &N) {
 
 std::string llvm::UpgradeDataLayoutString(StringRef DL, StringRef TT) {
   Triple T(TT);
-  // For AMDGPU we uprgrade older DataLayouts to include the default globals
-  // address space of 1.
-  if (T.isAMDGPU() && !DL.contains("-G") && !DL.startswith("G")) {
+  // The only data layout upgrades needed for pre-GCN are setting the address
+  // space of globals to 1.
+  if (T.isAMDGPU() && !T.isAMDGCN() && !DL.contains("-G") &&
+      !DL.startswith("G")) {
     return DL.empty() ? std::string("G1") : (DL + "-G1").str();
   }
 
@@ -4934,6 +4980,31 @@ std::string llvm::UpgradeDataLayoutString(StringRef DL, StringRef TT) {
   }
 
   std::string Res = DL.str();
+  // AMDGCN data layout upgrades.
+  if (T.isAMDGCN()) {
+    // Define address spaces for constants.
+    if (!DL.contains("-G") && !DL.starts_with("G"))
+      Res.append(Res.empty() ? "G1" : "-G1");
+
+    // Add missing non-integral declarations.
+    // This goes before adding new address spaces to prevent incoherent string
+    // values.
+    if (!DL.contains("-ni") && !DL.startswith("ni"))
+      Res.append("-ni:7:8");
+    // Update ni:7 to ni:7:8.
+    if (DL.ends_with("ni:7"))
+      Res.append(":8");
+
+    // Add sizing for address spaces 7 and 8 (fat raw buffers and buffer
+    // resources) An empty data layout has already been upgraded to G1 by now.
+    if (!DL.contains("-p7") && !DL.startswith("p7"))
+      Res.append("-p7:160:256:256:32");
+    if (!DL.contains("-p8") && !DL.startswith("p8"))
+      Res.append("-p8:128:128");
+
+    return Res;
+  }
+
   if (!T.isX86())
     return Res;
 
@@ -4988,7 +5059,6 @@ void llvm::UpgradeAttributes(AttrBuilder &B) {
 }
 
 void llvm::UpgradeOperandBundles(std::vector<OperandBundleDef> &Bundles) {
-
   // clang.arc.attachedcall bundles are now required to have an operand.
   // If they don't, it's okay to drop them entirely: when there is an operand,
   // the "attachedcall" is meaningful and required, but without an operand,
