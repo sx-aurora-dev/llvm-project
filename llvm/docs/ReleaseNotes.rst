@@ -84,6 +84,7 @@ Changes to the AArch64 Backend
 
 * Added Assembly Support for the 2022 A-profile extensions FEAT_GCS (Guarded
   Control Stacks), FEAT_CHK (Check Feature Status), and FEAT_ATS1A.
+* Support for preserve_all calling convention is added.
 
 Changes to the AMDGPU Backend
 -----------------------------
@@ -170,6 +171,10 @@ Changes to the RISC-V Backend
 * Updated support experimental vector crypto extensions to version 0.5.1 of
   the specification.
 * Removed N extension (User-Level Interrupts) CSR names in the assembler.
+* ``RISCV::parseCPUKind`` and ``RISCV::checkCPUKind`` were merged into a single
+  ``RISCV::parseCPU``. The ``CPUKind`` enum is no longer part of the
+  RISCVTargetParser.h interface. Similar for ``parseTuneCPUkind`` and
+  ``checkTuneCPUKind``.
 
 Changes to the WebAssembly Backend
 ----------------------------------
