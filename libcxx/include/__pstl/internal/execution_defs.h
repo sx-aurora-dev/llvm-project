@@ -10,7 +10,9 @@
 #ifndef _PSTL_EXECUTION_POLICY_DEFS_H
 #define _PSTL_EXECUTION_POLICY_DEFS_H
 
-#include <type_traits>
+#include <__type_traits/decay.h>
+#include <__type_traits/enable_if.h>
+#include <__type_traits/integral_constant.h>
 
 #include "pstl_config.h"
 
@@ -48,11 +50,8 @@ struct is_execution_policy<__pstl::execution::parallel_unsequenced_policy> : std
 template <>
 struct is_execution_policy<__pstl::execution::unsequenced_policy> : std::true_type {};
 
-#if defined(_PSTL_CPP14_VARIABLE_TEMPLATES_PRESENT)
 template <class _Tp>
 constexpr bool is_execution_policy_v = __pstl::execution::is_execution_policy<_Tp>::value;
-#endif
-
 } // namespace v1
 } // namespace execution
 
