@@ -192,11 +192,19 @@ New Compiler Flags
 - The flag ``-std=c++23`` has been added. This behaves the same as the existing
   flag ``-std=c++2b``.
 
+- ``-dumpdir`` has been implemented to specify auxiliary and dump output
+  filenames for features like ``-gsplit-dwarf``.
+
 Deprecated Compiler Flags
 -------------------------
 
 Modified Compiler Flags
 -----------------------
+
+- ``clang -g -gsplit-dwarf a.c -o obj/x`` (compile and link) now generates the
+  ``.dwo`` file at ``obj/x-a.dwo``, instead of a file in the temporary
+  directory (``/tmp`` on \*NIX systems, if none of the environment variables
+  TMPDIR, TMP, and TEMP are specified).
 
 Removed Compiler Flags
 -------------------------
@@ -383,6 +391,10 @@ Bug Fixes in This Version
   at the point where it is required. This fixes:
   (`#62224 <https://github.com/llvm/llvm-project/issues/62224>`_) and
   (`#62596 <https://github.com/llvm/llvm-project/issues/62596>`_)
+- Fix an assertion when instantiating the body of a Class Template Specialization
+  when it had been instantiated from a partial template specialization with different
+  template arguments on the containing class. This fixes:
+  (`#60778 <https://github.com/llvm/llvm-project/issues/60778>`_).
 
 Bug Fixes to Compiler Builtins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -430,6 +442,9 @@ Bug Fixes to C++ Support
 - Fix a crash when expanding a pack as the index of a subscript expression.
 - Fix handling of constexpr dynamic memory allocations in template
   arguments. (`#62462 <https://github.com/llvm/llvm-project/issues/62462>`_)
+- Some predefined expressions are now treated as string literals in MSVC
+  compatibility mode.
+  (`#114 <https://github.com/llvm/llvm-project/issues/114>`_)
 
 Bug Fixes to AST Handling
 ^^^^^^^^^^^^^^^^^^^^^^^^^

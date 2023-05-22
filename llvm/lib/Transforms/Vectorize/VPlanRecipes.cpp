@@ -835,9 +835,7 @@ void VPWidenGEPRecipe::execute(VPTransformState &State) {
       // Create the new GEP. Note that this GEP may be a scalar if VF == 1,
       // but it should be a vector, otherwise.
       auto *NewGEP = State.Builder.CreateGEP(GEP->getSourceElementType(), Ptr,
-                                             Indices, "");
-      if (auto *I = dyn_cast<GetElementPtrInst>(NewGEP))
-        setFlags(I);
+                                             Indices, "", isInBounds());
       assert((State.VF.isScalar() || NewGEP->getType()->isVectorTy()) &&
              "NewGEP is not a pointer vector");
       State.set(this, NewGEP, Part);
@@ -1138,7 +1136,9 @@ void VPExpandSCEVRecipe::execute(VPTransformState &State) {
 
   Value *Res = Exp.expandCodeFor(Expr, Expr->getType(),
                                  &*State.Builder.GetInsertPoint());
-
+  assert(!State.ExpandedSCEVs.contains(Expr) &&
+         "Same SCEV expanded multiple times");
+  State.ExpandedSCEVs[Expr] = Res;
   for (unsigned Part = 0, UF = State.UF; Part < UF; ++Part)
     State.set(this, Res, {Part, 0});
 }

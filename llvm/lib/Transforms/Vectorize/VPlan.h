@@ -411,6 +411,10 @@ struct VPTransformState {
   /// This is currently only used to add no-alias metadata based on the
   /// memchecks.  The actually versioning is performed manually.
   LoopVersioning *LVer = nullptr;
+
+  /// Map SCEVs to their expanded values. Populated when executing
+  /// VPExpandSCEVRecipes.
+  DenseMap<const SCEV *, Value *> ExpandedSCEVs;
 };
 
 /// VPBlockBase is the building block of the Hierarchical Control-Flow Graph.
@@ -942,8 +946,8 @@ class VPRecipeWithIRFlags : public VPRecipeBase {
   enum class OperationType : unsigned char {
     OverflowingBinOp,
     PossiblyExactOp,
-    FPMathOp,
     GEPOp,
+    FPMathOp,
     Other
   };
   struct WrapFlagsTy {
@@ -1065,6 +1069,12 @@ public:
     case OperationType::Other:
       break;
     }
+  }
+
+  bool isInBounds() const {
+    assert(OpType == OperationType::GEPOp &&
+           "recipe doesn't have inbounds flag");
+    return GEPFlags.IsInBounds;
   }
 };
 
