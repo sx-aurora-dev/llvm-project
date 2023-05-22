@@ -82,20 +82,20 @@ define fastcc <512 x i64> @vec_fptoui_v512f64_v512i64(<512 x double> %x) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lea.sl %s1, 1138753536
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v3, %s1
-; CHECK-NEXT:    vfcmp.d %v2, %v0, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2
-; CHECK-NEXT:    vfcmp.d %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v2
-; CHECK-NEXT:    vfsub.d %v2, %v1, %v3
+; CHECK-NEXT:    vbrd %v4, %s1
+; CHECK-NEXT:    vfsub.d %v2, %v1, %v4
 ; CHECK-NEXT:    vcvt.l.d.rz %v2, %v2
 ; CHECK-NEXT:    lea.sl %s1, -2147483648
 ; CHECK-NEXT:    vxor %v2, %s1, %v2
-; CHECK-NEXT:    vcvt.l.d.rz %v2, %v1, %vm3
-; CHECK-NEXT:    vfsub.d %v1, %v0, %v3
+; CHECK-NEXT:    vfcmp.d %v3, %v1, %v4
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v3
+; CHECK-NEXT:    vcvt.l.d.rz %v2, %v1, %vm1
+; CHECK-NEXT:    vfsub.d %v1, %v0, %v4
 ; CHECK-NEXT:    vcvt.l.d.rz %v1, %v1
 ; CHECK-NEXT:    vxor %v3, %s1, %v1
-; CHECK-NEXT:    vcvt.l.d.rz %v3, %v0, %vm2
+; CHECK-NEXT:    vfcmp.d %v1, %v0, %v4
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v1
+; CHECK-NEXT:    vcvt.l.d.rz %v3, %v0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v2
