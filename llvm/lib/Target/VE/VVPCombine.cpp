@@ -135,6 +135,48 @@ static bool match_FFMS(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
   return true;
 }
 
+// Check vp.fma with negate.
+//   vz * vw - vy
+//     VVP_FMA(fneg(vy), vz, vw) -> FMSB(vz, vw, vy)
+//   vy - vz * vw
+//     VVP_FMA(vy, fneg(vz), vw) -> FNMSB(vz, vw, vy)
+//   -(vz * vw + vy)
+//     VVP_FMA(fneg(vy), fneg(vz), vw) -> FNMA(vz, vw, vy)
+static bool match_FFMA_WITH_NEG(
+  SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
+  SDValue &Mask, SDValue &AVL, bool &Negated, bool &Subtracted) {
+  if (Root->getOpcode() != VEISD::VVP_FFMA)
+    return false;
+
+  VY = Root->getOperand(0);
+  VZ = Root->getOperand(1);
+  VW = Root->getOperand(2);
+
+  // Detect whether both first and second expressions of fma are negated or not.
+  auto check_fneg = [](SDValue& V) {
+    return V->getOpcode() == VEISD::VVP_FNEG &&
+           V->hasOneUse() && V->getFlags().hasAllowContract();
+  };
+  if (check_fneg(VZ)) {
+    Negated = true;
+    VZ = VZ->getOperand(0);
+  }
+
+  // Detect whether third expression of fma is negated or not.
+  if (check_fneg(VY)) {
+    Subtracted = true;
+    VY = VY->getOperand(0);
+  }
+
+  // Take apart.
+  Mask = Root->getOperand(3);
+  AVL = Root->getOperand(4);
+
+  LLVM_DEBUG(dbgs() << "match_FFMA_WITH_NEG: matched, negated: " << Negated
+    << ", subtracted: " << Subtracted << "\n";);
+  return true;
+}
+
 static bool match_Reciprocal(SDNode *N, SDValue &VX, SDValue &Mask,
                              SDValue &AVL) {
   // Fold VFRCP.
@@ -175,7 +217,30 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   switch (N->getOpcode()) {
 
   // Fuse FMA, FMSB, FNMA, FNMSB, ..
+  case VEISD::VVP_FFMA: {
+    // For the case like following.
+    //   VVP_FMA(fneg(vy), vz, vw) -> FMSB(vz, vw, vy)
+    //   VVP_FMA(vy, fneg(vz), fneg(vw)) -> FNMSB(vz, vw, vy)
+    // TODO: support FNMA
+    //   VVP_FMA(fneg(vy), fneg(vz), vw) -> FNMA(vz, vw, vy)
+    SDValue VY, VZ, VW, Mask, AVL;
+    bool Subtracted = false;
+    bool Negated = false;
+    if (match_FFMA_WITH_NEG(N, VY, VZ, VW, Mask, AVL, Negated, Subtracted)) {
+      MVT ResVT = N->getSimpleValueType(0);
+      unsigned Opcode = VEISD::VVP_FFMA;
+      if (Subtracted && !Negated)
+        Opcode = VEISD::VVP_FFMS;
+      else if (!Subtracted && Negated)
+        Opcode = VEISD::VVP_FFMSN;
+      else
+        break;
+      auto N = CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL}, Flags);
+      return N;
+    }
+  } break;
   case VEISD::VVP_FADD: {
+    // vz * vw + vy
     SDValue VY, VZ, VW, Mask, AVL;
     if (match_FFMA(N, VY, VZ, VW, Mask, AVL)) {
       MVT ResVT = N->getSimpleValueType(0);
@@ -185,6 +250,7 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
     }
   } break;
   case VEISD::VVP_FSUB: {
+    // vz * vw - vy
     SDValue VY, VZ, VW, Mask, AVL;
     bool Negated;
     if (match_FFMS(N, VY, VZ, VW, Mask, AVL, Negated)) {
