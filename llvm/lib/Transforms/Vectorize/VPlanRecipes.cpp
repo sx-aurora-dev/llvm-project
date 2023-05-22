@@ -478,6 +478,7 @@ void VPInstruction::setFastMathFlags(FastMathFlags FMFNew) {
 }
 
 void VPWidenCallRecipe::execute(VPTransformState &State) {
+  assert(State.VF.isVector() && "not widening");
   auto &CI = *cast<CallInst>(getUnderlyingInstr());
   assert(!isa<DbgInfoIntrinsic>(CI) &&
          "DbgInfoIntrinsic should have been dropped during VPlan construction");
@@ -488,9 +489,7 @@ void VPWidenCallRecipe::execute(VPTransformState &State) {
     // Add return type if intrinsic is overloaded on it.
     if (isVectorIntrinsicWithOverloadTypeAtArg(VectorIntrinsicID, -1)) {
       TysForDecl.push_back(
-          State.VF.isVector()
-              ? VectorType::get(CI.getType()->getScalarType(), State.VF)
-              : CI.getType());
+          VectorType::get(CI.getType()->getScalarType(), State.VF));
     }
     SmallVector<Value *, 4> Args;
     for (const auto &I : enumerate(operands())) {
@@ -633,17 +632,8 @@ void VPWidenRecipe::execute(VPTransformState &State) {
 
       Value *V = Builder.CreateNAryOp(I.getOpcode(), Ops);
 
-      if (auto *VecOp = dyn_cast<Instruction>(V)) {
-        VecOp->copyIRFlags(&I);
-
-        // If the instruction is vectorized and was in a basic block that needed
-        // predication, we can't propagate poison-generating flags (nuw/nsw,
-        // exact, etc.). The control flow has been linearized and the
-        // instruction is no longer guarded by the predicate, which could make
-        // the flag properties to no longer hold.
-        if (State.MayGeneratePoisonRecipes.contains(this))
-          VecOp->dropPoisonGeneratingFlags();
-      }
+      if (auto *VecOp = dyn_cast<Instruction>(V))
+        setFlags(VecOp);
 
       // Use this vector value for all users of the original instruction.
       State.set(this, V, Part);
@@ -788,6 +778,7 @@ void VPScalarIVStepsRecipe::print(raw_ostream &O, const Twine &Indent,
 #endif
 
 void VPWidenGEPRecipe::execute(VPTransformState &State) {
+  assert(State.VF.isVector() && "not widening");
   auto *GEP = cast<GetElementPtrInst>(getUnderlyingInstr());
   // Construct a vector GEP by widening the operands of the scalar GEP as
   // necessary. We mark the vector GEP 'inbounds' if appropriate. A GEP
@@ -795,7 +786,7 @@ void VPWidenGEPRecipe::execute(VPTransformState &State) {
   // is vector-typed. Thus, to keep the representation compact, we only use
   // vector-typed operands for loop-varying values.
 
-  if (State.VF.isVector() && areAllOperandsInvariant()) {
+  if (areAllOperandsInvariant()) {
     // If we are vectorizing, but the GEP has only loop-invariant operands,
     // the GEP we build (by only using vector-typed operands for
     // loop-varying values) would be a scalar pointer. Thus, to ensure we
@@ -809,6 +800,7 @@ void VPWidenGEPRecipe::execute(VPTransformState &State) {
     //       collectLoopScalars() and teach getVectorValue() to broadcast
     //       the lane-zero scalar value.
     auto *Clone = State.Builder.Insert(GEP->clone());
+    setFlags(Clone);
     for (unsigned Part = 0; Part < State.UF; ++Part) {
       Value *EntryPart = State.Builder.CreateVectorSplat(State.VF, Clone);
       State.set(this, EntryPart, Part);
@@ -840,18 +832,12 @@ void VPWidenGEPRecipe::execute(VPTransformState &State) {
           Indices.push_back(State.get(Operand, Part));
       }
 
-      // If the GEP instruction is vectorized and was in a basic block that
-      // needed predication, we can't propagate the poison-generating 'inbounds'
-      // flag. The control flow has been linearized and the GEP is no longer
-      // guarded by the predicate, which could make the 'inbounds' properties to
-      // no longer hold.
-      bool IsInBounds =
-          GEP->isInBounds() && State.MayGeneratePoisonRecipes.count(this) == 0;
-
       // Create the new GEP. Note that this GEP may be a scalar if VF == 1,
       // but it should be a vector, otherwise.
       auto *NewGEP = State.Builder.CreateGEP(GEP->getSourceElementType(), Ptr,
-                                             Indices, "", IsInBounds);
+                                             Indices, "");
+      if (auto *I = dyn_cast<GetElementPtrInst>(NewGEP))
+        setFlags(I);
       assert((State.VF.isScalar() || NewGEP->getType()->isVectorTy()) &&
              "NewGEP is not a pointer vector");
       State.set(this, NewGEP, Part);
