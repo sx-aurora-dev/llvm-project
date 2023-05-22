@@ -1653,10 +1653,6 @@ public:
     Scalars.clear();
   }
 
-  /// Convenience function that returns the value of vscale_range iff
-  /// vscale_range.min == vscale_range.max or otherwise returns the value
-  /// returned by the corresponding TLI method.
-  std::optional<unsigned> getVScaleForTuning() const;
 
 private:
   unsigned NumPredStores = 0;
@@ -5340,9 +5336,14 @@ ElementCount LoopVectorizationCostModel::getMaximizedVFForTarget(
   return MaxVF;
 }
 
-std::optional<unsigned> LoopVectorizationCostModel::getVScaleForTuning() const {
-  if (TheFunction->hasFnAttribute(Attribute::VScaleRange)) {
-    auto Attr = TheFunction->getFnAttribute(Attribute::VScaleRange);
+/// Convenience function that returns the value of vscale_range iff
+/// vscale_range.min == vscale_range.max or otherwise returns the value
+/// returned by the corresponding TTI method.
+static std::optional<unsigned>
+getVScaleForTuning(const Loop *L, const TargetTransformInfo &TTI) {
+  const Function *Fn = L->getHeader()->getParent();
+  if (Fn->hasFnAttribute(Attribute::VScaleRange)) {
+    auto Attr = Fn->getFnAttribute(Attribute::VScaleRange);
     auto Min = Attr.getVScaleRangeMin();
     auto Max = Attr.getVScaleRangeMax();
     if (Max && Min == Max)
@@ -5384,7 +5385,7 @@ bool LoopVectorizationCostModel::isMoreProfitable(
   // Improve estimate for the vector width if it is scalable.
   unsigned EstimatedWidthA = A.Width.getKnownMinValue();
   unsigned EstimatedWidthB = B.Width.getKnownMinValue();
-  if (std::optional<unsigned> VScale = getVScaleForTuning()) {
+  if (std::optional<unsigned> VScale = getVScaleForTuning(TheLoop, TTI)) {
     if (A.Width.isScalable())
       EstimatedWidthA *= *VScale;
     if (B.Width.isScalable())
@@ -5498,7 +5499,7 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
 
 #ifndef NDEBUG
     unsigned AssumedMinimumVscale = 1;
-    if (std::optional<unsigned> VScale = getVScaleForTuning())
+    if (std::optional<unsigned> VScale = getVScaleForTuning(TheLoop, TTI))
       AssumedMinimumVscale = *VScale;
     unsigned Width =
         Candidate.Width.isScalable()
@@ -5594,7 +5595,7 @@ bool LoopVectorizationCostModel::isEpilogueVectorizationProfitable(
 
   unsigned Multiplier = 1;
   if (VF.isScalable())
-    Multiplier = getVScaleForTuning().value_or(1);
+    Multiplier = getVScaleForTuning(TheLoop, TTI).value_or(1);
   if ((Multiplier * VF.getKnownMinValue()) >= EpilogueVectorizationMinVF)
     return true;
   return false;
@@ -5654,7 +5655,7 @@ LoopVectorizationCostModel::selectEpilogueVectorizationFactor(
   ElementCount EstimatedRuntimeVF = MainLoopVF;
   if (MainLoopVF.isScalable()) {
     EstimatedRuntimeVF = ElementCount::getFixed(MainLoopVF.getKnownMinValue());
-    if (std::optional<unsigned> VScale = getVScaleForTuning())
+    if (std::optional<unsigned> VScale = getVScaleForTuning(TheLoop, TTI))
       EstimatedRuntimeVF *= *VScale;
   }
 
@@ -7514,7 +7515,7 @@ LoopVectorizationPlanner::planInVPlanNativePath(ElementCount UserVF) {
     // reasonable one.
     if (UserVF.isZero()) {
       VF = ElementCount::getFixed(determineVPlanVF(
-          TTI->getRegisterBitWidth(TargetTransformInfo::RGK_FixedWidthVector)
+          TTI.getRegisterBitWidth(TargetTransformInfo::RGK_FixedWidthVector)
               .getFixedValue(),
           CM));
       LLVM_DEBUG(dbgs() << "LV: VPlan computed VF " << VF << ".\n");
@@ -7558,7 +7559,7 @@ LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
 
   // Invalidate interleave groups if all blocks of loop will be predicated.
   if (CM.blockNeedsPredicationForAnyReason(OrigLoop->getHeader()) &&
-      !useMaskedInterleavedAccesses(*TTI)) {
+      !useMaskedInterleavedAccesses(TTI)) {
     LLVM_DEBUG(
         dbgs()
         << "LV: Invalidate all interleaved groups due to fold-tail by masking "
@@ -9199,7 +9200,7 @@ void LoopVectorizationPlanner::adjustRecipesForReductions(
         VecOp = FMulRecipe;
       }
       VPReductionRecipe *RedRecipe =
-          new VPReductionRecipe(&RdxDesc, R, ChainOp, VecOp, CondOp, TTI);
+          new VPReductionRecipe(&RdxDesc, R, ChainOp, VecOp, CondOp, &TTI);
       WidenRecipe->getVPSingleValue()->replaceAllUsesWith(RedRecipe);
       Plan->removeVPValueFor(R);
       Plan->addVPValue(R, RedRecipe);
@@ -9638,7 +9639,7 @@ void VPWidenMemoryInstructionRecipe::execute(VPTransformState &State) {
 
   auto *DataTy = VectorType::get(ScalarDataTy, State.VF);
   const Align Alignment = getLoadStoreAlignment(&Ingredient);
-  bool CreateGatherScatter = !Consecutive;
+  bool CreateGatherScatter = !isConsecutive();
 
   auto &Builder = State.Builder;
   InnerLoopVectorizer::VectorParts BlockInMaskParts(State.UF);
@@ -9655,13 +9656,13 @@ void VPWidenMemoryInstructionRecipe::execute(VPTransformState &State) {
     // or query DataLayout for a more suitable index type otherwise.
     const DataLayout &DL =
         Builder.GetInsertBlock()->getModule()->getDataLayout();
-    Type *IndexTy = State.VF.isScalable() && (Reverse || Part > 0)
+    Type *IndexTy = State.VF.isScalable() && (isReverse() || Part > 0)
                         ? DL.getIndexType(ScalarDataTy->getPointerTo())
                         : Builder.getInt32Ty();
     bool InBounds = false;
     if (auto *gep = dyn_cast<GetElementPtrInst>(Ptr->stripPointerCasts()))
       InBounds = gep->isInBounds();
-    if (Reverse) {
+    if (isReverse()) {
       // If the address is consecutive but reversed, then the
       // wide store needs to start at the last vector element.
       // RunTimeVF =  VScale * VF.getKnownMinValue()
@@ -9701,7 +9702,7 @@ void VPWidenMemoryInstructionRecipe::execute(VPTransformState &State) {
         NewSI = Builder.CreateMaskedScatter(StoredVal, VectorGep, Alignment,
                                             MaskPart);
       } else {
-        if (Reverse) {
+        if (isReverse()) {
           // If we store to reverse consecutive memory locations, then we need
           // to reverse the order of elements in the stored value.
           StoredVal = Builder.CreateVectorReverse(StoredVal, "reverse");
@@ -9899,7 +9900,7 @@ static bool processLoopInVPlanNativePath(
   // Use the planner for outer loop vectorization.
   // TODO: CM is not used at this point inside the planner. Turn CM into an
   // optional argument if we don't need it in the future.
-  LoopVectorizationPlanner LVP(L, LI, TLI, TTI, LVL, CM, IAI, PSE, Hints, ORE);
+  LoopVectorizationPlanner LVP(L, LI, TLI, *TTI, LVL, CM, IAI, PSE, Hints, ORE);
 
   // Get user vectorization factor.
   ElementCount UserVF = Hints.getWidth();
@@ -10239,7 +10240,8 @@ bool LoopVectorizePass::processLoop(Loop *L) {
   LoopVectorizationCostModel CM(SEL, L, PSE, LI, &LVL, *TTI, TLI, DB, AC, ORE,
                                 F, &Hints, IAI);
   // Use the planner for vectorization.
-  LoopVectorizationPlanner LVP(L, LI, TLI, TTI, &LVL, CM, IAI, PSE, Hints, ORE);
+  LoopVectorizationPlanner LVP(L, LI, TLI, *TTI, &LVL, CM, IAI, PSE, Hints,
+                               ORE);
 
   // Get user vectorization factor and interleave count.
   ElementCount UserVF = Hints.getWidth();
@@ -10268,7 +10270,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
     bool ForceVectorization =
         Hints.getForce() == LoopVectorizeHints::FK_Enabled;
     if (!ForceVectorization &&
-        !areRuntimeChecksProfitable(Checks, VF, CM.getVScaleForTuning(), L,
+        !areRuntimeChecksProfitable(Checks, VF, getVScaleForTuning(L, *TTI), L,
                                     *PSE.getSE())) {
       ORE->emit([&]() {
         return OptimizationRemarkAnalysisAliasing(
