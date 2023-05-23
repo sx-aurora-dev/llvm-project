@@ -1,10 +1,11 @@
 pipeline {
     agent any
     environment {
-        // PATH for aurora-ds02
-        PATH = "/proj/share/local/x86_64/cmake-3.18.4-Linux-x86_64/bin:$PATH"
         TOP = pwd()
-        CMAKE = "cmake"
+        // LLVM requires cmake newer than 3.20
+        CMAKE = "/proj/share/local/x86_64/cmake-3.26.4-linux-x86_64/bin/cmake"
+        // VML requires cmake older than 3.20
+        CMAKEO = "/proj/share/local/x86_64/cmake-3.18.4-Linux-x86_64/bin/cmake"
         PYTHON = "python3"
         // Job pool
         COMPILE_THREADS = 24
@@ -116,7 +117,7 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
-                                ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
+                                ${CMAKEO} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
                                     -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/17/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
