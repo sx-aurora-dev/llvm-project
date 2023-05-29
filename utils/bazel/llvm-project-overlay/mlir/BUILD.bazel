@@ -33,8 +33,8 @@ expand_template(
     name = "mlir_config_h_gen",
     out = "include/mlir/Config/mlir-config.h",
     substitutions = {
-        "#cmakedefine01 MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS": "#define MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS 0"
-        },
+        "#cmakedefine01 MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS": "#define MLIR_ENABLE_EXPENSIVE_PATTERN_API_CHECKS 0",
+    },
     template = "include/mlir/Config/mlir-config.h.cmake",
 )
 
@@ -4039,6 +4039,7 @@ cc_library(
         ":BytecodeOpInterfaceIncGen",
         ":IR",
         ":Support",
+        "//llvm:CodeGen",
         "//llvm:Support",
     ],
 )
@@ -6078,7 +6079,6 @@ cc_library(
     ),
     includes = ["include"],
     deps = [
-        ":config",
         ":ControlFlowInterfaces",
         ":IR",
         ":LoopLikeInterface",
@@ -6087,6 +6087,7 @@ cc_library(
         ":SideEffectInterfaces",
         ":Support",
         ":TransformsPassIncGen",
+        ":config",
         "//llvm:Support",
     ],
 )
@@ -6835,6 +6836,7 @@ cc_library(
         ":BytecodeOpInterfaceIncGen",
         ":IR",
         ":Support",
+        "//llvm:CodeGen",
         "//llvm:Support",
     ],
 )
@@ -10075,11 +10077,11 @@ cc_library(
         ":IR",
         ":PDLDialect",
         ":PDLInterpDialect",
+        ":Rewrite",
         ":SideEffectInterfaces",
         ":Support",
         ":TransformDialect",
         ":TransformPDLExtensionOpsIncGen",
-        ":Rewrite",
         "//llvm:Support",
     ],
 )
