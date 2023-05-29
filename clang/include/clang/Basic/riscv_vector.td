@@ -2030,6 +2030,36 @@ let HasMasked = false,
 let HasMasked = false, HasVL = false, IRName = "" in {
   let Name = "vreinterpret_v", MaskedPolicyScheme = NonePolicy,
       ManualCodegen = [{
+        if (ResultType->isIntOrIntVectorTy(1) ||
+            Ops[0]->getType()->isIntOrIntVectorTy(1)) {
+          assert(isa<ScalableVectorType>(ResultType) &&
+                 isa<ScalableVectorType>(Ops[0]->getType()));
+
+          LLVMContext &Context = CGM.getLLVMContext();
+          ScalableVectorType *Boolean64Ty =
+              ScalableVectorType::get(llvm::Type::getInt1Ty(Context), 64);
+
+          if (ResultType->isIntOrIntVectorTy(1)) {
+            // Casting from m1 vector integer -> vector boolean
+            // Ex: <vscale x 8 x i8>
+            //     --(bitcast)--------> <vscale x 64 x i1>
+            //     --(vector_extract)-> <vscale x  8 x i1>
+            llvm::Value *BitCast = Builder.CreateBitCast(Ops[0], Boolean64Ty);
+            return Builder.CreateExtractVector(ResultType, BitCast,
+                                               ConstantInt::get(Int64Ty, 0));
+          } else {
+            // Casting from vector boolean -> m1 vector integer
+            // Ex: <vscale x  1 x i1>
+            //       --(vector_insert)-> <vscale x 64 x i1>
+            //       --(bitcast)-------> <vscale x  8 x i8>
+            llvm::Value *Boolean64Val =
+              Builder.CreateInsertVector(Boolean64Ty,
+                                         llvm::PoisonValue::get(Boolean64Ty),
+                                         Ops[0],
+                                         ConstantInt::get(Int64Ty, 0));
+            return Builder.CreateBitCast(Boolean64Val, ResultType);
+          }
+        }
         return Builder.CreateBitCast(Ops[0], ResultType);
       }] in {
     // Reinterpret between different type under the same SEW and LMUL
@@ -2048,6 +2078,53 @@ let HasMasked = false, HasVL = false, IRName = "" in {
       def vreinterpret_u_ # dst_sew : RVVBuiltin<"Uv" # dst_sew # "Uv",
                                                  dst_sew # "UvUv", "csil", dst_sew # "Uv">;
     }
+
+    // Existing users of FixedSEW - the reinterpretation between different SEW
+    // and same LMUL has the implicit assumption that if FixedSEW is set to the
+    // given element width, then the type will be identified as invalid, thus
+    // skipping definition of reinterpret of SEW=8 to SEW=8. However this blocks
+    // our usage here of defining all possible combinations of a fixed SEW to
+    // any boolean. So we need to separately define SEW=8 here.
+    // Reinterpret from LMUL=1 integer type to vector boolean type
+    def vreintrepret_m1_b8_signed :
+        RVVBuiltin<"Svm",
+                    "mSv",
+                    "c", "m">;
+    def vreintrepret_m1_b8_usigned :
+        RVVBuiltin<"USvm",
+                    "mUSv",
+                    "c", "m">;
+
+    // Reinterpret from vector boolean type to LMUL=1 integer type
+    def vreintrepret_b8_m1_signed :
+        RVVBuiltin<"mSv",
+                    "Svm",
+                    "c", "Sv">;
+    def vreintrepret_b8_m1_usigned :
+        RVVBuiltin<"mUSv",
+                    "USvm",
+                    "c", "USv">;
+
+    foreach dst_sew = ["16", "32", "64"] in {
+      // Reinterpret from LMUL=1 integer type to vector boolean type
+      def vreinterpret_m1_b # dst_sew # _signed:
+        RVVBuiltin<"(FixedSEW:" # dst_sew # ")Svm",
+                    "m(FixedSEW:" # dst_sew # ")Sv",
+                    "c", "m">;
+      def vreinterpret_m1_b # dst_sew # _unsigned:
+        RVVBuiltin<"(FixedSEW:" # dst_sew # ")USvm",
+                    "m(FixedSEW:" # dst_sew # ")USv",
+                    "c", "m">;
+      // Reinterpret from vector boolean type to LMUL=1 integer type
+      def vreinterpret_b # dst_sew # _m1_signed:
+        RVVBuiltin<"m(FixedSEW:" # dst_sew # ")Sv",
+                    "(FixedSEW:" # dst_sew # ")Svm",
+                    "c", "(FixedSEW:" # dst_sew # ")Sv">;
+      def vreinterpret_b # dst_sew # _m1_unsigned:
+        RVVBuiltin<"m(FixedSEW:" # dst_sew # ")USv",
+                    "(FixedSEW:" # dst_sew # ")USvm",
+                    "c", "(FixedSEW:" # dst_sew # ")USv">;
+    }
   }
 
   let Name = "vundefined", SupportOverloading = false,
@@ -2064,10 +2141,8 @@ let HasMasked = false, HasVL = false, IRName = "" in {
   let Name = "vlmul_trunc_v", OverloadedName = "vlmul_trunc",
       MaskedPolicyScheme = NonePolicy,
       ManualCodegen = [{ {
-        ID = Intrinsic::vector_extract;
-        IntrinsicTypes = {ResultType, Ops[0]->getType()};
-        Ops.push_back(ConstantInt::get(Int64Ty, 0));
-        return Builder.CreateCall(CGM.getIntrinsic(ID, IntrinsicTypes), Ops, "");
+        return Builder.CreateExtractVector(ResultType, Ops[0],
+                                           ConstantInt::get(Int64Ty, 0));
       } }] in {
     foreach dst_lmul = ["(SFixedLog2LMUL:-3)", "(SFixedLog2LMUL:-2)", "(SFixedLog2LMUL:-1)",
                         "(SFixedLog2LMUL:0)", "(SFixedLog2LMUL:1)", "(SFixedLog2LMUL:2)"] in {
@@ -2083,12 +2158,9 @@ let HasMasked = false, HasVL = false, IRName = "" in {
   let Name = "vlmul_ext_v", OverloadedName = "vlmul_ext",
       MaskedPolicyScheme = NonePolicy,
       ManualCodegen = [{
-        ID = Intrinsic::vector_insert;
-        IntrinsicTypes = {ResultType, Ops[0]->getType()};
-        Ops.push_back(llvm::PoisonValue::get(ResultType));
-        std::swap(Ops[0], Ops[1]);
-        Ops.push_back(ConstantInt::get(Int64Ty, 0));
-        return Builder.CreateCall(CGM.getIntrinsic(ID, IntrinsicTypes), Ops, "");
+        return Builder.CreateInsertVector(ResultType,
+                                          llvm::PoisonValue::get(ResultType),
+                                          Ops[0], ConstantInt::get(Int64Ty, 0));
       }] in {
     foreach dst_lmul = ["(LFixedLog2LMUL:-2)", "(LFixedLog2LMUL:-1)", "(LFixedLog2LMUL:-0)",
                         "(LFixedLog2LMUL:1)", "(LFixedLog2LMUL:2)", "(LFixedLog2LMUL:3)"] in {
@@ -2102,7 +2174,6 @@ let HasMasked = false, HasVL = false, IRName = "" in {
   let Name = "vget_v", MaskedPolicyScheme = NonePolicy,
       ManualCodegen = [{
       {
-        ID = Intrinsic::vector_extract;
         auto *VecTy = cast<ScalableVectorType>(ResultType);
         auto *OpVecTy = cast<ScalableVectorType>(Ops[0]->getType());
         // Mask to only valid indices.
@@ -2113,8 +2184,7 @@ let HasMasked = false, HasVL = false, IRName = "" in {
         Ops[1] = Builder.CreateMul(Ops[1],
                                    ConstantInt::get(Ops[1]->getType(),
                                                     VecTy->getMinNumElements()));
-        IntrinsicTypes = {ResultType, Ops[0]->getType()};
-        return Builder.CreateCall(CGM.getIntrinsic(ID, IntrinsicTypes), Ops, "");
+        return Builder.CreateExtractVector(ResultType, Ops[0], Ops[1]);
       }
       }] in {
     foreach dst_lmul = ["(SFixedLog2LMUL:0)", "(SFixedLog2LMUL:1)", "(SFixedLog2LMUL:2)"] in {
@@ -2126,8 +2196,6 @@ let HasMasked = false, HasVL = false, IRName = "" in {
   let Name = "vset_v", Log2LMUL = [0, 1, 2], MaskedPolicyScheme = NonePolicy,
       ManualCodegen = [{
       {
-        ID = Intrinsic::vector_insert;
-        IntrinsicTypes = {ResultType, Ops[2]->getType()};
         auto *ResVecTy = cast<ScalableVectorType>(ResultType);
         auto *VecTy = cast<ScalableVectorType>(Ops[2]->getType());
         // Mask to only valid indices.
@@ -2138,8 +2206,7 @@ let HasMasked = false, HasVL = false, IRName = "" in {
         Ops[1] = Builder.CreateMul(Ops[1],
                                    ConstantInt::get(Ops[1]->getType(),
                                                     VecTy->getMinNumElements()));
-        std::swap(Ops[1], Ops[2]);
-        return Builder.CreateCall(CGM.getIntrinsic(ID, IntrinsicTypes), Ops, "");
+        return Builder.CreateInsertVector(ResultType, Ops[0], Ops[2], Ops[1]);
       }
       }] in {
     foreach dst_lmul = ["(LFixedLog2LMUL:1)", "(LFixedLog2LMUL:2)", "(LFixedLog2LMUL:3)"] in {

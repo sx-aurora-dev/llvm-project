@@ -41,6 +41,9 @@ Implemented Papers
 - P1328R1 - ``constexpr type_info::operator==()``
 - P1413R3 - Formatting ``thread::id`` (the ``stacktrace`` is not done yet)
 - P2675R1 - ``format``'s width estimation is too approximate and not forward compatible
+- P2505R5 - Monadic operations for ``std::expected``
+- P2711R1 - Making Multi-Param Constructors Of views explicit (``join_with_view`` is not done yet)
+- P2572R1 - ``std::format`` fill character allowances
 
 Improvements and New Features
 -----------------------------
@@ -94,6 +97,8 @@ Deprecations and Removals
   which is impossible in C++03 mode. Furthermore, C++17 mandated that they be ``inline constexpr`` variables,
   which led to ODR violations when mixed with the C++03 definition. Cleaning this up is required for libc++ to
   make progress on support for C++20 modules.
+
+- The ``_LIBCPP_ABI_OLD_LOGNORMAL_DISTRIBUTION`` macro has been removed.
 
 Upcoming Deprecations and Removals
 ----------------------------------

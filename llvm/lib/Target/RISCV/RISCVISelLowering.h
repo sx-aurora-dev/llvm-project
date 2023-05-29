@@ -256,6 +256,13 @@ enum NodeType : unsigned {
   VFMSUB_VL,
   VFNMSUB_VL,
 
+  // Vector widening FMA ops with a mask as a fourth operand and VL as a fifth
+  // operand.
+  VFWMADD_VL,
+  VFWNMADD_VL,
+  VFWMSUB_VL,
+  VFWNMSUB_VL,
+
   // Widening instructions with a merge value a third operand, a mask as a
   // fourth operand, and VL as a fifth operand.
   VWMUL_VL,
@@ -522,6 +529,13 @@ public:
       return false;
 
     return TargetLowering::shouldFormOverflowOp(Opcode, VT, MathUsed);
+  }
+
+  bool storeOfVectorConstantIsCheap(bool IsZero, EVT MemVT, unsigned NumElem,
+                                    unsigned AddrSpace) const override {
+    // If we can replace 4 or more scalar stores, there will be a reduction
+    // in instructions even after we add a vector constant load.
+    return NumElem >= 4;
   }
 
   bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {

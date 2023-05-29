@@ -768,6 +768,11 @@ static Instruction *unpackLoadToAggregate(InstCombinerImpl &IC, LoadInst &LI) {
     // the knowledge that padding exists for the rest of the pipeline.
     const DataLayout &DL = IC.getDataLayout();
     auto *SL = DL.getStructLayout(ST);
+
+    // Don't unpack for structure with scalable vector.
+    if (SL->getSizeInBits().isScalable())
+      return nullptr;
+
     if (SL->hasPadding())
       return nullptr;
 
@@ -1100,9 +1105,8 @@ Instruction *InstCombinerImpl::visitLoadInst(LoadInst &LI) {
     // that this code is not reachable.  We do this instead of inserting
     // an unreachable instruction directly because we cannot modify the
     // CFG.
-    StoreInst *SI = new StoreInst(PoisonValue::get(LI.getType()),
-                                  Constant::getNullValue(Op->getType()), &LI);
-    SI->setDebugLoc(LI.getDebugLoc());
+    Builder.CreateStore(PoisonValue::get(LI.getType()),
+                        Constant::getNullValue(Op->getType()));
     return replaceInstUsesWith(LI, PoisonValue::get(LI.getType()));
   }
 
@@ -1292,6 +1296,11 @@ static bool unpackStoreToAggregate(InstCombinerImpl &IC, StoreInst &SI) {
     // the knowledge that padding exists for the rest of the pipeline.
     const DataLayout &DL = IC.getDataLayout();
     auto *SL = DL.getStructLayout(ST);
+
+    // Don't unpack for structure with scalable vector.
+    if (SL->getSizeInBits().isScalable())
+      return false;
+
     if (SL->hasPadding())
       return false;
 
