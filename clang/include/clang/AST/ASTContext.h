@@ -448,7 +448,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::DenseMap<Module*, PerModuleInitializers*> ModuleInitializers;
 
   /// This is the top-level (C++20) Named module we are building.
-   Module *CurrentCXXNamedModule = nullptr;
+  Module *CurrentCXXNamedModule = nullptr;
 
   static constexpr unsigned ConstantArrayTypesLog2InitSize = 8;
   static constexpr unsigned GeneralTypesLog2InitSize = 9;
@@ -1472,9 +1472,12 @@ public:
 
   /// Return the unique reference to a scalable vector type of the specified
   /// element type and scalable number of elements.
+  /// For RISC-V, number of fields is also provided when it fetching for
+  /// tuple type.
   ///
   /// \pre \p EltTy must be a built-in type.
-  QualType getScalableVectorType(QualType EltTy, unsigned NumElts) const;
+  QualType getScalableVectorType(QualType EltTy, unsigned NumElts,
+                                 unsigned NumFields = 1) const;
 
   /// Return a WebAssembly externref type.
   QualType getWebAssemblyExternrefType() const;

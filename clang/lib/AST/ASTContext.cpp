@@ -1155,7 +1155,7 @@ ArrayRef<Decl *> ASTContext::getModuleInitializers(Module *M) {
 void ASTContext::setCurrentNamedModule(Module *M) {
   assert(M->isModulePurview());
   assert(!CurrentCXXNamedModule &&
-        "We should set named module for ASTContext for only once");
+         "We should set named module for ASTContext for only once");
   CurrentCXXNamedModule = M;
 }
 
@@ -4042,8 +4042,8 @@ QualType ASTContext::getWebAssemblyExternrefType() const {
 /// getScalableVectorType - Return the unique reference to a scalable vector
 /// type of the specified element type and size. VectorType must be a built-in
 /// type.
-QualType ASTContext::getScalableVectorType(QualType EltTy,
-                                           unsigned NumElts) const {
+QualType ASTContext::getScalableVectorType(QualType EltTy, unsigned NumElts,
+                                           unsigned NumFields) const {
   if (Target->hasAArch64SVETypes()) {
     uint64_t EltTySize = getTypeSize(EltTy);
 #define SVE_VECTOR_TYPE(Name, MangledName, Id, SingletonId, NumEls, ElBits,    \
@@ -4067,15 +4067,15 @@ QualType ASTContext::getScalableVectorType(QualType EltTy,
     uint64_t EltTySize = getTypeSize(EltTy);
 #define RVV_VECTOR_TYPE(Name, Id, SingletonId, NumEls, ElBits, NF, IsSigned,   \
                         IsFP)                                                  \
-    if (!EltTy->isBooleanType() &&                                             \
-        ((EltTy->hasIntegerRepresentation() &&                                 \
-          EltTy->hasSignedIntegerRepresentation() == IsSigned) ||              \
-         (EltTy->hasFloatingRepresentation() && IsFP)) &&                      \
-        EltTySize == ElBits && NumElts == NumEls)                              \
-      return SingletonId;
+  if (!EltTy->isBooleanType() &&                                               \
+      ((EltTy->hasIntegerRepresentation() &&                                   \
+        EltTy->hasSignedIntegerRepresentation() == IsSigned) ||                \
+       (EltTy->hasFloatingRepresentation() && IsFP)) &&                        \
+      EltTySize == ElBits && NumElts == NumEls && NumFields == NF)             \
+    return SingletonId;
 #define RVV_PREDICATE_TYPE(Name, Id, SingletonId, NumEls)                      \
-    if (EltTy->isBooleanType() && NumElts == NumEls)                           \
-      return SingletonId;
+  if (EltTy->isBooleanType() && NumElts == NumEls)                             \
+    return SingletonId;
 #include "clang/Basic/RISCVVTypes.def"
   }
   return QualType();
@@ -11935,9 +11935,7 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
     return false;
 
   // Variables in other module units shouldn't be forced to be emitted.
-  auto *VM = VD->getOwningModule();
-  if (VM && VM->getTopLevelModule()->isModulePurview() &&
-      VM->getTopLevelModule() != getCurrentNamedModule())
+  if (VD->isInAnotherModuleUnit())
     return false;
 
   // Variables that can be needed in other TUs are required.
