@@ -17,6 +17,7 @@
 #include "SIModeRegisterDefaults.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/ConstantFolding.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/UniformityAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -24,14 +25,17 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/Utils/IntegerDivision.h"
+#include "llvm/Transforms/Utils/Local.h"
 
 #define DEBUG_TYPE "amdgpu-codegenprepare"
 
 using namespace llvm;
+using namespace llvm::PatternMatch;
 
 namespace {
 
@@ -87,6 +91,7 @@ static cl::opt<bool> DisableIDivExpand(
 class AMDGPUCodeGenPrepare : public FunctionPass,
                              public InstVisitor<AMDGPUCodeGenPrepare, bool> {
   const GCNSubtarget *ST = nullptr;
+  const TargetLibraryInfo *TLInfo = nullptr;
   AssumptionCache *AC = nullptr;
   DominatorTree *DT = nullptr;
   UniformityInfo *UA = nullptr;
@@ -94,6 +99,10 @@ class AMDGPUCodeGenPrepare : public FunctionPass,
   const DataLayout *DL = nullptr;
   bool HasUnsafeFPMath = false;
   bool HasFP32Denormals = false;
+
+  DenseMap<const PHINode *, bool> BreakPhiNodesCache;
+
+  bool canBreakPHINode(const PHINode &I);
 
   /// Copies exact/nsw/nuw flags (if any) from binary operation \p I to
   /// binary operation \p V.
@@ -118,6 +127,9 @@ class AMDGPUCodeGenPrepare : public FunctionPass,
   /// \returns True if type \p T needs to be promoted to 32 bit integer type,
   /// false otherwise.
   bool needsPromotionToI32(const Type *T) const;
+
+  /// Return true if \p T is a legal scalar floating point type.
+  bool isLegalFloatingTy(const Type *T) const;
 
   /// Promotes uniform binary operation \p I to equivalent 32 bit binary
   /// operation.
@@ -216,6 +228,9 @@ class AMDGPUCodeGenPrepare : public FunctionPass,
 
   bool canWidenScalarExtLoad(LoadInst &I) const;
 
+  Value *matchFractPat(IntrinsicInst &I);
+  Value *applyFractPat(IRBuilder<> &Builder, Value *FractArg);
+
 public:
   static char ID;
 
@@ -233,6 +248,7 @@ public:
 
   bool visitIntrinsicInst(IntrinsicInst &I);
   bool visitBitreverseIntrinsicInst(IntrinsicInst &I);
+  bool visitMinNum(IntrinsicInst &I);
 
   bool doInitialization(Module &M) override;
   bool runOnFunction(Function &F) override;
@@ -242,6 +258,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AssumptionCacheTracker>();
     AU.addRequired<UniformityInfoWrapperPass>();
+    AU.addRequired<TargetLibraryInfoWrapperPass>();
 
     // FIXME: Division expansion needs to preserve the dominator tree.
     if (!ExpandDiv64InIR)
@@ -295,6 +312,11 @@ bool AMDGPUCodeGenPrepare::needsPromotionToI32(const Type *T) const {
   }
 
   return false;
+}
+
+bool AMDGPUCodeGenPrepare::isLegalFloatingTy(const Type *Ty) const {
+  return Ty->isFloatTy() || Ty->isDoubleTy() ||
+         (Ty->isHalfTy() && ST->has16BitInsts());
 }
 
 // Return true if the op promoted to i32 should have nsw set.
@@ -1389,57 +1411,149 @@ bool AMDGPUCodeGenPrepare::visitICmpInst(ICmpInst &I) {
 }
 
 bool AMDGPUCodeGenPrepare::visitSelectInst(SelectInst &I) {
-  bool Changed = false;
+  if (ST->has16BitInsts() && needsPromotionToI32(I.getType())) {
+    if (UA->isUniform(&I))
+      return promoteUniformOpToI32(I);
+    return false;
+  }
 
-  if (ST->has16BitInsts() && needsPromotionToI32(I.getType()) &&
-      UA->isUniform(&I))
-    Changed |= promoteUniformOpToI32(I);
+  Value *Cond = I.getCondition();
+  Value *TrueVal = I.getTrueValue();
+  Value *FalseVal = I.getFalseValue();
+  Value *CmpVal;
+  FCmpInst::Predicate Pred;
 
-  return Changed;
+  // Match fract pattern with nan check.
+  if (!match(Cond, m_FCmp(Pred, m_Value(CmpVal), m_NonNaN())))
+    return false;
+
+  FPMathOperator *FPOp = dyn_cast<FPMathOperator>(&I);
+  if (!FPOp)
+    return false;
+
+  IRBuilder<> Builder(&I);
+  Builder.setFastMathFlags(FPOp->getFastMathFlags());
+
+  auto *IITrue = dyn_cast<IntrinsicInst>(TrueVal);
+  auto *IIFalse = dyn_cast<IntrinsicInst>(FalseVal);
+
+  Value *Fract = nullptr;
+  if (Pred == FCmpInst::FCMP_UNO && TrueVal == CmpVal && IIFalse &&
+      CmpVal == matchFractPat(*IIFalse)) {
+    // isnan(x) ? x : fract(x)
+    Fract = applyFractPat(Builder, CmpVal);
+  } else if (Pred == FCmpInst::FCMP_ORD && FalseVal == CmpVal && IITrue &&
+             CmpVal == matchFractPat(*IITrue)) {
+    // !isnan(x) ? fract(x) : x
+    Fract = applyFractPat(Builder, CmpVal);
+  } else
+    return false;
+
+  Fract->takeName(&I);
+  I.replaceAllUsesWith(Fract);
+  RecursivelyDeleteTriviallyDeadInstructions(&I, TLInfo);
+  return true;
+}
+
+static bool areInSameBB(const Value *A, const Value *B) {
+  const auto *IA = dyn_cast<Instruction>(A);
+  const auto *IB = dyn_cast<Instruction>(B);
+  return IA && IB && IA->getParent() == IB->getParent();
 }
 
 // Helper for breaking large PHIs that returns true when an extractelement on V
 // is likely to be folded away by the DAG combiner.
-static bool isInterestingPHIIncomingValue(Value *V, FixedVectorType *FVT) {
-  InsertElementInst *IE = dyn_cast<InsertElementInst>(V);
+static bool isInterestingPHIIncomingValue(const Value *V) {
+  const auto *FVT = dyn_cast<FixedVectorType>(V->getType());
+  if (!FVT)
+    return false;
 
-  // Constants & InsertElements chains are interesting.
-  if (!IE)
-    return isa<Constant>(V);
+  const Value *CurVal = V;
 
-  // Check if this is a simple chain of insertelement that fills the vector. If
-  // that's the case, we can break up this PHI node profitably because the
-  // extractelement we will insert will get folded out.
-  BasicBlock *BB = IE->getParent();
+  // Check for insertelements, keeping track of the elements covered.
   BitVector EltsCovered(FVT->getNumElements());
-  InsertElementInst *Next = IE;
-  while (Next && !EltsCovered.all()) {
-    ConstantInt *Idx = dyn_cast<ConstantInt>(Next->getOperand(2));
+  while (const auto *IE = dyn_cast<InsertElementInst>(CurVal)) {
+    const auto *Idx = dyn_cast<ConstantInt>(IE->getOperand(2));
 
     // Non constant index/out of bounds index -> folding is unlikely.
-    // Note that this is more of a sanity check - canonical IR should
-    // already have replaced those with poison.
+    // The latter is more of a sanity check because canonical IR should just
+    // have replaced those with poison.
     if (!Idx || Idx->getSExtValue() >= FVT->getNumElements())
       return false;
 
+    const auto *VecSrc = IE->getOperand(0);
+
+    // If the vector source is another instruction, it must be in the same basic
+    // block. Otherwise, the DAGCombiner won't see the whole thing and is
+    // unlikely to be able to do anything interesting here.
+    if (isa<Instruction>(VecSrc) && !areInSameBB(VecSrc, IE))
+      return false;
+
+    CurVal = VecSrc;
     EltsCovered.set(Idx->getSExtValue());
 
-    // If the insertelement chain ends with a constant, it's fine.
-    if (isa<Constant>(Next->getOperand(0)))
+    // All elements covered.
+    if (EltsCovered.all())
       return true;
-
-    Next = dyn_cast<InsertElementInst>(Next->getOperand(0));
-
-    // If the chain is spread across basic blocks, the DAG combiner
-    // won't see it in its entirety and is unlikely to be able to fold
-    // evevrything away.
-    if (Next && Next->getParent() != BB)
-      return false;
   }
 
-  // All elements covered, all of the extract elements will likely be
-  // combined.
-  return EltsCovered.all();
+  // We either didn't find a single insertelement, or the insertelement chain
+  // ended before all elements were covered. Check for other interesting values.
+
+  // Constants are always interesting because we can just constant fold the
+  // extractelements.
+  if (isa<Constant>(CurVal))
+    return true;
+
+  // shufflevector is likely to be profitable if either operand is a constant,
+  // or if either source is in the same block.
+  // This is because shufflevector is most often lowered as a series of
+  // insert/extract elements anyway.
+  if (const auto *SV = dyn_cast<ShuffleVectorInst>(CurVal)) {
+    return isa<Constant>(SV->getOperand(1)) ||
+           areInSameBB(SV, SV->getOperand(0)) ||
+           areInSameBB(SV, SV->getOperand(1));
+  }
+
+  return false;
+}
+
+bool AMDGPUCodeGenPrepare::canBreakPHINode(const PHINode &I) {
+  // Check in the cache, or add an entry for this node.
+  //
+  // We init with false because we consider all PHI nodes unbreakable until we
+  // reach a conclusion. Doing the opposite - assuming they're break-able until
+  // proven otherwise - can be harmful in some pathological cases so we're
+  // conservative for now.
+  const auto [It, DidInsert] = BreakPhiNodesCache.insert({&I, false});
+  if (!DidInsert)
+    return It->second;
+
+  // This function may recurse, so to guard against infinite looping, this PHI
+  // is conservatively considered unbreakable until we reach a conclusion.
+
+  // Don't break PHIs that have no interesting incoming values. That is, where
+  // there is no clear opportunity to fold the "extractelement" instructions we
+  // would add.
+  //
+  // Note: IC does not run after this pass, so we're only interested in the
+  // foldings that the DAG combiner can do.
+  if (none_of(I.incoming_values(),
+              [&](Value *V) { return isInterestingPHIIncomingValue(V); }))
+    return false;
+
+  // Now, check users for unbreakable PHI nodes. If we have an unbreakable PHI
+  // node as user, we don't want to break this PHI either because it's unlikely
+  // to be beneficial. We would just explode the vector and reassemble it
+  // directly, wasting instructions.
+  for (const Value *U : I.users()) {
+    if (const auto *PU = dyn_cast<PHINode>(U)) {
+      if (!canBreakPHINode(*PU))
+        return false;
+    }
+  }
+
+  return BreakPhiNodesCache[&I] = true;
 }
 
 bool AMDGPUCodeGenPrepare::visitPHINode(PHINode &I) {
@@ -1460,23 +1574,8 @@ bool AMDGPUCodeGenPrepare::visitPHINode(PHINode &I) {
   if (!FVT || DL->getTypeSizeInBits(FVT) <= ScalarizeLargePHIsThreshold)
     return false;
 
-  // Try to avoid unprofitable cases:
-  // - Don't break PHIs that have no interesting incoming values. That is, where
-  // there is no clear opportunity to fold the "extractelement" instructions we
-  // would add.
-  //   - Note: IC does not run after this pass, so we're only interested in the
-  //     folding that the DAG combiner can do.
-  // - For simplicity, don't break PHIs that are used by other PHIs because it'd
-  // require us to determine if the whole "chain" can be converted or not. e.g.
-  // if we broke this PHI but not its user, we would actually make things worse.
-  if (!ForceScalarizeLargePHIs) {
-    if (none_of(
-            I.incoming_values(),
-            [&](Value *V) { return isInterestingPHIIncomingValue(V, FVT); }) ||
-        any_of(I.users(), [&](User *U) { return isa<PHINode>(U); })) {
-      return false;
-    }
-  }
+  if (!ForceScalarizeLargePHIs && !canBreakPHINode(I))
+    return false;
 
   struct VectorSlice {
     Type *Ty = nullptr;
@@ -1564,6 +1663,8 @@ bool AMDGPUCodeGenPrepare::visitIntrinsicInst(IntrinsicInst &I) {
   switch (I.getIntrinsicID()) {
   case Intrinsic::bitreverse:
     return visitBitreverseIntrinsicInst(I);
+  case Intrinsic::minnum:
+    return visitMinNum(I);
   default:
     return false;
   }
@@ -1577,6 +1678,84 @@ bool AMDGPUCodeGenPrepare::visitBitreverseIntrinsicInst(IntrinsicInst &I) {
     Changed |= promoteUniformBitreverseToI32(I);
 
   return Changed;
+}
+
+/// Match non-nan fract pattern.
+///   minnum(fsub(x, floor(x)), nextafter(1.0, -1.0)
+///
+/// If fract is a useful instruction for the subtarget. Does not account for the
+/// nan handling; the instruction has a nan check on the input value.
+Value *AMDGPUCodeGenPrepare::matchFractPat(IntrinsicInst &I) {
+  if (ST->hasFractBug())
+    return nullptr;
+
+  if (I.getIntrinsicID() != Intrinsic::minnum)
+    return nullptr;
+
+  Type *Ty = I.getType();
+  if (!isLegalFloatingTy(Ty->getScalarType()))
+    return nullptr;
+
+  Value *Arg0 = I.getArgOperand(0);
+  Value *Arg1 = I.getArgOperand(1);
+
+  const APFloat *C;
+  if (!match(Arg1, m_APFloat(C)))
+    return nullptr;
+
+  APFloat One(1.0);
+  bool LosesInfo;
+  One.convert(C->getSemantics(), APFloat::rmNearestTiesToEven, &LosesInfo);
+
+  // Match nextafter(1.0, -1)
+  One.next(true);
+  if (One != *C)
+    return nullptr;
+
+  Value *FloorSrc;
+  if (match(Arg0, m_FSub(m_Value(FloorSrc),
+                         m_Intrinsic<Intrinsic::floor>(m_Deferred(FloorSrc)))))
+    return FloorSrc;
+  return nullptr;
+}
+
+Value *AMDGPUCodeGenPrepare::applyFractPat(IRBuilder<> &Builder,
+                                           Value *FractArg) {
+  SmallVector<Value *, 4> FractVals;
+  extractValues(Builder, FractVals, FractArg);
+
+  SmallVector<Value *, 4> ResultVals(FractVals.size());
+
+  Type *Ty = FractArg->getType()->getScalarType();
+  for (unsigned I = 0, E = FractVals.size(); I != E; ++I) {
+    ResultVals[I] =
+        Builder.CreateIntrinsic(Intrinsic::amdgcn_fract, {Ty}, {FractVals[I]});
+  }
+
+  return insertValues(Builder, FractArg->getType(), ResultVals);
+}
+
+bool AMDGPUCodeGenPrepare::visitMinNum(IntrinsicInst &I) {
+  Value *FractArg = matchFractPat(I);
+  if (!FractArg)
+    return false;
+
+  // Match pattern for fract intrinsic in contexts where the nan check has been
+  // optimized out (and hope the knowledge the source can't be nan wasn't lost).
+  if (!I.hasNoNaNs() && !isKnownNeverNaN(FractArg, *DL, TLInfo))
+    return false;
+
+  IRBuilder<> Builder(&I);
+  FastMathFlags FMF = I.getFastMathFlags();
+  FMF.setNoNaNs();
+  Builder.setFastMathFlags(FMF);
+
+  Value *Fract = applyFractPat(Builder, FractArg);
+  Fract->takeName(&I);
+  I.replaceAllUsesWith(Fract);
+
+  RecursivelyDeleteTriviallyDeadInstructions(&I, TLInfo);
+  return true;
 }
 
 bool AMDGPUCodeGenPrepare::doInitialization(Module &M) {
@@ -1595,6 +1774,7 @@ bool AMDGPUCodeGenPrepare::runOnFunction(Function &F) {
 
   const AMDGPUTargetMachine &TM = TPC->getTM<AMDGPUTargetMachine>();
   ST = &TM.getSubtarget<GCNSubtarget>(F);
+  TLInfo = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
   AC = &getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
   UA = &getAnalysis<UniformityInfoWrapperPass>().getUniformityInfo();
 
@@ -1636,6 +1816,7 @@ bool AMDGPUCodeGenPrepare::runOnFunction(Function &F) {
 INITIALIZE_PASS_BEGIN(AMDGPUCodeGenPrepare, DEBUG_TYPE,
                       "AMDGPU IR optimizations", false, false)
 INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
+INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(UniformityInfoWrapperPass)
 INITIALIZE_PASS_END(AMDGPUCodeGenPrepare, DEBUG_TYPE, "AMDGPU IR optimizations",
                     false, false)

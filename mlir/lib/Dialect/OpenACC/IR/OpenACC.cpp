@@ -335,6 +335,108 @@ struct RemoveConstantIfConditionWithRegion : public OpRewritePattern<OpTy> {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// PrivateRecipeOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyInitLikeSingleArgRegion(
+    Operation *op, Region &region, StringRef regionType, StringRef regionName,
+    Type type, bool verifyYield, bool optional = false) {
+  if (optional && region.empty())
+    return success();
+
+  if (region.empty())
+    return op->emitOpError() << "expects non-empty " << regionName << " region";
+  Block &firstBlock = region.front();
+  if (firstBlock.getNumArguments() != 1 ||
+      firstBlock.getArgument(0).getType() != type)
+    return op->emitOpError() << "expects " << regionName
+                             << " region with one "
+                                "argument of the "
+                             << regionType << " type";
+
+  if (verifyYield) {
+    for (YieldOp yieldOp : region.getOps<acc::YieldOp>()) {
+      if (yieldOp.getOperands().size() != 1 ||
+          yieldOp.getOperands().getTypes()[0] != type)
+        return op->emitOpError() << "expects " << regionName
+                                 << " region to "
+                                    "yield a value of the "
+                                 << regionType << " type";
+    }
+  }
+  return success();
+}
+
+LogicalResult acc::PrivateRecipeOp::verifyRegions() {
+  if (failed(verifyInitLikeSingleArgRegion(*this, getInitRegion(),
+                                           "privatization", "init", getType(),
+                                           /*verifyYield=*/true)))
+    return failure();
+  if (failed(verifyInitLikeSingleArgRegion(
+          *this, getDestroyRegion(), "privatization", "destroy", getType(),
+          /*verifyYield=*/false, /*optional=*/true)))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FirstprivateRecipeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult acc::FirstprivateRecipeOp::verifyRegions() {
+  if (failed(verifyInitLikeSingleArgRegion(*this, getInitRegion(),
+                                           "privatization", "init", getType(),
+                                           /*verifyYield=*/true)))
+    return failure();
+
+  if (getCopyRegion().empty())
+    return emitOpError() << "expects non-empty copy region";
+
+  Block &firstBlock = getCopyRegion().front();
+  if (firstBlock.getNumArguments() != 2 ||
+      firstBlock.getArgument(0).getType() != getType())
+    return emitOpError() << "expects copy region with two arguments of the "
+                            "privatization type";
+
+  if (failed(verifyInitLikeSingleArgRegion(*this, getDestroyRegion(),
+                                           "privatization", "destroy",
+                                           getType(), /*verifyYield=*/false)))
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ReductionRecipeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult acc::ReductionRecipeOp::verifyRegions() {
+  if (failed(verifyInitLikeSingleArgRegion(*this, getInitRegion(), "reduction",
+                                           "init", getType(),
+                                           /*verifyYield=*/true)))
+    return failure();
+
+  if (getCombinerRegion().empty())
+    return emitOpError() << "expects non-empty combiner region";
+
+  Block &reductionBlock = getCombinerRegion().front();
+  if (reductionBlock.getNumArguments() != 2 ||
+      reductionBlock.getArgument(0).getType() != getType() ||
+      reductionBlock.getArgument(1).getType() != getType())
+    return emitOpError() << "expects combiner region with two arguments of "
+                         << "the reduction type";
+
+  for (YieldOp yieldOp : getCombinerRegion().getOps<YieldOp>()) {
+    if (yieldOp.getOperands().size() != 1 ||
+        yieldOp.getOperands().getTypes()[0] != getType())
+      return emitOpError() << "expects combiner region to yield a value "
+                              "of the reduction type";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ParallelOp
 //===----------------------------------------------------------------------===//
 

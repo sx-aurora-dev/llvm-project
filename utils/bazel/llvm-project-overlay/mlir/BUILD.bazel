@@ -1210,7 +1210,6 @@ cc_library(
         ":AffineUtils",
         ":FuncDialect",
         ":IR",
-        ":PDLDialect",
         ":TransformDialect",
         ":Transforms",
         ":VectorDialect",
@@ -1950,6 +1949,7 @@ td_library(
     name = "IRDLTdFiles",
     srcs = [
         "include/mlir/Dialect/IRDL/IR/IRDL.td",
+        "include/mlir/Dialect/IRDL/IR/IRDLInterfaces.td",
         "include/mlir/Dialect/IRDL/IR/IRDLOps.td",
         "include/mlir/Dialect/IRDL/IR/IRDLTypes.td",
     ],
@@ -1996,6 +1996,24 @@ gentbl_cc_library(
 )
 
 gentbl_cc_library(
+    name = "IRDLInterfacesIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            ["-gen-op-interface-decls"],
+            "include/mlir/Dialect/IRDL/IR/IRDLInterfaces.h.inc",
+        ),
+        (
+            ["-gen-op-interface-defs"],
+            "include/mlir/Dialect/IRDL/IR/IRDLInterfaces.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/Dialect/IRDL/IR/IRDLInterfaces.td",
+    deps = [":IRDLTdFiles"],
+)
+
+gentbl_cc_library(
     name = "IRDLOpsIncGen",
     strip_include_prefix = "include",
     tbl_outs = [
@@ -2035,18 +2053,23 @@ cc_library(
     name = "IRDLDialect",
     srcs = [
         "lib/Dialect/IRDL/IR/IRDL.cpp",
+        "lib/Dialect/IRDL/IR/IRDLOps.cpp",
         "lib/Dialect/IRDL/IRDLLoading.cpp",
+        "lib/Dialect/IRDL/IRDLVerifiers.cpp",
     ],
     hdrs = [
         "include/mlir/Dialect/IRDL/IR/IRDL.h",
+        "include/mlir/Dialect/IRDL/IR/IRDLInterfaces.h",
         "include/mlir/Dialect/IRDL/IR/IRDLTraits.h",
         "include/mlir/Dialect/IRDL/IRDLLoading.h",
+        "include/mlir/Dialect/IRDL/IRDLVerifiers.h",
     ],
     includes = ["include"],
     deps = [
         ":Dialect",
         ":IR",
         ":IRDLIncGen",
+        ":IRDLInterfacesIncGen",
         ":IRDLOpsIncGen",
         ":IRDLTypesIncGen",
         ":InferTypeOpInterface",
@@ -2380,6 +2403,7 @@ cc_library(
     srcs = ["lib/Dialect/SparseTensor/IR/SparseTensorDialect.cpp"],
     hdrs = [
         "include/mlir/Dialect/SparseTensor/IR/SparseTensor.h",
+        "include/mlir/Dialect/SparseTensor/IR/SparseTensorStorageLayout.h",
         "include/mlir/Dialect/SparseTensor/IR/SparseTensorType.h",
     ],
     includes = ["include"],
@@ -4361,7 +4385,6 @@ td_library(
     ],
     includes = ["include"],
     deps = [
-        ":PDLDialectTdFiles",
         ":TransformDialectTdFiles",
     ],
 )
@@ -4406,7 +4429,6 @@ cc_library(
         ":GPUTransformOpsIncGen",
         ":GPUTransforms",
         ":IR",
-        ":PDLDialect",
         ":Parser",
         ":SCFDialect",
         ":SideEffectInterfaces",
@@ -5896,7 +5918,6 @@ td_library(
     ],
     includes = ["include"],
     deps = [
-        ":PDLDialect",
         ":TransformDialectTdFiles",
     ],
 )
@@ -5929,7 +5950,6 @@ cc_library(
     deps = [
         ":AffineDialect",
         ":IR",
-        ":PDLDialect",
         ":SCFDialect",
         ":TensorDialect",
         ":TensorTransformOpsIncGen",
@@ -8029,6 +8049,7 @@ gentbl_cc_library(
     td_file = "include/mlir/Dialect/OpenACC/OpenACCOps.td",
     deps = [
         ":BuiltinDialectTdFiles",
+        ":ControlFlowInterfacesTdFiles",
         ":OpenAccOpsTdFiles",
         ":SideEffectInterfacesTdFiles",
     ],
@@ -8089,6 +8110,7 @@ cc_library(
     ]),
     includes = ["include"],
     deps = [
+        ":ControlFlowInterfaces",
         ":IR",
         ":LLVMDialect",
         ":MemRefDialect",
@@ -8573,7 +8595,6 @@ td_library(
     ]),
     includes = ["include"],
     deps = [
-        ":PDLDialectTdFiles",
         ":SCFTdFiles",
         ":TransformDialectTdFiles",
     ],
@@ -8951,7 +8972,6 @@ cc_library(
         ":LinalgTransformOpsIncGen",
         ":LinalgTransforms",
         ":LinalgUtils",
-        ":PDLDialect",
         ":SCFDialect",
         ":SCFTransforms",
         ":Support",
@@ -10658,7 +10678,6 @@ td_library(
     ],
     includes = ["include"],
     deps = [
-        ":PDLDialect",
         ":TransformDialectTdFiles",
     ],
 )
@@ -10697,7 +10716,6 @@ cc_library(
         ":MemRefTransformOpsIncGen",
         ":MemRefTransforms",
         ":NVGPUDialect",
-        ":PDLDialect",
         ":SCFDialect",
         ":TransformDialect",
         ":TransformUtils",
@@ -10932,7 +10950,6 @@ td_library(
     includes = ["include"],
     deps = [
         ":BufferizationOpsTdFiles",
-        ":PDLDialectTdFiles",
         ":TransformDialectTdFiles",
     ],
 )
@@ -10973,7 +10990,6 @@ cc_library(
         ":BufferizationTransforms",
         ":IR",
         ":MemRefDialect",
-        ":PDLDialect",
         ":Parser",
         ":SideEffectInterfaces",
         ":TensorDialect",

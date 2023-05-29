@@ -1258,25 +1258,29 @@ SmallVector<llvm::Value *> ModuleTranslation::lookupValues(ValueRange values) {
 llvm::OpenMPIRBuilder *ModuleTranslation::getOpenMPBuilder() {
   if (!ompBuilder) {
     ompBuilder = std::make_unique<llvm::OpenMPIRBuilder>(*llvmModule);
-    ompBuilder->initialize();
 
     bool isDevice = false;
+    llvm::StringRef hostIRFilePath = "";
     if (auto offloadMod =
-            dyn_cast<mlir::omp::OffloadModuleInterface>(mlirModule))
+            dyn_cast<mlir::omp::OffloadModuleInterface>(mlirModule)) {
       isDevice = offloadMod.getIsDevice();
+      hostIRFilePath = offloadMod.getHostIRFilePath();
+    }
+
+    ompBuilder->initialize(hostIRFilePath);
 
     // TODO: set the flags when available
-    llvm::OpenMPIRBuilderConfig Config(
+    llvm::OpenMPIRBuilderConfig config(
         isDevice, /* IsTargetCodegen */ false,
         /* HasRequiresUnifiedSharedMemory */ false,
         /* OpenMPOffloadMandatory */ false);
-    ompBuilder->setConfig(Config);
+    ompBuilder->setConfig(config);
   }
   return ompBuilder.get();
 }
 
-const llvm::DILocation *
-ModuleTranslation::translateLoc(Location loc, llvm::DILocalScope *scope) {
+llvm::DILocation *ModuleTranslation::translateLoc(Location loc,
+                                                  llvm::DILocalScope *scope) {
   return debugTranslation->translateLoc(loc, scope);
 }
 
