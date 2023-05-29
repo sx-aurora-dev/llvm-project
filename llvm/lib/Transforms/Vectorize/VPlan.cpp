@@ -247,11 +247,19 @@ void VPTransformState::addNewMetadata(Instruction *To,
 }
 
 void VPTransformState::addMetadata(Instruction *To, Instruction *From) {
+  // No source instruction to transfer metadata from?
+  if (!From)
+    return;
+
   propagateMetadata(To, From);
   addNewMetadata(To, From);
 }
 
 void VPTransformState::addMetadata(ArrayRef<Value *> To, Instruction *From) {
+  // No source instruction to transfer metadata from?
+  if (!From)
+    return;
+
   for (Value *V : To) {
     if (Instruction *I = dyn_cast<Instruction>(V))
       addMetadata(I, From);
@@ -269,7 +277,7 @@ void VPTransformState::setDebugLocFromInst(const Value *V) {
   // When a FSDiscriminator is enabled, we don't need to add the multiply
   // factors to the discriminators.
   if (DIL && Inst->getFunction()->shouldEmitDebugInfoForProfiling() &&
-      !isa<DbgInfoIntrinsic>(Inst) && !EnableFSDiscriminator) {
+      !Inst->isDebugOrPseudoInst() && !EnableFSDiscriminator) {
     // FIXME: For scalable vectors, assume vscale=1.
     auto NewDIL =
         DIL->cloneByMultiplyingDuplicationFactor(UF * VF.getKnownMinValue());
@@ -591,6 +599,9 @@ VPlan::~VPlan() {
       Block->dropAllReferences(&DummyValue);
 
     VPBlockBase::deleteCFG(Entry);
+
+    Preheader->dropAllReferences(&DummyValue);
+    delete Preheader;
   }
   for (VPValue *VPV : VPLiveInsToFree)
     delete VPV;

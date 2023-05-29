@@ -190,7 +190,7 @@ define fastcc i64 @test_reduce_mul(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %n
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB12_2:
 ; CHECK-NEXT:    st %s1, 8(, %s11) # 8-byte Folded Spill
-; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
@@ -205,11 +205,11 @@ define fastcc i64 @test_reduce_mul(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %n
 ; CHECK-NEXT:    vbrd %v2, %s2
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
-; CHECK-NEXT:    andm %vm1, %vm1, %vm2
-; CHECK-NEXT:    vbrd %v0, 1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vfmk.w.lt %vm2, %v0
 ; CHECK-NEXT:    andm %vm1, %vm0, %vm0
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
+; CHECK-NEXT:    vbrd %v0, 1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lea %s2, -128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    or %s2, 0, %s2
@@ -331,7 +331,7 @@ define fastcc i64 @test_reduce_smin(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB16_2:
 ; CHECK-NEXT:    st %s1, 8(, %s11) # 8-byte Folded Spill
-; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
@@ -346,17 +346,17 @@ define fastcc i64 @test_reduce_smin(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; CHECK-NEXT:    vbrd %v2, %s2
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
-; CHECK-NEXT:    andm %vm1, %vm1, %vm2
+; CHECK-NEXT:    vfmk.w.lt %vm2, %v0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    lea %s2, -1
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, 2147483647(, %s2)
 ; CHECK-NEXT:    vbrd %v0, %s2
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lea %s2, -128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    or %s2, 0, %s2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s3, 128
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3
@@ -450,7 +450,7 @@ define fastcc i64 @test_reduce_umin(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; TODO: map to smax
 ; CHECK-LABEL: test_reduce_umin:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
@@ -463,14 +463,14 @@ define fastcc i64 @test_reduce_umin(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; CHECK-NEXT:    vbrd %v2, %s2
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
-; CHECK-NEXT:    andm %vm1, %vm1, %vm2
+; CHECK-NEXT:    vfmk.w.lt %vm2, %v0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    vbrd %v0, -1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lea %s2, -128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    or %s2, 0, %s2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s3, 128
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3
@@ -550,7 +550,7 @@ define fastcc i64 @test_reduce_umax(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; TODO: map to smax
 ; CHECK-LABEL: test_reduce_umax:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
@@ -563,14 +563,14 @@ define fastcc i64 @test_reduce_umax(i64 %s, <256 x i64> %v, <256 x i1> %m, i32 %
 ; CHECK-NEXT:    vbrd %v2, %s2
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v2
-; CHECK-NEXT:    vfmk.w.lt %vm1, %v0
-; CHECK-NEXT:    andm %vm1, %vm1, %vm2
+; CHECK-NEXT:    vfmk.w.lt %vm2, %v0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    vbrd %v0, 0
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    lea %s2, -128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    or %s2, 0, %s2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s3, 128
 ; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3

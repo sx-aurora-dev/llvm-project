@@ -186,7 +186,7 @@ function(create_libc_unittest fq_target_name)
   if(NOT LIBC_UNITTEST_NO_RUN_POSTBUILD)
     add_custom_target(
       ${fq_target_name}
-      COMMAND $<TARGET_FILE:${fq_build_target_name}>
+      COMMAND ${fq_build_target_name}
       COMMENT "Running unit test ${fq_target_name}"
     )
   endif()
@@ -551,7 +551,8 @@ if(LIBC_GPU_TARGET_ARCHITECTURE_IS_AMDGPU)
        -mcpu=${LIBC_GPU_TARGET_ARCHITECTURE} -flto --target=${LIBC_GPU_TARGET_TRIPLE})
 elseif(LIBC_GPU_TARGET_ARCHITECTURE_IS_NVPTX)
   get_nvptx_compile_options(nvptx_options ${LIBC_GPU_TARGET_ARCHITECTURE})
-  list(APPEND ${nvptx_options} --target=${LIBC_GPU_TARGET_TRIPLE})
+  list(APPEND LIBC_HERMETIC_TEST_COMPILE_OPTIONS
+       ${nvptx_options} -fno-use-cxa-atexit --target=${LIBC_GPU_TARGET_TRIPLE})
 endif()
 
 # Rule to add a hermetic test. A hermetic test is one whose executable is fully
