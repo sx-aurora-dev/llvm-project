@@ -164,6 +164,12 @@ enum NodeType : unsigned {
   // value. The fourth and fifth operands are the mask and VL operands.
   VSLIDE1UP_VL,
   VSLIDE1DOWN_VL,
+  // Matches the semantics of vfslide1up/vfslide1down. The first operand is
+  // passthru operand, the second is source vector, third is a scalar value
+  // whose type matches the element type of the vectors.  The fourth and fifth
+  // operands are the mask and VL operands.
+  VFSLIDE1UP_VL,
+  VFSLIDE1DOWN_VL,
   // Matches the semantics of the vid.v instruction, with a mask and VL
   // operand.
   VID_VL,
@@ -235,6 +241,7 @@ enum NodeType : unsigned {
   FNEG_VL,
   FABS_VL,
   FSQRT_VL,
+  FCLASS_VL,
   FCOPYSIGN_VL, // Has a merge operand
   VFCVT_RTZ_X_F_VL,
   VFCVT_RTZ_XU_F_VL,
@@ -815,6 +822,7 @@ private:
                                             SelectionDAG &DAG) const;
   SDValue lowerToScalableOp(SDValue Op, SelectionDAG &DAG, unsigned NewOpc,
                             bool HasMergeOp = false, bool HasMask = true) const;
+  SDValue LowerIS_FPCLASS(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVPOp(SDValue Op, SelectionDAG &DAG, unsigned RISCVISDOpc,
                     bool HasMergeOp = false) const;
   SDValue lowerLogicVPOp(SDValue Op, SelectionDAG &DAG, unsigned MaskOpc,

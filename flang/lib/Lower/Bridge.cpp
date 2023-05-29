@@ -1847,8 +1847,12 @@ private:
     Fortran::lower::pft::Evaluation &eval = getEval();
     Fortran::lower::StatementContext stmtCtx;
     pushActiveConstruct(eval, stmtCtx);
-    for (Fortran::lower::pft::Evaluation &e : getEval().getNestedEvaluations())
-      genFIR(e);
+    for (Fortran::lower::pft::Evaluation &e : eval.getNestedEvaluations()) {
+      if (e.getIf<Fortran::parser::EndSelectStmt>())
+        maybeStartBlock(e.block);
+      else
+        genFIR(e);
+    }
     popActiveConstruct();
   }
 
@@ -2708,7 +2712,7 @@ private:
         builder->restoreInsertionPoint(crtInsPt);
         ++typeGuardIdx;
       } else if (eval.getIf<Fortran::parser::EndSelectStmt>()) {
-        genFIR(eval);
+        maybeStartBlock(eval.block);
         if (hasLocalScope)
           localSymbols.popScope();
       } else {
@@ -3388,7 +3392,10 @@ private:
               // Scalar assignment
               const bool isNumericScalar =
                   isNumericScalarCategory(lhsType->category());
-              fir::ExtendedValue rhs = isNumericScalar
+              const bool isVector =
+                  isDerivedCategory(lhsType->category()) &&
+                  lhsType->GetDerivedTypeSpec().IsVectorType();
+              fir::ExtendedValue rhs = (isNumericScalar || isVector)
                                            ? genExprValue(assign.rhs, stmtCtx)
                                            : genExprAddr(assign.rhs, stmtCtx);
               const bool lhsIsWholeAllocatable =
@@ -3436,7 +3443,7 @@ private:
                 return genExprAddr(assign.lhs, stmtCtx);
               }();
 
-              if (isNumericScalar) {
+              if (isNumericScalar || isVector) {
                 // Fortran 2018 10.2.1.3 p8 and p9
                 // Conversions should have been inserted by semantic analysis,
                 // but they can be incorrect between the rhs and lhs. Correct
@@ -3450,7 +3457,8 @@ private:
                 // conversion to the actual type.
                 mlir::Type toTy = genType(assign.lhs);
                 mlir::Value cast =
-                    builder->convertWithSemantics(loc, toTy, val);
+                    isVector ? val
+                             : builder->convertWithSemantics(loc, toTy, val);
                 if (fir::dyn_cast_ptrEleTy(addr.getType()) != toTy) {
                   assert(isFuncResultDesignator(assign.lhs) && "type mismatch");
                   addr = builder->createConvert(

@@ -248,6 +248,10 @@ Changes in existing checks
   constructor initializers. Correctly handle constructor arguments as being
   sequenced when constructor call is written as list-initialization.
 
+- Extend :doc:`bugprone-unused-return-value
+  <clang-tidy/checks/bugprone/unused-return-value>` check to check for all functions
+  with specified return types using the ``CheckedReturnTypes`` option.
+
 - Deprecated :doc:`cert-dcl21-cpp
   <clang-tidy/checks/cert/dcl21-cpp>` check.
 
@@ -386,6 +390,10 @@ Changes in existing checks
 - Fixed a false positive in :doc:`performance-no-automatic-move
   <clang-tidy/checks/performance/no-automatic-move>` when warning would be
   emitted for a const local variable to which NRVO is applied.
+
+- Improved :doc:`performance-no-automatic-move
+  <clang-tidy/checks/performance/no-automatic-move>`: warn on ``const &&``
+  constructors.
 
 Removed checks
 ^^^^^^^^^^^^^^

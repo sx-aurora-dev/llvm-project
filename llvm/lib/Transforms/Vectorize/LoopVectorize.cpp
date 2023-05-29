@@ -7743,7 +7743,10 @@ SCEV2ValueTy LoopVectorizationPlanner::executePlan(
     LoopVectorizeHints Hints(L, true, *ORE);
     Hints.setAlreadyVectorized();
   }
-  AddRuntimeUnrollDisableMetaData(L);
+  TargetTransformInfo::UnrollingPreferences UP;
+  TTI.getUnrollingPreferences(L, *PSE.getSE(), UP, ORE);
+  if (!UP.UnrollVectorizedLoop || CanonicalIVStartValue)
+    AddRuntimeUnrollDisableMetaData(L);
 
   // 3. Fix the vectorized code: take care of header phi's, live-outs,
   //    predication, updating analyses.
@@ -8487,7 +8490,7 @@ VPRecipeBase *VPRecipeBuilder::tryToWiden(Instruction *I,
       Ops[1] = SafeRHS;
       return new VPWidenRecipe(*I, make_range(Ops.begin(), Ops.end()));
     }
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   }
   case Instruction::Add:
   case Instruction::And:

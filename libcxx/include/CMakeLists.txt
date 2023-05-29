@@ -78,6 +78,7 @@ set(files
   __algorithm/pstl_backends/cpu_backends/find_if.h
   __algorithm/pstl_backends/cpu_backends/for_each.h
   __algorithm/pstl_backends/cpu_backends/serial.h
+  __algorithm/pstl_backends/cpu_backends/thread.h
   __algorithm/pstl_backends/cpu_backends/transform.h
   __algorithm/pstl_copy.h
   __algorithm/pstl_fill.h
@@ -691,6 +692,7 @@ set(files
   __type_traits/has_unique_object_representation.h
   __type_traits/has_virtual_destructor.h
   __type_traits/integral_constant.h
+  __type_traits/invoke.h
   __type_traits/is_abstract.h
   __type_traits/is_aggregate.h
   __type_traits/is_allocator.h

@@ -121,6 +121,7 @@ END-SCRIPT
 #include <__algorithm/pstl_backends/cpu_backends/find_if.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/pstl_backends/cpu_backends/find_if.h'}}
 #include <__algorithm/pstl_backends/cpu_backends/for_each.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/pstl_backends/cpu_backends/for_each.h'}}
 #include <__algorithm/pstl_backends/cpu_backends/serial.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/pstl_backends/cpu_backends/serial.h'}}
+#include <__algorithm/pstl_backends/cpu_backends/thread.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/pstl_backends/cpu_backends/thread.h'}}
 #include <__algorithm/pstl_backends/cpu_backends/transform.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/pstl_backends/cpu_backends/transform.h'}}
 #include <__algorithm/push_heap.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/push_heap.h'}}
 #include <__algorithm/ranges_adjacent_find.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/ranges_adjacent_find.h'}}
@@ -673,6 +674,7 @@ END-SCRIPT
 #include <__type_traits/has_unique_object_representation.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/has_unique_object_representation.h'}}
 #include <__type_traits/has_virtual_destructor.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/has_virtual_destructor.h'}}
 #include <__type_traits/integral_constant.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/integral_constant.h'}}
+#include <__type_traits/invoke.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/invoke.h'}}
 #include <__type_traits/is_abstract.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_abstract.h'}}
 #include <__type_traits/is_aggregate.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_aggregate.h'}}
 #include <__type_traits/is_allocator.h> // expected-error@*:* {{use of private header from outside its module: '__type_traits/is_allocator.h'}}
