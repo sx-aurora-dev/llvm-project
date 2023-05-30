@@ -49,7 +49,7 @@ algorithms, otherwise they are implemented in terms of other algorithms. If none
 implemented, all the algorithms will eventually forward to the basis algorithms listed above:
 
   template <class _ExecutionPolicy, class _Iterator, class _Size, class _Func>
-  void __pstl_for_each_n(_Backend, _ExecutionPolicy&&, _Iterator __first, _Size __n, _Func __f);
+  void __pstl_for_each_n(_Backend, _Iterator __first, _Size __n, _Func __f);
 
   template <class _ExecutionPolicy, class _Iterator, class _Predicate>
   bool __pstl_any_of(_Backend, _Iterator __first, _iterator __last, _Predicate __pred);
@@ -61,10 +61,16 @@ implemented, all the algorithms will eventually forward to the basis algorithms 
   bool __pstl_none_of(_Backend, _Iterator __first, _iterator __last, _Predicate __pred);
 
   template <class _ExecutionPolicy, class _Iterator, class _Tp>
-  void __pstl_fill(_Iterator __first, _Iterator __last, const _Tp& __value);
+  _Iterator __pstl_find(_Backend, _Iterator __first, _Iterator __last, const _Tp& __value);
+
+  template <class _ExecutionPolicy, class _Iterator, class _Predicate>
+  _Iterator __pstl_find_if_not(_Backend, _Iterator __first, _Iterator __last, _Predicate __pred);
+
+  template <class _ExecutionPolicy, class _Iterator, class _Tp>
+  void __pstl_fill(_Backend, _Iterator __first, _Iterator __last, const _Tp& __value);
 
   template <class _ExecutionPolicy, class _Iterator, class _SizeT, class _Tp>
-  void __pstl_fill_n(_Iterator __first, _SizeT __n, const _Tp& __value);
+  void __pstl_fill_n(_Backend, _Iterator __first, _SizeT __n, const _Tp& __value);
 
 // TODO: Complete this list
 
@@ -85,7 +91,7 @@ struct __select_backend<std::execution::unsequenced_policy> {
 };
 #  endif
 
-#  if defined(_PSTL_CPU_BACKEND_SERIAL)
+#  if defined(_LIBCPP_PSTL_CPU_BACKEND_SERIAL) || defined(_LIBCPP_PSTL_CPU_BACKEND_THREAD)
 template <>
 struct __select_backend<std::execution::parallel_policy> {
   using type = __cpu_backend_tag;

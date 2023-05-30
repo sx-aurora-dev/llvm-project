@@ -2550,6 +2550,41 @@ Instruction *InstCombinerImpl::visitUnconditionalBranchInst(BranchInst &BI) {
   return nullptr;
 }
 
+/// If a block is dead due to a known branch condition, remove instructions
+/// in it.
+static bool handlePotentiallyDeadBlock(BasicBlock *BB, InstCombiner &IC) {
+  // We only know one edge to this block is dead, but there may be others.
+  // TODO: We could track dead edges globally.
+  if (!BB->getSinglePredecessor())
+    return false;
+
+  bool Changed = false;
+  for (Instruction &Inst : make_early_inc_range(make_range(
+           std::next(BB->getTerminator()->getReverseIterator()), BB->rend()))) {
+    if (!Inst.use_empty() && !Inst.getType()->isTokenTy()) {
+      IC.replaceInstUsesWith(Inst, PoisonValue::get(Inst.getType()));
+      Changed = true;
+    }
+    if (Inst.isEHPad() || Inst.getType()->isTokenTy())
+      continue;
+    IC.eraseInstFromFunction(Inst);
+    Changed = true;
+  }
+
+  // TODO: Successor blocks may also be dead.
+  return Changed;
+}
+
+static bool handlePotentiallyDeadSuccessors(BasicBlock *BB,
+                                            BasicBlock *LiveSucc,
+                                            InstCombiner &IC) {
+  bool Changed = false;
+  for (BasicBlock *Succ : successors(BB))
+    if (Succ != LiveSucc)
+      Changed |= handlePotentiallyDeadBlock(Succ, IC);
+  return Changed;
+}
+
 Instruction *InstCombinerImpl::visitBranchInst(BranchInst &BI) {
   if (BI.isUnconditional())
     return visitUnconditionalBranchInst(BI);
@@ -2593,6 +2628,14 @@ Instruction *InstCombinerImpl::visitBranchInst(BranchInst &BI) {
     return &BI;
   }
 
+  if (isa<UndefValue>(Cond) && handlePotentiallyDeadSuccessors(
+                                   BI.getParent(), /*LiveSucc*/ nullptr, *this))
+    return &BI;
+  if (auto *CI = dyn_cast<ConstantInt>(Cond))
+    if (handlePotentiallyDeadSuccessors(
+            BI.getParent(), BI.getSuccessor(!CI->getZExtValue()), *this))
+      return &BI;
+
   return nullptr;
 }
 
@@ -2610,6 +2653,14 @@ Instruction *InstCombinerImpl::visitSwitchInst(SwitchInst &SI) {
     }
     return replaceOperand(SI, 0, Op0);
   }
+
+  if (isa<UndefValue>(Cond) && handlePotentiallyDeadSuccessors(
+                                   SI.getParent(), /*LiveSucc*/ nullptr, *this))
+    return &SI;
+  if (auto *CI = dyn_cast<ConstantInt>(Cond))
+    if (handlePotentiallyDeadSuccessors(
+            SI.getParent(), SI.findCaseValue(CI)->getCaseSuccessor(), *this))
+      return &SI;
 
   KnownBits Known = computeKnownBits(Cond, 0, &SI);
   unsigned LeadingKnownZeros = Known.countMinLeadingZeros();
@@ -3475,8 +3526,8 @@ static bool SoleWriteToDeadLocal(Instruction *I, TargetLibraryInfo &TLI) {
 /// beginning of DestBlock, which can only happen if it's safe to move the
 /// instruction past all of the instructions between it and the end of its
 /// block.
-static bool TryToSinkInstruction(Instruction *I, BasicBlock *DestBlock,
-                                 TargetLibraryInfo &TLI) {
+bool InstCombinerImpl::tryToSinkInstruction(Instruction *I,
+                                            BasicBlock *DestBlock) {
   BasicBlock *SrcBlock = I->getParent();
 
   // Cannot move control-flow-involving, volatile loads, vaarg, etc.
@@ -3523,10 +3574,13 @@ static bool TryToSinkInstruction(Instruction *I, BasicBlock *DestBlock,
         return false;
   }
 
-  I->dropDroppableUses([DestBlock](const Use *U) {
-    if (auto *I = dyn_cast<Instruction>(U->getUser()))
-      return I->getParent() != DestBlock;
-    return true;
+  I->dropDroppableUses([&](const Use *U) {
+    auto *I = dyn_cast<Instruction>(U->getUser());
+    if (I && I->getParent() != DestBlock) {
+      Worklist.add(I);
+      return true;
+    }
+    return false;
   });
   /// FIXME: We could remove droppable uses that are not dominated by
   /// the new position.
@@ -3699,7 +3753,7 @@ bool InstCombinerImpl::run() {
     if (OptBB) {
       auto *UserParent = *OptBB;
       // Okay, the CFG is simple enough, try to sink this instruction.
-      if (TryToSinkInstruction(I, UserParent, TLI)) {
+      if (tryToSinkInstruction(I, UserParent)) {
         LLVM_DEBUG(dbgs() << "IC: Sink: " << *I << '\n');
         MadeIRChange = true;
         // We'll add uses of the sunk instruction below, but since
@@ -3900,15 +3954,21 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
     // Recursively visit successors.  If this is a branch or switch on a
     // constant, only visit the reachable successor.
     Instruction *TI = BB->getTerminator();
-    if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
-      if (BI->isConditional() && isa<ConstantInt>(BI->getCondition())) {
-        bool CondVal = cast<ConstantInt>(BI->getCondition())->getZExtValue();
+    if (BranchInst *BI = dyn_cast<BranchInst>(TI); BI && BI->isConditional()) {
+      if (isa<UndefValue>(BI->getCondition()))
+        // Branch on undef is UB.
+        continue;
+      if (auto *Cond = dyn_cast<ConstantInt>(BI->getCondition())) {
+        bool CondVal = Cond->getZExtValue();
         BasicBlock *ReachableBB = BI->getSuccessor(!CondVal);
         Worklist.push_back(ReachableBB);
         continue;
       }
     } else if (SwitchInst *SI = dyn_cast<SwitchInst>(TI)) {
-      if (ConstantInt *Cond = dyn_cast<ConstantInt>(SI->getCondition())) {
+      if (isa<UndefValue>(SI->getCondition()))
+        // Switch on undef is UB.
+        continue;
+      if (auto *Cond = dyn_cast<ConstantInt>(SI->getCondition())) {
         Worklist.push_back(SI->findCaseValue(Cond)->getCaseSuccessor());
         continue;
       }

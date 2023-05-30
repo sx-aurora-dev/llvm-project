@@ -626,17 +626,17 @@ ValueRange::ValueRange(ResultRange values)
 /// See `llvm::detail::indexed_accessor_range_base` for details.
 ValueRange::OwnerT ValueRange::offset_base(const OwnerT &owner,
                                            ptrdiff_t index) {
-  if (const auto *value = owner.dyn_cast<const Value *>())
+  if (const auto *value = llvm::dyn_cast_if_present<const Value *>(owner))
     return {value + index};
-  if (auto *operand = owner.dyn_cast<OpOperand *>())
+  if (auto *operand = llvm::dyn_cast_if_present<OpOperand *>(owner))
     return {operand + index};
   return owner.get<detail::OpResultImpl *>()->getNextResultAtOffset(index);
 }
 /// See `llvm::detail::indexed_accessor_range_base` for details.
 Value ValueRange::dereference_iterator(const OwnerT &owner, ptrdiff_t index) {
-  if (const auto *value = owner.dyn_cast<const Value *>())
+  if (const auto *value = llvm::dyn_cast_if_present<const Value *>(owner))
     return value[index];
-  if (auto *operand = owner.dyn_cast<OpOperand *>())
+  if (auto *operand = llvm::dyn_cast_if_present<OpOperand *>(owner))
     return operand[index].get();
   return owner.get<detail::OpResultImpl *>()->getNextResultAtOffset(index);
 }
@@ -877,6 +877,9 @@ OperationFingerPrint::OperationFingerPrint(Operation *topOp) {
   topOp->walk([&](Operation *op) {
     //   - Operation pointer
     addDataToHash(hasher, op);
+    //   - Parent operation pointer (to take into account the nesting structure)
+    if (op != topOp)
+      addDataToHash(hasher, op->getParentOp());
     //   - Attributes
     addDataToHash(hasher, op->getDiscardableAttrDictionary());
     //   - Properties

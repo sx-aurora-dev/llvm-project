@@ -38,6 +38,14 @@ mapPossibleTopLevelTransformOpBlockArguments(TransformState &state,
 /// Verification hook for PossibleTopLevelTransformOpTrait.
 LogicalResult verifyPossibleTopLevelTransformOpTrait(Operation *op);
 
+/// Populates `effects` with side effects implied by
+/// PossibleTopLevelTransformOpTrait for the given operation. The operation may
+/// have an optional `root` operand, indicating it is not in fact top-level. It
+/// is also expected to have a single-block body.
+void getPotentialTopLevelEffects(
+    Operation *operation, Value root, Block &body,
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects);
+
 /// Verification hook for TransformOpInterface.
 LogicalResult verifyTransformOpInterface(Operation *op);
 
@@ -51,6 +59,11 @@ void prepareValueMappings(
 /// the operands to `block`'s terminator.
 void forwardTerminatorOperands(Block *block, transform::TransformState &state,
                                transform::TransformResults &results);
+
+/// Make a dummy transform state for testing purposes. This MUST NOT be used
+/// outside of test cases.
+TransformState makeTransformStateForTesting(Region *region,
+                                            Operation *payloadRoot);
 } // namespace detail
 
 /// Options controlling the application of transform operations by the
@@ -153,6 +166,9 @@ private:
   friend LogicalResult applyTransforms(Operation *, TransformOpInterface,
                                        const RaggedArray<MappedValue> &,
                                        const TransformOptions &);
+
+  friend TransformState
+  detail::makeTransformStateForTesting(Region *region, Operation *payloadRoot);
 
 public:
   /// Returns the op at which the transformation state is rooted. This is
@@ -753,15 +769,16 @@ TransformState::make_isolated_region_scope(Region &region) {
 /// can be standalone top-level transforms. Such operations typically contain
 /// other Transform dialect operations that can be executed following some
 /// control flow logic specific to the current operation. The operations with
-/// this trait are expected to have at least one single-block region with one
-/// argument of PDL Operation type. The operations are also expected to be valid
-/// without operands, in which case they are considered top-level, and with one
-/// or more arguments, in which case they are considered nested. Top-level
-/// operations have the block argument of the entry block in the Transform IR
-/// correspond to the root operation of Payload IR. Nested operations have the
-/// block argument of the entry block in the Transform IR correspond to a list
-/// of Payload IR operations mapped to the first operand of the Transform IR
-/// operation. The operation must implement TransformOpInterface.
+/// this trait are expected to have at least one single-block region with at
+/// least one argument of type implementing TransformHandleTypeInterface. The
+/// operations are also expected to be valid without operands, in which case
+/// they are considered top-level, and with one or more arguments, in which case
+/// they are considered nested. Top-level operations have the block argument of
+/// the entry block in the Transform IR correspond to the root operation of
+/// Payload IR. Nested operations have the block argument of the entry block in
+/// the Transform IR correspond to a list of Payload IR operations mapped to the
+/// first operand of the Transform IR operation. The operation must implement
+/// TransformOpInterface.
 template <typename OpTy>
 class PossibleTopLevelTransformOpTrait
     : public OpTrait::TraitBase<OpTy, PossibleTopLevelTransformOpTrait> {
@@ -775,6 +792,14 @@ public:
   /// Returns the single block of the given region.
   Block *getBodyBlock(unsigned region = 0) {
     return &this->getOperation()->getRegion(region).front();
+  }
+
+  /// Populates `effects` with side effects implied by this trait.
+  void getPotentialTopLevelEffects(
+      SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+    detail::getPotentialTopLevelEffects(
+        this->getOperation(), cast<OpTy>(this->getOperation()).getRoot(),
+        *getBodyBlock(), effects);
   }
 
   /// Sets up the mapping between the entry block of the given region of this op

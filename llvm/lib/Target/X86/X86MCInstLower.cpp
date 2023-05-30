@@ -18,6 +18,7 @@
 #include "MCTargetDesc/X86ShuffleDecode.h"
 #include "MCTargetDesc/X86TargetStreamer.h"
 #include "X86AsmPrinter.h"
+#include "X86MachineFunctionInfo.h"
 #include "X86RegisterInfo.h"
 #include "X86ShuffleDecodeConstantPool.h"
 #include "X86Subtarget.h"
@@ -1529,6 +1530,20 @@ static void printConstant(const Constant *COp, raw_ostream &CS) {
     printConstant(CI->getValue(), CS);
   } else if (auto *CF = dyn_cast<ConstantFP>(COp)) {
     printConstant(CF->getValueAPF(), CS);
+  } else if (auto *CDS = dyn_cast<ConstantDataSequential>(COp)) {
+    Type *EltTy = CDS->getElementType();
+    bool IsInteger = EltTy->isIntegerTy();
+    bool IsFP = EltTy->isHalfTy() || EltTy->isFloatTy() || EltTy->isDoubleTy();
+    for (unsigned I = 0, E = CDS->getNumElements(); I != E; ++I) {
+      if (I != 0)
+        CS << ",";
+      if (IsInteger)
+        printConstant(CDS->getElementAsAPInt(I), CS);
+      else if (IsFP)
+        printConstant(CDS->getElementAsAPFloat(I), CS);
+      else
+        CS << "?";
+    }
   } else {
     CS << "?";
   }
@@ -2118,6 +2133,7 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
 
     if (HasActiveDwarfFrame && !hasFP) {
       OutStreamer->emitCFIAdjustCfaOffset(-stackGrowth);
+      MF->getInfo<X86MachineFunctionInfo>()->setHasCFIAdjustCfa(true);
     }
 
     // Emit the label.

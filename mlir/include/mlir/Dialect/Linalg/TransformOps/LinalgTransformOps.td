@@ -183,7 +183,8 @@ def FuseIntoContainingOp :
 
   let arguments = (ins TransformHandleTypeInterface:$producer_op,
                        TransformHandleTypeInterface:$containing_op);
-  let results = (outs TransformHandleTypeInterface:$fused_op);
+  let results = (outs TransformHandleTypeInterface:$fused_op,
+                      TransformHandleTypeInterface:$new_containing_op);
   let assemblyFormat = "$producer_op `into` $containing_op attr-dict "
                        " `:` functional-type(operands, results)";
 
@@ -819,7 +820,7 @@ def HoistPadBuildPackingLoopNestOp :
     loop nests, which can be empty.
   }];
 
-  // Also allow any !pdl.operation for simpler composition. Non-tensor.pad ops
+  // Also allow any payload operation for simpler composition. Non-tensor.pad ops
   // will be dropped from the results.
   let arguments =
     (ins TransformHandleTypeInterface:$target,
@@ -862,7 +863,7 @@ def HoistPadOp : Op<Transform_Dialect, "structured.hoist_pad",
     tensor.pad operations, which can be empty.
   }];
 
-  // Also allow any !pdl.operation for simpler composition. Non-tensor.pad ops
+  // Also allow any operation for simpler composition. Non-tensor.pad ops
   // will be dropped from the results.
   let arguments =
     (ins TransformHandleTypeInterface:$target,

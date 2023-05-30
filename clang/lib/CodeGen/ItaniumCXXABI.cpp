@@ -580,7 +580,7 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
   CGBuilderTy &Builder = CGF.Builder;
 
   const FunctionProtoType *FPT =
-    MPT->getPointeeType()->getAs<FunctionProtoType>();
+      MPT->getPointeeType()->castAs<FunctionProtoType>();
   auto *RD =
       cast<CXXRecordDecl>(MPT->getClass()->castAs<RecordType>()->getDecl());
 
@@ -4689,6 +4689,7 @@ static llvm::FunctionCallee getClangCallTerminateFn(CodeGenModule &CGM) {
       cast<llvm::Function>(fnRef.getCallee()->stripPointerCasts());
   if (fn->empty()) {
     CGM.SetLLVMFunctionAttributes(GlobalDecl(), FI, fn, /*IsThunk=*/false);
+    CGM.SetLLVMFunctionAttributesForDefinition(nullptr, fn);
     fn->setDoesNotThrow();
     fn->setDoesNotReturn();
 

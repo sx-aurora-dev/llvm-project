@@ -211,7 +211,8 @@ bool AArch64TTIImpl::areInlineCompatible(const Function *Caller,
 bool AArch64TTIImpl::shouldMaximizeVectorBandwidth(
     TargetTransformInfo::RegisterKind K) const {
   assert(K != TargetTransformInfo::RGK_Scalar);
-  return K == TargetTransformInfo::RGK_FixedWidthVector;
+  return (K == TargetTransformInfo::RGK_FixedWidthVector &&
+          !ST->forceStreamingCompatibleSVE());
 }
 
 /// Calculate the cost of materializing a 64-bit value. This helper
@@ -736,6 +737,11 @@ instCombineConvertFromSVBool(InstCombiner &IC, IntrinsicInst &II) {
 
   if (auto BinOpCombine = tryCombineFromSVBoolBinOp(IC, II))
     return BinOpCombine;
+
+  // Ignore converts to/from svcount_t.
+  if (isa<TargetExtType>(II.getArgOperand(0)->getType()) ||
+      isa<TargetExtType>(II.getType()))
+    return std::nullopt;
 
   SmallVector<Instruction *, 32> CandidatesForRemoval;
   Value *Cursor = II.getOperand(0), *EarliestReplacement = nullptr;
@@ -2523,7 +2529,7 @@ InstructionCost AArch64TTIImpl::getArithmeticInstrCost(
       return 2 * LT.first;
     if (!Ty->getScalarType()->isFP128Ty())
       return LT.first;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ISD::FMUL:
   case ISD::FDIV:
     // These nodes are marked as 'custom' just to lower them to SVE.

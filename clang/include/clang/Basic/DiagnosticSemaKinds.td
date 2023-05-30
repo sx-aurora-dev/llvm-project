@@ -5490,10 +5490,10 @@ def note_template_kw_refers_to_non_template : Note<
 def err_template_kw_refers_to_dependent_non_template : Error<
   "%0%select{| following the 'template' keyword}1 "
   "cannot refer to a dependent template">;
-def err_template_kw_refers_to_class_template : Error<
-  "'%0%1' instantiated to a class template, not a function template">;
-def note_referenced_class_template : Note<
-  "class template declared here">;
+def err_template_kw_refers_to_type_template : Error<
+  "'%0%1' is expected to be a non-type template, but instantiated to a %select{class|type alias}2 template">;
+def note_referenced_type_template : Note<
+  "%select{class|type alias}0 template declared here">;
 def err_template_kw_missing : Error<
   "missing 'template' keyword prior to dependent template name '%0%1'">;
 def ext_template_outside_of_template : ExtWarn<
@@ -6981,9 +6981,8 @@ def err_typecheck_indirection_requires_pointer : Error<
 def ext_typecheck_indirection_through_void_pointer : ExtWarn<
   "ISO C does not allow indirection on operand of type %0">,
   InGroup<VoidPointerDeref>;
-def ext_typecheck_indirection_through_void_pointer_cpp
-    : ExtWarn<"ISO C++ does not allow indirection on operand of type %0">,
-      InGroup<VoidPointerDeref>, DefaultError, SFINAEFailure;
+def err_typecheck_indirection_through_void_pointer_cpp
+    : Error<"indirection not permitted on operand of type %0">;
 def warn_indirection_through_null : Warning<
   "indirection of non-volatile null pointer will be deleted, not trap">,
   InGroup<NullDereference>;
@@ -8748,8 +8747,6 @@ def err_cast_pointer_to_non_pointer_int : Error<
 def err_nullptr_cast : Error<
   "cannot cast an object of type %select{'nullptr_t' to %1|%1 to 'nullptr_t'}0"
 >;
-def err_cast_to_bfloat16 : Error<"cannot type-cast to __bf16">;
-def err_cast_from_bfloat16 : Error<"cannot type-cast from __bf16">;
 def err_typecheck_expect_scalar_operand : Error<
   "operand of type %0 where arithmetic or pointer type is required">;
 def err_typecheck_cond_incompatible_operands : Error<
@@ -11823,8 +11820,8 @@ def warn_unsafe_buffer_operation : Warning<
   InGroup<UnsafeBufferUsage>, DefaultIgnore;
 def note_unsafe_buffer_operation : Note<
   "used%select{| in pointer arithmetic| in buffer access}0 here">;
-def note_unsafe_buffer_variable_fixit : Note<
-  "change type of '%0' to '%select{std::span|std::array|std::span::iterator}1' to preserve bounds information">;
+def note_unsafe_buffer_variable_fixit_group : Note<
+  "change type of %0 to '%select{std::span|std::array|std::span::iterator}1' to preserve bounds information%select{|, and change %2 to '%select{std::span|std::array|std::span::iterator}1' to propagate bounds information between them}3">;
 def note_safe_buffer_usage_suggestions_disabled : Note<
   "pass -fsafe-buffer-usage-suggestions to receive code hardening suggestions">;
 def err_loongarch_builtin_requires_la32 : Error<

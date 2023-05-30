@@ -481,7 +481,7 @@ public:
 private:
   class __destroy_vector {
     public:
-      _LIBCPP_CONSTEXPR __destroy_vector(vector& __vec) : __vec_(__vec) {}
+      _LIBCPP_CONSTEXPR _LIBCPP_HIDE_FROM_ABI __destroy_vector(vector& __vec) : __vec_(__vec) {}
 
       _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void operator()() {
           std::__debug_db_erase_c(std::addressof(__vec_));
@@ -3524,7 +3524,7 @@ inline constexpr bool __format::__enable_insertable<vector<wchar_t>> = true;
 
 #endif // _LIBCPP_STD_VER >= 20
 
-#if !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT) && _LIBCPP_STD_VER >= 23
+#if _LIBCPP_STD_VER >= 23
 template <class _Tp, class CharT>
 // Since is-vector-bool-reference is only used once it's inlined here.
   requires same_as<typename _Tp::__container, vector<bool, typename _Tp::__container::allocator_type>>
@@ -3543,7 +3543,7 @@ public:
         return __underlying_.format(__ref, __ctx);
   }
 };
-#endif // !defined(_LIBCPP_HAS_NO_INCOMPLETE_FORMAT) && _LIBCPP_STD_VER >= 23
+#endif // _LIBCPP_STD_VER >= 23
 
 _LIBCPP_END_NAMESPACE_STD
 

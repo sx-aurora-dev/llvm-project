@@ -426,9 +426,17 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
 
   const Distro Distro(getDriver().getVFS(), Triple);
 
-  if (Triple.isAndroid())
+  if (Triple.isAndroid()) {
+    if (getSanitizerArgs(Args).needsHwasanRt() &&
+        !Triple.isAndroidVersionLT(34) && Triple.isArch64Bit()) {
+      // On Android 14 and newer, there is a special linker_hwasan64 that
+      // allows to run HWASan binaries on non-HWASan system images. This
+      // is also available on HWASan system images, so we can just always
+      // use that instead.
+      return "/system/bin/linker_hwasan64";
+    }
     return Triple.isArch64Bit() ? "/system/bin/linker64" : "/system/bin/linker";
-
+  }
   if (Triple.isMusl()) {
     std::string ArchName;
     bool IsArm = false;
@@ -806,6 +814,9 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   if (IsX86_64 || IsAArch64) {
     Res |= SanitizerKind::KernelHWAddress;
   }
+  // Work around "Cannot represent a difference across sections".
+  if (getTriple().getArch() == llvm::Triple::ppc64)
+    Res &= ~SanitizerKind::Function;
   return Res;
 }
 

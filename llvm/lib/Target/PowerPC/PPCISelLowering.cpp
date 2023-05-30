@@ -10686,7 +10686,7 @@ SDValue PPCTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       RetOps.push_back(Extract);
       return DAG.getMergeValues(RetOps, dl);
     }
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   }
   case Intrinsic::ppc_vsx_disassemble_pair: {
     int NumVecs = 2;
@@ -15041,6 +15041,7 @@ SDValue PPCTargetLowering::combineStoreFPToInt(SDNode *N,
   SelectionDAG &DAG = DCI.DAG;
   SDLoc dl(N);
   unsigned Opcode = N->getOperand(1).getOpcode();
+  (void)Opcode;
 
   assert((Opcode == ISD::FP_TO_SINT || Opcode == ISD::FP_TO_UINT)
          && "Not a FP_TO_INT Instruction!");
@@ -15524,8 +15525,10 @@ SDValue PPCTargetLowering::PerformDAGCombine(SDNode *N,
 
     EVT Op1VT = N->getOperand(1).getValueType();
     unsigned Opcode = N->getOperand(1).getOpcode();
+    bool NeedsFPCVT = Opcode == ISD::FP_TO_UINT && Op1VT == MVT::i64;
 
-    if (Opcode == ISD::FP_TO_SINT || Opcode == ISD::FP_TO_UINT) {
+    if ((Opcode == ISD::FP_TO_SINT || Opcode == ISD::FP_TO_UINT) &&
+        (!NeedsFPCVT || Subtarget.hasFPCVT())) {
       SDValue Val= combineStoreFPToInt(N, DCI);
       if (Val)
         return Val;

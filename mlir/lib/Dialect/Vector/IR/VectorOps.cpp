@@ -1154,7 +1154,7 @@ ExtractOp::inferReturnTypes(MLIRContext *, std::optional<Location>,
                             OpaqueProperties properties, RegionRange,
                             SmallVectorImpl<Type> &inferredReturnTypes) {
   ExtractOp::Adaptor op(operands, attributes, properties);
-  auto vectorType = op.getVector().getType().cast<VectorType>();
+  auto vectorType = llvm::cast<VectorType>(op.getVector().getType());
   if (static_cast<int64_t>(op.getPosition().size()) == vectorType.getRank()) {
     inferredReturnTypes.push_back(vectorType.getElementType());
   } else {
@@ -2003,9 +2003,9 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor adaptor) {
   if (!adaptor.getSource())
     return {};
   auto vectorType = getResultVectorType();
-  if (adaptor.getSource().isa<IntegerAttr, FloatAttr>())
+  if (llvm::isa<IntegerAttr, FloatAttr>(adaptor.getSource()))
     return DenseElementsAttr::get(vectorType, adaptor.getSource());
-  if (auto attr = adaptor.getSource().dyn_cast<SplatElementsAttr>())
+  if (auto attr = llvm::dyn_cast<SplatElementsAttr>(adaptor.getSource()))
     return DenseElementsAttr::get(vectorType, attr.getSplatValue<Attribute>());
   return {};
 }
@@ -2090,7 +2090,7 @@ ShuffleOp::inferReturnTypes(MLIRContext *, std::optional<Location>,
                             OpaqueProperties properties, RegionRange,
                             SmallVectorImpl<Type> &inferredReturnTypes) {
   ShuffleOp::Adaptor op(operands, attributes, properties);
-  auto v1Type = op.getV1().getType().cast<VectorType>();
+  auto v1Type = llvm::cast<VectorType>(op.getV1().getType());
   auto v1Rank = v1Type.getRank();
   // Construct resulting type: leading dimension matches mask
   // length, all trailing dimensions match the operands.
@@ -4615,6 +4615,13 @@ static bool isValidShapeCast(ArrayRef<int64_t> a, ArrayRef<int64_t> b) {
   unsigned rankB = b.size();
   assert(rankA < rankB);
 
+  auto isOne = [](int64_t v) { return v == 1; };
+
+  // Special-case for n-D to 0-d shape cast. 'b' must be all ones to be shape
+  // casted to a 0-d vector.
+  if (rankA == 0 && llvm::all_of(b, isOne))
+    return true;
+
   unsigned i = 0;
   unsigned j = 0;
   while (i < rankA && j < rankB) {
@@ -4628,7 +4635,6 @@ static bool isValidShapeCast(ArrayRef<int64_t> a, ArrayRef<int64_t> b) {
 
     // Handle the case when trailing dimensions are of size 1.
     // Include them into the contiguous sequence.
-    auto isOne = [](int64_t v) { return v == 1; };
     if (i < rankA && llvm::all_of(a.slice(i), isOne))
       i = rankA;
     if (j < rankB && llvm::all_of(b.slice(j), isOne))
@@ -4945,7 +4951,7 @@ void vector::TransposeOp::build(OpBuilder &builder, OperationState &result,
 
 OpFoldResult vector::TransposeOp::fold(FoldAdaptor adaptor) {
   // Eliminate splat constant transpose ops.
-  if (auto attr = adaptor.getVector().dyn_cast_or_null<DenseElementsAttr>())
+  if (auto attr = llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getVector()))
     if (attr.isSplat())
       return attr.reshape(getResultVectorType());
 

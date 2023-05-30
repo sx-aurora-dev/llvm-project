@@ -481,7 +481,8 @@ def OpenACC_FirstprivateRecipeOp : OpenACC_Op<"firstprivate.recipe",
          created private value. It takes the initial value and the privatized
          value as arguments.
       3. The destroy region specifies how to destruct the value when it reaches
-         its end of life. It takes the privatized value as argument.
+         its end of life. It takes the privatized value as argument. It is
+         optional.
 
     A single privatization recipe can be used for multiple operand if they have
     the same type and do not require a specific default initialization.
@@ -634,9 +635,10 @@ def OpenACC_ParallelOp : OpenACC_Op<"parallel",
                        Optional<I1>:$ifCond,
                        Optional<I1>:$selfCond,
                        UnitAttr:$selfAttr,
-                       OptionalAttr<OpenACC_ReductionOperatorAttr>:$reductionOp,
                        Variadic<AnyType>:$reductionOperands,
-                       Variadic<AnyType>:$gangPrivateOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$reductionRecipes,
+                       Variadic<OpenACC_PointerLikeTypeInterface>:$gangPrivateOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$privatizations,
                        Variadic<AnyType>:$gangFirstPrivateOperands,
                        Variadic<OpenACC_PointerLikeTypeInterface>:$dataClauseOperands,
                        OptionalAttr<DefaultValueAttr>:$defaultAttr);
@@ -659,12 +661,16 @@ def OpenACC_ParallelOp : OpenACC_Op<"parallel",
             type($gangFirstPrivateOperands) `)`
       | `num_gangs` `(` $numGangs `:` type($numGangs) `)`
       | `num_workers` `(` $numWorkers `:` type($numWorkers) `)`
-      | `private` `(` $gangPrivateOperands `:` type($gangPrivateOperands) `)`
+      | `private` `(` custom<SymOperandList>(
+            $gangPrivateOperands, type($gangPrivateOperands), $privatizations)
+        `)`
       | `vector_length` `(` $vectorLength `:` type($vectorLength) `)`
       | `wait` `(` $waitOperands `:` type($waitOperands) `)`
       | `self` `(` $selfCond `)`
       | `if` `(` $ifCond `)`
-      | `reduction` `(` $reductionOperands `:` type($reductionOperands) `)`
+      | `reduction` `(` custom<SymOperandList>(
+            $reductionOperands, type($reductionOperands), $reductionRecipes)
+        `)`
     )
     $region attr-dict-with-keyword
   }];
@@ -699,9 +705,10 @@ def OpenACC_SerialOp : OpenACC_Op<"serial",
                        Optional<I1>:$ifCond,
                        Optional<I1>:$selfCond,
                        UnitAttr:$selfAttr,
-                       OptionalAttr<OpenACC_ReductionOperatorAttr>:$reductionOp,
                        Variadic<AnyType>:$reductionOperands,
-                       Variadic<AnyType>:$gangPrivateOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$reductionRecipes,
+                       Variadic<OpenACC_PointerLikeTypeInterface>:$gangPrivateOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$privatizations,
                        Variadic<AnyType>:$gangFirstPrivateOperands,
                        Variadic<OpenACC_PointerLikeTypeInterface>:$dataClauseOperands,
                        OptionalAttr<DefaultValueAttr>:$defaultAttr);
@@ -722,11 +729,15 @@ def OpenACC_SerialOp : OpenACC_Op<"serial",
       | `async` `(` $async `:` type($async) `)`
       | `firstprivate` `(` $gangFirstPrivateOperands `:`
             type($gangFirstPrivateOperands) `)`
-      | `private` `(` $gangPrivateOperands `:` type($gangPrivateOperands) `)`
+      | `private` `(` custom<SymOperandList>(
+            $gangPrivateOperands, type($gangPrivateOperands), $privatizations)
+        `)`
       | `wait` `(` $waitOperands `:` type($waitOperands) `)`
       | `self` `(` $selfCond `)`
       | `if` `(` $ifCond `)`
-      | `reduction` `(` $reductionOperands `:` type($reductionOperands) `)`
+      | `reduction` `(` custom<SymOperandList>(
+            $reductionOperands, type($reductionOperands), $reductionRecipes)
+        `)`
     )
     $region attr-dict-with-keyword
   }];
@@ -1033,9 +1044,10 @@ def OpenACC_LoopOp : OpenACC_Op<"loop",
                        UnitAttr:$hasWorker,
                        UnitAttr:$hasVector,
                        Variadic<IntOrIndex>:$tileOperands,
-                       Variadic<AnyType>:$privateOperands,
-                       OptionalAttr<OpenACC_ReductionOperatorAttr>:$reductionOp,
-                       Variadic<AnyType>:$reductionOperands);
+                       Variadic<OpenACC_PointerLikeTypeInterface>:$privateOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$privatizations,
+                       Variadic<AnyType>:$reductionOperands,
+                       OptionalAttr<SymbolRefArrayAttr>:$reductionRecipes);
 
   let results = (outs Variadic<AnyType>:$results);
 
@@ -1053,9 +1065,13 @@ def OpenACC_LoopOp : OpenACC_Op<"loop",
         `gang` `` custom<GangClause>($gangNum, type($gangNum), $gangStatic, type($gangStatic), $hasGang)
       | `worker` `` custom<WorkerClause>($workerNum, type($workerNum), $hasWorker)
       | `vector` `` custom<VectorClause>($vectorLength, type($vectorLength), $hasVector)
-      | `private` `(` $privateOperands `:` type($privateOperands) `)`
+      | `private` `(` custom<SymOperandList>(
+            $privateOperands, type($privateOperands), $privatizations)
+        `)`
       | `tile` `(` $tileOperands `:` type($tileOperands) `)`
-      | `reduction` `(` $reductionOperands `:` type($reductionOperands) `)`
+      | `reduction` `(` custom<SymOperandList>(
+            $reductionOperands, type($reductionOperands), $reductionRecipes)
+        `)`
     )
     $region
     ( `(` type($results)^ `)` )?
