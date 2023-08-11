@@ -13,6 +13,28 @@ registers:
   - { id: 1, class: _, preferred-register: '' }
 body:             |
   bb.1:
+    ; X64-LABEL: name: test_ctlz35
+    ; X64: [[DEF:%[0-9]+]]:_(s35) = IMPLICIT_DEF
+    ; X64-NEXT: [[ZEXT:%[0-9]+]]:_(s64) = G_ZEXT [[DEF]](s35)
+    ; X64-NEXT: [[CTLZ:%[0-9]+]]:_(s64) = G_CTLZ [[ZEXT]](s64)
+    ; X64-NEXT: [[C:%[0-9]+]]:_(s64) = G_CONSTANT i64 29
+    ; X64-NEXT: [[SUB:%[0-9]+]]:_(s64) = G_SUB [[CTLZ]], [[C]]
+    ; X64-NEXT: [[TRUNC:%[0-9]+]]:_(s35) = G_TRUNC [[SUB]](s64)
+    ; X64-NEXT: [[COPY:%[0-9]+]]:_(s35) = COPY [[TRUNC]](s35)
+    ; X64-NEXT: RET 0, implicit [[COPY]](s35)
+    ; X86-LABEL: name: test_ctlz35
+    ; X86: [[DEF:%[0-9]+]]:_(s35) = IMPLICIT_DEF
+    ; X86-NEXT: [[ZEXT:%[0-9]+]]:_(s64) = G_ZEXT [[DEF]](s35)
+    ; X86-NEXT: [[CTLZ:%[0-9]+]]:_(s64) = G_CTLZ [[ZEXT]](s64)
+    ; X86-NEXT: [[C:%[0-9]+]]:_(s64) = G_CONSTANT i64 29
+    ; X86-NEXT: [[UV:%[0-9]+]]:_(s32), [[UV1:%[0-9]+]]:_(s32) = G_UNMERGE_VALUES [[CTLZ]](s64)
+    ; X86-NEXT: [[UV2:%[0-9]+]]:_(s32), [[UV3:%[0-9]+]]:_(s32) = G_UNMERGE_VALUES [[C]](s64)
+    ; X86-NEXT: [[USUBO:%[0-9]+]]:_(s32), [[USUBO1:%[0-9]+]]:_(s1) = G_USUBO [[UV]], [[UV2]]
+    ; X86-NEXT: [[USUBE:%[0-9]+]]:_(s32), [[USUBE1:%[0-9]+]]:_(s1) = G_USUBE [[UV1]], [[UV3]], [[USUBO1]]
+    ; X86-NEXT: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[USUBO]](s32), [[USUBE]](s32)
+    ; X86-NEXT: [[TRUNC:%[0-9]+]]:_(s35) = G_TRUNC [[MV]](s64)
+    ; X86-NEXT: [[COPY:%[0-9]+]]:_(s35) = COPY [[TRUNC]](s35)
+    ; X86-NEXT: RET 0, implicit [[COPY]](s35)
     ; CHECK-LABEL: name: test_ctlz35
     ; CHECK: [[DEF:%[0-9]+]]:_(s35) = IMPLICIT_DEF
     ; CHECK-NEXT: [[ZEXT:%[0-9]+]]:_(s64) = G_ZEXT [[DEF]](s35)
@@ -26,7 +48,6 @@ body:             |
     %1:_(s35) = G_CTLZ %0
     %2:_(s35) = COPY %1(s35)
     RET 0, implicit %2
-
 ...
 ---
 name:            test_ctlz8
@@ -51,7 +72,6 @@ body:             |
     %1:_(s8) = G_CTLZ %0
     %2:_(s8) = COPY %1(s8)
     RET 0, implicit %2
-
 ...
 ---
 name:            test_ctlz64
@@ -63,6 +83,23 @@ registers:
   - { id: 1, class: _, preferred-register: '' }
 body:             |
   bb.1:
+    ; X64-LABEL: name: test_ctlz64
+    ; X64: [[DEF:%[0-9]+]]:_(s64) = IMPLICIT_DEF
+    ; X64-NEXT: [[CTLZ:%[0-9]+]]:_(s64) = G_CTLZ [[DEF]](s64)
+    ; X64-NEXT: [[COPY:%[0-9]+]]:_(s64) = COPY [[CTLZ]](s64)
+    ; X64-NEXT: RET 0, implicit [[COPY]](s64)
+    ; X86-LABEL: name: test_ctlz64
+    ; X86: [[DEF:%[0-9]+]]:_(s64) = IMPLICIT_DEF
+    ; X86-NEXT: [[UV:%[0-9]+]]:_(s32), [[UV1:%[0-9]+]]:_(s32) = G_UNMERGE_VALUES [[DEF]](s64)
+    ; X86-NEXT: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 0
+    ; X86-NEXT: [[ICMP:%[0-9]+]]:_(s1) = G_ICMP intpred(eq), [[UV1]](s32), [[C]]
+    ; X86-NEXT: [[CTLZ:%[0-9]+]]:_(s64) = G_CTLZ [[UV]](s32)
+    ; X86-NEXT: [[C1:%[0-9]+]]:_(s64) = G_CONSTANT i64 32
+    ; X86-NEXT: [[ADD:%[0-9]+]]:_(s64) = G_ADD [[CTLZ]], [[C1]]
+    ; X86-NEXT: [[CTLZ_ZERO_UNDEF:%[0-9]+]]:_(s64) = G_CTLZ_ZERO_UNDEF [[UV1]](s32)
+    ; X86-NEXT: [[SELECT:%[0-9]+]]:_(s64) = G_SELECT [[ICMP]](s1), [[ADD]], [[CTLZ_ZERO_UNDEF]]
+    ; X86-NEXT: [[COPY:%[0-9]+]]:_(s64) = COPY [[SELECT]](s64)
+    ; X86-NEXT: RET 0, implicit [[COPY]](s64)
     ; CHECK-LABEL: name: test_ctlz64
     ; CHECK: [[DEF:%[0-9]+]]:_(s64) = IMPLICIT_DEF
     ; CHECK-NEXT: [[CTLZ:%[0-9]+]]:_(s64) = G_CTLZ [[DEF]](s64)
@@ -72,7 +109,6 @@ body:             |
     %1:_(s64) = G_CTLZ %0
     %2:_(s64) = COPY %1(s64)
     RET 0, implicit %2
-
 ...
 ---
 name:            test_ctlz32
@@ -93,7 +129,6 @@ body:             |
     %1:_(s32) = G_CTLZ %0
     %2:_(s32) = COPY %1(s32)
     RET 0, implicit %2
-
 ...
 ---
 name:            test_ctlz16
@@ -114,5 +149,4 @@ body:             |
     %1:_(s16) = G_CTLZ %0
     %2:_(s16) = COPY %1(s16)
     RET 0, implicit %2
-
 ...

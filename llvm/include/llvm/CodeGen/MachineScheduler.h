@@ -135,6 +135,8 @@ struct MachineSchedContext {
   RegisterClassInfo *RegClassInfo;
 
   MachineSchedContext();
+  MachineSchedContext &operator=(const MachineSchedContext &other) = delete;
+  MachineSchedContext(const MachineSchedContext &other) = delete;
   virtual ~MachineSchedContext();
 };
 
@@ -722,7 +724,8 @@ public:
     Available(ID, Name+".A"), Pending(ID << LogMaxQID, Name+".P") {
     reset();
   }
-
+  SchedBoundary &operator=(const SchedBoundary &other) = delete;
+  SchedBoundary(const SchedBoundary &other) = delete;
   ~SchedBoundary();
 
   void reset();

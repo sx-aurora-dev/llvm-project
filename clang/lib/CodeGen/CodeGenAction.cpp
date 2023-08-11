@@ -635,9 +635,8 @@ BackendConsumer::StackSizeDiagHandler(const llvm::DiagnosticInfoStackSize &D) {
     return false;
 
   Diags.Report(*Loc, diag::warn_fe_frame_larger_than)
-      << D.getStackSize()
-      << D.getStackLimit()
-      << llvm::demangle(D.getFunction().getName().str());
+      << D.getStackSize() << D.getStackLimit()
+      << llvm::demangle(D.getFunction().getName());
   return true;
 }
 
@@ -651,7 +650,7 @@ bool BackendConsumer::ResourceLimitDiagHandler(
 
   Diags.Report(*Loc, DiagID)
       << D.getResourceName() << D.getResourceSize() << D.getResourceLimit()
-      << llvm::demangle(D.getFunction().getName().str());
+      << llvm::demangle(D.getFunction().getName());
   return true;
 }
 
@@ -856,7 +855,7 @@ void BackendConsumer::DontCallDiagHandler(const DiagnosticInfoDontCall &D) {
   Diags.Report(LocCookie, D.getSeverity() == DiagnosticSeverity::DS_Error
                               ? diag::err_fe_backend_error_attr
                               : diag::warn_fe_backend_warning_attr)
-      << llvm::demangle(D.getFunctionName().str()) << D.getNote();
+      << llvm::demangle(D.getFunctionName()) << D.getNote();
 }
 
 void BackendConsumer::MisExpectDiagHandler(
@@ -1048,8 +1047,6 @@ CodeGenAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (BA != Backend_EmitNothing && !OS)
     return nullptr;
 
-  VMContext->setOpaquePointers(CI.getCodeGenOpts().OpaquePointers);
-
   // Load bitcode modules to link with, if we need to.
   if (LinkModules.empty())
     for (const CodeGenOptions::BitcodeFileToLink &F :
@@ -1106,8 +1103,6 @@ std::unique_ptr<llvm::Module>
 CodeGenAction::loadModule(MemoryBufferRef MBRef) {
   CompilerInstance &CI = getCompilerInstance();
   SourceManager &SM = CI.getSourceManager();
-
-  VMContext->setOpaquePointers(CI.getCodeGenOpts().OpaquePointers);
 
   // For ThinLTO backend invocations, ensure that the context
   // merges types based on ODR identifiers. We also need to read
