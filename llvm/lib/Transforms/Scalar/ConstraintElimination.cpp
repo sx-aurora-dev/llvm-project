@@ -75,7 +75,86 @@ static int64_t addWithOverflow(int64_t A, int64_t B) {
   return Result;
 }
 
+static Instruction *getContextInstForUse(Use &U) {
+  Instruction *UserI = cast<Instruction>(U.getUser());
+  if (auto *Phi = dyn_cast<PHINode>(UserI))
+    UserI = Phi->getIncomingBlock(U)->getTerminator();
+  return UserI;
+}
+
 namespace {
+/// Represents either
+///  * a condition that holds on entry to a block (=conditional fact)
+///  * an assume (=assume fact)
+///  * a use of a compare instruction to simplify.
+/// It also tracks the Dominator DFS in and out numbers for each entry.
+struct FactOrCheck {
+  union {
+    Instruction *Inst;
+    Use *U;
+  };
+  unsigned NumIn;
+  unsigned NumOut;
+  bool HasInst;
+  bool Not;
+
+  FactOrCheck(DomTreeNode *DTN, Instruction *Inst, bool Not)
+      : Inst(Inst), NumIn(DTN->getDFSNumIn()), NumOut(DTN->getDFSNumOut()),
+        HasInst(true), Not(Not) {}
+
+  FactOrCheck(DomTreeNode *DTN, Use *U)
+      : U(U), NumIn(DTN->getDFSNumIn()), NumOut(DTN->getDFSNumOut()),
+        HasInst(false), Not(false) {}
+
+  static FactOrCheck getFact(DomTreeNode *DTN, Instruction *Inst,
+                             bool Not = false) {
+    return FactOrCheck(DTN, Inst, Not);
+  }
+
+  static FactOrCheck getCheck(DomTreeNode *DTN, Use *U) {
+    return FactOrCheck(DTN, U);
+  }
+
+  static FactOrCheck getCheck(DomTreeNode *DTN, CallInst *CI) {
+    return FactOrCheck(DTN, CI, false);
+  }
+
+  bool isCheck() const {
+    return !HasInst ||
+           match(Inst, m_Intrinsic<Intrinsic::ssub_with_overflow>());
+  }
+
+  Instruction *getContextInst() const {
+    if (HasInst)
+      return Inst;
+    return getContextInstForUse(*U);
+  }
+  Instruction *getInstructionToSimplify() const {
+    assert(isCheck());
+    if (HasInst)
+      return Inst;
+    // The use may have been simplified to a constant already.
+    return dyn_cast<Instruction>(*U);
+  }
+  bool isConditionFact() const { return !isCheck() && isa<CmpInst>(Inst); }
+};
+
+/// Keep state required to build worklist.
+struct State {
+  DominatorTree &DT;
+  SmallVector<FactOrCheck, 64> WorkList;
+
+  State(DominatorTree &DT) : DT(DT) {}
+
+  /// Process block \p BB and add known facts to work-list.
+  void addInfoFor(BasicBlock &BB);
+
+  /// Returns true if we can add a known condition from BB to its successor
+  /// block Succ.
+  bool canAddSuccessor(BasicBlock &BB, BasicBlock *Succ) const {
+    return DT.dominates(BasicBlockEdge(&BB, Succ), Succ);
+  }
+};
 
 class ConstraintInfo;
 
@@ -660,89 +739,6 @@ void ConstraintInfo::transferToOtherSystem(
   }
 }
 
-static Instruction *getContextInstForUse(Use &U) {
-  Instruction *UserI = cast<Instruction>(U.getUser());
-  if (auto *Phi = dyn_cast<PHINode>(UserI))
-    UserI = Phi->getIncomingBlock(U)->getTerminator();
-  return UserI;
-}
-
-namespace {
-/// Represents either
-///  * a condition that holds on entry to a block (=conditional fact)
-///  * an assume (=assume fact)
-///  * a use of a compare instruction to simplify.
-/// It also tracks the Dominator DFS in and out numbers for each entry.
-struct FactOrCheck {
-  union {
-    Instruction *Inst;
-    Use *U;
-  };
-  unsigned NumIn;
-  unsigned NumOut;
-  bool HasInst;
-  bool Not;
-
-  FactOrCheck(DomTreeNode *DTN, Instruction *Inst, bool Not)
-      : Inst(Inst), NumIn(DTN->getDFSNumIn()), NumOut(DTN->getDFSNumOut()),
-        HasInst(true), Not(Not) {}
-
-  FactOrCheck(DomTreeNode *DTN, Use *U)
-      : U(U), NumIn(DTN->getDFSNumIn()), NumOut(DTN->getDFSNumOut()),
-        HasInst(false), Not(false) {}
-
-  static FactOrCheck getFact(DomTreeNode *DTN, Instruction *Inst,
-                             bool Not = false) {
-    return FactOrCheck(DTN, Inst, Not);
-  }
-
-  static FactOrCheck getCheck(DomTreeNode *DTN, Use *U) {
-    return FactOrCheck(DTN, U);
-  }
-
-  static FactOrCheck getCheck(DomTreeNode *DTN, CallInst *CI) {
-    return FactOrCheck(DTN, CI, false);
-  }
-
-  bool isCheck() const {
-    return !HasInst ||
-           match(Inst, m_Intrinsic<Intrinsic::ssub_with_overflow>());
-  }
-
-  Instruction *getContextInst() const {
-    if (HasInst)
-      return Inst;
-    return getContextInstForUse(*U);
-  }
-  Instruction *getInstructionToSimplify() const {
-    assert(isCheck());
-    if (HasInst)
-      return Inst;
-    // The use may have been simplified to a constant already.
-    return dyn_cast<Instruction>(*U);
-  }
-  bool isConditionFact() const { return !isCheck() && isa<CmpInst>(Inst); }
-};
-
-/// Keep state required to build worklist.
-struct State {
-  DominatorTree &DT;
-  SmallVector<FactOrCheck, 64> WorkList;
-
-  State(DominatorTree &DT) : DT(DT) {}
-
-  /// Process block \p BB and add known facts to work-list.
-  void addInfoFor(BasicBlock &BB);
-
-  /// Returns true if we can add a known condition from BB to its successor
-  /// block Succ.
-  bool canAddSuccessor(BasicBlock &BB, BasicBlock *Succ) const {
-    return DT.dominates(BasicBlockEdge(&BB, Succ), Succ);
-  }
-};
-
-} // namespace
-
 #ifndef NDEBUG
 
 static void dumpConstraint(ArrayRef<int64_t> C,
@@ -1006,10 +1002,9 @@ static void generateReproducer(CmpInst *Cond, Module *M,
   assert(!verifyFunction(*F, &dbgs()));
 }
 
-static bool checkAndReplaceCondition(
-    CmpInst *Cmp, ConstraintInfo &Info, unsigned NumIn, unsigned NumOut,
-    Instruction *ContextInst, Module *ReproducerModule,
-    ArrayRef<ReproducerEntry> ReproducerCondStack, DominatorTree &DT) {
+static std::optional<bool> checkCondition(CmpInst *Cmp, ConstraintInfo &Info,
+                                          unsigned NumIn, unsigned NumOut,
+                                          Instruction *ContextInst) {
   LLVM_DEBUG(dbgs() << "Checking " << *Cmp << "\n");
 
   CmpInst::Predicate Pred = Cmp->getPredicate();
@@ -1019,7 +1014,7 @@ static bool checkAndReplaceCondition(
   auto R = Info.getConstraintForSolving(Pred, A, B);
   if (R.empty() || !R.isValid(Info)){
     LLVM_DEBUG(dbgs() << "   failed to decompose condition\n");
-    return false;
+    return std::nullopt;
   }
 
   auto &CSToUse = Info.getCS(R.IsSigned);
@@ -1034,12 +1029,12 @@ static bool checkAndReplaceCondition(
       CSToUse.popLastConstraint();
   });
 
-  auto ReplaceCmpWithConstant = [&](CmpInst *Cmp, bool IsTrue) {
+  if (auto ImpliedCondition = R.isImpliedBy(CSToUse)) {
     if (!DebugCounter::shouldExecute(EliminatedCounter))
-      return false;
+      return std::nullopt;
 
     LLVM_DEBUG({
-      if (IsTrue) {
+      if (*ImpliedCondition) {
         dbgs() << "Condition " << *Cmp;
       } else {
         auto InversePred = Cmp->getInversePredicate();
@@ -1049,7 +1044,17 @@ static bool checkAndReplaceCondition(
       dbgs() << " implied by dominating constraints\n";
       CSToUse.dump();
     });
+    return ImpliedCondition;
+  }
 
+  return std::nullopt;
+}
+
+static bool checkAndReplaceCondition(
+    CmpInst *Cmp, ConstraintInfo &Info, unsigned NumIn, unsigned NumOut,
+    Instruction *ContextInst, Module *ReproducerModule,
+    ArrayRef<ReproducerEntry> ReproducerCondStack, DominatorTree &DT) {
+  auto ReplaceCmpWithConstant = [&](CmpInst *Cmp, bool IsTrue) {
     generateReproducer(Cmp, ReproducerModule, ReproducerCondStack, Info, DT);
     Constant *ConstantC = ConstantInt::getBool(
         CmpInst::makeCmpResultType(Cmp->getType()), IsTrue);
@@ -1072,9 +1077,9 @@ static bool checkAndReplaceCondition(
     return true;
   };
 
-  if (auto ImpliedCondition = R.isImpliedBy(CSToUse))
+  if (auto ImpliedCondition =
+          checkCondition(Cmp, Info, NumIn, NumOut, ContextInst))
     return ReplaceCmpWithConstant(Cmp, *ImpliedCondition);
-
   return false;
 }
 
@@ -1092,6 +1097,41 @@ removeEntryFromStack(const StackEntry &E, ConstraintInfo &Info,
   DFSInStack.pop_back();
   if (ReproducerModule)
     ReproducerCondStack.pop_back();
+}
+
+/// Check if the first condition for an AND implies the second.
+static bool checkAndSecondOpImpliedByFirst(
+    FactOrCheck &CB, ConstraintInfo &Info, Module *ReproducerModule,
+    SmallVectorImpl<ReproducerEntry> &ReproducerCondStack,
+    SmallVectorImpl<StackEntry> &DFSInStack) {
+  CmpInst::Predicate Pred;
+  Value *A, *B;
+  Instruction *And = CB.getContextInst();
+  if (!match(And->getOperand(0), m_ICmp(Pred, m_Value(A), m_Value(B))))
+    return false;
+
+  // Optimistically add fact from first condition.
+  unsigned OldSize = DFSInStack.size();
+  Info.addFact(Pred, A, B, CB.NumIn, CB.NumOut, DFSInStack);
+  if (OldSize == DFSInStack.size())
+    return false;
+
+  bool Changed = false;
+  // Check if the second condition can be simplified now.
+  if (auto ImpliedCondition =
+          checkCondition(cast<ICmpInst>(And->getOperand(1)), Info, CB.NumIn,
+                         CB.NumOut, CB.getContextInst())) {
+    And->setOperand(1, ConstantInt::getBool(And->getType(), *ImpliedCondition));
+    Changed = true;
+  }
+
+  // Remove entries again.
+  while (OldSize < DFSInStack.size()) {
+    StackEntry E = DFSInStack.back();
+    removeEntryFromStack(E, Info, ReproducerModule, ReproducerCondStack,
+                         DFSInStack);
+  }
+  return Changed;
 }
 
 void ConstraintInfo::addFact(CmpInst::Predicate Pred, Value *A, Value *B,
@@ -1295,9 +1335,16 @@ static bool eliminateConstraints(Function &F, DominatorTree &DT,
       if (auto *II = dyn_cast<WithOverflowInst>(Inst)) {
         Changed |= tryToSimplifyOverflowMath(II, Info, ToRemove);
       } else if (auto *Cmp = dyn_cast<ICmpInst>(Inst)) {
-        Changed |= checkAndReplaceCondition(
+        bool Simplified = checkAndReplaceCondition(
             Cmp, Info, CB.NumIn, CB.NumOut, CB.getContextInst(),
             ReproducerModule.get(), ReproducerCondStack, S.DT);
+        if (!Simplified && match(CB.getContextInst(),
+                                 m_LogicalAnd(m_Value(), m_Specific(Inst)))) {
+          Simplified =
+              checkAndSecondOpImpliedByFirst(CB, Info, ReproducerModule.get(),
+                                             ReproducerCondStack, DFSInStack);
+        }
+        Changed |= Simplified;
       }
       continue;
     }
