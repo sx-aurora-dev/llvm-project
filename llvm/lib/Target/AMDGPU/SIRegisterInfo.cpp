@@ -31,7 +31,7 @@ using namespace llvm;
 
 static cl::opt<bool> EnableSpillSGPRToVGPR(
   "amdgpu-spill-sgpr-to-vgpr",
-  cl::desc("Enable spilling VGPRs to SGPRs"),
+  cl::desc("Enable spilling SGPRs to VGPRs"),
   cl::ReallyHidden,
   cl::init(true));
 
@@ -614,6 +614,10 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
     // TODO: May need to reserve a VGPR if doing LDS spilling.
     reserveRegisterTuples(Reserved, ScratchRSrcReg);
   }
+
+  Register LongBranchReservedReg = MFI->getLongBranchReservedReg();
+  if (LongBranchReservedReg)
+    reserveRegisterTuples(Reserved, LongBranchReservedReg);
 
   // We have to assume the SP is needed in case there are calls in the function,
   // which is detected after the function is lowered. If we aren't really going
@@ -2878,13 +2882,12 @@ bool SIRegisterInfo::opCanUseLiteralConstant(unsigned OpType) const {
 
 /// Returns a lowest register that is not used at any point in the function.
 ///        If all registers are used, then this function will return
-///         AMDGPU::NoRegister. If \p ReserveHighestVGPR = true, then return
+///         AMDGPU::NoRegister. If \p ReserveHighestRegister = true, then return
 ///         highest unused register.
-MCRegister SIRegisterInfo::findUnusedRegister(const MachineRegisterInfo &MRI,
-                                              const TargetRegisterClass *RC,
-                                              const MachineFunction &MF,
-                                              bool ReserveHighestVGPR) const {
-  if (ReserveHighestVGPR) {
+MCRegister SIRegisterInfo::findUnusedRegister(
+    const MachineRegisterInfo &MRI, const TargetRegisterClass *RC,
+    const MachineFunction &MF, bool ReserveHighestRegister) const {
+  if (ReserveHighestRegister) {
     for (MCRegister Reg : reverse(*RC))
       if (MRI.isAllocatable(Reg) && !MRI.isPhysRegUsed(Reg))
         return Reg;

@@ -2535,6 +2535,14 @@ private:
     using VecTreeTy = SmallVector<std::unique_ptr<TreeEntry>, 8>;
     TreeEntry(VecTreeTy &Container) : Container(Container) {}
 
+    /// \returns Common mask for reorder indices and reused scalars.
+    SmallVector<int> getCommonMask() const {
+      SmallVector<int> Mask;
+      inversePermutation(ReorderIndices, Mask);
+      ::addMask(Mask, ReuseShuffleIndices);
+      return Mask;
+    }
+
     /// \returns true if the scalars in VL are equal to this entry.
     bool isSame(ArrayRef<Value *> VL) const {
       auto &&IsSame = [VL](ArrayRef<Value *> Scalars, ArrayRef<int> Mask) {
@@ -7438,15 +7446,11 @@ BoUpSLP::getEntryCost(const TreeEntry *E, ArrayRef<Value *> VectorizedVals,
 
       ScalarCost = TTI->getPointersChainCost(Ptrs, BasePtr, PtrsInfo, ScalarTy,
                                              CostKind);
-
-      // Remark: it not quite correct to use scalar GEP cost for a vector GEP,
-      // but it's not clear how to do that without having vector GEP arguments
-      // ready.
-      // Perhaps using just TTI::TCC_Free/TTI::TCC_Basic would be better option.
-      if (const auto *Base = dyn_cast<GetElementPtrInst>(BasePtr)) {
-        SmallVector<const Value *> Indices(Base->indices());
-        VecCost = TTI->getGEPCost(Base->getSourceElementType(),
-                                  Base->getPointerOperand(), Indices, CostKind);
+      if (auto *BaseGEP = dyn_cast<GEPOperator>(BasePtr)) {
+        SmallVector<const Value *> Indices(BaseGEP->indices());
+        VecCost = TTI->getGEPCost(BaseGEP->getSourceElementType(),
+                                  BaseGEP->getPointerOperand(), Indices, VecTy,
+                                  CostKind);
       }
     }
 
@@ -9070,8 +9074,8 @@ Instruction &BoUpSLP::getLastInstructionInBundle(const TreeEntry *E) {
 
   // Set the insert point to the beginning of the basic block if the entry
   // should not be scheduled.
-  if (E->State != TreeEntry::NeedToGather &&
-      (doesNotNeedToSchedule(E->Scalars) ||
+  if (doesNotNeedToSchedule(E->Scalars) ||
+      (E->State != TreeEntry::NeedToGather &&
        all_of(E->Scalars, isVectorLikeInstWithConstOps))) {
     Instruction *InsertInst;
     if ((E->getOpcode() == Instruction::GetElementPtr &&
@@ -9751,16 +9755,23 @@ ResTy BoUpSLP::processBuildVector(const TreeEntry *E, Args &...Params) {
             << "SLP: perfect diamond match for gather bundle that starts with "
             << *E->Scalars.front() << ".\n");
         // Restore the mask for previous partially matched values.
-        for (auto [I, V] : enumerate(E->Scalars)) {
-          if (isa<PoisonValue>(V)) {
-            Mask[I] = PoisonMaskElem;
-            continue;
-          }
-          if (Mask[I] == PoisonMaskElem)
+        if (Entries.front()->ReorderIndices.empty() &&
+            ((Entries.front()->ReuseShuffleIndices.empty() &&
+              E->Scalars.size() == Entries.front()->Scalars.size()) ||
+             (E->Scalars.size() ==
+              Entries.front()->ReuseShuffleIndices.size()))) {
+          std::iota(Mask.begin(), Mask.end(), 0);
+        } else {
+          for (auto [I, V] : enumerate(E->Scalars)) {
+            if (isa<PoisonValue>(V)) {
+              Mask[I] = PoisonMaskElem;
+              continue;
+            }
             Mask[I] = Entries.front()->findLaneForValue(V);
+          }
         }
         ShuffleBuilder.add(Entries.front()->VectorizedValue, Mask);
-        Res = ShuffleBuilder.finalize(E->ReuseShuffleIndices);
+        Res = ShuffleBuilder.finalize(E->getCommonMask());
         return Res;
       }
       if (!Resized) {
