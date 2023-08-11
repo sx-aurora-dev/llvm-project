@@ -73,7 +73,7 @@ def HasStdExtZihintpause : Predicate<"Subtarget->hasStdExtZihintpause()">,
                                      "'Zihintpause' (Pause Hint)">;
 
 def FeatureStdExtZihintntl
-    : SubtargetFeature<"experimental-zihintntl", "HasStdExtZihintntl", "true",
+    : SubtargetFeature<"zihintntl", "HasStdExtZihintntl", "true",
                        "'Zihintntl' (Non-Temporal Locality Hints)">;
 def HasStdExtZihintntl : Predicate<"Subtarget->hasStdExtZihintntl()">,
                                     AssemblerPredicate<(all_of FeatureStdExtZihintntl),
@@ -542,6 +542,7 @@ def FeatureStdExtZtso
 def HasStdExtZtso : Predicate<"Subtarget->hasStdExtZTso()">,
                               AssemblerPredicate<(all_of FeatureStdExtZtso),
                               "'Ztso' (Memory Model - Total Store Order)">;
+def NotHasStdExtZtso : Predicate<"!Subtarget->hasStdExtZtso()">;
 
 def FeatureStdExtZawrs : SubtargetFeature<"zawrs", "HasStdExtZawrs", "true",
                                           "'Zawrs' (Wait on Reservation Set)">;

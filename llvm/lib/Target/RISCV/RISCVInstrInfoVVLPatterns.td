@@ -98,6 +98,8 @@ def riscv_urem_vl  : SDNode<"RISCVISD::UREM_VL",  SDT_RISCVIntBinOp_VL>;
 def riscv_shl_vl   : SDNode<"RISCVISD::SHL_VL",   SDT_RISCVIntBinOp_VL>;
 def riscv_sra_vl   : SDNode<"RISCVISD::SRA_VL",   SDT_RISCVIntBinOp_VL>;
 def riscv_srl_vl   : SDNode<"RISCVISD::SRL_VL",   SDT_RISCVIntBinOp_VL>;
+def riscv_rotl_vl  : SDNode<"RISCVISD::ROTL_VL",  SDT_RISCVIntBinOp_VL>;
+def riscv_rotr_vl  : SDNode<"RISCVISD::ROTR_VL",  SDT_RISCVIntBinOp_VL>;
 def riscv_smin_vl  : SDNode<"RISCVISD::SMIN_VL",  SDT_RISCVIntBinOp_VL, [SDNPCommutative]>;
 def riscv_smax_vl  : SDNode<"RISCVISD::SMAX_VL",  SDT_RISCVIntBinOp_VL, [SDNPCommutative]>;
 def riscv_umin_vl  : SDNode<"RISCVISD::UMIN_VL",  SDT_RISCVIntBinOp_VL, [SDNPCommutative]>;
@@ -2218,7 +2220,7 @@ defm : VPatBinaryVL_VV_VX<riscv_mulhu_vl, "PseudoVMULHU", IntegerVectorsExceptI6
 // vsmul.vv and vsmul.vx are not included in EEW=64 in Zve64*.
 let Predicates = [HasVInstructionsFullMultiply] in {
   defm : VPatBinaryVL_VV_VX<riscv_mulhs_vl, "PseudoVMULH", I64IntegerVectors>;
-  defm : VPatBinaryVL_VV_VX<riscv_mulhu_vl, "PseudoVMULHU", I64IntegerVectors>;  
+  defm : VPatBinaryVL_VV_VX<riscv_mulhu_vl, "PseudoVMULHU", I64IntegerVectors>;
 }
 
 // 11.11. Vector Integer Divide Instructions
@@ -2461,9 +2463,9 @@ foreach vti = AllFloatVectors in {
               (!cast<Instruction>("PseudoVFROUND_NOEXCEPT_V_" # vti.LMul.MX #"_MASK")
                     (vti.Vector (IMPLICIT_DEF)), vti.RegClass:$rs1,
                     (vti.Mask V0), GPR:$vl, vti.Log2SEW, TA_MA)>;
-  
+
     // 14.14. Vector Floating-Point Classify Instruction
-    def : Pat<(riscv_fclass_vl (vti.Vector vti.RegClass:$rs2), 
+    def : Pat<(riscv_fclass_vl (vti.Vector vti.RegClass:$rs2),
                                (vti.Mask true_mask), VLOpFrag),
               (!cast<Instruction>("PseudoVFCLASS_V_"# vti.LMul.MX)
                  (vti.Vector (IMPLICIT_DEF)), vti.RegClass:$rs2, GPR:$vl, vti.Log2SEW, TA_MA)>;
@@ -2768,7 +2770,7 @@ foreach vti = AllIntegerVectors in {
               (!cast<Instruction>("PseudoVMV_S_X_"#vti.LMul.MX)
                   vti.RegClass:$merge,
                   (vti.Scalar vti.ScalarRegClass:$rs1), GPR:$vl, vti.Log2SEW)>;
-  
+
     def : Pat<(vti.Vector (riscv_vrgather_vv_vl vti.RegClass:$rs2,
                                                 vti.RegClass:$rs1,
                                                 vti.RegClass:$merge,

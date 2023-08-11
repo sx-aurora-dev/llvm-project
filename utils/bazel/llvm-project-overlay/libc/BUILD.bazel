@@ -144,9 +144,21 @@ libc_support_library(
 )
 
 libc_support_library(
+    name = "__support_cpp_algorithm",
+    hdrs = ["src/__support/CPP/algorithm.h"],
+    deps = [
+        ":__support_macros_attributes",
+        ":libc_root",
+    ],
+)
+
+libc_support_library(
     name = "__support_cpp_array",
     hdrs = ["src/__support/CPP/array.h"],
-    deps = [":libc_root"],
+    deps = [
+        ":__support_macros_attributes",
+        ":libc_root",
+    ],
 )
 
 libc_support_library(
@@ -154,6 +166,7 @@ libc_support_library(
     hdrs = ["src/__support/CPP/bit.h"],
     deps = [
         ":__support_cpp_type_traits",
+        ":__support_macros_attributes",
         ":__support_macros_config",
         ":libc_root",
     ],
@@ -162,7 +175,10 @@ libc_support_library(
 libc_support_library(
     name = "__support_cpp_bitset",
     hdrs = ["src/__support/CPP/bitset.h"],
-    deps = [":libc_root"],
+    deps = [
+        ":__support_macros_attributes",
+        ":libc_root",
+    ],
 )
 
 libc_support_library(
@@ -170,6 +186,7 @@ libc_support_library(
     hdrs = ["src/__support/CPP/cstddef.h"],
     deps = [
         ":__support_cpp_type_traits",
+        ":__support_macros_attributes",
         ":libc_root",
     ],
 )
@@ -405,6 +422,9 @@ libc_support_library(
     hdrs = ["src/__support/integer_to_string.h"],
     deps = [
         ":__support_common",
+        ":__support_cpp_algorithm",
+        ":__support_cpp_bit",
+        ":__support_cpp_limits",
         ":__support_cpp_optional",
         ":__support_cpp_span",
         ":__support_cpp_string_view",
@@ -428,6 +448,7 @@ libc_support_library(
 libc_support_library(
     name = "__support_ctype_utils",
     hdrs = ["src/__support/ctype_utils.h"],
+    deps = [":__support_macros_attributes"],
 )
 
 libc_support_library(
@@ -834,6 +855,7 @@ libc_support_library(
     ],
     deps = [
         ":__support_common",
+        ":__support_cpp_bit",
         ":libc_root",
     ],
 )

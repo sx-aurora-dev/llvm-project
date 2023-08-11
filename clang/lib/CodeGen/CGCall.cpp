@@ -1761,6 +1761,15 @@ static void AddAttributesFromFunctionProtoType(ASTContext &Ctx,
   if (!isUnresolvedExceptionSpec(FPT->getExceptionSpecType()) &&
       FPT->isNothrow())
     FuncAttrs.addAttribute(llvm::Attribute::NoUnwind);
+
+  if (FPT->getAArch64SMEAttributes() & FunctionType::SME_PStateSMEnabledMask)
+    FuncAttrs.addAttribute("aarch64_pstate_sm_enabled");
+  if (FPT->getAArch64SMEAttributes() & FunctionType::SME_PStateSMCompatibleMask)
+    FuncAttrs.addAttribute("aarch64_pstate_sm_compatible");
+  if (FPT->getAArch64SMEAttributes() & FunctionType::SME_PStateZASharedMask)
+    FuncAttrs.addAttribute("aarch64_pstate_za_shared");
+  if (FPT->getAArch64SMEAttributes() & FunctionType::SME_PStateZAPreservedMask)
+    FuncAttrs.addAttribute("aarch64_pstate_za_preserved");
 }
 
 static void AddAttributesFromAssumes(llvm::AttrBuilder &FuncAttrs,
@@ -2406,6 +2415,12 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     if (TargetDecl->hasAttr<CUDAGlobalAttr>() &&
         getLangOpts().OffloadUniformBlock)
       FuncAttrs.addAttribute("uniform-work-group-size", "true");
+
+    if (TargetDecl->hasAttr<ArmLocallyStreamingAttr>())
+      FuncAttrs.addAttribute("aarch64_pstate_sm_body");
+
+    if (TargetDecl->hasAttr<ArmNewZAAttr>())
+      FuncAttrs.addAttribute("aarch64_pstate_za_new");
   }
 
   // Attach "no-builtins" attributes to:
@@ -4262,15 +4277,13 @@ void CallArgList::allocateArgumentMemory(CodeGenFunction &CGF) {
   assert(!StackBase);
 
   // Save the stack.
-  llvm::Function *F = CGF.CGM.getIntrinsic(llvm::Intrinsic::stacksave);
-  StackBase = CGF.Builder.CreateCall(F, {}, "inalloca.save");
+  StackBase = CGF.Builder.CreateStackSave("inalloca.save");
 }
 
 void CallArgList::freeArgumentMemory(CodeGenFunction &CGF) const {
   if (StackBase) {
     // Restore the stack after the call.
-    llvm::Function *F = CGF.CGM.getIntrinsic(llvm::Intrinsic::stackrestore);
-    CGF.Builder.CreateCall(F, StackBase);
+    CGF.Builder.CreateStackRestore(StackBase);
   }
 }
 

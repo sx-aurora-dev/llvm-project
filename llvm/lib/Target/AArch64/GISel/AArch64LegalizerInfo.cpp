@@ -243,8 +243,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
 
   getActionDefinitionsBuilder(G_FREM).libcallFor({s32, s64});
 
-  getActionDefinitionsBuilder({G_FCEIL, G_FSQRT, G_FFLOOR, G_FRINT,
-                               G_FMA, G_INTRINSIC_TRUNC, G_INTRINSIC_ROUND,
+  getActionDefinitionsBuilder({G_FCEIL, G_FFLOOR, G_FRINT, G_FMA,
+                               G_INTRINSIC_TRUNC, G_INTRINSIC_ROUND,
                                G_FNEARBYINT, G_INTRINSIC_LRINT})
       // If we don't have full FP16 support, then scalarize the elements of
       // vectors containing fp16 types.
@@ -486,7 +486,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
                    Ty.getElementType() != SrcTy.getElementType();
           },
           0, 1)
-      .clampNumElements(0, v2s32, v4s32);
+      .clampNumElements(0, v2s32, v4s32)
+      .clampMaxNumElements(1, s64, 2);
 
   // Extensions
   auto ExtLegalFunc = [=](const LegalityQuery &Query) {
@@ -529,6 +530,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
   getActionDefinitionsBuilder(G_SEXT_INREG)
       .legalFor({s32, s64})
       .legalFor(PackedVectorAllTypeList)
+      .maxScalar(0, s64)
       .lower();
 
   // FP conversions
@@ -798,7 +800,9 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
     return Query.Types[0] == p0 && Query.Types[1] == s64;
   });
 
-  getActionDefinitionsBuilder(G_DYN_STACKALLOC).lower();
+  getActionDefinitionsBuilder({G_DYN_STACKALLOC,
+                               G_STACKSAVE,
+                               G_STACKRESTORE}).lower();
 
   if (ST.hasMOPS()) {
     // G_BZERO is not supported. Currently it is only emitted by
@@ -920,7 +924,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
   getActionDefinitionsBuilder({G_SADDSAT, G_SSUBSAT}).lowerIf(isScalar(0));
 
   getActionDefinitionsBuilder(
-      {G_FABS, G_FMAXNUM, G_FMINNUM, G_FMAXIMUM, G_FMINIMUM})
+      {G_FABS, G_FSQRT, G_FMAXNUM, G_FMINNUM, G_FMAXIMUM, G_FMINIMUM})
       .legalFor({MinFPScalar, s32, s64, v2s32, v4s32, v2s64})
       .legalIf([=](const LegalityQuery &Query) {
         const auto &Ty = Query.Types[0];

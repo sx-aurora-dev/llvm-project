@@ -1115,7 +1115,7 @@ static bool remapInputs(StringRef line, const Twine &location) {
   else if (Expected<GlobPattern> pat = GlobPattern::create(fields[0]))
     config->remapInputsWildcards.emplace_back(std::move(*pat), fields[1]);
   else {
-    error(location + ": " + toString(pat.takeError()));
+    error(location + ": " + toString(pat.takeError()) + ": " + fields[0]);
     return true;
   }
   return false;
@@ -1416,7 +1416,7 @@ static void readConfigs(opt::InputArgList &args) {
     else if (Expected<GlobPattern> pat = GlobPattern::create(kv.first))
       config->shuffleSections.emplace_back(std::move(*pat), uint32_t(v));
     else
-      error(errPrefix + toString(pat.takeError()));
+      error(errPrefix + toString(pat.takeError()) + ": " + kv.first);
   }
 
   auto reports = {std::make_pair("bti-report", &config->zBtiReport),
@@ -1454,7 +1454,7 @@ static void readConfigs(opt::InputArgList &args) {
     else if (Expected<GlobPattern> pat = GlobPattern::create(kv.first))
       config->deadRelocInNonAlloc.emplace_back(std::move(*pat), v);
     else
-      error(errPrefix + toString(pat.takeError()));
+      error(errPrefix + toString(pat.takeError()) + ": " + kv.first);
   }
 
   cl::ResetAllOptionOccurrences();
@@ -1611,7 +1611,8 @@ static void readConfigs(opt::InputArgList &args) {
     if (Expected<GlobPattern> pat = GlobPattern::create(pattern))
       config->warnBackrefsExclude.push_back(std::move(*pat));
     else
-      error(arg->getSpelling() + ": " + toString(pat.takeError()));
+      error(arg->getSpelling() + ": " + toString(pat.takeError()) + ": " +
+            pattern);
   }
 
   // For -no-pie and -pie, --export-dynamic-symbol specifies defined symbols
@@ -1969,7 +1970,7 @@ static void handleUndefined(Symbol *sym, const char *option) {
 static void handleUndefinedGlob(StringRef arg) {
   Expected<GlobPattern> pat = GlobPattern::create(arg);
   if (!pat) {
-    error("--undefined-glob: " + toString(pat.takeError()));
+    error("--undefined-glob: " + toString(pat.takeError()) + ": " + arg);
     return;
   }
 

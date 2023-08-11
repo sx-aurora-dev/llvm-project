@@ -96,8 +96,12 @@ C Language Changes
   constant expressions.  This change is more consistent with the behavior of
   GCC.
 
-C2x Feature Support
+C23 Feature Support
 ^^^^^^^^^^^^^^^^^^^
+- Clang now accepts ``-std=c23`` and ``-std=gnu23`` as language standard modes,
+  and the ``__STDC_VERSION__`` macro now expands to ``202311L`` instead of its
+  previous placeholder value. Clang continues to accept ``-std=c2x`` and
+  ``-std=gnu2x`` as aliases for C23 and GNU C23, respectively.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -121,6 +125,10 @@ Improvements to Clang's diagnostics
 -----------------------------------
 - Clang constexpr evaluator now prints template arguments when displaying
   template-specialization function calls.
+- Clang contexpr evaluator now displays notes as well as an error when a constructor
+  of a base class is not called in the constructor of its derived class.
+- Clang no longer emits ``-Wmissing-variable-declarations`` for variables declared
+  with the ``register`` storage class.
 
 Bug Fixes in This Version
 -------------------------
@@ -155,6 +163,10 @@ Bug Fixes to C++ Support
   (`#35574 <https://github.com/llvm/llvm-project/issues/35574>_`) and
   (`#27224 <https://github.com/llvm/llvm-project/issues/27224>_`).
 
+- Clang emits an error on substitution failure within lambda body inside a
+  requires-expression. This fixes:
+  (`#64138 <https://github.com/llvm/llvm-project/issues/64138>_`).
+
 Bug Fixes to AST Handling
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 - Fixed an import failure of recursive friend class template.
@@ -173,6 +185,8 @@ Miscellaneous Clang Crashes Fixed
   terminated. Clang should now also recover better when an @end is missing
   between blocks.
   `Issue 64065 <https://github.com/llvm/llvm-project/issues/64065>`_
+- Fixed a crash when check array access on zero-length element.
+  `Issue 64564 <https://github.com/llvm/llvm-project/issues/64564>`_
 
 Target Specific Changes
 -----------------------
@@ -228,12 +242,16 @@ Floating Point Support in Clang
 
 AST Matchers
 ------------
+- Add ``convertVectorExpr``.
+- Add ``dependentSizedExtVectorType``.
 
 clang-format
 ------------
 
 libclang
 --------
+
+- Exposed arguments of ``clang::annotate``.
 
 Static Analyzer
 ---------------
