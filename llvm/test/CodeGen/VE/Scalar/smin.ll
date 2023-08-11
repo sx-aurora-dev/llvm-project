@@ -73,14 +73,12 @@ define i128 @func_smin_var_i128(i128 noundef %0, i128 noundef %1) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s4, %s1, %s3
 ; CHECK-NEXT:    cmps.l %s5, %s1, %s3
-; CHECK-NEXT:    or %s6, 0, (0)1
-; CHECK-NEXT:    or %s7, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s7, (63)0, %s5
-; CHECK-NEXT:    cmpu.l %s5, %s0, %s2
-; CHECK-NEXT:    cmov.l.lt %s6, (63)0, %s5
-; CHECK-NEXT:    cmov.l.eq %s7, %s6, %s4
-; CHECK-NEXT:    cmov.w.ne %s2, %s0, %s7
-; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s7
+; CHECK-NEXT:    srl %s5, %s5, 63
+; CHECK-NEXT:    cmpu.l %s6, %s0, %s2
+; CHECK-NEXT:    srl %s6, %s6, 63
+; CHECK-NEXT:    cmov.l.eq %s5, %s6, %s4
+; CHECK-NEXT:    cmov.w.ne %s2, %s0, %s5
+; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s5
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -245,15 +243,12 @@ define i64 @func_smin_fore_const_i64(i64 noundef %0) {
 define i128 @func_smin_fore_const_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smin_fore_const_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    cmps.l %s3, %s1, (0)1
-; CHECK-NEXT:    or %s4, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s4, (63)0, %s3
+; CHECK-NEXT:    srl %s2, %s1, 63
 ; CHECK-NEXT:    cmpu.l %s3, %s0, (56)0
-; CHECK-NEXT:    cmov.l.lt %s2, (63)0, %s3
-; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s1
-; CHECK-NEXT:    cmov.w.eq %s0, (56)0, %s4
-; CHECK-NEXT:    cmov.w.eq %s1, (0)1, %s4
+; CHECK-NEXT:    srl %s3, %s3, 63
+; CHECK-NEXT:    cmov.l.eq %s2, %s3, %s1
+; CHECK-NEXT:    cmov.w.eq %s0, (56)0, %s2
+; CHECK-NEXT:    cmov.w.eq %s1, (0)1, %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = tail call i128 @llvm.smin.i128(i128 %0, i128 255)
   ret i128 %2
@@ -306,15 +301,12 @@ define i64 @func_smin_back_const_i64(i64 noundef %0) {
 define i128 @func_smin_back_const_i128(i128 noundef %0) {
 ; CHECK-LABEL: func_smin_back_const_i128:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    cmps.l %s3, %s1, (0)1
-; CHECK-NEXT:    or %s4, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s4, (63)0, %s3
+; CHECK-NEXT:    srl %s2, %s1, 63
 ; CHECK-NEXT:    cmpu.l %s3, %s0, (56)0
-; CHECK-NEXT:    cmov.l.lt %s2, (63)0, %s3
-; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s1
-; CHECK-NEXT:    cmov.w.eq %s0, (56)0, %s4
-; CHECK-NEXT:    cmov.w.eq %s1, (0)1, %s4
+; CHECK-NEXT:    srl %s3, %s3, 63
+; CHECK-NEXT:    cmov.l.eq %s2, %s3, %s1
+; CHECK-NEXT:    cmov.w.eq %s0, (56)0, %s2
+; CHECK-NEXT:    cmov.w.eq %s1, (0)1, %s2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = tail call i128 @llvm.smin.i128(i128 %0, i128 255)
   ret i128 %2

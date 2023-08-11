@@ -86,14 +86,13 @@ define i128 @func_umax_var_u128(i128 noundef %0, i128 noundef %1) {
 ; CHECK-LABEL: func_umax_var_u128:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.l %s4, %s1, %s3
-; CHECK-NEXT:    or %s5, 0, (0)1
-; CHECK-NEXT:    or %s6, 0, (0)1
-; CHECK-NEXT:    cmov.l.gt %s6, (63)0, %s4
-; CHECK-NEXT:    cmpu.l %s7, %s0, %s2
-; CHECK-NEXT:    cmov.l.gt %s5, (63)0, %s7
-; CHECK-NEXT:    cmov.l.eq %s6, %s5, %s4
-; CHECK-NEXT:    cmov.w.ne %s2, %s0, %s6
-; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s6
+; CHECK-NEXT:    cmpu.l %s5, %s3, %s1
+; CHECK-NEXT:    srl %s5, %s5, 63
+; CHECK-NEXT:    cmpu.l %s6, %s2, %s0
+; CHECK-NEXT:    srl %s6, %s6, 63
+; CHECK-NEXT:    cmov.l.eq %s5, %s6, %s4
+; CHECK-NEXT:    cmov.w.ne %s2, %s0, %s5
+; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s5
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    b.l.t (, %s10)
