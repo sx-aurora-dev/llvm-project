@@ -143,6 +143,12 @@ template <typename AnalysisT> struct AnalysisInputs {
     BuiltinOptions = std::move(Options);
     return std::move(*this);
   }
+  AnalysisInputs<AnalysisT> &&
+  withSolverFactory(std::function<std::unique_ptr<Solver>()> Factory) && {
+    assert(Factory);
+    SolverFactory = std::move(Factory);
+    return std::move(*this);
+  }
 
   /// Required. Input code that is analyzed.
   llvm::StringRef Code;
@@ -170,6 +176,10 @@ template <typename AnalysisT> struct AnalysisInputs {
   tooling::FileContentMappings ASTBuildVirtualMappedFiles = {};
   /// Configuration options for the built-in model.
   DataflowAnalysisContext::Options BuiltinOptions;
+  /// SAT solver factory.
+  std::function<std::unique_ptr<Solver>()> SolverFactory = [] {
+    return std::make_unique<WatchedLiteralsSolver>();
+  };
 };
 
 /// Returns assertions based on annotations that are present after statements in
@@ -248,7 +258,7 @@ checkDataflow(AnalysisInputs<AnalysisT> AI,
     auto &CFCtx = *MaybeCFCtx;
 
     // Initialize states for running dataflow analysis.
-    DataflowAnalysisContext DACtx(std::make_unique<WatchedLiteralsSolver>(),
+    DataflowAnalysisContext DACtx(AI.SolverFactory(),
                                   {/*Opts=*/AI.BuiltinOptions});
     Environment InitEnv(DACtx, *Target);
     auto Analysis = AI.MakeAnalysis(Context, InitEnv);
@@ -439,6 +449,28 @@ ValueT &getValueForDecl(ASTContext &ASTCtx, const Environment &Env,
   const ValueDecl *VD = findValueDecl(ASTCtx, Name);
   assert(VD != nullptr);
   return *cast<ValueT>(Env.getValue(*VD));
+}
+
+/// Returns the value of a `Field` on the record referenced by `Loc.`
+/// Returns null if `Loc` is null.
+inline Value *getFieldValue(const AggregateStorageLocation *Loc,
+                            const ValueDecl &Field, const Environment &Env) {
+  if (Loc == nullptr)
+    return nullptr;
+  return Env.getValue(Loc->getChild(Field));
+}
+
+/// Returns the value of a `Field` on a `Struct.
+/// Returns null if `Struct` is null.
+///
+/// Note: This function currently does not use the `Env` parameter, but it will
+/// soon be needed to look up the `Value` when `setChild()` changes to return a
+/// `StorageLocation *`.
+inline Value *getFieldValue(const StructValue *Struct, const ValueDecl &Field,
+                            const Environment &Env) {
+  if (Struct == nullptr)
+    return nullptr;
+  return Struct->getChild(Field);
 }
 
 /// Creates and owns constraints which are boolean values.

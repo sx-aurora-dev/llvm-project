@@ -347,7 +347,6 @@ public:
         continue;
       }
 
-      SmallVector<User *, 16> Stack(GV.users());
       for (User *V : GV.users()) {
         if (auto *I = dyn_cast<Instruction>(V)) {
           Function *F = I->getFunction();
@@ -388,7 +387,7 @@ public:
 
     auto functionMakesUnknownCall = [&](const Function *F) -> bool {
       assert(!F->isDeclaration());
-      for (CallGraphNode::CallRecord R : *CG[F]) {
+      for (const CallGraphNode::CallRecord &R : *CG[F]) {
         if (!R.second->getFunction()) {
           return true;
         }
@@ -426,7 +425,7 @@ public:
         // have already been computed, with more care than this
         set_union(transitive_map_function[&Func], direct_map_function[F]);
 
-        for (CallGraphNode::CallRecord R : *CG[F]) {
+        for (const CallGraphNode::CallRecord &R : *CG[F]) {
           Function *ith = R.second->getFunction();
           if (ith) {
             if (!seen.contains(ith)) {
@@ -446,7 +445,7 @@ public:
       if (Func.isDeclaration() || !isKernelLDS(&Func))
         continue;
 
-      for (CallGraphNode::CallRecord R : *CG[&Func]) {
+      for (const CallGraphNode::CallRecord &R : *CG[&Func]) {
         Function *ith = R.second->getFunction();
         if (ith) {
           set_union(indirect_map_kernel[&Func], transitive_map_function[ith]);
@@ -472,7 +471,7 @@ public:
 
   static Constant *getAddressesOfVariablesInKernel(
       LLVMContext &Ctx, ArrayRef<GlobalVariable *> Variables,
-      DenseMap<GlobalVariable *, Constant *> &LDSVarsToConstantGEP) {
+      const DenseMap<GlobalVariable *, Constant *> &LDSVarsToConstantGEP) {
     // Create a ConstantArray containing the address of each Variable within the
     // kernel corresponding to LDSVarsToConstantGEP, or poison if that kernel
     // does not allocate it
@@ -485,8 +484,9 @@ public:
     SmallVector<Constant *> Elements;
     for (size_t i = 0; i < Variables.size(); i++) {
       GlobalVariable *GV = Variables[i];
-      if (LDSVarsToConstantGEP.count(GV) != 0) {
-        auto elt = ConstantExpr::getPtrToInt(LDSVarsToConstantGEP[GV], I32);
+      auto ConstantGepIt = LDSVarsToConstantGEP.find(GV);
+      if (ConstantGepIt != LDSVarsToConstantGEP.end()) {
+        auto elt = ConstantExpr::getPtrToInt(ConstantGepIt->second, I32);
         Elements.push_back(elt);
       } else {
         Elements.push_back(PoisonValue::get(I32));
@@ -513,11 +513,15 @@ public:
     ArrayType *AllKernelsOffsetsType =
         ArrayType::get(KernelOffsetsType, NumberKernels);
 
+    Constant *Missing = PoisonValue::get(KernelOffsetsType);
     std::vector<Constant *> overallConstantExprElts(NumberKernels);
     for (size_t i = 0; i < NumberKernels; i++) {
-      LDSVariableReplacement Replacement = KernelToReplacement[kernels[i]];
-      overallConstantExprElts[i] = getAddressesOfVariablesInKernel(
-          Ctx, Variables, Replacement.LDSVarsToConstantGEP);
+      auto Replacement = KernelToReplacement.find(kernels[i]);
+      overallConstantExprElts[i] =
+          (Replacement == KernelToReplacement.end())
+              ? Missing
+              : getAddressesOfVariablesInKernel(
+                    Ctx, Variables, Replacement->second.LDSVarsToConstantGEP);
     }
 
     Constant *init =
@@ -911,6 +915,7 @@ public:
 
     // Create a struct for each kernel for the non-module-scope variables.
 
+    IRBuilder<> Builder(M.getContext());
     DenseMap<Function *, LDSVariableReplacement> KernelToReplacement;
     for (Function &Func : M.functions()) {
       if (Func.isDeclaration() || !isKernelLDS(&Func))
@@ -962,6 +967,14 @@ public:
 
       auto Replacement =
           createLDSVariableReplacement(M, VarName, KernelUsedVariables);
+
+      // If any indirect uses, create a direct use to ensure allocation
+      // TODO: Simpler to unconditionally mark used but that regresses
+      // codegen in test/CodeGen/AMDGPU/noclobber-barrier.ll
+      auto Accesses = LDSUsesInfo.indirect_access.find(&Func);
+      if ((Accesses != LDSUsesInfo.indirect_access.end()) &&
+          !Accesses->second.empty())
+        markUsedByKernel(Builder, &Func, Replacement.SGV);
 
       // remove preserves existing codegen
       removeLocalVarsFromUsedLists(M, KernelUsedVariables);
@@ -1127,14 +1140,14 @@ public:
     // If the kernel accesses a variable that is going to be stored in the
     // module instance through a call then that kernel needs to allocate the
     // module instance
-    DenseSet<Function *> KernelsThatAllocateModuleLDS =
+    const DenseSet<Function *> KernelsThatAllocateModuleLDS =
         kernelsThatIndirectlyAccessAnyOfPassedVariables(M, LDSUsesInfo,
                                                         ModuleScopeVariables);
-    DenseSet<Function *> KernelsThatAllocateTableLDS =
+    const DenseSet<Function *> KernelsThatAllocateTableLDS =
         kernelsThatIndirectlyAccessAnyOfPassedVariables(M, LDSUsesInfo,
                                                         TableLookupVariables);
 
-    DenseSet<Function *> KernelsThatIndirectlyAllocateDynamicLDS =
+    const DenseSet<Function *> KernelsThatIndirectlyAllocateDynamicLDS =
         kernelsThatIndirectlyAccessAnyOfPassedVariables(M, LDSUsesInfo,
                                                         DynamicVariables);
 
@@ -1156,8 +1169,6 @@ public:
       DenseSet<GlobalVariable *> Vec;
       Vec.insert(GV);
 
-      // TODO: Looks like a latent bug, Replacement may not be marked
-      // UsedByKernel here
       replaceLDSVariablesWithStruct(M, Vec, Replacement, [](Use &U) {
         return isa<Instruction>(U.getUser());
       });
@@ -1171,11 +1182,6 @@ public:
     if (!KernelsThatAllocateTableLDS.empty()) {
       LLVMContext &Ctx = M.getContext();
       IRBuilder<> Builder(Ctx);
-
-      for (size_t i = 0; i < OrderedKernels.size(); i++) {
-        markUsedByKernel(Builder, OrderedKernels[i],
-                         KernelToReplacement[OrderedKernels[i]].SGV);
-      }
 
       // The order must be consistent between lookup table and accesses to
       // lookup table
@@ -1222,8 +1228,9 @@ public:
         const bool AllocateModuleScopeStruct =
             MaybeModuleScopeStruct && !canElideModuleLDS(Func);
 
+        auto Replacement = KernelToReplacement.find(&Func);
         const bool AllocateKernelScopeStruct =
-            KernelToReplacement.contains(&Func);
+            Replacement != KernelToReplacement.end();
 
         const bool AllocateDynamicVariable =
             KernelToCreatedDynamicLDS.contains(&Func);
@@ -1237,7 +1244,7 @@ public:
         }
 
         if (AllocateKernelScopeStruct) {
-          GlobalVariable *KernelStruct = KernelToReplacement[&Func].SGV;
+          GlobalVariable *KernelStruct = Replacement->second.SGV;
 
           Offset = alignTo(Offset, AMDGPU::getAlign(DL, KernelStruct));
 

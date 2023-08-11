@@ -107,6 +107,14 @@ void Ctx::reset() {
   needsTlsLd.store(false, std::memory_order_relaxed);
 }
 
+llvm::raw_fd_ostream Ctx::openAuxiliaryFile(llvm::StringRef filename,
+                                            std::error_code &ec) {
+  using namespace llvm::sys::fs;
+  OpenFlags flags =
+      auxiliaryFiles.insert(filename).second ? OF_None : OF_Append;
+  return {filename, ec, flags};
+}
+
 namespace lld {
 namespace elf {
 bool link(ArrayRef<const char *> args, llvm::raw_ostream &stdoutOS,
@@ -1983,7 +1991,7 @@ static void writeArchiveStats() {
     return;
 
   std::error_code ec;
-  raw_fd_ostream os(config->printArchiveStats, ec, sys::fs::OF_None);
+  raw_fd_ostream os = ctx.openAuxiliaryFile(config->printArchiveStats, ec);
   if (ec) {
     error("--print-archive-stats=: cannot open " + config->printArchiveStats +
           ": " + ec.message());
@@ -2013,7 +2021,7 @@ static void writeWhyExtract() {
     return;
 
   std::error_code ec;
-  raw_fd_ostream os(config->whyExtract, ec, sys::fs::OF_None);
+  raw_fd_ostream os = ctx.openAuxiliaryFile(config->whyExtract, ec);
   if (ec) {
     error("cannot open --why-extract= file " + config->whyExtract + ": " +
           ec.message());
@@ -2072,7 +2080,7 @@ static void reportBackrefs() {
 // easily.
 static void writeDependencyFile() {
   std::error_code ec;
-  raw_fd_ostream os(config->dependencyFile, ec, sys::fs::OF_None);
+  raw_fd_ostream os = ctx.openAuxiliaryFile(config->dependencyFile, ec);
   if (ec) {
     error("cannot open " + config->dependencyFile + ": " + ec.message());
     return;

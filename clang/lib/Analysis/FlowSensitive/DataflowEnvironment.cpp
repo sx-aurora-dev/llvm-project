@@ -20,6 +20,7 @@
 #include "clang/Analysis/FlowSensitive/Value.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -123,6 +124,9 @@ static Value *mergeDistinctValues(QualType Type, Value &Val1,
   // returns false to avoid storing unneeded values in `DACtx`.
   // FIXME: Creating the value based on the type alone creates misshapen values
   // for lvalues, since the type does not reflect the need for `ReferenceValue`.
+  // This issue will be resolved when `ReferenceValue` is eliminated as part
+  // of the ongoing migration to strict handling of value categories (see
+  // https://discourse.llvm.org/t/70086 for details).
   if (Value *MergedVal = MergedEnv.createValue(Type))
     if (Model.merge(Type, Val1, Env1, Val2, Env2, *MergedVal, MergedEnv))
       return MergedVal;
@@ -170,8 +174,7 @@ static void insertIfFunction(const Decl &D,
 }
 
 static void
-getFieldsGlobalsAndFuncs(const Decl &D,
-                         llvm::DenseSet<const FieldDecl *> &Fields,
+getFieldsGlobalsAndFuncs(const Decl &D, FieldSet &Fields,
                          llvm::DenseSet<const VarDecl *> &Vars,
                          llvm::DenseSet<const FunctionDecl *> &Funcs) {
   insertIfGlobal(D, Vars);
@@ -188,8 +191,7 @@ getFieldsGlobalsAndFuncs(const Decl &D,
 /// global variables and functions that are declared in or referenced from
 /// sub-statements.
 static void
-getFieldsGlobalsAndFuncs(const Stmt &S,
-                         llvm::DenseSet<const FieldDecl *> &Fields,
+getFieldsGlobalsAndFuncs(const Stmt &S, FieldSet &Fields,
                          llvm::DenseSet<const VarDecl *> &Vars,
                          llvm::DenseSet<const FunctionDecl *> &Funcs) {
   for (auto *Child : S.children())
@@ -214,6 +216,10 @@ getFieldsGlobalsAndFuncs(const Stmt &S,
     insertIfFunction(*VD, Funcs);
     if (const auto *FD = dyn_cast<FieldDecl>(VD))
       Fields.insert(FD);
+  } else if (auto *InitList = dyn_cast<InitListExpr>(&S)) {
+    if (RecordDecl *RD = InitList->getType()->getAsRecordDecl())
+      for (const auto *FD : getFieldsForInitListExpr(RD))
+        Fields.insert(FD);
   }
 }
 
@@ -222,7 +228,7 @@ getFieldsGlobalsAndFuncs(const Stmt &S,
 void Environment::initFieldsGlobalsAndFuncs(const FunctionDecl *FuncDecl) {
   assert(FuncDecl->getBody() != nullptr);
 
-  llvm::DenseSet<const FieldDecl *> Fields;
+  FieldSet Fields;
   llvm::DenseSet<const VarDecl *> Vars;
   llvm::DenseSet<const FunctionDecl *> Funcs;
 
@@ -500,7 +506,7 @@ LatticeJoinEffect Environment::widen(const Environment &PrevEnv,
   assert(ExprToLoc.size() <= PrevEnv.ExprToLoc.size());
   // assert(MemberLocToStruct.size() <= PrevEnv.MemberLocToStruct.size());
 
-  llvm::DenseMap<const StorageLocation *, Value *> WidenedLocToVal;
+  llvm::MapVector<const StorageLocation *, Value *> WidenedLocToVal;
   for (auto &Entry : LocToVal) {
     const StorageLocation *Loc = Entry.first;
     assert(Loc != nullptr);
@@ -708,7 +714,7 @@ void Environment::setValue(const StorageLocation &Loc, Value &Val) {
     const QualType Type = AggregateLoc.getType();
     assert(Type->isRecordType());
 
-    for (const FieldDecl *Field : DACtx->getReferencedFields(Type)) {
+    for (const FieldDecl *Field : DACtx->getModeledFields(Type)) {
       assert(Field != nullptr);
       StorageLocation &FieldLoc = AggregateLoc.getChild(*Field);
       MemberLocToStruct[&FieldLoc] = std::make_pair(StructVal, Field);
@@ -846,7 +852,7 @@ Value *Environment::createValueUnlessSelfReferential(
   if (Type->isRecordType()) {
     CreatedValuesCount++;
     llvm::DenseMap<const ValueDecl *, Value *> FieldValues;
-    for (const FieldDecl *Field : DACtx->getReferencedFields(Type)) {
+    for (const FieldDecl *Field : DACtx->getModeledFields(Type)) {
       assert(Field != nullptr);
 
       QualType FieldType = Field->getType();
@@ -955,6 +961,18 @@ AggregateStorageLocation *getBaseObjectLocation(const MemberExpr &ME,
     return nullptr;
   }
   return cast<AggregateStorageLocation>(Loc);
+}
+
+std::vector<FieldDecl *> getFieldsForInitListExpr(const RecordDecl *RD) {
+  // Unnamed bitfields are only used for padding and do not appear in
+  // `InitListExpr`'s inits. However, those fields do appear in `RecordDecl`'s
+  // field list, and we thus need to remove them before mapping inits to
+  // fields to avoid mapping inits to the wrongs fields.
+  std::vector<FieldDecl *> Fields;
+  llvm::copy_if(
+      RD->fields(), std::back_inserter(Fields),
+      [](const FieldDecl *Field) { return !Field->isUnnamedBitfield(); });
+  return Fields;
 }
 
 } // namespace dataflow

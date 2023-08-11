@@ -401,7 +401,9 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
   case Intrinsic::smin:
   case Intrinsic::smax: {
     static const auto ValidMinMaxTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
-                                        MVT::v8i16, MVT::v2i32, MVT::v4i32};
+                                        MVT::v8i16, MVT::v2i32, MVT::v4i32,
+                                        MVT::nxv16i8, MVT::nxv8i16, MVT::nxv4i32,
+                                        MVT::nxv2i64};
     auto LT = getTypeLegalizationCost(RetTy);
     // v2i64 types get converted to cmp+bif hence the cost of 2
     if (LT.second == MVT::v2i64)
@@ -1210,16 +1212,15 @@ instCombineSVELD1(InstCombiner &IC, IntrinsicInst &II, const DataLayout &DL) {
   Value *Pred = II.getOperand(0);
   Value *PtrOp = II.getOperand(1);
   Type *VecTy = II.getType();
-  Value *VecPtr = IC.Builder.CreateBitCast(PtrOp, VecTy->getPointerTo());
 
   if (isAllActivePredicate(Pred)) {
-    LoadInst *Load = IC.Builder.CreateLoad(VecTy, VecPtr);
+    LoadInst *Load = IC.Builder.CreateLoad(VecTy, PtrOp);
     Load->copyMetadata(II);
     return IC.replaceInstUsesWith(II, Load);
   }
 
   CallInst *MaskedLoad =
-      IC.Builder.CreateMaskedLoad(VecTy, VecPtr, PtrOp->getPointerAlignment(DL),
+      IC.Builder.CreateMaskedLoad(VecTy, PtrOp, PtrOp->getPointerAlignment(DL),
                                   Pred, ConstantAggregateZero::get(VecTy));
   MaskedLoad->copyMetadata(II);
   return IC.replaceInstUsesWith(II, MaskedLoad);
@@ -1230,17 +1231,15 @@ instCombineSVEST1(InstCombiner &IC, IntrinsicInst &II, const DataLayout &DL) {
   Value *VecOp = II.getOperand(0);
   Value *Pred = II.getOperand(1);
   Value *PtrOp = II.getOperand(2);
-  Value *VecPtr =
-      IC.Builder.CreateBitCast(PtrOp, VecOp->getType()->getPointerTo());
 
   if (isAllActivePredicate(Pred)) {
-    StoreInst *Store = IC.Builder.CreateStore(VecOp, VecPtr);
+    StoreInst *Store = IC.Builder.CreateStore(VecOp, PtrOp);
     Store->copyMetadata(II);
     return IC.eraseInstFromFunction(II);
   }
 
   CallInst *MaskedStore = IC.Builder.CreateMaskedStore(
-      VecOp, VecPtr, PtrOp->getPointerAlignment(DL), Pred);
+      VecOp, PtrOp, PtrOp->getPointerAlignment(DL), Pred);
   MaskedStore->copyMetadata(II);
   return IC.eraseInstFromFunction(II);
 }
