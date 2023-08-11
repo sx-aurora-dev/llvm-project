@@ -350,13 +350,13 @@ static bool isAdmissibleCSR(SparseTensorType &aTp) {
 /// Test for admissible types on operands (with output parameter `isCOO`).
 static bool areAdmissibleTypes(SparseTensorType aTp, SparseTensorType bTp,
                                SparseTensorType cTp, bool enableRT,
-                               bool &isCOO) {
+                               bool isMatVec, bool &isCOO) {
   if (bTp.hasEncoding() || cTp.hasEncoding())
     return false;
   if (isAdmissibleCOO(aTp)) {
     isCOO = true;
 #ifdef CUSPARSE_COO_AOS
-    return true;
+    return isMatVec;
 #else
     return enableRT;
 #endif
@@ -424,7 +424,7 @@ static LogicalResult rewriteSpMV(PatternRewriter &rewriter,
   SparseTensorType aTp = getSparseTensorType(a);
   SparseTensorType xTp = getSparseTensorType(x);
   SparseTensorType yTp = getSparseTensorType(y);
-  if (!areAdmissibleTypes(aTp, xTp, yTp, enableRT, isCOO))
+  if (!areAdmissibleTypes(aTp, xTp, yTp, enableRT, /*isMatVec=*/true, isCOO))
     return failure();
 
   // Start sparse kernel and copy data from host to device.
@@ -450,7 +450,7 @@ static LogicalResult rewriteSpMV(PatternRewriter &rewriter,
   // Create sparse environment and sparse matrix/dense vector handles.
   Type indexTp = rewriter.getIndexType();
   Type envHandleTp = rewriter.getType<gpu::SparseEnvHandleType>();
-  Type dnVecHandleTp = rewriter.getType<gpu::SparseDnVecHandleType>();
+  Type dnTensorHandleTp = rewriter.getType<gpu::SparseDnTensorHandleType>();
   Type spmatHandleTp = rewriter.getType<gpu::SparseSpMatHandleType>();
   Type tokenTp = rewriter.getType<gpu::AsyncTokenType>();
   Value token = genFirstWait(rewriter, loc);
@@ -463,12 +463,12 @@ static LogicalResult rewriteSpMV(PatternRewriter &rewriter,
                rowA, colA, valA, isCOO, enableRT);
   Value spMatA = spGenA->getResult(0);
   token = spGenA->getResult(1);
-  auto dvecX = rewriter.create<gpu::CreateDnVecOp>(loc, dnVecHandleTp, tokenTp,
-                                                   token, handle, vecX, szX);
+  auto dvecX = rewriter.create<gpu::CreateDnTensorOp>(
+      loc, dnTensorHandleTp, tokenTp, token, handle, vecX, szX);
   Value dnX = dvecX.getResult(0);
   token = dvecX.getAsyncToken();
-  auto dvecY = rewriter.create<gpu::CreateDnVecOp>(loc, dnVecHandleTp, tokenTp,
-                                                   token, handle, vecY, szY);
+  auto dvecY = rewriter.create<gpu::CreateDnTensorOp>(
+      loc, dnTensorHandleTp, tokenTp, token, handle, vecY, szY);
   Value dnY = dvecY.getResult(0);
   token = dvecY.getAsyncToken();
 
@@ -493,9 +493,9 @@ static LogicalResult rewriteSpMV(PatternRewriter &rewriter,
   // Copy data back to host and free all the resoures.
   token = rewriter.create<gpu::DestroySpMatOp>(loc, tokenTp, token, spMatA)
               .getAsyncToken();
-  token = rewriter.create<gpu::DestroyDnVecOp>(loc, tokenTp, token, dnX)
+  token = rewriter.create<gpu::DestroyDnTensorOp>(loc, tokenTp, token, dnX)
               .getAsyncToken();
-  token = rewriter.create<gpu::DestroyDnVecOp>(loc, tokenTp, token, dnY)
+  token = rewriter.create<gpu::DestroyDnTensorOp>(loc, tokenTp, token, dnY)
               .getAsyncToken();
   token = rewriter.create<gpu::DestroySparseEnvOp>(loc, tokenTp, token, handle)
               .getAsyncToken();
@@ -530,7 +530,7 @@ static LogicalResult rewriteSpMM(PatternRewriter &rewriter,
   SparseTensorType aTp = getSparseTensorType(a);
   SparseTensorType bTp = getSparseTensorType(b);
   SparseTensorType cTp = getSparseTensorType(c);
-  if (!areAdmissibleTypes(aTp, bTp, cTp, enableRT, isCOO))
+  if (!areAdmissibleTypes(aTp, bTp, cTp, enableRT, /*isMatVec=*/false, isCOO))
     return failure();
 
   // Start sparse kernel and copy data from host to device.
@@ -557,7 +557,7 @@ static LogicalResult rewriteSpMM(PatternRewriter &rewriter,
   // Create sparse environment and sparse matrix/dense matrix handles.
   Type indexTp = rewriter.getIndexType();
   Type envHandleTp = rewriter.getType<gpu::SparseEnvHandleType>();
-  Type dnMatHandleTp = rewriter.getType<gpu::SparseDnMatHandleType>();
+  Type dnTensorHandleTp = rewriter.getType<gpu::SparseDnTensorHandleType>();
   Type spMatHandleTp = rewriter.getType<gpu::SparseSpMatHandleType>();
   Type tokenTp = rewriter.getType<gpu::AsyncTokenType>();
   Value token = genFirstWait(rewriter, loc);
@@ -570,12 +570,14 @@ static LogicalResult rewriteSpMM(PatternRewriter &rewriter,
                rowA, colA, valA, isCOO, enableRT);
   Value spMatA = spGenA->getResult(0);
   token = spGenA->getResult(1);
-  auto dmatB = rewriter.create<gpu::CreateDnMatOp>(
-      loc, dnMatHandleTp, tokenTp, token, handle, szk, szn, matB);
+  auto dmatB = rewriter.create<gpu::CreateDnTensorOp>(
+      loc, dnTensorHandleTp, tokenTp, token, handle, matB,
+      SmallVector<Value>{szk, szn});
   Value dnB = dmatB.getResult(0);
   token = dmatB.getAsyncToken();
-  auto dmatC = rewriter.create<gpu::CreateDnMatOp>(
-      loc, dnMatHandleTp, tokenTp, token, handle, szm, szn, matC);
+  auto dmatC = rewriter.create<gpu::CreateDnTensorOp>(
+      loc, dnTensorHandleTp, tokenTp, token, handle, matC,
+      SmallVector<Value>{szm, szn});
   Value dnC = dmatC.getResult(0);
   token = dmatC.getAsyncToken();
 
@@ -602,9 +604,9 @@ static LogicalResult rewriteSpMM(PatternRewriter &rewriter,
   // Copy data back to host and free all the resoures.
   token = rewriter.create<gpu::DestroySpMatOp>(loc, tokenTp, token, spMatA)
               .getAsyncToken();
-  token = rewriter.create<gpu::DestroyDnMatOp>(loc, tokenTp, token, dnB)
+  token = rewriter.create<gpu::DestroyDnTensorOp>(loc, tokenTp, token, dnB)
               .getAsyncToken();
-  token = rewriter.create<gpu::DestroyDnMatOp>(loc, tokenTp, token, dnC)
+  token = rewriter.create<gpu::DestroyDnTensorOp>(loc, tokenTp, token, dnC)
               .getAsyncToken();
   token = rewriter.create<gpu::DestroySparseEnvOp>(loc, tokenTp, token, handle)
               .getAsyncToken();

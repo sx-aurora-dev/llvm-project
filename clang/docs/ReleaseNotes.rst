@@ -111,6 +111,7 @@ C++20 Feature Support
   SFINAE.
 - Clang now supports `requires cplusplus20` for module maps.
 - Implemented missing parts of `P2002R1: Consistent comparison operators <https://wg21.link/P2002R1>`_
+- Clang now defines `__cpp_consteval` macro.
 
 C++23 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
@@ -230,9 +231,11 @@ New Compiler Flags
 ------------------
 - The flag ``-std=c++23`` has been added. This behaves the same as the existing
   flag ``-std=c++2b``.
-
 - ``-dumpdir`` has been implemented to specify auxiliary and dump output
   filenames for features like ``-gsplit-dwarf``.
+- ``-fcaret-diagnostics-max-lines=`` has been added as a driver options, which
+  lets users control the maximum number of source lines printed for a
+  caret diagnostic.
 
 Deprecated Compiler Flags
 -------------------------
@@ -337,6 +340,10 @@ Improvements to Clang's diagnostics
   can be controlled using ``-fcaret-diagnostics-max-lines=``.
 - Clang no longer emits ``-Wunused-variable`` warnings for variables declared
   with ``__attribute__((cleanup(...)))`` to match GCC's behavior.
+- Clang now issues expected warnings for situations of comparing with NULL pointers.
+  (`#42992: <https://github.com/llvm/llvm-project/issues/42992>`_)
+- Clang now diagnoses unused const-qualified variable template as
+  "unused variable template" rather than "unused variable".
 
 Bug Fixes in This Version
 -------------------------
@@ -492,6 +499,9 @@ Bug Fixes in This Version
   (`See patch <https://reviews.llvm.org/D152303>`_).
 - Fix crash when passing a value larger then 64 bits to the aligned attribute.
   (`#50534 <https://github.com/llvm/llvm-project/issues/50534>`_).
+- CallExpr built for C error-recovery now is always type-dependent. Fixes a
+  crash when we encounter a unresolved TypoExpr during diagnostic emission.
+  (`#50244 <https://github.com/llvm/llvm-project/issues/50244>_`).
 
 Bug Fixes to Compiler Builtins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -588,6 +598,12 @@ AMDGPU Support
   --undefined`` if using an offloading language.
 - The deprecated ``-mcode-object-v3`` and ``-mno-code-object-v3`` command-line
   options have been removed.
+- A new option ``-mprintf-kind`` has been introduced that controls printf lowering
+  scheme. It is currently supported only for HIP and takes following values,
+  ``hostcall`` - printing happens during kernel execution via series of hostcalls,
+  The scheme requires the system to support pcie atomics.(default)
+  ``buffered`` - Scheme uses a debug buffer to populate printf varargs, does not
+  rely on pcie atomics support.
 
 X86 Support
 ^^^^^^^^^^^
@@ -727,6 +743,9 @@ libclang
 - Added check in ``clang_getFieldDeclBitWidth`` for whether a bit-field
   has an evaluable bit width. Fixes undefined behavior when called on a
   bit-field whose width depends on a template parameter.
+
+- Added ``CXBinaryOperatorKind`` and ``CXUnaryOperatorKind``.
+  (`#29138 <https://github.com/llvm/llvm-project/issues/29138>`_)
 
 Static Analyzer
 ---------------

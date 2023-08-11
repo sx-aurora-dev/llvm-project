@@ -1258,10 +1258,6 @@ void DwarfDebug::beginModule(Module *M) {
         // There is no point in force-emitting a forward declaration.
         CU.getOrCreateTypeDIE(RT);
     }
-    // Emit imported_modules last so that the relevant context is already
-    // available.
-    for (auto *IE : CUNode->getImportedEntities())
-      constructAndAddImportedEntityDIE(CU, IE);
   }
 }
 
@@ -1442,8 +1438,15 @@ void DwarfDebug::endModule() {
   assert(CurMI == nullptr);
 
   for (const auto &P : CUMap) {
-    auto &CU = *P.second;
-    CU.createBaseTypeDIEs();
+    const auto *CUNode = cast<DICompileUnit>(P.first);
+    DwarfCompileUnit *CU = &*P.second;
+
+    // Emit imported entities.
+    for (auto *IE : CUNode->getImportedEntities())
+      constructAndAddImportedEntityDIE(*CU, IE);
+
+    // Emit base types.
+    CU->createBaseTypeDIEs();
   }
 
   // If we aren't actually generating debug info (check beginModule -
@@ -3596,11 +3599,9 @@ dwarf::Form DwarfDebug::getDwarfSectionOffsetForm() const {
 }
 
 const MCSymbol *DwarfDebug::getSectionLabel(const MCSection *S) {
-  auto I = SectionLabels.find(S);
-  if (I == SectionLabels.end())
-    return nullptr;
-  return I->second;
+  return SectionLabels.lookup(S);
 }
+
 void DwarfDebug::insertSectionLabel(const MCSymbol *S) {
   if (SectionLabels.insert(std::make_pair(&S->getSection(), S)).second)
     if (useSplitDwarf() || getDwarfVersion() >= 5)

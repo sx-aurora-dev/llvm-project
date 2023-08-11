@@ -3443,7 +3443,9 @@ Instruction *InstCombinerImpl::foldICmpEqIntrinsicWithConstant(
 }
 
 /// Fold an icmp with LLVM intrinsics
-static Instruction *foldICmpIntrinsicWithIntrinsic(ICmpInst &Cmp) {
+static Instruction *
+foldICmpIntrinsicWithIntrinsic(ICmpInst &Cmp,
+                               InstCombiner::BuilderTy &Builder) {
   assert(Cmp.isEquality());
 
   ICmpInst::Predicate Pred = Cmp.getPredicate();
@@ -3461,16 +3463,32 @@ static Instruction *foldICmpIntrinsicWithIntrinsic(ICmpInst &Cmp) {
     // original values.
     return new ICmpInst(Pred, IIOp0->getOperand(0), IIOp1->getOperand(0));
   case Intrinsic::fshl:
-  case Intrinsic::fshr:
+  case Intrinsic::fshr: {
     // If both operands are rotated by same amount, just compare the
     // original values.
     if (IIOp0->getOperand(0) != IIOp0->getOperand(1))
       break;
     if (IIOp1->getOperand(0) != IIOp1->getOperand(1))
       break;
-    if (IIOp0->getOperand(2) != IIOp1->getOperand(2))
-      break;
-    return new ICmpInst(Pred, IIOp0->getOperand(0), IIOp1->getOperand(0));
+    if (IIOp0->getOperand(2) == IIOp1->getOperand(2))
+      return new ICmpInst(Pred, IIOp0->getOperand(0), IIOp1->getOperand(0));
+
+    // rotate(X, AmtX) == rotate(Y, AmtY)
+    //  -> rotate(X, AmtX - AmtY) == Y
+    // Do this if either both rotates have one use or if only one has one use
+    // and AmtX/AmtY are constants.
+    unsigned OneUses = IIOp0->hasOneUse() + IIOp1->hasOneUse();
+    if (OneUses == 2 ||
+        (OneUses == 1 && match(IIOp0->getOperand(2), m_ImmConstant()) &&
+         match(IIOp1->getOperand(2), m_ImmConstant()))) {
+      Value *SubAmt =
+          Builder.CreateSub(IIOp0->getOperand(2), IIOp1->getOperand(2));
+      Value *CombinedRotate = Builder.CreateIntrinsic(
+          Op0->getType(), IIOp0->getIntrinsicID(),
+          {IIOp0->getOperand(0), IIOp0->getOperand(0), SubAmt});
+      return new ICmpInst(Pred, IIOp1->getOperand(0), CombinedRotate);
+    }
+  } break;
   default:
     break;
   }
@@ -4788,6 +4806,39 @@ static Instruction *foldICmpWithMinMax(ICmpInst &Cmp) {
   return nullptr;
 }
 
+// Canonicalize checking for a power-of-2-or-zero value:
+static Instruction *foldICmpPow2Test(ICmpInst &I,
+                                     InstCombiner::BuilderTy &Builder) {
+  Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
+  const CmpInst::Predicate Pred = I.getPredicate();
+  Value *A = nullptr;
+  // (A & (A-1)) == 0 --> ctpop(A) < 2 (two commuted variants)
+  // ((A-1) & A) != 0 --> ctpop(A) > 1 (two commuted variants)
+  if (!match(Op0, m_OneUse(m_c_And(m_Add(m_Value(A), m_AllOnes()),
+                                   m_Deferred(A)))) ||
+      !match(Op1, m_ZeroInt()))
+    A = nullptr;
+
+  // (A & -A) == A --> ctpop(A) < 2 (four commuted variants)
+  // (-A & A) != A --> ctpop(A) > 1 (four commuted variants)
+  if (match(Op0, m_OneUse(m_c_And(m_Neg(m_Specific(Op1)), m_Specific(Op1)))))
+    A = Op1;
+  else if (match(Op1,
+                 m_OneUse(m_c_And(m_Neg(m_Specific(Op0)), m_Specific(Op0)))))
+    A = Op0;
+
+  if (A) {
+    Type *Ty = A->getType();
+    CallInst *CtPop = Builder.CreateUnaryIntrinsic(Intrinsic::ctpop, A);
+    return Pred == ICmpInst::ICMP_EQ ? new ICmpInst(ICmpInst::ICMP_ULT, CtPop,
+                                                    ConstantInt::get(Ty, 2))
+                                     : new ICmpInst(ICmpInst::ICMP_UGT, CtPop,
+                                                    ConstantInt::get(Ty, 1));
+  }
+
+  return nullptr;
+}
+
 Instruction *InstCombinerImpl::foldICmpEquality(ICmpInst &I) {
   if (!I.isEquality())
     return nullptr;
@@ -4970,32 +5021,8 @@ Instruction *InstCombinerImpl::foldICmpEquality(ICmpInst &I) {
     }
   }
 
-  if (Instruction *ICmp = foldICmpIntrinsicWithIntrinsic(I))
+  if (Instruction *ICmp = foldICmpIntrinsicWithIntrinsic(I, Builder))
     return ICmp;
-
-  // Canonicalize checking for a power-of-2-or-zero value:
-  // (A & (A-1)) == 0 --> ctpop(A) < 2 (two commuted variants)
-  // ((A-1) & A) != 0 --> ctpop(A) > 1 (two commuted variants)
-  if (!match(Op0, m_OneUse(m_c_And(m_Add(m_Value(A), m_AllOnes()),
-                                   m_Deferred(A)))) ||
-      !match(Op1, m_ZeroInt()))
-    A = nullptr;
-
-  // (A & -A) == A --> ctpop(A) < 2 (four commuted variants)
-  // (-A & A) != A --> ctpop(A) > 1 (four commuted variants)
-  if (match(Op0, m_OneUse(m_c_And(m_Neg(m_Specific(Op1)), m_Specific(Op1)))))
-    A = Op1;
-  else if (match(Op1,
-                 m_OneUse(m_c_And(m_Neg(m_Specific(Op0)), m_Specific(Op0)))))
-    A = Op0;
-
-  if (A) {
-    Type *Ty = A->getType();
-    CallInst *CtPop = Builder.CreateUnaryIntrinsic(Intrinsic::ctpop, A);
-    return Pred == ICmpInst::ICMP_EQ
-        ? new ICmpInst(ICmpInst::ICMP_ULT, CtPop, ConstantInt::get(Ty, 2))
-        : new ICmpInst(ICmpInst::ICMP_UGT, CtPop, ConstantInt::get(Ty, 1));
-  }
 
   // Match icmp eq (trunc (lshr A, BW), (ashr (trunc A), BW-1)), which checks the
   // top BW/2 + 1 bits are all the same. Create "A >=s INT_MIN && A <=s INT_MAX",
@@ -5026,6 +5053,19 @@ Instruction *InstCombinerImpl::foldICmpEquality(ICmpInst &I) {
       isKnownToBeAPowerOfTwo(Op0, /* OrZero */ false, 0, &I))
     return new ICmpInst(CmpInst::getInversePredicate(Pred), Op1,
                         ConstantInt::getNullValue(Op1->getType()));
+
+  // Canonicalize:
+  // icmp eq/ne X, OneUse(rotate-right(X))
+  //    -> icmp eq/ne X, rotate-left(X)
+  // We generally try to convert rotate-right -> rotate-left, this just
+  // canonicalizes another case.
+  CmpInst::Predicate PredUnused = Pred;
+  if (match(&I, m_c_ICmp(PredUnused, m_Value(A),
+                         m_OneUse(m_Intrinsic<Intrinsic::fshr>(
+                             m_Deferred(A), m_Deferred(A), m_Value(B))))))
+    return new ICmpInst(
+        Pred, A,
+        Builder.CreateIntrinsic(Op0->getType(), Intrinsic::fshl, {A, A, B}));
 
   return nullptr;
 }
@@ -6707,6 +6747,9 @@ Instruction *InstCombinerImpl::visitICmpInst(ICmpInst &I) {
   }
 
   if (Instruction *Res = foldICmpEquality(I))
+    return Res;
+
+  if (Instruction *Res = foldICmpPow2Test(I, Builder))
     return Res;
 
   if (Instruction *Res = foldICmpOfUAddOv(I))

@@ -12856,22 +12856,6 @@ TEST_F(FormatTest, FormatsAfterAccessModifiers) {
                "  void f() {}\n"
                "};\n",
                Style);
-  verifyFormat("struct foo {\n"
-               "#ifdef FOO\n"
-               "#else\n"
-               "private:\n"
-               "\n"
-               "#endif\n"
-               "};",
-               "struct foo {\n"
-               "#ifdef FOO\n"
-               "#else\n"
-               "private:\n"
-               "\n"
-               "\n"
-               "#endif\n"
-               "};",
-               Style);
 
   Style.EmptyLineAfterAccessModifier = FormatStyle::ELAAMS_Always;
   verifyFormat("struct foo {\n"
@@ -25763,6 +25747,18 @@ TEST_F(FormatTest, InterfaceAsClassMemberName) {
                "  int interface;\n"
                "  Foo::Foo(int iface) : interface{iface} {}\n"
                "}");
+}
+
+TEST_F(FormatTest, PreprocessorOverlappingRegions) {
+  verifyFormat("#ifdef\n\n"
+               "#else\n"
+               "#endif\n",
+               "#ifdef \n"
+               "    \n"
+               "\n"
+               "#else \n"
+               "#endif \n",
+               getGoogleStyle());
 }
 
 } // namespace

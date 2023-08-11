@@ -51,21 +51,19 @@
 #include <vector>
 
 using namespace llvm;
-using namespace rdf;
 
 static cl::opt<unsigned> MaxRecNest("rdf-liveness-max-rec", cl::init(25),
                                     cl::Hidden,
                                     cl::desc("Maximum recursion level"));
 
-namespace llvm {
-namespace rdf {
+namespace llvm::rdf {
 
 raw_ostream &operator<<(raw_ostream &OS, const Print<Liveness::RefMap> &P) {
   OS << '{';
   for (const auto &I : P.Obj) {
     OS << ' ' << printReg(I.first, &P.G.getTRI()) << '{';
     for (auto J = I.second.begin(), E = I.second.end(); J != E;) {
-      OS << Print(J->first, P.G) << PrintLaneMaskOpt(J->second);
+      OS << Print(J->first, P.G) << PrintLaneMaskShort(J->second);
       if (++J != E)
         OS << ',';
     }
@@ -74,9 +72,6 @@ raw_ostream &operator<<(raw_ostream &OS, const Print<Liveness::RefMap> &P) {
   OS << " }";
   return OS;
 }
-
-} // end namespace rdf
-} // end namespace llvm
 
 // The order in the returned sequence is the order of reaching defs in the
 // upward traversal: the first def is the closest to the given reference RefA,
@@ -659,6 +654,8 @@ void Liveness::computePhiInfo() {
   // The operation "clearIn" can be expensive. For a given set of intervening
   // defs, cache the result of subtracting these defs from a given register
   // ref.
+  using RefHash = std::hash<RegisterRef>;
+  using RefEqual = std::equal_to<RegisterRef>;
   using SubMap = std::unordered_map<RegisterRef, RegisterRef>;
   std::unordered_map<RegisterAggr, SubMap> Subs;
   auto ClearIn = [](RegisterRef RR, const RegisterAggr &Mid, SubMap &SM) {
@@ -690,7 +687,10 @@ void Liveness::computePhiInfo() {
 
         if (MidDefs.hasCoverOf(UR))
           continue;
-        SubMap &SM = Subs[MidDefs];
+        if (Subs.find(MidDefs) == Subs.end()) {
+          Subs.insert({MidDefs, SubMap(1, RefHash(), RefEqual(PRI))});
+        }
+        SubMap &SM = Subs.at(MidDefs);
 
         // General algorithm:
         //   for each (R,U) : U is use node of R, U is reached by PA
@@ -873,7 +873,7 @@ void Liveness::computeLiveIns() {
       std::vector<RegisterRef> LV;
       for (const MachineBasicBlock::RegisterMaskPair &LI : B.liveins())
         LV.push_back(RegisterRef(LI.PhysReg, LI.LaneMask));
-      llvm::sort(LV);
+      llvm::sort(LV, std::less<RegisterRef>(PRI));
       dbgs() << printMBBReference(B) << "\t rec = {";
       for (auto I : LV)
         dbgs() << ' ' << Print(I, DFG);
@@ -883,7 +883,7 @@ void Liveness::computeLiveIns() {
       LV.clear();
       for (RegisterRef RR : LiveMap[&B].refs())
         LV.push_back(RR);
-      llvm::sort(LV);
+      llvm::sort(LV, std::less<RegisterRef>(PRI));
       dbgs() << "\tcomp = {";
       for (auto I : LV)
         dbgs() << ' ' << Print(I, DFG);
@@ -1173,3 +1173,5 @@ void Liveness::emptify(RefMap &M) {
   for (auto I = M.begin(), E = M.end(); I != E;)
     I = I->second.empty() ? M.erase(I) : std::next(I);
 }
+
+} // namespace llvm::rdf
