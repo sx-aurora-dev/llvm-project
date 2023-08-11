@@ -18,11 +18,11 @@
 #include "mlir/Support/LogicalResult.h"
 
 namespace mlir {
-
 namespace transform {
 
 class TransformOpInterface;
 class TransformResults;
+class TransformRewriter;
 class TransformState;
 
 using Param = Attribute;
@@ -222,14 +222,19 @@ public:
 
   /// Populates `handles` with all handles pointing to the given Payload IR op.
   /// Returns success if such handles exist, failure otherwise.
+  /// If `includeOutOfScope` is set to "true", handles that are defined in
+  /// regions beyond the most recent isolated from above region are included.
   LogicalResult getHandlesForPayloadOp(Operation *op,
-                                       SmallVectorImpl<Value> &handles) const;
+                                       SmallVectorImpl<Value> &handles,
+                                       bool includeOutOfScope = false) const;
 
   /// Populates `handles` with all handles pointing to the given payload IR
   /// value. Returns success if such handles exist, failure otherwise.
-  LogicalResult
-  getHandlesForPayloadValue(Value payloadValue,
-                            SmallVectorImpl<Value> &handles) const;
+  /// If `includeOutOfScope` is set to "true", handles that are defined in
+  /// regions beyond the most recent isolated from above region are included.
+  LogicalResult getHandlesForPayloadValue(Value payloadValue,
+                                          SmallVectorImpl<Value> &handles,
+                                          bool includeOutOfScope = false) const;
 
   /// Applies the transformation specified by the given transform op and updates
   /// the state accordingly.
@@ -262,12 +267,6 @@ public:
   // class body to comply with visibility and full-declaration requirements.
   inline RegionScope make_region_scope(Region &region);
 
-  /// Creates a new region scope for the given isolated-from-above region.
-  /// Unlike the non-isolated counterpart, there is no nesting expectation.
-  // Implementation note: this method is inline but implemented outside of the
-  // class body to comply with visibility and full-declaration requirements
-  inline RegionScope make_isolated_region_scope(Region &region);
-
   /// A RAII object maintaining a "stack frame" for a transform IR region. When
   /// applying a transform IR operation that contains a region, the caller is
   /// expected to create a RegionScope before applying the ops contained in the
@@ -279,44 +278,18 @@ public:
     /// Forgets the mapping from or to values defined in the associated
     /// transform IR region, and restores the mapping that existed before
     /// entering this scope.
-    ~RegionScope() {
-      state.mappings.erase(region);
-      if (storedMappings.has_value())
-        state.mappings.swap(*storedMappings);
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
-      state.regionStack.pop_back();
-#endif // LLVM_ENABLE_ABI_BREAKING_CHECKS
-    }
+    ~RegionScope();
 
   private:
-    /// Tag structure for differentiating the constructor for isolated regions.
-    struct Isolated {};
-
     /// Creates a new scope for mappings between values defined in the given
     /// transform IR region and payload IR objects.
     RegionScope(TransformState &state, Region &region)
         : state(state), region(&region) {
-      auto res = state.mappings.try_emplace(this->region);
+      auto res = state.mappings.insert(std::make_pair(&region, Mappings()));
       assert(res.second && "the region scope is already present");
       (void)res;
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
-      assert(((state.regionStack.size() == 1 && !state.regionStack.back()) ||
-              state.regionStack.back()->isProperAncestor(&region)) &&
-             "scope started at a non-nested region");
       state.regionStack.push_back(&region);
-#endif // LLVM_ENABLE_ABI_BREAKING_CHECKS
-    }
-
-    /// Creates a new scope for mappings between values defined in the given
-    /// isolated-from-above transform IR region and payload IR objects.
-    RegionScope(TransformState &state, Region &region, Isolated)
-        : state(state), region(&region) {
-      // Store the previous mapping stack locally.
-      storedMappings = llvm::SmallDenseMap<Region *, Mappings>();
-      storedMappings->swap(state.mappings);
-      state.mappings.try_emplace(this->region);
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
-      state.regionStack.push_back(this->region);
 #endif // LLVM_ENABLE_ABI_BREAKING_CHECKS
     }
 
@@ -326,14 +299,7 @@ public:
     /// The region this scope is associated with.
     Region *region;
 
-    /// Local copy of the mappings that existed before entering the current
-    /// region. Used only when the current region is isolated so we don't
-    /// accidentally look up the values defined outside the isolated region.
-    std::optional<llvm::SmallDenseMap<Region *, Mappings>> storedMappings =
-        std::nullopt;
-
     friend RegionScope TransformState::make_region_scope(Region &);
-    friend RegionScope TransformState::make_isolated_region_scope(Region &);
   };
   friend class RegionScope;
 
@@ -449,24 +415,55 @@ private:
                  const TransformOptions &options = TransformOptions());
 
   /// Returns the mappings frame for the region in which the value is defined.
-  const Mappings &getMapping(Value value) const {
-    return const_cast<TransformState *>(this)->getMapping(value);
+  /// If `allowOutOfScope` is set to "false", asserts that the value is in
+  /// scope, based on the current stack of frames.
+  const Mappings &getMapping(Value value, bool allowOutOfScope = false) const {
+    return const_cast<TransformState *>(this)->getMapping(value,
+                                                          allowOutOfScope);
   }
-  Mappings &getMapping(Value value) {
-    auto it = mappings.find(value.getParentRegion());
+  Mappings &getMapping(Value value, bool allowOutOfScope = false) {
+    Region *region = value.getParentRegion();
+    auto it = mappings.find(region);
     assert(it != mappings.end() &&
            "trying to find a mapping for a value from an unmapped region");
+#ifndef NDEBUG
+    if (!allowOutOfScope) {
+      for (Region *r : llvm::reverse(llvm::make_first_range(mappings))) {
+        if (r == region)
+          break;
+        if (r->getParentOp()->hasTrait<OpTrait::IsIsolatedFromAbove>())
+          llvm_unreachable("trying to get mapping beyond region that is "
+                           "isolated from above");
+      }
+    }
+#endif // NDEBUG
     return it->second;
   }
 
   /// Returns the mappings frame for the region in which the operation resides.
-  const Mappings &getMapping(Operation *operation) const {
-    return const_cast<TransformState *>(this)->getMapping(operation);
+  /// If `allowOutOfScope` is set to "false", asserts that the operation is in
+  /// scope, based on the current stack of frames.
+  const Mappings &getMapping(Operation *operation,
+                             bool allowOutOfScope = false) const {
+    return const_cast<TransformState *>(this)->getMapping(operation,
+                                                          allowOutOfScope);
   }
-  Mappings &getMapping(Operation *operation) {
-    auto it = mappings.find(operation->getParentRegion());
+  Mappings &getMapping(Operation *operation, bool allowOutOfScope = false) {
+    Region *region = operation->getParentRegion();
+    auto it = mappings.find(region);
     assert(it != mappings.end() &&
            "trying to find a mapping for an operation from an unmapped region");
+#ifndef NDEBUG
+    if (!allowOutOfScope) {
+      for (Region *r : llvm::reverse(llvm::make_first_range(mappings))) {
+        if (r == region)
+          break;
+        if (r->getParentOp()->hasTrait<OpTrait::IsIsolatedFromAbove>())
+          llvm_unreachable("trying to get mapping beyond region that is "
+                           "isolated from above");
+      }
+    }
+#endif // NDEBUG
     return it->second;
   }
 
@@ -574,7 +571,8 @@ private:
                           ArrayRef<Operation *> payloadOperations);
 
   /// Replaces the given payload op with another op. If the replacement op is
-  /// null, removes the association of the payload op with its handle.
+  /// null, removes the association of the payload op with its handle. Returns
+  /// failure if the op is not associated with any handle.
   ///
   /// Note: This function does not update value handles. None of the original
   /// op's results are allowed to be mapped to any value handle.
@@ -582,7 +580,7 @@ private:
 
   /// Replaces the given payload value with another value. If the replacement
   /// value is null, removes the association of the payload value with its
-  /// handle.
+  /// handle. Returns failure if the value is not associated with any handle.
   LogicalResult replacePayloadValue(Value value, Value replacement);
 
   /// Records handle invalidation reporters into `newlyInvalidated`.
@@ -683,9 +681,9 @@ private:
   /// Remove all nullptrs from op handles that were added by `replacePayloadOp`.
   void compactOpHandles();
 
-  /// The mappings between transform IR values and payload IR ops, aggregated by
-  /// the region in which the transform IR values are defined.
-  llvm::SmallDenseMap<Region *, Mappings> mappings;
+  /// A stack of mappings between transform IR values and payload IR ops,
+  /// aggregated by the region in which the transform IR values are defined.
+  llvm::MapVector<Region *, Mappings> mappings;
 
   /// Op handles may be temporarily mapped to nullptr to avoid invalidating
   /// payload op iterators. This set contains all op handles with nullptrs.
@@ -841,14 +839,6 @@ TransformState::RegionScope TransformState::make_region_scope(Region &region) {
   return RegionScope(*this, region);
 }
 
-/// Creates a RAII object the lifetime of which corresponds to the new mapping
-/// for transform IR values defined in the given isolated-from-above region.
-/// Values defined in surrounding regions cannot be accessed.
-TransformState::RegionScope
-TransformState::make_isolated_region_scope(Region &region) {
-  return RegionScope(*this, region, RegionScope::Isolated());
-}
-
 /// A listener that updates a TransformState based on IR modifications. This
 /// listener can be used during a greedy pattern rewrite to keep the transform
 /// state up-to-date.
@@ -856,8 +846,7 @@ class TrackingListener : public RewriterBase::Listener,
                          public TransformState::Extension {
 public:
   /// Create a new TrackingListener for usage in the specified transform op.
-  explicit TrackingListener(TransformState &state, TransformOpInterface op)
-      : TransformState::Extension(state), transformOp(op) {}
+  TrackingListener(TransformState &state, TransformOpInterface op);
 
 protected:
   /// Return a replacement payload op for the given op, which is going to be
@@ -931,12 +920,18 @@ protected:
   TransformOpInterface getTransformOp() const { return transformOp; }
 
 private:
+  friend class TransformRewriter;
+
   void notifyOperationRemoved(Operation *op) override;
 
   void notifyOperationReplaced(Operation *op, ValueRange newValues) override;
+  using Listener::notifyOperationReplaced;
 
   /// The transform op in which this TrackingListener is used.
   TransformOpInterface transformOp;
+
+  /// The handles that are consumed by the transform op.
+  DenseSet<Value> consumedHandles;
 };
 
 /// A specialized listener that keeps track of cases in which no replacement
@@ -966,6 +961,41 @@ private:
 
   /// The number of errors that have been encountered.
   int64_t errorCounter = 0;
+};
+
+/// This is a special rewriter to be used in transform op implementations,
+/// providing additional helper functions to update the transform state, etc.
+// TODO: Helper functions will be added in a subsequent change.
+class TransformRewriter : public RewriterBase {
+protected:
+  friend class TransformState;
+
+  /// Create a new TransformRewriter.
+  explicit TransformRewriter(MLIRContext *ctx,
+                             ErrorCheckingTrackingListener *listener);
+
+public:
+  /// Return "true" if the tracking listener had failures.
+  bool hasTrackingFailures() const;
+
+  /// Silence all tracking failures that have been encountered so far.
+  void silenceTrackingFailure();
+
+  /// Notify the transform dialect interpreter that the given op has been
+  /// replaced with another op and that the mapping between handles and payload
+  /// ops/values should be updated. This function should be called before the
+  /// original op is erased. It fails if the operation could not be replaced,
+  /// e.g., because the original operation is not tracked.
+  ///
+  /// Note: As long as IR modifications are performed through this rewriter,
+  /// the transform state is usually updated automatically. This function should
+  /// be used when unsupported rewriter API is used; e.g., updating all uses of
+  /// a tracked operation one-by-one instead of using `RewriterBase::replaceOp`.
+  LogicalResult notifyPayloadOperationReplaced(Operation *op,
+                                               Operation *replacement);
+
+private:
+  ErrorCheckingTrackingListener *const listener;
 };
 
 /// This trait is supposed to be attached to Transform dialect operations that
@@ -1064,7 +1094,8 @@ public:
   ///   5. If any `applyToOne` return silenceableFailure, the transformation is
   ///      considered silenceable.
   ///   6. Otherwise the transformation is considered successful.
-  DiagnosedSilenceableFailure apply(TransformResults &transformResults,
+  DiagnosedSilenceableFailure apply(transform::TransformRewriter &rewriter,
+                                    TransformResults &transformResults,
                                     TransformState &state);
 
   /// Checks that the op matches the expectations of this trait.
@@ -1213,6 +1244,15 @@ public:
   }
 };
 
+/// `TrackingListener` failures are reported only for ops that have this trait.
+/// The purpose of this trait is to give users more time to update their custom
+/// transform ops to use the provided `TransformRewriter` for all IR
+/// modifications. This trait will eventually be removed, and failures will be
+/// reported for all transform ops.
+template <typename OpTy>
+class ReportTrackingListenerFailuresOpTrait
+    : public OpTrait::TraitBase<OpTy, ReportTrackingListenerFailuresOpTrait> {};
+
 /// A single result of applying a transform op with `ApplyEachOpTrait` to a
 /// single payload operation.
 using ApplyToEachResult = MappedValue;
@@ -1307,14 +1347,14 @@ void setApplyToOneResults(Operation *transformOp,
 ///   `targets` contains operations of the same class and a silenceable failure
 ///   is reported if it does not.
 template <typename TransformOpTy, typename Range>
-DiagnosedSilenceableFailure
-applyTransformToEach(TransformOpTy transformOp, Range &&targets,
-                     SmallVectorImpl<ApplyToEachResultList> &results,
-                     TransformState &state) {
+DiagnosedSilenceableFailure applyTransformToEach(
+    TransformOpTy transformOp, TransformRewriter &rewriter, Range &&targets,
+    SmallVectorImpl<ApplyToEachResultList> &results, TransformState &state) {
   using OpTy = typename llvm::function_traits<
-      decltype(&TransformOpTy::applyToOne)>::template arg_t<0>;
+      decltype(&TransformOpTy::applyToOne)>::template arg_t<1>;
   static_assert(std::is_convertible<OpTy, Operation *>::value,
                 "expected transform function to take an operation");
+  OpBuilder::InsertionGuard g(rewriter);
 
   SmallVector<Diagnostic> silenceableStack;
   unsigned expectedNumResults = transformOp->getNumResults();
@@ -1331,8 +1371,9 @@ applyTransformToEach(TransformOpTy transformOp, Range &&targets,
     ApplyToEachResultList partialResults;
     partialResults.reserve(expectedNumResults);
     Location specificOpLoc = specificOp->getLoc();
+    rewriter.setInsertionPoint(specificOp);
     DiagnosedSilenceableFailure res =
-        transformOp.applyToOne(specificOp, partialResults, state);
+        transformOp.applyToOne(rewriter, specificOp, partialResults, state);
     if (res.isDefiniteFailure())
       return DiagnosedSilenceableFailure::definiteFailure();
 
@@ -1367,7 +1408,8 @@ LogicalResult checkNestedConsumption(Location loc,
 template <typename OpTy>
 mlir::DiagnosedSilenceableFailure
 mlir::transform::TransformEachOpTrait<OpTy>::apply(
-    TransformResults &transformResults, TransformState &state) {
+    TransformRewriter &rewriter, TransformResults &transformResults,
+    TransformState &state) {
   Value handle = this->getOperation()->getOperand(0);
   auto targets = state.getPayloadOps(handle);
 
@@ -1403,7 +1445,7 @@ mlir::transform::TransformEachOpTrait<OpTy>::apply(
   // corresponding results entry.
   SmallVector<ApplyToEachResultList, 1> results;
   DiagnosedSilenceableFailure result = detail::applyTransformToEach(
-      cast<OpTy>(this->getOperation()), targets, results, state);
+      cast<OpTy>(this->getOperation()), rewriter, targets, results, state);
 
   // Step 3. Propagate the definite failure if any and bail out.
   if (result.isDefiniteFailure())

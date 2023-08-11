@@ -23,6 +23,7 @@
 #include "clang/Analysis/FlowSensitive/ControlFlowContext.h"
 #include "clang/Analysis/FlowSensitive/DataflowEnvironment.h"
 #include "clang/Analysis/FlowSensitive/NoopAnalysis.h"
+#include "clang/Analysis/FlowSensitive/RecordOps.h"
 #include "clang/Analysis/FlowSensitive/Value.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/OperatorKinds.h"
@@ -48,9 +49,15 @@ const Environment *StmtToEnvMap::getEnvironment(const Stmt &S) const {
 
 static BoolValue &evaluateBooleanEquality(const Expr &LHS, const Expr &RHS,
                                           Environment &Env) {
-  if (auto *LHSValue = dyn_cast_or_null<BoolValue>(Env.getValueStrict(LHS)))
-    if (auto *RHSValue = dyn_cast_or_null<BoolValue>(Env.getValueStrict(RHS)))
-      return Env.makeIff(*LHSValue, *RHSValue);
+  Value *LHSValue = Env.getValueStrict(LHS);
+  Value *RHSValue = Env.getValueStrict(RHS);
+
+  if (LHSValue == RHSValue)
+    return Env.getBoolLiteralValue(true);
+
+  if (auto *LHSBool = dyn_cast_or_null<BoolValue>(LHSValue))
+    if (auto *RHSBool = dyn_cast_or_null<BoolValue>(RHSValue))
+      return Env.makeIff(*LHSBool, *RHSBool);
 
   return Env.makeAtomicBoolValue();
 }
@@ -591,16 +598,21 @@ public:
       const Expr *Arg = S->getArg(0);
       assert(Arg != nullptr);
 
-      if (S->isElidable()) {
-        auto *ArgLoc = Env.getStorageLocation(*Arg, SkipPast::Reference);
-        if (ArgLoc == nullptr)
-          return;
+      auto *ArgLoc = cast<AggregateStorageLocation>(
+          Env.getStorageLocation(*Arg, SkipPast::Reference));
+      if (ArgLoc == nullptr)
+        return;
 
+      if (S->isElidable()) {
         Env.setStorageLocation(*S, *ArgLoc);
-      } else if (auto *ArgVal = Env.getValue(*Arg, SkipPast::Reference)) {
-        auto &Loc = Env.createStorageLocation(*S);
+      } else {
+        auto &Loc =
+            cast<AggregateStorageLocation>(Env.createStorageLocation(*S));
         Env.setStorageLocation(*S, Loc);
-        Env.setValue(Loc, *ArgVal);
+        if (Value *Val = Env.createValue(S->getType())) {
+          Env.setValue(Loc, *Val);
+          copyRecord(*ArgLoc, Loc, Env);
+        }
       }
       return;
     }
@@ -632,16 +644,17 @@ public:
           !Method->isMoveAssignmentOperator())
         return;
 
-      auto *ObjectLoc = Env.getStorageLocation(*Arg0, SkipPast::Reference);
+      auto *ObjectLoc = cast_or_null<AggregateStorageLocation>(
+          Env.getStorageLocation(*Arg0, SkipPast::Reference));
       if (ObjectLoc == nullptr)
         return;
 
-      auto *Val = Env.getValue(*Arg1, SkipPast::Reference);
-      if (Val == nullptr)
+      auto *ArgLoc = cast_or_null<AggregateStorageLocation>(
+          Env.getStorageLocation(*Arg1, SkipPast::Reference));
+      if (ArgLoc == nullptr)
         return;
 
-      // Assign a value to the storage location of the object.
-      Env.setValue(*ObjectLoc, *Val);
+      copyRecord(*ArgLoc, *ObjectLoc, Env);
 
       // FIXME: Add a test for the value of the whole expression.
       // Assign a storage location for the whole expression.
@@ -776,6 +789,10 @@ public:
     Env.setValueStrict(*S, Env.getBoolLiteralValue(S->getValue()));
   }
 
+  void VisitIntegerLiteral(const IntegerLiteral *S) {
+    Env.setValueStrict(*S, Env.getIntLiteralValue(S->getValue()));
+  }
+
   void VisitParenExpr(const ParenExpr *S) {
     // The CFG does not contain `ParenExpr` as top-level statements in basic
     // blocks, however manual traversal to sub-expressions may encounter them.
@@ -855,7 +872,7 @@ private:
     assert(BlockToOutputState);
     assert(ExitBlock < BlockToOutputState->size());
 
-    auto ExitState = (*BlockToOutputState)[ExitBlock];
+    auto &ExitState = (*BlockToOutputState)[ExitBlock];
     assert(ExitState);
 
     Env.popCall(S, ExitState->Env);

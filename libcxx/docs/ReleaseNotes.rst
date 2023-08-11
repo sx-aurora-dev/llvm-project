@@ -35,6 +35,9 @@ see the `releases page <https://llvm.org/releases/>`_.
 What's New in Libc++ 17.0.0?
 ============================
 
+There is an experimental implementation of the C++23 ``std`` module. See
+:ref:`ModulesInLibcxx` for more information.
+
 Implemented Papers
 ------------------
 - P2520R0 - ``move_iterator<T*>`` should be a random access iterator
@@ -64,6 +67,10 @@ Improvements and New Features
   in the specialization has not been implemented in libc++. This prevents the
   feature-test macro to be set.
 
+- Platforms that don't have support for a filesystem can now still take advantage of some parts of ``<filesystem>``.
+  Anything that does not rely on having an actual filesystem available will now work, such as ``std::filesystem::path``,
+  ``std::filesystem::perms`` and similar classes.
+
 Deprecations and Removals
 -------------------------
 
@@ -79,6 +86,10 @@ Deprecations and Removals
            ``stdexcept``, ``system_error``, ``type_traits``, ``typeinfo``
 
 - ``<algorithm>`` no longer includes ``<chrono>`` in any C++ version (it was previously included in C++17 and earlier).
+
+- ``<limits>`` no longer includes ``<type_traits>`` in any C++ version (it was previously included in C++20 and earlier).
+
+- ``<new>`` no longer includes ``<exception>`` or ``<type_traits>`` in any C++ version (they were previously included in C++20 and earlier).
 
 - ``<string>`` no longer includes ``<vector>`` in any C++ version (it was previously included in C++20 and earlier).
 
@@ -107,6 +118,9 @@ Deprecations and Removals
 
 - The classes ``strstreambuf`` , ``istrstream``, ``ostrstream``, and ``strstream`` have been deprecated.
   They have been deprecated in the Standard since C++98, but were never marked as deprecated in libc++.
+
+- LWG3631 ``basic_format_arg(T&&) should use remove_cvref_t<T> throughout`` removed
+  support for ``volatile`` qualified formatters.
 
 Upcoming Deprecations and Removals
 ----------------------------------
@@ -161,3 +175,9 @@ Build System Changes
 
 - ``LIBCXX_ENABLE_FSTREAM`` is not supported anymore, please use ``LIBCXX_ENABLE_FILESYSTEM=OFF`` if your
   platform does not have support for a filesystem.
+
+- The lit test parameter ``enable_modules`` changed from a Boolean to an enum. The changes are
+
+  - ``False`` became ``none``. This option does not test with modules enabled.
+  - ``True`` became ``clang``. This option tests using Clang modules.
+  - ``std`` is a new optional and tests with the experimental C++23 ``std`` module.

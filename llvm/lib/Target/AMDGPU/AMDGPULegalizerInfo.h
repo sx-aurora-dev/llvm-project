@@ -78,6 +78,7 @@ public:
 
   bool legalizeAtomicCmpXChg(MachineInstr &MI, MachineRegisterInfo &MRI,
                              MachineIRBuilder &B) const;
+  bool legalizeFlog2(MachineInstr &MI, MachineIRBuilder &B) const;
   bool legalizeFlog(MachineInstr &MI, MachineIRBuilder &B,
                     double Log2BaseInverted) const;
   bool legalizeFExp(MachineInstr &MI, MachineIRBuilder &B) const;
@@ -194,9 +195,6 @@ public:
       const AMDGPU::ImageDimIntrinsicInfo *ImageDimIntr) const;
 
   bool legalizeSBufferLoad(LegalizerHelper &Helper, MachineInstr &MI) const;
-
-  bool legalizeAtomicIncDec(MachineInstr &MI,  MachineIRBuilder &B,
-                            bool IsInc) const;
 
   bool legalizeTrapIntrinsic(MachineInstr &MI, MachineRegisterInfo &MRI,
                              MachineIRBuilder &B) const;

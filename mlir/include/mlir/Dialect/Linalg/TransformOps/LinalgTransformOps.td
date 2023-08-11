@@ -80,12 +80,14 @@ def ApplyTilingCanonicalizationPatternsOp : Op<Transform_Dialect,
 def BufferizeToAllocationOp : Op<Transform_Dialect,
     "structured.bufferize_to_allocation",
     [DeclareOpInterfaceMethods<TransformOpInterface>,
-     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     This transform materializes an allocation for the targeted tensor value. It
     replaces all original uses of the target with the newly allocated buffer,
-    wrapped in a `bufferization.to_tensor` op. It returns a handle to the result
-    of the `to_tensor` op.
+    wrapped in a `bufferization.to_tensor` op. It returns a handle to the newly
+    allocated buffer. Furthermore, it returns a handle to the result of the
+    `to_tensor` op.
 
     Example:
     ```
@@ -115,13 +117,14 @@ def BufferizeToAllocationOp : Op<Transform_Dialect,
 
     #### Return modes
 
-    This operation consumes the `target` handle and produces the `transformed`
-    handle. It always succeeds.
+    This operation consumes the `target` handle and produces the `replacement`
+    and `allocated_buffer` handles. It always succeeds.
   }];
 
   let arguments = (ins Transform_AnyValue:$target,
                        OptionalAttr<AnyAttr>:$memory_space);
-  let results = (outs Transform_AnyValue:$transformed);
+  let results = (outs Transform_AnyValue:$allocated_buffer,
+                      Transform_AnyValue:$replacement);
   let assemblyFormat = "$target attr-dict";
 }
 
@@ -133,7 +136,8 @@ def DecomposeOp : Op<Transform_Dialect, "structured.decompose",
     [FunctionalStyleTransformOpTrait, 
      MemoryEffectsOpInterface,
      TransformOpInterface, 
-     TransformEachOpTrait]> {
+     TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Decomposes named complex operations, such as higher-dimensional
     (depthwise) convolutions, into combinations of lower-dimensional equivalents
@@ -155,6 +159,7 @@ def DecomposeOp : Op<Transform_Dialect, "structured.decompose",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -167,7 +172,8 @@ def DecomposeOp : Op<Transform_Dialect, "structured.decompose",
 
 def FuseOp : Op<Transform_Dialect, "structured.fuse",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     DeclareOpInterfaceMethods<TransformOpInterface>]> {
+     DeclareOpInterfaceMethods<TransformOpInterface>,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Tiles the operations pointed to by the target handle and fuses their
     producers greedily using the options provided as attributes.
@@ -192,7 +198,8 @@ def FuseIntoContainingOp :
     Op<Transform_Dialect, "structured.fuse_into_containing_op",
       [DeclareOpInterfaceMethods<TransformOpInterface,
           ["allowsRepeatedHandleOperands"]>,
-       DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+       DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+       ReportTrackingListenerFailuresOpTrait]> {
   let summary = "Fuse a producer into a containing operation.";
 
   let description = [{
@@ -247,7 +254,8 @@ def FuseIntoContainingOp :
 
 def GeneralizeOp : Op<Transform_Dialect, "structured.generalize",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     TransformOpInterface, TransformEachOpTrait]> {
+     TransformOpInterface, TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Transforms a named structured operation into the generic form with the
     explicit attached region.
@@ -270,6 +278,7 @@ def GeneralizeOp : Op<Transform_Dialect, "structured.generalize",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -282,7 +291,8 @@ def GeneralizeOp : Op<Transform_Dialect, "structured.generalize",
 
 def InterchangeOp : Op<Transform_Dialect, "structured.interchange",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-    TransformOpInterface, TransformEachOpTrait]> {
+    TransformOpInterface, TransformEachOpTrait,
+    ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Interchanges the iterators of the operations pointed to by the target handle
     using the iterator interchange attribute.
@@ -313,6 +323,7 @@ def InterchangeOp : Op<Transform_Dialect, "structured.interchange",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::GenericOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -326,7 +337,8 @@ def LowerPackOp : Op<Transform_Dialect, "structured.lower_pack", [
                          FunctionalStyleTransformOpTrait,
                          MemoryEffectsOpInterface,
                          TransformEachOpTrait,
-                         TransformOpInterface]> {
+                         TransformOpInterface,
+                         ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Rewrite a tensor.pack into tensor.pad + tensor.expand_shape + linalg.transpose.
 
@@ -350,6 +362,7 @@ def LowerPackOp : Op<Transform_Dialect, "structured.lower_pack", [
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::tensor::PackOp target,
         ::mlir::transform::ApplyToEachResultList &transformResults,
         ::mlir::transform::TransformState &state);
@@ -363,7 +376,8 @@ def LowerUnPackOp : Op<Transform_Dialect, "structured.lower_unpack", [
                          FunctionalStyleTransformOpTrait,
                          MemoryEffectsOpInterface,
                          TransformEachOpTrait,
-                         TransformOpInterface]> {
+                         TransformOpInterface,
+                         ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Lower a tensor.unpack into empty + linalg.transpose + tensor.collapse_shape + 
     tensor.extract_slice.
@@ -389,6 +403,7 @@ def LowerUnPackOp : Op<Transform_Dialect, "structured.lower_unpack", [
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::tensor::UnPackOp target,
         ::mlir::transform::ApplyToEachResultList &transformResults,
         ::mlir::transform::TransformState &state);
@@ -461,7 +476,8 @@ def MatchOp : Op<Transform_Dialect, "structured.match",
 
 def MultiTileSizesOp : Op<Transform_Dialect, "structured.multitile_sizes",
     [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-     TransformOpInterface, TransformEachOpTrait]> {
+     TransformOpInterface, TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Emits the IR computing the tile sizes `s1` and `s2` such that:
 
@@ -531,6 +547,7 @@ def MultiTileSizesOp : Op<Transform_Dialect, "structured.multitile_sizes",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         TransformState &state);
@@ -543,7 +560,8 @@ def MultiTileSizesOp : Op<Transform_Dialect, "structured.multitile_sizes",
 
 def PackOp : Op<Transform_Dialect, "structured.pack", [
                 DeclareOpInterfaceMethods<TransformOpInterface>,
-                DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+                DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+                ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Pack a LinalgOp by applying a data tiling transformation on the op and
     packing the operands according to the `packed_sizes` specification.
@@ -632,7 +650,8 @@ def PackOp : Op<Transform_Dialect, "structured.pack", [
 //===----------------------------------------------------------------------===//
 def PackGreedilyOp : Op<Transform_Dialect, "structured.pack_greedily", [
                         DeclareOpInterfaceMethods<TransformOpInterface>,
-                        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+                        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+                        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Target a Linalg op and rewrite it into packed LinalgOp form by trying to
     infer whether a known suboperation is embedded
@@ -740,7 +759,8 @@ def PackGreedilyOp : Op<Transform_Dialect, "structured.pack_greedily", [
 def PackTransposeOp : Op<Transform_Dialect, "structured.pack_transpose", [
                          FunctionalStyleTransformOpTrait,
                          MemoryEffectsOpInterface,
-                         DeclareOpInterfaceMethods<TransformOpInterface>]> {
+                         DeclareOpInterfaceMethods<TransformOpInterface>,
+                         ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Apply a transposition to a single `tensor.pack` (resp. `tensor.unpack`) and 
     update the `linalg.generic` op that consumes (resp. produces) the operation.
@@ -803,7 +823,8 @@ def PackTransposeOp : Op<Transform_Dialect, "structured.pack_transpose", [
 
 def PadOp : Op<Transform_Dialect, "structured.pad",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     TransformOpInterface, TransformEachOpTrait]> {
+     TransformOpInterface, TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Pads the operations pointed to by the target handle using the options
     provides as operation attributes.
@@ -827,7 +848,8 @@ def PadOp : Op<Transform_Dialect, "structured.pad",
          DefaultValuedAttr<I64ArrayAttr, "{}">:$pack_paddings,
          DefaultValuedAttr<
           TypedArrayAttrBase<I64ArrayAttr, "array of arrays of i64">,
-          "{}">:$transpose_paddings);
+          "{}">:$transpose_paddings,
+         DefaultValuedAttr<BoolAttr, "true">:$copy_back);
   let results = (outs TransformHandleTypeInterface:$transformed);
 
   let assemblyFormat =
@@ -837,6 +859,7 @@ def PadOp : Op<Transform_Dialect, "structured.pad",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -851,7 +874,8 @@ def HoistPadBuildPackingLoopNestOp :
     Op<Transform_Dialect,
        "structured.hoist_pad.build_packing_loop_nest",
     [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-     DeclareOpInterfaceMethods<TransformOpInterface>]> {
+     DeclareOpInterfaceMethods<TransformOpInterface>,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Helper transform used to hoist a tensor.pad target operation. This operation
     creates the packing loop nest required by the hoist_pad operation and makes
@@ -931,6 +955,7 @@ def HoistPadOp : Op<Transform_Dialect, "structured.hoist_pad",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::tensor::PadOp,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -944,7 +969,8 @@ def HoistPadOp : Op<Transform_Dialect, "structured.hoist_pad",
 
 def PromoteOp : Op<Transform_Dialect, "structured.promote",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-    TransformOpInterface, TransformEachOpTrait]> {
+    TransformOpInterface, TransformEachOpTrait,
+    ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Promotes the specified operands of the target into a separate memory buffer.
 
@@ -978,6 +1004,7 @@ def PromoteOp : Op<Transform_Dialect, "structured.promote",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -990,7 +1017,8 @@ def PromoteOp : Op<Transform_Dialect, "structured.promote",
 
 def ReplaceOp : Op<Transform_Dialect, "structured.replace",
     [IsolatedFromAbove, DeclareOpInterfaceMethods<TransformOpInterface>,
-     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>] # GraphRegionNoTerminator.traits> {
+     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+     ReportTrackingListenerFailuresOpTrait] # GraphRegionNoTerminator.traits> {
   let description = [{
     Replace all `target` payload ops with the single op that is contained in
     this op's region. All targets must have zero arguments and must be isolated
@@ -1018,7 +1046,8 @@ def ReplaceOp : Op<Transform_Dialect, "structured.replace",
 
 def ScalarizeOp : Op<Transform_Dialect, "structured.scalarize",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     TransformOpInterface, TransformEachOpTrait]> {
+     TransformOpInterface, TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that ops of a specific kind in the given function should be
     scalarized (i.e. their dynamic dimensions tiled by 1).
@@ -1051,6 +1080,7 @@ def ScalarizeOp : Op<Transform_Dialect, "structured.scalarize",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1066,7 +1096,8 @@ def RewriteInDestinationPassingStyleOp : Op<
     [FunctionalStyleTransformOpTrait, 
      MemoryEffectsOpInterface,
      TransformOpInterface, 
-     TransformEachOpTrait]> {
+     TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Rewrite a supported tensor operation that is not in destination-passing style
     into a form that is in destination-passing style.
@@ -1098,6 +1129,7 @@ def RewriteInDestinationPassingStyleOp : Op<
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::Operation *target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1110,7 +1142,8 @@ def RewriteInDestinationPassingStyleOp : Op<
 
 def SplitOp : Op<Transform_Dialect, "structured.split",
     [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-     DeclareOpInterfaceMethods<TransformOpInterface>]> {
+     DeclareOpInterfaceMethods<TransformOpInterface>,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op should be split into two complementary
     parts, which combined cover the entire iteration domain of the original op.
@@ -1147,7 +1180,8 @@ def SplitOp : Op<Transform_Dialect, "structured.split",
 
 def SplitReductionOp : Op<Transform_Dialect, "structured.split_reduction",
        [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-        TransformEachOpTrait, TransformOpInterface]> {
+        TransformEachOpTrait, TransformOpInterface,
+        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op should be transformed with the
     `splitReduction` transformation and split factor provided as attribute.
@@ -1309,6 +1343,7 @@ def SplitReductionOp : Op<Transform_Dialect, "structured.split_reduction",
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1321,7 +1356,8 @@ def SplitReductionOp : Op<Transform_Dialect, "structured.split_reduction",
 
 def TileReductionUsingScfOp : Op<Transform_Dialect, "structured.tile_reduction_using_scf",
        [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-        TransformEachOpTrait, TransformOpInterface]> {
+        TransformEachOpTrait, TransformOpInterface,
+        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op should be transformed with the
     `tileReduction` transformation with the tile size provided as attribute.
@@ -1413,6 +1449,7 @@ def TileReductionUsingScfOp : Op<Transform_Dialect, "structured.tile_reduction_u
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1426,7 +1463,8 @@ def TileReductionUsingScfOp : Op<Transform_Dialect, "structured.tile_reduction_u
 def TileReductionUsingForallOp :
   Op<Transform_Dialect, "structured.tile_reduction_using_forall",
        [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-        TransformEachOpTrait, TransformOpInterface]> {
+        TransformEachOpTrait, TransformOpInterface,
+        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Tile a PartialReductionOpInterface op to a tiled `scf.forall` doing
     partial reduction.
@@ -1522,6 +1560,7 @@ def TileReductionUsingForallOp :
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1535,7 +1574,8 @@ def TileReductionUsingForallOp :
 
 def TileOp : Op<Transform_Dialect, "structured.tile",
        [DeclareOpInterfaceMethods<TransformOpInterface>,
-        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op should be tiled with the given sizes.
     This transform generates a loop nest with a smaller ("tiled") target
@@ -1616,7 +1656,7 @@ def TileToForallOp :
     Op<Transform_Dialect, "structured.tile_to_forall_op",
       [AttrSizedOperandSegments,
        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-       TransformOpInterface]> {
+       TransformOpInterface, ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Tile a TilingInterface op to a tiled `scf.forall`.
 
@@ -1726,6 +1766,7 @@ def TileToForallOp :
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure apply(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::transform::TransformResults &transformResults,
         ::mlir::transform::TransformState &state);
 
@@ -1740,7 +1781,8 @@ def TileToForallOp :
 
 def TileToScfForOp : Op<Transform_Dialect, "structured.tile_to_scf_for",
        [DeclareOpInterfaceMethods<TransformOpInterface>,
-        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+        DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+        ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op should be tiled with the given sizes.
     This transform generates a loop nest with a smaller ("tiled") target
@@ -1807,7 +1849,8 @@ def TileToScfForOp : Op<Transform_Dialect, "structured.tile_to_scf_for",
 
 def VectorizeOp : Op<Transform_Dialect, "structured.vectorize",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     TransformEachOpTrait, TransformOpInterface]> {
+     TransformEachOpTrait, TransformOpInterface,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Indicates that the given `target` op all the ops it contains should be
     vectorized with the configuration specified by the attributes of this op.
@@ -1862,6 +1905,7 @@ def VectorizeOp : Op<Transform_Dialect, "structured.vectorize",
   ];
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::Operation *target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -1870,7 +1914,7 @@ def VectorizeOp : Op<Transform_Dialect, "structured.vectorize",
 
 def MaskedVectorizeOp : Op<Transform_Dialect, "structured.masked_vectorize",
     [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-     TransformOpInterface]> {
+     TransformOpInterface, ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Vectorize the target ops, which must be Linalg ops, with masked vectors
     of the specified size.
@@ -1914,6 +1958,7 @@ def MaskedVectorizeOp : Op<Transform_Dialect, "structured.masked_vectorize",
   let extraClassDeclaration = [{
     // TODO: applyToOne.
     ::mlir::DiagnosedSilenceableFailure apply(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::transform::TransformResults &transformResults,
         ::mlir::transform::TransformState &state);
 
@@ -1928,7 +1973,8 @@ def MaskedVectorizeOp : Op<Transform_Dialect, "structured.masked_vectorize",
 def HoistRedundantVectorTransfersOp :
   Op<Transform_Dialect, "structured.hoist_redundant_vector_transfers",
     [FunctionalStyleTransformOpTrait, MemoryEffectsOpInterface,
-     TransformEachOpTrait, TransformOpInterface]> {
+     TransformEachOpTrait, TransformOpInterface,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Hoist vector.transfer_read / vector.transfer_write pairs out of immediately
     enclosing scf::ForOp iteratively, if the following conditions are true:
@@ -1958,7 +2004,8 @@ def HoistRedundantVectorTransfersOp :
   ];
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
-        ::mlir::func::FuncOp target,
+         ::mlir::transform::TransformRewriter &rewriter,
+         ::mlir::func::FuncOp target,
          ::mlir::transform::ApplyToEachResultList &results,
          ::mlir::transform::TransformState &state);
    }];
@@ -1973,7 +2020,8 @@ def ConvertConv2DToImg2ColOp : Op<Transform_Dialect,
     [FunctionalStyleTransformOpTrait,
      MemoryEffectsOpInterface,
      TransformOpInterface,
-     TransformEachOpTrait]> {
+     TransformEachOpTrait,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Convert linalg.conv_2d_xxx into linalg.generic (for img2col packing)
     and linalg.matmul.
@@ -2034,6 +2082,7 @@ def ConvertConv2DToImg2ColOp : Op<Transform_Dialect,
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::linalg::LinalgOp target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -2048,7 +2097,8 @@ def HoistRedundantTensorSubsetsOp :
   Op<Transform_Dialect, "structured.hoist_redundant_tensor_subsets",
     [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
      TransformEachOpTrait,
-     TransformOpInterface]> {
+     TransformOpInterface,
+     ReportTrackingListenerFailuresOpTrait]> {
   let description = [{
     Hoists supported tensor subset extract/insert operation pairs out of 
     immediately enclosing loop iteratively, if the following conditions
@@ -2082,6 +2132,7 @@ def HoistRedundantTensorSubsetsOp :
 
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::Operation *target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);
@@ -2120,6 +2171,7 @@ def InsertSliceToCopyOp :
   ];
   let extraClassDeclaration = [{
     ::mlir::DiagnosedSilenceableFailure applyToOne(
+        ::mlir::transform::TransformRewriter &rewriter,
         ::mlir::Operation *target,
         ::mlir::transform::ApplyToEachResultList &results,
         ::mlir::transform::TransformState &state);

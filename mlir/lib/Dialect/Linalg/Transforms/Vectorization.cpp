@@ -225,7 +225,8 @@ struct VectorizationState {
 
     // TODO: Extend scalable vector type to support a bit map.
     bool numScalableDims = !scalableVecDims.empty() && scalableVecDims.back();
-    return VectorType::get(vectorShape, elementType, numScalableDims);
+    return VectorType::get(vectorShape, elementType, numScalableDims,
+                           scalableDims);
   }
 
   /// Masks an operation with the canonical vector mask if the operation needs
@@ -605,8 +606,18 @@ static Value buildVectorWrite(RewriterBase &rewriter, Value value,
   Location loc = value.getLoc();
   auto linalgOp = cast<LinalgOp>(outputOperand->getOwner());
   AffineMap opOperandMap = linalgOp.getMatchingIndexingMap(outputOperand);
+
+  // Compute the vector type of the value to store. This type should be an
+  // identity or projection of the canonical vector type without any permutation
+  // applied, given that any permutation in a transfer write happens as part of
+  // the write itself.
+  AffineMap vectorTypeMap = AffineMap::getFilteredIdentityMap(
+      opOperandMap.getContext(), opOperandMap.getNumInputs(),
+      [&](AffineDimExpr dimExpr) -> bool {
+        return llvm::is_contained(opOperandMap.getResults(), dimExpr);
+      });
   auto vectorType = state.getCanonicalVecType(
-      getElementTypeOrSelf(outputOperand->get().getType()), opOperandMap);
+      getElementTypeOrSelf(outputOperand->get().getType()), vectorTypeMap);
 
   Operation *write;
   if (vectorType.getRank() > 0) {
@@ -614,13 +625,14 @@ static Value buildVectorWrite(RewriterBase &rewriter, Value value,
     SmallVector<Value> indices(linalgOp.getRank(outputOperand),
                                rewriter.create<arith::ConstantIndexOp>(loc, 0));
     value = broadcastIfNeeded(rewriter, value, vectorType);
+    assert(value.getType() == vectorType && "Incorrect type");
     write = rewriter.create<vector::TransferWriteOp>(
         loc, value, outputOperand->get(), indices, writeMap);
   } else {
     // 0-d case is still special: do not invert the reindexing writeMap.
     if (!isa<VectorType>(value.getType()))
       value = rewriter.create<vector::BroadcastOp>(loc, vectorType, value);
-    assert(value.getType() == vectorType && "incorrect type");
+    assert(value.getType() == vectorType && "Incorrect type");
     write = rewriter.create<vector::TransferWriteOp>(
         loc, value, outputOperand->get(), ValueRange{});
   }
@@ -1199,38 +1211,45 @@ vectorizeOneOp(RewriterBase &rewriter, VectorizationState &state,
   //   a. Get the first max ranked shape.
   VectorType firstMaxRankedType;
   for (Value operand : op->getOperands()) {
-    auto vecType = dyn_cast<VectorType>(bvm.lookup(operand).getType());
+    auto vecOperand = bvm.lookup(operand);
+    assert(vecOperand && "Vector operand couldn't be found");
+
+    auto vecType = dyn_cast<VectorType>(vecOperand.getType());
     if (vecType && (!firstMaxRankedType ||
                     firstMaxRankedType.getRank() < vecType.getRank()))
       firstMaxRankedType = vecType;
   }
   //   b. Broadcast each op if needed.
-  SmallVector<Value> vectorizedOperands;
+  SmallVector<Value> vecOperands;
   for (Value scalarOperand : op->getOperands()) {
-    Value vectorizedOperand = bvm.lookup(scalarOperand);
-    auto vecType =
-        VectorType::get(firstMaxRankedType.getShape(),
-                        getElementTypeOrSelf(vectorizedOperand.getType()),
-                        firstMaxRankedType.getNumScalableDims());
-    vectorizedOperands.push_back(
-        !firstMaxRankedType
-            ? vectorizedOperand
-            : broadcastIfNeeded(rewriter, vectorizedOperand, vecType));
+    Value vecOperand = bvm.lookup(scalarOperand);
+    assert(vecOperand && "Vector operand couldn't be found");
+
+    if (firstMaxRankedType) {
+      auto vecType = VectorType::get(firstMaxRankedType.getShape(),
+                                     getElementTypeOrSelf(vecOperand.getType()),
+                                     firstMaxRankedType.getNumScalableDims(),
+                                     firstMaxRankedType.getScalableDims());
+      vecOperands.push_back(broadcastIfNeeded(rewriter, vecOperand, vecType));
+    } else {
+      vecOperands.push_back(vecOperand);
+    }
   }
   //   c. for elementwise, the result is the vector with the firstMaxRankedShape
   SmallVector<Type> resultTypes;
   for (Type resultType : op->getResultTypes()) {
     resultTypes.push_back(
-        !firstMaxRankedType
-            ? resultType
-            : VectorType::get(firstMaxRankedType.getShape(), resultType,
-                              firstMaxRankedType.getNumScalableDims()));
+        firstMaxRankedType
+            ? VectorType::get(firstMaxRankedType.getShape(), resultType,
+                              firstMaxRankedType.getNumScalableDims(),
+                              firstMaxRankedType.getScalableDims())
+            : resultType);
   }
   //   d. Build and return the new op.
   return VectorizationResult{
       VectorizationStatus::NewOp,
-      rewriter.create(op->getLoc(), op->getName().getIdentifier(),
-                      vectorizedOperands, resultTypes, op->getAttrs())};
+      rewriter.create(op->getLoc(), op->getName().getIdentifier(), vecOperands,
+                      resultTypes, op->getAttrs())};
 }
 
 /// Generic vectorization function that rewrites the body of a `linalgOp` into
@@ -2750,10 +2769,16 @@ struct Conv1DGenerator
     const Type dstType =
         cast<ShapedType>(val.getType()).cloneWith(std::nullopt, dstElementType);
 
-    if (isa<FloatType>(dstElementType) && srcWidth < dstWidth)
+    if (isa<IntegerType>(srcElementType) && isa<FloatType>(dstElementType)) {
+      return rewriter.create<arith::SIToFPOp>(loc, dstType, val);
+    }
+
+    if (isa<FloatType>(srcElementType) && isa<FloatType>(dstElementType) &&
+        srcWidth < dstWidth)
       return rewriter.create<arith::ExtFOp>(loc, dstType, val);
 
-    if (isa<IntegerType>(dstElementType) && srcWidth < dstWidth)
+    if (isa<IntegerType>(srcElementType) && isa<IntegerType>(dstElementType) &&
+        srcWidth < dstWidth)
       return rewriter.create<arith::ExtSIOp>(loc, dstType, val);
 
     assert(false && "unhandled promotion case");

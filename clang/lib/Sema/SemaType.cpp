@@ -38,6 +38,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <bitset>
@@ -2708,8 +2709,8 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
     return QualType();
   }
   // Only support _BitInt elements with byte-sized power of 2 NumBits.
-  if (CurType->isBitIntType()) {
-    unsigned NumBits = CurType->getAs<BitIntType>()->getNumBits();
+  if (const auto *BIT = CurType->getAs<BitIntType>()) {
+    unsigned NumBits = BIT->getNumBits();
     if (!llvm::isPowerOf2_32(NumBits) || NumBits < 8) {
       Diag(AttrLoc, diag::err_attribute_invalid_bitint_vector_type)
           << (NumBits < 8);
@@ -2790,7 +2791,7 @@ QualType Sema::BuildExtVectorType(QualType T, Expr *ArraySize,
 
   // Only support _BitInt elements with byte-sized power of 2 NumBits.
   if (T->isBitIntType()) {
-    unsigned NumBits = T->getAs<BitIntType>()->getNumBits();
+    unsigned NumBits = T->castAs<BitIntType>()->getNumBits();
     if (!llvm::isPowerOf2_32(NumBits) || NumBits < 8) {
       Diag(AttrLoc, diag::err_attribute_invalid_bitint_vector_type)
           << (NumBits < 8);

@@ -72,6 +72,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -2170,6 +2171,10 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
     if (SemaBuiltinFPClassification(TheCall, 6))
       return ExprError();
     break;
+  case Builtin::BI__builtin_isfpclass:
+    if (SemaBuiltinFPClassification(TheCall, 2))
+      return ExprError();
+    break;
   case Builtin::BI__builtin_isfinite:
   case Builtin::BI__builtin_isinf:
   case Builtin::BI__builtin_isinf_sign:
@@ -2632,6 +2637,9 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
   case Builtin::BI__builtin_elementwise_log2:
   case Builtin::BI__builtin_elementwise_log10:
   case Builtin::BI__builtin_elementwise_roundeven:
+  case Builtin::BI__builtin_elementwise_round:
+  case Builtin::BI__builtin_elementwise_rint:
+  case Builtin::BI__builtin_elementwise_nearbyint:
   case Builtin::BI__builtin_elementwise_sin:
   case Builtin::BI__builtin_elementwise_trunc:
   case Builtin::BI__builtin_elementwise_canonicalize: {
@@ -4688,6 +4696,118 @@ bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
   // Check if rnum is in [0, 10]
   case RISCV::BI__builtin_riscv_aes64ks1i_64:
     return SemaBuiltinConstantArgRange(TheCall, 1, 0, 10);
+  // Check if value range for vxrm is in [0, 3]
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_ta:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_ta:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_ta:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_ta:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_ta:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_ta:
+    return SemaBuiltinConstantArgRange(TheCall, 2, 0, 3);
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_tu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_tu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_tu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_tu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_tu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_tu:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_tama:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_tama:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_tama:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_tama:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_tama:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_tama:
+    return SemaBuiltinConstantArgRange(TheCall, 3, 0, 3);
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vaaddu_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vaadd_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vasubu_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vasub_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vasub_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_mu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_mu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_mu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_mu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_mu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_mu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_tum:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_tum:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_tum:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_tum:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_tum:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_tum:
+  case RISCVVector::BI__builtin_rvv_vsmul_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vsmul_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vssra_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vssra_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vv_tumu:
+  case RISCVVector::BI__builtin_rvv_vssrl_vx_tumu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wv_tumu:
+  case RISCVVector::BI__builtin_rvv_vnclip_wx_tumu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wv_tumu:
+  case RISCVVector::BI__builtin_rvv_vnclipu_wx_tumu:
+    return SemaBuiltinConstantArgRange(TheCall, 4, 0, 3);
   case RISCV::BI__builtin_riscv_ntl_load:
   case RISCV::BI__builtin_riscv_ntl_store:
     DeclRefExpr *DRE =
@@ -4845,6 +4965,26 @@ bool Sema::CheckWebAssemblyBuiltinFunctionCall(const TargetInfo &TI,
   }
 
   return false;
+}
+
+void Sema::checkRVVTypeSupport(QualType Ty, SourceLocation Loc, ValueDecl *D) {
+  const TargetInfo &TI = Context.getTargetInfo();
+  if (Ty->isRVVType(/* Bitwidth */ 64, /* IsFloat */ false) &&
+      !TI.hasFeature("zve64x"))
+    Diag(Loc, diag::err_riscv_type_requires_extension, D) << Ty << "zve64x";
+  if (Ty->isRVVType(/* Bitwidth */ 16, /* IsFloat */ true) &&
+      !TI.hasFeature("experimental-zvfh"))
+    Diag(Loc, diag::err_riscv_type_requires_extension, D) << Ty << "zvfh";
+  if (Ty->isRVVType(/* Bitwidth */ 32, /* IsFloat */ true) &&
+      !TI.hasFeature("zve32f"))
+    Diag(Loc, diag::err_riscv_type_requires_extension, D) << Ty << "zve32f";
+  if (Ty->isRVVType(/* Bitwidth */ 64, /* IsFloat */ true) &&
+      !TI.hasFeature("zve64d"))
+    Diag(Loc, diag::err_riscv_type_requires_extension, D) << Ty << "zve64d";
+  // Given that caller already checked isRVVType() before calling this function,
+  // if we don't have at least zve32x supported, then we need to emit error.
+  if (!TI.hasFeature("zve32x"))
+    Diag(Loc, diag::err_riscv_type_requires_extension, D) << Ty << "zve32x";
 }
 
 bool Sema::CheckNVPTXBuiltinFunctionCall(const TargetInfo &TI,
@@ -7688,9 +7828,12 @@ bool Sema::SemaBuiltinFPClassification(CallExpr *TheCall, unsigned NumArgs) {
   if (checkArgCount(*this, TheCall, NumArgs))
     return true;
 
-  // __builtin_fpclassify is the only case where NumArgs != 1, so we can count
-  // on all preceding parameters just being int.  Try all of those.
-  for (unsigned i = 0; i < NumArgs - 1; ++i) {
+  // Find out position of floating-point argument.
+  unsigned FPArgNo = (NumArgs == 2) ? 0 : NumArgs - 1;
+
+  // We can count on all parameters preceding the floating-point just being int.
+  // Try all of those.
+  for (unsigned i = 0; i < FPArgNo; ++i) {
     Expr *Arg = TheCall->getArg(i);
 
     if (Arg->isTypeDependent())
@@ -7703,7 +7846,7 @@ bool Sema::SemaBuiltinFPClassification(CallExpr *TheCall, unsigned NumArgs) {
     TheCall->setArg(i, Res.get());
   }
 
-  Expr *OrigArg = TheCall->getArg(NumArgs-1);
+  Expr *OrigArg = TheCall->getArg(FPArgNo);
 
   if (OrigArg->isTypeDependent())
     return false;
@@ -7715,13 +7858,19 @@ bool Sema::SemaBuiltinFPClassification(CallExpr *TheCall, unsigned NumArgs) {
     OrigArg = UsualUnaryConversions(OrigArg).get();
   else
     OrigArg = DefaultFunctionArrayLvalueConversion(OrigArg).get();
-  TheCall->setArg(NumArgs - 1, OrigArg);
+  TheCall->setArg(FPArgNo, OrigArg);
 
   // This operation requires a non-_Complex floating-point number.
   if (!OrigArg->getType()->isRealFloatingType())
     return Diag(OrigArg->getBeginLoc(),
                 diag::err_typecheck_call_invalid_unary_fp)
            << OrigArg->getType() << OrigArg->getSourceRange();
+
+  // __builtin_isfpclass has integer parameter that specify test mask. It is
+  // passed in (...), so it should be analyzed completely here.
+  if (NumArgs == 2)
+    if (SemaBuiltinConstantArgRange(TheCall, 1, 0, llvm::fcAllFlags))
+      return true;
 
   return false;
 }
@@ -10564,11 +10713,15 @@ CheckPrintfHandler::checkFormatExpr(const analyze_printf::PrintfSpecifier &FS,
       ImplicitMatch == ArgType::NoMatchTypeConfusion)
     Match = ImplicitMatch;
   assert(Match != ArgType::MatchPromotion);
-  // Look through enums to their underlying type.
+  // Look through unscoped enums to their underlying type.
   bool IsEnum = false;
   if (auto EnumTy = ExprTy->getAs<EnumType>()) {
-    ExprTy = EnumTy->getDecl()->getIntegerType();
-    IsEnum = true;
+    if (EnumTy->isUnscopedEnumerationType()) {
+      ExprTy = EnumTy->getDecl()->getIntegerType();
+      // This controls whether we're talking about the underlying type or not,
+      // which we only want to do when it's an unscoped enum.
+      IsEnum = true;
+    }
   }
 
   // %C in an Objective-C context prints a unichar, not a wchar_t.
@@ -16198,8 +16351,12 @@ std::optional<std::pair<
     if (auto *VD = dyn_cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl())) {
       // FIXME: If VD is captured by copy or is an escaping __block variable,
       // use the alignment of VD's type.
-      if (!VD->getType()->isReferenceType())
+      if (!VD->getType()->isReferenceType()) {
+        // Dependent alignment cannot be resolved -> bail out.
+        if (VD->hasDependentAlignment())
+          break;
         return std::make_pair(Ctx.getDeclAlign(VD), CharUnits::Zero());
+      }
       if (VD->hasInit())
         return getBaseAlignmentAndOffsetFromLValue(VD->getInit(), Ctx);
     }

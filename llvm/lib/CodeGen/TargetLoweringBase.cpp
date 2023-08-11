@@ -2006,7 +2006,8 @@ void TargetLoweringBase::insertSSPDeclarations(Module &M) const {
     // FreeBSD has "__stack_chk_guard" defined externally on libc.so
     if (M.getDirectAccessExternalData() &&
         !TM.getTargetTriple().isWindowsGNUEnvironment() &&
-        !TM.getTargetTriple().isOSFreeBSD())
+        !TM.getTargetTriple().isOSFreeBSD() &&
+        !TM.getTargetTriple().isOSDarwin())
       GV->setDSOLocal(true);
   }
 }

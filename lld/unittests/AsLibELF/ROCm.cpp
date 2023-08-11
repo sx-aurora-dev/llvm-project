@@ -26,10 +26,15 @@
 #include <algorithm>
 
 static std::string expand(const char *path) {
-  llvm::StringRef thisFile = llvm::sys::path::parent_path(__FILE__);
-  std::string expanded = path;
-  if (llvm::StringRef(path).contains("%"))
-    expanded.replace(expanded.find("%S"), 2, thisFile.data(), thisFile.size());
+  if (!llvm::StringRef(path).contains("%"))
+    return std::string(path);
+
+  llvm::SmallString<256> thisPath;
+  thisPath.append(getenv("LLD_SRC_DIR"));
+  llvm::sys::path::append(thisPath, "unittests", "AsLibELF");
+
+  std::string expanded(path);
+  expanded.replace(expanded.find("%S"), 2, thisPath.data(), thisPath.size());
   return expanded;
 }
 

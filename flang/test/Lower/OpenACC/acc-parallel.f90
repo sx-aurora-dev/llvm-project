@@ -118,6 +118,13 @@ subroutine acc_parallel
 !CHECK:        acc.yield
 !CHECK-NEXT: }{{$}}
 
+  !$acc parallel num_gangs(1, 1, 1)
+  !$acc end parallel
+
+!CHECK:      acc.parallel num_gangs(%{{.*}}, %{{.*}}, %{{.*}} : i32, i32, i32) {
+!CHECK:        acc.yield
+!CHECK-NEXT: }{{$}}
+
   !$acc parallel num_workers(10)
   !$acc end parallel
 
@@ -308,7 +315,10 @@ subroutine acc_parallel
 !$acc parallel private(a) firstprivate(b) private(c)
 !$acc end parallel
 
-! CHECK:      acc.parallel firstprivate(@firstprivatization_ref_10x10xf32 -> %[[B]] : !fir.ref<!fir.array<10x10xf32>>) private(@privatization_ref_10x10xf32 -> %[[A]] : !fir.ref<!fir.array<10x10xf32>>, @privatization_ref_10x10xf32 -> %[[C]] : !fir.ref<!fir.array<10x10xf32>>) {
+! CHECK:      %[[ACC_PRIVATE_A:.*]] = acc.private varPtr(%[[A]] : !fir.ref<!fir.array<10x10xf32>>) bounds(%{{.*}}, %{{.*}}) -> !fir.ref<!fir.array<10x10xf32>> {name = "a"}
+! CHECK:      %[[ACC_FPRIVATE_B:.*]] = acc.firstprivate varPtr(%[[B]] : !fir.ref<!fir.array<10x10xf32>>) bounds(%{{.*}}, %{{.*}}) -> !fir.ref<!fir.array<10x10xf32>> {name = "b"}
+! CHECK:      %[[ACC_PRIVATE_C:.*]] = acc.private varPtr(%[[C]] : !fir.ref<!fir.array<10x10xf32>>) bounds(%{{.*}}, %{{.*}}) -> !fir.ref<!fir.array<10x10xf32>> {name = "c"}
+! CHECK:      acc.parallel firstprivate(@firstprivatization_ref_10x10xf32 -> %[[ACC_FPRIVATE_B]] : !fir.ref<!fir.array<10x10xf32>>) private(@privatization_ref_10x10xf32 -> %[[ACC_PRIVATE_A]] : !fir.ref<!fir.array<10x10xf32>>, @privatization_ref_10x10xf32 -> %[[ACC_PRIVATE_C]] : !fir.ref<!fir.array<10x10xf32>>) {
 ! CHECK:        acc.yield
 ! CHECK-NEXT: }{{$}}
 

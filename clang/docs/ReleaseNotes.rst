@@ -132,6 +132,7 @@ C++23 Feature Support
 C++2c Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
 - Compiler flags ``-std=c++2c`` and ``-std=gnu++2c`` have been added for experimental C++2c implementation work.
+- Implemented `P2738R1: constexpr cast from void* <https://wg21.link/P2738R1>`_.
 
 Resolutions to C++ Defect Reports
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -226,6 +227,17 @@ Non-comprehensive list of changes in this release
   This fixes (`#58951 <https://github.com/llvm/llvm-project/issues/58951>`_).
 - Clang now supports the `NO_COLOR <https://no-color.org/>`_ environment
   variable as a way to disable color diagnostics.
+- Clang now supports ``__builtin_isfpclass``, which checks if the specified
+  floating-point value falls into any of the specified data classes.
+- Added ``__builtin_elementwise_round`` for  builtin for floating
+  point types. This allows access to ``llvm.round`` for
+  arbitrary floating-point and vector of floating-point types.
+- Added ``__builtin_elementwise_rint`` for floating point types. This
+  allows access to ``llvm.rint`` for arbitrary floating-point and
+  vector of floating-point types.
+- Added ``__builtin_elementwise_nearbyint`` for floating point
+  types. This allows access to ``llvm.nearbyint`` for arbitrary
+  floating-point and vector of floating-point types.
 
 New Compiler Flags
 ------------------
@@ -344,6 +356,25 @@ Improvements to Clang's diagnostics
   (`#42992: <https://github.com/llvm/llvm-project/issues/42992>`_)
 - Clang now diagnoses unused const-qualified variable template as
   "unused variable template" rather than "unused variable".
+- When diagnosing a constant expression where an enum without a fixed underlying
+  type is set to a value outside the range of the enum's values, clang will now
+  print the name of the enum in question.
+- Clang no longer diagnoses a read of an empty structure as use of an
+  uninitialized variable.
+  (`#26842: <https://github.com/llvm/llvm-project/issues/26842>`_)
+- The Fix-It emitted for unused labels used to expand to the next line, which caused
+  visual oddities now that Clang shows more than one line of code snippet. This has
+  been fixed and the Fix-It now only spans to the end of the ``:``.
+- Clang now underlines the parameter list of function declaration when emitting
+  a note about the mismatch in the number of arguments.
+- Clang now diagnoses unexpected tokens after a
+  ``#pragma clang|GCC diagnostic push|pop`` directive.
+  (`#13920: <https://github.com/llvm/llvm-project/issues/13920>`_)
+- Clang now does not try to analyze cast validity on variables with dependent alignment (`#63007: <https://github.com/llvm/llvm-project/issues/63007>`_).
+- Clang constexpr evaluator now displays member function calls more precisely
+  by making use of the syntactical structure of function calls. This avoids display
+  of syntactically invalid codes in diagnostics.
+  (`#57081: <https://github.com/llvm/llvm-project/issues/57081>`_)
 
 Bug Fixes in This Version
 -------------------------
@@ -449,7 +480,7 @@ Bug Fixes in This Version
 - Fix crash when redefining a variable with an invalid type again with an
   invalid type. (`#62447 <https://github.com/llvm/llvm-project/issues/62447>`_)
 - Fix a stack overflow issue when evaluating ``consteval`` default arguments.
-  (`#60082` <https://github.com/llvm/llvm-project/issues/60082>`_)
+  (`#60082 <https://github.com/llvm/llvm-project/issues/60082>`_)
 - Fix the assertion hit when generating code for global variable initializer of
   _BitInt(1) type.
   (`#62207 <https://github.com/llvm/llvm-project/issues/62207>`_)
@@ -501,7 +532,23 @@ Bug Fixes in This Version
   (`#50534 <https://github.com/llvm/llvm-project/issues/50534>`_).
 - CallExpr built for C error-recovery now is always type-dependent. Fixes a
   crash when we encounter a unresolved TypoExpr during diagnostic emission.
-  (`#50244 <https://github.com/llvm/llvm-project/issues/50244>_`).
+  (`#50244 <https://github.com/llvm/llvm-project/issues/50244>`_).
+- Apply ``-fmacro-prefix-map`` to anonymous tags in template arguments
+  (`#63219 <https://github.com/llvm/llvm-project/issues/63219>`_).
+- Clang now properly diagnoses format string mismatches involving scoped
+  enumeration types. A scoped enumeration type is not promoted to an integer
+  type by the default argument promotions, and thus this is UB. Clang's
+  behavior now matches GCC's behavior in C++.
+  (`#38717 <https://github.com/llvm/llvm-project/issues/38717>`_).
+- Fixed a failing assertion when implicitly defining a function within a GNU
+  statement expression that appears outside of a function block scope. The
+  assertion was benign outside of asserts builds and would only fire in C.
+  (`#48579 <https://github.com/llvm/llvm-project/issues/48579>`_).
+- Fixed a failing assertion when applying an attribute to an anonymous union.
+  The assertion was benign outside of asserts builds and would only fire in C++.
+  (`#48512 <https://github.com/llvm/llvm-project/issues/48512>`_).
+- Fixed a failing assertion when parsing incomplete destructor.
+  (`#63503 <https://github.com/llvm/llvm-project/issues/63503>`_)
 
 Bug Fixes to Compiler Builtins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -644,6 +691,8 @@ LoongArch Support
 
 - Patchable function entry (``-fpatchable-function-entry``) is now supported
   on LoongArch.
+- Unaligned memory accesses can be toggled by ``-m[no-]unaligned-access`` or the
+  aliases ``-m[no-]strict-align``.
 
 RISC-V Support
 ^^^^^^^^^^^^^^
@@ -659,6 +708,9 @@ RISC-V Support
 - Added ``attribute(riscv_rvv_vector_bits(__riscv_v_fixed_vlen))`` to allow
   the size of a RVV (RISC-V Vector) scalable type to be specified. This allows
   RVV scalable vector types to be used in structs or in global variables.
+- The rules for ordering of extensions in ``-march`` strings were relaxed. A
+  canonical ordering is no longer enforced on ``z*``, ``s*``, and ``x*``
+  prefixed extensions.
 
 CUDA/HIP Language Changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -683,6 +735,12 @@ AIX Support
 
 WebAssembly Support
 ^^^^^^^^^^^^^^^^^^^
+- Shared library support (and PIC code generation) for WebAssembly is no longer
+  limited to the Emscripten target OS and now works with other targets such as
+  wasm32-wasi.  Note that the `format
+  <https://github.com/WebAssembly/tool-conventions/blob/main/DynamicLinking.md>`_
+  is not yet stable and may change between LLVM versions.  Also, WASI does not
+  yet have facilities to load dynamic libraries.
 
 AVR Support
 ^^^^^^^^^^^

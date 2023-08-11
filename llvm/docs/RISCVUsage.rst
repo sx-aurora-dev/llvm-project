@@ -40,6 +40,8 @@ The current known variances from the specification are:
   users migrate build systems so as not to rely on this.
 * Allowing CSRs to be named without gating on specific extensions.  This
   applies to all CSR names, not just those in zicsr, zicntr, and zihpm.
+* The ordering of ``z*``, ``s*``, and ``x*`` prefixed extension names is not
+  enforced in user-specified ISA naming strings (e.g. ``-march``).
 
 We are actively deciding not to support multiple specification revisions
 at this time. We acknowledge a likely future need, but actively defer the
@@ -100,6 +102,12 @@ on support follow.
      ``Zbkc``         Supported
      ``Zbkx``         Supported (`See note <#riscv-scalar-crypto-note1>`__)
      ``Zbs``          Supported
+     ``Zca``          Supported
+     ``Zcb``          Supported
+     ``Zcd``          Supported
+     ``Zcf``          Supported
+     ``Zcmp``         Assembly Support
+     ``Zcmt``         Assembly Support
      ``Zdinx``        Supported
      ``Zfh``          Supported
      ``Zfhmin``       Supported
@@ -183,29 +191,11 @@ The primary goal of experimental support is to assist in the process of ratifica
 ``experimental-ssaia``
   LLVM implements the `Ratification candidate 3 <https://github.com/riscv/riscv-aia/releases/tag/1.0-RC3>`_.
 
-``experimental-zca``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`__.
-
-``experimental-zcb``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`__.
-
-``experimental-zcd``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`__.
-
-``experimental-zcf``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`__.
-
-``experimental-zcmp``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`__.
-
-``experimental-zcmt``
-  LLVM implements the `1.0.1 draft specification <https://github.com/riscv/riscv-code-size-reduction/releases/tag/v1.0.1>`_.
-
 ``experimental-zfa``
   LLVM implements the `0.2 draft specification <https://github.com/riscv/riscv-isa-manual/releases/download/draft-20230131-c0b298a/zfa-20230414.pdf>`__.
 
-``experimental-zfbfmin``
-  LLVM implements assembler support for the `0.6 draft specification <https://github.com/riscv/riscv-bfloat16/releases/tag/main>`_.
+``experimental-zfbfmin``, ``experimental-zvfbfmin``, ``experimental-zvfbfwma``
+  LLVM implements assembler support for the `0.6.9 draft specification <https://github.com/riscv/riscv-bfloat16/releases/tag/20230614>`_.
 
 ``experimental-zicond``
   LLVM implements the `1.0-rc1 draft specification <https://github.com/riscv/riscv-zicond/releases/tag/v1.0-rc1>`__.
@@ -279,3 +269,12 @@ The current vendor extensions supported are:
 
 ``XSfvcp``
   LLVM implements `version 1.0.0 of the SiFive Vector Coprocessor Interface (VCIX) Software Specification <https://sifive.cdn.prismic.io/sifive/c3829e36-8552-41f0-a841-79945784241b_vcix-spec-software.pdf>`_ by SiFive.  All instructions are prefixed with `sf.vc.` as described in the specification, and the riscv-toolchain-convention document linked above.
+
+``XCVbitmanip``
+  LLVM implements `version 1.3.1 of the Core-V bit manipulation custom instructions specification <https://github.com/openhwgroup/cv32e40p/blob/62bec66b36182215e18c9cf10f723567e23878e9/docs/source/instruction_set_extensions.rst>`_ by Core-V.  All instructions are prefixed with `cv.` as described in the specification.
+
+``XCVmac``
+  LLVM implements `version 1.3.1 of the Core-V Multiply-Accumulate (MAC) custom instructions specification <https://github.com/openhwgroup/cv32e40p/blob/4f024fe4b15a68b76615b0630c07a6745c620da7/docs/source/instruction_set_extensions.rst>`_ by Core-V.  All instructions are prefixed with `cv.mac.` as described in the specification. These instructions are only available for riscv32 at this time.
+
+``XSfcie``
+  LLVM implements `version 1.0.0 of the SiFive Custom Instruction Extension (CIE) Software Specification <https://sifive.cdn.prismic.io/sifive/767804da-53b2-4893-97d5-b7c030ae0a94_s76mc_core_complex_manual_21G3.pdf>`_ by SiFive.  All custom instruction are added as described in the specification, and the riscv-toolchain-convention document linked above. These instructions are only available for S76 processor at this time.

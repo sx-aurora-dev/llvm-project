@@ -53,8 +53,6 @@ ModulePass *createAMDGPURemoveIncompatibleFunctionsPass(const TargetMachine *);
 FunctionPass *createAMDGPUCodeGenPreparePass();
 FunctionPass *createAMDGPULateCodeGenPreparePass();
 FunctionPass *createAMDGPUMachineCFGStructurizerPass();
-FunctionPass *createAMDGPUPropagateAttributesEarlyPass(const TargetMachine *);
-ModulePass *createAMDGPUPropagateAttributesLatePass(const TargetMachine *);
 FunctionPass *createAMDGPURewriteOutArgumentsPass();
 ModulePass *createAMDGPULowerModuleLDSPass();
 FunctionPass *createSIModeRegisterPass();
@@ -85,7 +83,9 @@ void initializeAMDGPUAttributorPass(PassRegistry &);
 void initializeAMDGPUAnnotateKernelFeaturesPass(PassRegistry &);
 extern char &AMDGPUAnnotateKernelFeaturesID;
 
-enum class ScanOptions : bool { DPP, Iterative };
+// DPP/Iterative option enables the atomic optimizer with given strategy
+// whereas None disables the atomic optimizer.
+enum class ScanOptions { DPP, Iterative, None };
 FunctionPass *createAMDGPUAtomicOptimizerPass(ScanOptions ScanStrategy);
 void initializeAMDGPUAtomicOptimizerPass(PassRegistry &);
 extern char &AMDGPUAtomicOptimizerID;
@@ -114,30 +114,6 @@ extern char &AMDGPULowerKernelAttributesID;
 struct AMDGPULowerKernelAttributesPass
     : PassInfoMixin<AMDGPULowerKernelAttributesPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
-
-void initializeAMDGPUPropagateAttributesEarlyPass(PassRegistry &);
-extern char &AMDGPUPropagateAttributesEarlyID;
-
-struct AMDGPUPropagateAttributesEarlyPass
-    : PassInfoMixin<AMDGPUPropagateAttributesEarlyPass> {
-  AMDGPUPropagateAttributesEarlyPass(TargetMachine &TM) : TM(TM) {}
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-private:
-  TargetMachine &TM;
-};
-
-void initializeAMDGPUPropagateAttributesLatePass(PassRegistry &);
-extern char &AMDGPUPropagateAttributesLateID;
-
-struct AMDGPUPropagateAttributesLatePass
-    : PassInfoMixin<AMDGPUPropagateAttributesLatePass> {
-  AMDGPUPropagateAttributesLatePass(TargetMachine &TM) : TM(TM) {}
-  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-
-private:
-  TargetMachine &TM;
 };
 
 void initializeAMDGPULowerModuleLDSPass(PassRegistry &);
@@ -315,9 +291,6 @@ extern char &SIMemoryLegalizerID;
 
 void initializeSIModeRegisterPass(PassRegistry&);
 extern char &SIModeRegisterID;
-
-void initializeAMDGPUReleaseVGPRsPass(PassRegistry &);
-extern char &AMDGPUReleaseVGPRsID;
 
 void initializeAMDGPUInsertDelayAluPass(PassRegistry &);
 extern char &AMDGPUInsertDelayAluID;

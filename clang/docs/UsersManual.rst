@@ -2400,6 +2400,14 @@ usual build cycle when using sample profilers for optimization:
    without the ``-b`` flag, you need to use ``--use_lbr=false`` when
    calling ``create_llvm_prof``.
 
+   Alternatively, the LLVM tool ``llvm-profgen`` can also be used to generate
+   the LLVM sample profile:
+
+   .. code-block:: console
+
+     $ llvm-profgen --binary=./code --output=code.prof--perfdata=perf.data
+
+
 4. Build the code again using the collected profile. This step feeds
    the profile back to the optimizers. This should result in a binary
    that executes faster than the original one. Note that you are not
@@ -3871,7 +3879,7 @@ codebases.
 
 On ``x86_64-mingw32``, passing i128(by value) is incompatible with the
 Microsoft x64 calling convention. You might need to tweak
-``WinX86_64ABIInfo::classify()`` in lib/CodeGen/TargetInfo.cpp.
+``WinX86_64ABIInfo::classify()`` in lib/CodeGen/Targets/X86.cpp.
 
 For the X86 target, clang supports the `-m16` command line
 argument which enables 16-bit code output. This is broadly similar to

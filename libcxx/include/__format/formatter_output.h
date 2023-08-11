@@ -28,7 +28,7 @@
 #include <__format/unicode.h>
 #include <__iterator/back_insert_iterator.h>
 #include <__iterator/concepts.h>
-#include <__iterator/readable_traits.h> // iter_value_t
+#include <__iterator/iterator_traits.h> // iter_value_t
 #include <__system_error/errc.h>
 #include <__type_traits/make_unsigned.h>
 #include <__utility/move.h>
@@ -65,7 +65,7 @@ _LIBCPP_HIDE_FROM_ABI constexpr char __hex_to_upper(char __c) {
   return __c;
 }
 
-struct _LIBCPP_TYPE_VIS __padding_size_result {
+struct _LIBCPP_EXPORTED_FROM_ABI __padding_size_result {
   size_t __before_;
   size_t __after_;
 };

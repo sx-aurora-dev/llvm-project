@@ -91,6 +91,7 @@ set(files
   __algorithm/pstl_for_each.h
   __algorithm/pstl_frontend_dispatch.h
   __algorithm/pstl_generate.h
+  __algorithm/pstl_is_partitioned.h
   __algorithm/pstl_merge.h
   __algorithm/pstl_replace.h
   __algorithm/pstl_stable_sort.h
@@ -501,6 +502,7 @@ set(files
   __memory/temp_value.h
   __memory/temporary_buffer.h
   __memory/uninitialized_algorithms.h
+  __memory/uninitialized_buffer.h
   __memory/unique_ptr.h
   __memory/uses_allocator.h
   __memory/uses_allocator_construction.h
@@ -607,7 +609,6 @@ set(files
   __ranges/common_view.h
   __ranges/concepts.h
   __ranges/container_compatible_range.h
-  __ranges/copyable_box.h
   __ranges/counted.h
   __ranges/dangling.h
   __ranges/data.h
@@ -624,6 +625,7 @@ set(files
   __ranges/istream_view.h
   __ranges/join_view.h
   __ranges/lazy_split_view.h
+  __ranges/movable_box.h
   __ranges/non_propagating_cache.h
   __ranges/owning_view.h
   __ranges/range_adaptor.h
@@ -671,7 +673,10 @@ set(files
   __system_error/error_code.h
   __system_error/error_condition.h
   __system_error/system_error.h
+  __thread/formatter.h
   __thread/poll_with_backoff.h
+  __thread/this_thread.h
+  __thread/thread.h
   __thread/timed_backoff_policy.h
   __threading_support
   __tree

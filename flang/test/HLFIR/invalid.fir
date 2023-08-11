@@ -369,6 +369,30 @@ func.func @bad_all6(%arg0: !hlfir.expr<?x!fir.logical<4>>) {
 }
 
 // -----
+func.func @bad_count1(%arg0: !hlfir.expr<?x?x!fir.logical<4>>, %arg1: i32) {
+  // expected-error@+1 {{'hlfir.count' op result must be an array}}
+  %0 = hlfir.count %arg0 dim %arg1 : (!hlfir.expr<?x?x!fir.logical<4>>, i32) -> !hlfir.expr<i32>
+}
+
+// -----
+func.func @bad_count2(%arg0: !hlfir.expr<?x?x!fir.logical<4>>, %arg1: i32){
+  // expected-error@+1 {{'hlfir.count' op result rank must be one less than MASK}}
+  %0 = hlfir.count %arg0 dim %arg1 : (!hlfir.expr<?x?x!fir.logical<4>>, i32) -> !hlfir.expr<?x?x!fir.logical<4>>
+}
+
+// -----
+func.func @bad_count3(%arg0: !hlfir.expr<?x!fir.logical<4>>, %arg1: i32) {
+  // expected-error@+1 {{'hlfir.count' op result must be of numerical scalar type}}
+  %0 = hlfir.count %arg0 dim %arg1 : (!hlfir.expr<?x!fir.logical<4>>, i32) -> !hlfir.expr<i32>
+}
+
+// -----
+func.func @bad_count4(%arg0: !hlfir.expr<?x!fir.logical<4>>, %arg1: i32) {
+  // expected-error@+1 {{'hlfir.count' op result must be of numerical scalar type}}
+  %0 = hlfir.count %arg0 dim %arg1 : (!hlfir.expr<?x!fir.logical<4>>, i32) -> !fir.logical<4>
+}
+
+// -----
 func.func @bad_product1(%arg0: !hlfir.expr<?xi32>, %arg1: i32, %arg2: !fir.box<!fir.logical<4>>) {
   // expected-error@+1 {{'hlfir.product' op result must have the same element type as ARRAY argument}}
   %0 = hlfir.product %arg0 dim %arg1 mask %arg2 : (!hlfir.expr<?xi32>, i32, !fir.box<!fir.logical<4>>) -> f32
@@ -617,6 +641,13 @@ func.func @bad_assign_1(%arg0: !fir.box<!fir.array<?xi32>>, %arg1: !fir.box<!fir
 func.func @bad_assign_2(%arg0: !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, %arg1: !fir.box<!fir.array<?xi32>>) {
   // expected-error@+1 {{'hlfir.assign' op `realloc` must be set and lhs must be a character allocatable when `keep_lhs_length_if_realloc` is set}}
   hlfir.assign %arg1 to %arg0 realloc keep_lhs_len : !fir.box<!fir.array<?xi32>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>
+  return
+}
+
+// -----
+func.func @bad_assign_3(%arg0: !fir.ref<!fir.box<!fir.heap<!fir.array<?x!fir.char<1,?>>>>>, %arg1: !fir.box<!fir.array<?x!fir.char<1,?>>>) {
+  // expected-error@+1 {{'hlfir.assign' op `keep_lhs_length_if_realloc` does not make sense for `temporary_lhs` assignments}}
+  hlfir.assign %arg1 to %arg0 realloc keep_lhs_len temporary_lhs : !fir.box<!fir.array<?x!fir.char<1,?>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?x!fir.char<1,?>>>>>
   return
 }
 

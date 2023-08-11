@@ -673,6 +673,10 @@ Expected<bool> parseSinglePassOption(StringRef Params, StringRef OptionName,
   return Result;
 }
 
+Expected<bool> parseGlobalDCEPassOptions(StringRef Params) {
+  return parseSinglePassOption(Params, "vfe-linkage-unit-visibility", "GlobalDCE");
+}
+
 Expected<bool> parseInlinerPassOptions(StringRef Params) {
   return parseSinglePassOption(Params, "only-mandatory", "InlinerPass");
 }
@@ -778,7 +782,11 @@ Expected<SimplifyCFGOptions> parseSimplifyCFGOptions(StringRef Params) {
     std::tie(ParamName, Params) = Params.split(';');
 
     bool Enable = !ParamName.consume_front("no-");
-    if (ParamName == "forward-switch-cond") {
+    if (ParamName == "speculate-blocks") {
+      Result.speculateBlocks(Enable);
+    } else if (ParamName == "simplify-cond-branch") {
+      Result.setSimplifyCondBranch(Enable);
+    } else if (ParamName == "forward-switch-cond") {
       Result.forwardSwitchCondToPhi(Enable);
     } else if (ParamName == "switch-range-to-icmp") {
       Result.convertSwitchRangeToICmp(Enable);
@@ -889,6 +897,26 @@ Expected<LICMOptions> parseLICMOptions(StringRef Params) {
     } else {
       return make_error<StringError>(
           formatv("invalid LICM pass parameter '{0}' ", ParamName).str(),
+          inconvertibleErrorCode());
+    }
+  }
+  return Result;
+}
+
+Expected<std::pair<bool, bool>> parseLoopRotateOptions(StringRef Params) {
+  std::pair<bool, bool> Result = {true, false};
+  while (!Params.empty()) {
+    StringRef ParamName;
+    std::tie(ParamName, Params) = Params.split(';');
+
+    bool Enable = !ParamName.consume_front("no-");
+    if (ParamName == "header-duplication") {
+      Result.first = Enable;
+    } else if (ParamName == "prepare-for-lto") {
+      Result.second = Enable;
+    } else {
+      return make_error<StringError>(
+          formatv("invalid LoopRotate pass parameter '{0}' ", ParamName).str(),
           inconvertibleErrorCode());
     }
   }

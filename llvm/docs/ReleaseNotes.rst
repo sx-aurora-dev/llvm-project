@@ -133,8 +133,18 @@ Changes to the AMDGPU Backend
   improves the interaction between AMDGPU buffer operations and the LLVM memory
   model, and so the non `.ptr` intrinsics are deprecated.
 
+* Removed ``llvm.amdgcn.atomic.inc`` and ``llvm.amdgcn.atomic.dec``
+  intrinsics. :ref:`atomicrmw <i_atomicrmw>` should be used instead
+  with ``uinc_wrap`` and ``udec_wrap``.
+
 * Added llvm.amdgcn.log.f32 intrinsic. This provides direct access to
   v_log_f32.
+
+* Added llvm.amdgcn.exp2.f32 intrinsic. This provides direct access to
+  v_exp_f32.
+
+* llvm.log2.f32 is now lowered accurately. Use llvm.amdgcn.log.f32 to
+  access the old behavior.
 
 Changes to the ARM Backend
 --------------------------
@@ -163,6 +173,8 @@ Changes to the LoongArch Backend
 --------------------------------
 
 * The ``lp64s`` ABI is supported now and has been tested on Rust bare-matal target.
+* A target feature ``ual`` is introduced to allow unaligned memory accesses and
+  this feature is enabled by default for generic 64-bit processors.
 
 Changes to the MIPS Backend
 ---------------------------
@@ -197,6 +209,8 @@ Changes to the RISC-V Backend
 * Added support for the vendor-defined XTHeadMemIdx (indexed memory operations)
   extension disassembler/assembler.
 * Added support for the vendor-defined Xsfvcp (SiFive VCIX) extension
+  disassembler/assembler.
+* Added support for the vendor-defined Xsfcie (SiFive CIE) extension
   disassembler/assembler.
 * Support for the now-ratified Zawrs extension is no longer experimental.
 * Adds support for the vendor-defined XTHeadCmo (cache management operations) extension.
@@ -238,6 +252,10 @@ Changes to the Windows Target
 
 Changes to the X86 Backend
 --------------------------
+
+* ``__builtin_unpredictable`` (unpredictable metadata in LLVM IR), is handled by X86 Backend.
+  ``X86CmovConversion`` pass now respects this builtin and does not convert CMOVs to branches.
+
 
 Changes to the OCaml bindings
 -----------------------------
@@ -325,6 +343,11 @@ Changes to LLDB
   this information). Fields are only printed when reading named registers, for
   example ``register read cpsr``. They are not shown when reading a register set,
   ``register read -s 0``.
+
+* A new command ``register info`` was added. This command will tell you everything that
+  LLDB knows about a register. Based on what LLDB already knows and what the debug
+  server tells it. Including but not limited to, the size, where it is read from and
+  the fields that the register contains.
 
 Changes to Sanitizers
 ---------------------

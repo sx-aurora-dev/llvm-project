@@ -547,6 +547,8 @@ def vecreduce_umin  : SDNode<"ISD::VECREDUCE_UMIN", SDTVecReduce>;
 def vecreduce_fadd  : SDNode<"ISD::VECREDUCE_FADD", SDTFPVecReduce>;
 def vecreduce_fmin  : SDNode<"ISD::VECREDUCE_FMIN", SDTFPVecReduce>;
 def vecreduce_fmax  : SDNode<"ISD::VECREDUCE_FMAX", SDTFPVecReduce>;
+def vecreduce_fminimum : SDNode<"ISD::VECREDUCE_FMINIMUM", SDTFPVecReduce>;
+def vecreduce_fmaximum : SDNode<"ISD::VECREDUCE_FMAXIMUM", SDTFPVecReduce>;
 
 def vp_reduce_add   : SDNode<"ISD::VP_REDUCE_ADD", SDTReduceVP>;
 def vp_reduce_smax  : SDNode<"ISD::VP_REDUCE_SMAX", SDTReduceVP>;

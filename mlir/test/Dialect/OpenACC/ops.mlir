@@ -136,7 +136,8 @@ func.func @compute3(%a: memref<10x10xf32>, %b: memref<10x10xf32>, %c: memref<10x
   %pc = acc.present varPtr(%c : memref<10xf32>) -> memref<10xf32>
   %pd = acc.present varPtr(%d : memref<10xf32>) -> memref<10xf32>
   acc.data dataOperands(%pa, %pb, %pc, %pd: memref<10x10xf32>, memref<10x10xf32>, memref<10xf32>, memref<10xf32>) {
-    acc.parallel num_gangs(%numGangs: i64) num_workers(%numWorkers: i64) private(@privatization_memref_10_f32 -> %c : memref<10xf32>) {
+    %private = acc.private varPtr(%c : memref<10xf32>) -> memref<10xf32>
+    acc.parallel num_gangs(%numGangs: i64) num_workers(%numWorkers: i64) private(@privatization_memref_10_f32 -> %private : memref<10xf32>) {
       acc.loop gang {
         scf.for %x = %lb to %c10 step %st {
           acc.loop worker {
@@ -178,7 +179,8 @@ func.func @compute3(%a: memref<10x10xf32>, %b: memref<10x10xf32>, %c: memref<10x
 // CHECK-NEXT:   [[NUMGANG:%.*]] = arith.constant 10 : i64
 // CHECK-NEXT:   [[NUMWORKERS:%.*]] = arith.constant 10 : i64
 // CHECK:        acc.data dataOperands(%{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} : memref<10x10xf32>, memref<10x10xf32>, memref<10xf32>, memref<10xf32>) {
-// CHECK-NEXT:     acc.parallel num_gangs([[NUMGANG]] : i64) num_workers([[NUMWORKERS]] : i64) private(@privatization_memref_10_f32 -> [[ARG2]] : memref<10xf32>) {
+// CHECK-NEXT:     %[[P_ARG2:.*]] = acc.private varPtr([[ARG2]] : memref<10xf32>) -> memref<10xf32> 
+// CHECK-NEXT:     acc.parallel num_gangs([[NUMGANG]] : i64) num_workers([[NUMWORKERS]] : i64) private(@privatization_memref_10_f32 -> %[[P_ARG2]] : memref<10xf32>) {
 // CHECK-NEXT:       acc.loop gang {
 // CHECK-NEXT:         scf.for %{{.*}} = [[C0]] to [[C10]] step [[C1]] {
 // CHECK-NEXT:           acc.loop worker {
@@ -441,6 +443,8 @@ func.func @testparallelop(%a: memref<10xf32>, %b: memref<10xf32>, %c: memref<10x
   }
   acc.parallel num_gangs(%idxValue: index) {
   }
+  acc.parallel num_gangs(%i64value, %i64value, %idxValue : i64, i64, index) {
+  }
   acc.parallel num_workers(%i64value: i64) {
   }
   acc.parallel num_workers(%i32value: i32) {
@@ -491,6 +495,8 @@ func.func @testparallelop(%a: memref<10xf32>, %b: memref<10xf32>, %c: memref<10x
 // CHECK:      acc.parallel num_gangs([[I32VALUE]] : i32) {
 // CHECK-NEXT: }
 // CHECK:      acc.parallel num_gangs([[IDXVALUE]] : index) {
+// CHECK-NEXT: }
+// CHECK:      acc.parallel num_gangs([[I64VALUE]], [[I64VALUE]], [[IDXVALUE]] : i64, i64, index) {
 // CHECK-NEXT: }
 // CHECK:      acc.parallel num_workers([[I64VALUE]] : i64) {
 // CHECK-NEXT: }
@@ -582,7 +588,8 @@ func.func @testserialop(%a: memref<10xf32>, %b: memref<10xf32>, %c: memref<10x10
   }
   acc.serial wait(%i64value, %i32value, %idxValue : i64, i32, index) {
   }
-  acc.serial private(@privatization_memref_10_f32 -> %a : memref<10xf32>, @privatization_memref_10_10_f32 -> %c : memref<10x10xf32>) firstprivate(@firstprivatization_memref_10xf32 -> %b: memref<10xf32>) {
+  %firstprivate = acc.firstprivate varPtr(%b : memref<10xf32>) -> memref<10xf32>
+  acc.serial private(@privatization_memref_10_f32 -> %a : memref<10xf32>, @privatization_memref_10_10_f32 -> %c : memref<10x10xf32>) firstprivate(@firstprivatization_memref_10xf32 -> %firstprivate : memref<10xf32>) {
   }
   acc.serial {
   } attributes {defaultAttr = #acc<defaultvalue none>}
@@ -618,7 +625,8 @@ func.func @testserialop(%a: memref<10xf32>, %b: memref<10xf32>, %c: memref<10x10
 // CHECK-NEXT: }
 // CHECK:      acc.serial wait([[I64VALUE]], [[I32VALUE]], [[IDXVALUE]] : i64, i32, index) {
 // CHECK-NEXT: }
-// CHECK:      acc.serial firstprivate(@firstprivatization_memref_10xf32 -> [[ARGB]] : memref<10xf32>) private(@privatization_memref_10_f32 -> [[ARGA]] : memref<10xf32>, @privatization_memref_10_10_f32 -> [[ARGC]] : memref<10x10xf32>) {
+// CHECK:      %[[FIRSTP:.*]] = acc.firstprivate varPtr([[ARGB]] : memref<10xf32>) -> memref<10xf32>
+// CHECK:      acc.serial firstprivate(@firstprivatization_memref_10xf32 -> %[[FIRSTP]] : memref<10xf32>) private(@privatization_memref_10_f32 -> [[ARGA]] : memref<10xf32>, @privatization_memref_10_10_f32 -> [[ARGC]] : memref<10x10xf32>) {
 // CHECK-NEXT: }
 // CHECK:      acc.serial {
 // CHECK-NEXT: } attributes {defaultAttr = #acc<defaultvalue none>}

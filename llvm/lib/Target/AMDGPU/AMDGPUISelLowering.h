@@ -60,6 +60,7 @@ protected:
   SDValue LowerFROUNDEVEN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFROUND(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFFLOOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFLOG2(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFLOG(SDValue Op, SelectionDAG &DAG,
                     double Log2BaseInverted) const;
   SDValue lowerFEXP(SDValue Op, SelectionDAG &DAG) const;
@@ -447,6 +448,9 @@ enum NodeType : unsigned {
 
   // log2, no denormal handling for f32.
   LOG,
+
+  // exp2, no denormal handling for f32.
+  EXP,
 
   FMUL_LEGACY,
   RSQ_CLAMP,

@@ -13429,6 +13429,7 @@ public:
                                          ArrayRef<IdentifierLocPair> Protocols);
   void CodeCompleteObjCProtocolDecl(Scope *S);
   void CodeCompleteObjCInterfaceDecl(Scope *S);
+  void CodeCompleteObjCClassForwardDecl(Scope *S);
   void CodeCompleteObjCSuperclass(Scope *S,
                                   IdentifierInfo *ClassName,
                                   SourceLocation ClassNameLoc);
@@ -13571,6 +13572,7 @@ private:
   bool CheckRISCVLMUL(CallExpr *TheCall, unsigned ArgNum);
   bool CheckRISCVBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                                      CallExpr *TheCall);
+  void checkRVVTypeSupport(QualType Ty, SourceLocation Loc, ValueDecl *D);
   bool CheckLoongArchBuiltinFunctionCall(const TargetInfo &TI,
                                          unsigned BuiltinID, CallExpr *TheCall);
   bool CheckWebAssemblyBuiltinFunctionCall(const TargetInfo &TI,

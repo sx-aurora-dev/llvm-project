@@ -16,7 +16,7 @@
 #include <__config>
 #include <__format/extended_grapheme_cluster_table.h>
 #include <__iterator/concepts.h>
-#include <__iterator/readable_traits.h> // iter_value_t
+#include <__iterator/iterator_traits.h> // iter_value_t
 #include <__type_traits/make_unsigned.h>
 #include <__utility/unreachable.h>
 #include <string_view>
@@ -105,7 +105,7 @@ template <contiguous_iterator _Iterator>
   requires same_as<iter_value_t<_Iterator>, char>
 _LIBCPP_HIDE_FROM_ABI constexpr bool __is_continuation(_Iterator __char, int __count) {
   do {
-    if ((*__char & 0b1000'0000) != 0b1000'0000)
+    if ((*__char & 0b1100'0000) != 0b1000'0000)
       return false;
     --__count;
     ++__char;

@@ -27,6 +27,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/RegionGraphTraits.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Target/LLVMIR/LLVMTranslationInterface.h"
 #include "mlir/Target/LLVMIR/TypeToLLVM.h"
 
@@ -359,6 +360,12 @@ llvm::Constant *mlir::LLVM::detail::getLLVMConstant(
         llvmType,
         intAttr.getValue().sextOrTrunc(llvmType->getIntegerBitWidth()));
   if (auto floatAttr = dyn_cast<FloatAttr>(attr)) {
+    const llvm::fltSemantics &sem = floatAttr.getValue().getSemantics();
+    // Special case for 8-bit floats, which are represented by integers due to
+    // the lack of native fp8 types in LLVM at the moment.
+    if (APFloat::getSizeInBits(sem) == 8 && llvmType->isIntegerTy(8))
+      return llvm::ConstantInt::get(llvmType,
+                                    floatAttr.getValue().bitcastToAPInt());
     if (llvmType !=
         llvm::Type::getFloatingPointTy(llvmType->getContext(),
                                        floatAttr.getValue().getSemantics())) {
@@ -724,6 +731,12 @@ LogicalResult ModuleTranslation::convertGlobals() {
                              : llvm::GlobalValue::NotThreadLocal,
         addrSpace);
 
+    if (std::optional<mlir::SymbolRefAttr> comdat = op.getComdat()) {
+      auto selectorOp = cast<ComdatSelectorOp>(
+          SymbolTable::lookupNearestSymbolFrom(op, *comdat));
+      var->setComdat(comdatMapping.lookup(selectorOp));
+    }
+
     if (op.getUnnamedAddr().has_value())
       var->setUnnamedAddr(convertUnnamedAddrToLLVM(*op.getUnnamedAddr()));
 
@@ -1018,6 +1031,13 @@ LogicalResult ModuleTranslation::convertFunctionSignatures() {
 
     // Convert visibility attribute.
     llvmFunc->setVisibility(convertVisibilityToLLVM(function.getVisibility_()));
+
+    // Convert the comdat attribute.
+    if (std::optional<mlir::SymbolRefAttr> comdat = function.getComdat()) {
+      auto selectorOp = cast<ComdatSelectorOp>(
+          SymbolTable::lookupNearestSymbolFrom(function, *comdat));
+      llvmFunc->setComdat(comdatMapping.lookup(selectorOp));
+    }
   }
 
   return success();
@@ -1034,6 +1054,22 @@ LogicalResult ModuleTranslation::convertFunctions() {
       return failure();
   }
 
+  return success();
+}
+
+LogicalResult ModuleTranslation::convertComdats() {
+  for (auto comdatOp : getModuleBody(mlirModule).getOps<ComdatOp>()) {
+    for (auto selectorOp : comdatOp.getOps<ComdatSelectorOp>()) {
+      llvm::Module *module = getLLVMModule();
+      if (module->getComdatSymbolTable().contains(selectorOp.getSymName()))
+        return emitError(selectorOp.getLoc())
+               << "comdat selection symbols must be unique even in different "
+                  "comdat regions";
+      llvm::Comdat *comdat = module->getOrInsertComdat(selectorOp.getSymName());
+      comdat->setSelectionKind(convertComdatToLLVM(selectorOp.getComdat()));
+      comdatMapping.try_emplace(selectorOp, comdat);
+    }
+  }
   return success();
 }
 
@@ -1370,6 +1406,8 @@ mlir::translateModuleToLLVMIR(Operation *module, llvm::LLVMContext &llvmContext,
   LLVM::ensureDistinctSuccessors(module);
 
   ModuleTranslation translator(module, std::move(llvmModule));
+  if (failed(translator.convertComdats()))
+    return nullptr;
   if (failed(translator.convertFunctionSignatures()))
     return nullptr;
   if (failed(translator.convertGlobals()))
@@ -1387,7 +1425,7 @@ mlir::translateModuleToLLVMIR(Operation *module, llvm::LLVMContext &llvmContext,
   llvm::IRBuilder<> llvmBuilder(llvmContext);
   for (Operation &o : getModuleBody(module).getOperations()) {
     if (!isa<LLVM::LLVMFuncOp, LLVM::GlobalOp, LLVM::GlobalCtorsOp,
-             LLVM::GlobalDtorsOp, LLVM::MetadataOp>(&o) &&
+             LLVM::GlobalDtorsOp, LLVM::MetadataOp, LLVM::ComdatOp>(&o) &&
         !o.hasTrait<OpTrait::IsTerminator>() &&
         failed(translator.convertOperation(o, llvmBuilder))) {
       return nullptr;

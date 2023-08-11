@@ -3431,6 +3431,8 @@ floating-point transformations.
    to form arbitrary contractions. For example, ``(a*b) + (c*d) + e`` can not
    be transformed into ``(a*b) + ((c*d) + e)`` to create two fma operations.
 
+.. _fastmath_afn:
+
 ``afn``
    Approximate functions - Allow substitution of approximate calculations for
    functions (sin, log, sqrt, etc). See floating-point intrinsic definitions
@@ -7436,9 +7438,9 @@ functions was called.
 '``annotation``' Metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``annotation`` metadata can be used to attach a tuple of annotation strings 
-or a tuple of a tuple of annotation strings to any instruction. This metadata does 
-not impact the semantics of the program and may only be used to provide additional 
+The ``annotation`` metadata can be used to attach a tuple of annotation strings
+or a tuple of a tuple of annotation strings to any instruction. This metadata does
+not impact the semantics of the program and may only be used to provide additional
 insight about the program and transformations to users.
 
 Example:
@@ -9623,7 +9625,7 @@ Overview:
 """""""""
 
 The '``frem``' instruction returns the remainder from the division of
-its two operands. 
+its two operands.
 
 .. note::
 
@@ -14829,6 +14831,9 @@ trapping or setting ``errno``.
 
 When specified with the fast-math-flag 'afn', the result may be approximated
 using a less accurate calculation.
+
+
+.. _int_log2:
 
 '``llvm.log2.*``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

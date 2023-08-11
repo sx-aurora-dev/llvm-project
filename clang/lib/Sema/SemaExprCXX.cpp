@@ -43,6 +43,7 @@
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TypeSize.h"
 #include <optional>
@@ -3157,7 +3158,8 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
     // Global allocation functions should always be visible.
     Alloc->setVisibleDespiteOwningModule();
 
-    if (HasBadAllocExceptionSpec && getLangOpts().NewInfallible)
+    if (HasBadAllocExceptionSpec && getLangOpts().NewInfallible &&
+        !getLangOpts().CheckNew)
       Alloc->addAttr(
           ReturnsNonNullAttr::CreateImplicit(Context, Alloc->getLocation()));
 

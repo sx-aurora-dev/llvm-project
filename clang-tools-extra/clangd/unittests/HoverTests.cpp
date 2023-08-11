@@ -22,6 +22,7 @@
 
 #include "gtest/gtest.h"
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -2926,6 +2927,41 @@ TEST(Hover, All) {
          HI.Definition = "__attribute__((nonnull))";
          HI.Documentation = Attr::getDocumentation(attr::NonNull).str();
        }},
+      {
+          R"cpp(
+          namespace std {
+          struct strong_ordering {
+            int n;
+            constexpr operator int() const { return n; }
+            static const strong_ordering equal, greater, less;
+          };
+          constexpr strong_ordering strong_ordering::equal = {0};
+          constexpr strong_ordering strong_ordering::greater = {1};
+          constexpr strong_ordering strong_ordering::less = {-1};
+          }
+
+          struct Foo
+          {
+            int x;
+            // Foo spaceship
+            auto operator<=>(const Foo&) const = default;
+          };
+
+          bool x = Foo(1) [[!^=]] Foo(2);
+         )cpp",
+          [](HoverInfo &HI) {
+            HI.Type = "bool (const Foo &) const noexcept";
+            HI.Value = "true";
+            HI.Name = "operator==";
+            HI.Parameters = {{{"const Foo &"}, std::nullopt, std::nullopt}};
+            HI.ReturnType = "bool";
+            HI.Kind = index::SymbolKind::InstanceMethod;
+            HI.LocalScope = "Foo::";
+            HI.NamespaceScope = "";
+            HI.Definition =
+                "bool operator==(const Foo &) const noexcept = default";
+            HI.Documentation = "Foo spaceship";
+          }},
   };
 
   // Create a tiny index, so tests above can verify documentation is fetched.
@@ -2941,7 +2977,7 @@ TEST(Hover, All) {
 
     Annotations T(Case.Code);
     TestTU TU = TestTU::withCode(T.code());
-    TU.ExtraArgs.push_back("-std=c++17");
+    TU.ExtraArgs.push_back("-std=c++20");
     TU.ExtraArgs.push_back("-xobjective-c++");
 
     TU.ExtraArgs.push_back("-Wno-gnu-designator");
@@ -3722,6 +3758,34 @@ TEST(Hover, ForwardStructNoCrash) {
   EXPECT_EQ(*HI->Value, "&bar");
 }
 
+TEST(Hover, FunctionParameterDefaulValueNotEvaluatedOnInvalidDecls) {
+  struct {
+    const char *const Code;
+    const std::optional<std::string> HoverValue;
+  } Cases[] = {
+      {R"cpp(
+        // error-ok testing behavior on invalid decl
+        class Foo {};
+        void foo(Foo p^aram = nullptr);
+        )cpp",
+       std::nullopt},
+      {R"cpp(
+        class Foo {};
+        void foo(Foo *p^aram = nullptr);
+        )cpp",
+       "nullptr"},
+  };
+
+  for (const auto &C : Cases) {
+    Annotations T(C.Code);
+    TestTU TU = TestTU::withCode(T.code());
+    auto AST = TU.build();
+    auto HI = getHover(AST, T.point(), format::getLLVMStyle(), nullptr);
+    ASSERT_TRUE(HI);
+    ASSERT_EQ(HI->Value, C.HoverValue);
+  }
+}
+
 TEST(Hover, DisableShowAKA) {
   Annotations T(R"cpp(
     using m_int = int;
@@ -4047,7 +4111,6 @@ constexpr u64 pow_with_mod(u64 a, u64 b, u64 p) {
   EXPECT_TRUE(H->Value);
   EXPECT_TRUE(H->Type);
 }
-
 } // namespace
 } // namespace clangd
 } // namespace clang

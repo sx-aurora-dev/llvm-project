@@ -911,6 +911,7 @@ module std [system] {
         private header "__filesystem/path.h"
         export functional.__functional.hash
         export functional.__functional.unary_function
+        export string
       }
       module path_iterator                { private header "__filesystem/path_iterator.h" }
       module perm_options                 { private header "__filesystem/perm_options.h" }
@@ -1211,6 +1212,7 @@ module std [system] {
       module temp_value                      { private header "__memory/temp_value.h" }
       module temporary_buffer                { private header "__memory/temporary_buffer.h" }
       module uninitialized_algorithms        { private header "__memory/uninitialized_algorithms.h" }
+      module uninitialized_buffer            { private header "__memory/uninitialized_buffer.h" }
       module unique_ptr                      { private header "__memory/unique_ptr.h" }
       module uses_allocator                  { private header "__memory/uses_allocator.h" }
       module uses_allocator_construction     { private header "__memory/uses_allocator_construction.h" }
@@ -1358,7 +1360,6 @@ module std [system] {
       module common_view                { private header "__ranges/common_view.h" }
       module concepts                   { private header "__ranges/concepts.h" }
       module container_compatible_range { private header "__ranges/container_compatible_range.h" }
-      module copyable_box               { private header "__ranges/copyable_box.h" }
       module counted                    {
         private header "__ranges/counted.h"
         export span
@@ -1381,6 +1382,7 @@ module std [system] {
       }
       module join_view                  { private header "__ranges/join_view.h" }
       module lazy_split_view            { private header "__ranges/lazy_split_view.h" }
+      module movable_box                { private header "__ranges/movable_box.h" }
       module non_propagating_cache      { private header "__ranges/non_propagating_cache.h" }
       module owning_view                { private header "__ranges/owning_view.h" }
       module range_adaptor              { private header "__ranges/range_adaptor.h" }
@@ -1531,7 +1533,10 @@ module std [system] {
     export *
 
     module __thread {
+      module formatter            { private header "__thread/formatter.h" }
       module poll_with_backoff    { private header "__thread/poll_with_backoff.h" }
+      module this_thread          { private header "__thread/this_thread.h" }
+      module thread               { private header "__thread/thread.h" }
       module timed_backoff_policy { private header "__thread/timed_backoff_policy.h" }
     }
   }

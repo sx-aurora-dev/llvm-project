@@ -41,9 +41,9 @@ Base::~Base() {}
 // CHECK: @_ZTSW3Mod4Base = constant
 // CHECK: @_ZTIW3Mod4Base = constant
 
-// CHECK-INLINE: @_ZTVW3Mod4Base = linkonce_odr unnamed_addr constant
-// CHECK-INLINE: @_ZTSW3Mod4Base = linkonce_odr constant
-// CHECK-INLINE: @_ZTIW3Mod4Base = linkonce_odr constant
+// CHECK-INLINE: @_ZTVW3Mod4Base = linkonce_odr {{.*}}unnamed_addr constant
+// CHECK-INLINE: @_ZTSW3Mod4Base = linkonce_odr {{.*}}constant
+// CHECK-INLINE: @_ZTIW3Mod4Base = linkonce_odr {{.*}}constant
 
 module :private;
 int private_use() {
@@ -62,9 +62,9 @@ int use() {
 // CHECK-NOT: @_ZTIW3Mod4Base = constant
 // CHECK: @_ZTVW3Mod4Base = external unnamed_addr
 
-// CHECK-INLINE: @_ZTVW3Mod4Base = linkonce_odr unnamed_addr constant
-// CHECK-INLINE: @_ZTSW3Mod4Base = linkonce_odr constant
-// CHECK-INLINE: @_ZTIW3Mod4Base = linkonce_odr constant
+// CHECK-INLINE: @_ZTVW3Mod4Base = linkonce_odr {{.*}}unnamed_addr constant
+// CHECK-INLINE: @_ZTSW3Mod4Base = linkonce_odr {{.*}}constant
+// CHECK-INLINE: @_ZTIW3Mod4Base = linkonce_odr {{.*}}constant
 
 // Check the case that the declaration of the key function comes from another
 // module unit but the definition of the key function comes from the current
