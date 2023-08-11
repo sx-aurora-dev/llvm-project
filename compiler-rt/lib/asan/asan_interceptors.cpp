@@ -194,6 +194,8 @@ static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
   __lsan::ScopedInterceptorDisabler disabler
 #endif
 
+#define SIGNAL_INTERCEPTOR_ENTER() ENSURE_ASAN_INITED()
+
 #include "sanitizer_common/sanitizer_common_interceptors.inc"
 #include "sanitizer_common/sanitizer_signal_interceptors.inc"
 
@@ -220,9 +222,17 @@ static thread_return_t THREAD_CALLING_CONV asan_thread_start(void *arg) {
   SetCurrentThread(t);
   auto self = GetThreadSelf();
   auto args = asanThreadArgRetval().GetArgs(self);
-  thread_return_t retval = t->ThreadStart(GetTid());
+  t->ThreadStart(GetTid());
+
+#    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+        SANITIZER_SOLARIS
+  __sanitizer_sigset_t sigset;
+  t->GetStartData(sigset);
+  SetSigProcMask(&sigset, nullptr);
+#    endif
+
+  thread_return_t retval = (*args.routine)(args.arg_retval);
   asanThreadArgRetval().Finish(self, retval);
-  CHECK_EQ(args.arg_retval, t->get_arg());
   return retval;
 }
 
@@ -240,8 +250,14 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   }();
 
   u32 current_tid = GetCurrentTidOrInvalid();
-  AsanThread *t =
-      AsanThread::Create(start_routine, arg, current_tid, &stack, detached);
+
+  __sanitizer_sigset_t sigset;
+#    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+        SANITIZER_SOLARIS
+  ScopedBlockSignals block(&sigset);
+#    endif
+
+  AsanThread *t = AsanThread::Create(sigset, current_tid, &stack, detached);
 
   int result;
   {

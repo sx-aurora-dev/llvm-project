@@ -183,9 +183,11 @@ def DeprecatedCopyWithUserProvidedCopy : DiagGroup<"deprecated-copy-with-user-pr
 def DeprecatedCopyWithUserProvidedDtor : DiagGroup<"deprecated-copy-with-user-provided-dtor">;
 def DeprecatedCopy : DiagGroup<"deprecated-copy", [DeprecatedCopyWithUserProvidedCopy]>;
 def DeprecatedCopyWithDtor : DiagGroup<"deprecated-copy-with-dtor", [DeprecatedCopyWithUserProvidedDtor]>;
+def DeprecatedLiteralOperator : DiagGroup<"deprecated-literal-operator">;
 // For compatibility with GCC.
 def : DiagGroup<"deprecated-copy-dtor", [DeprecatedCopyWithDtor]>;
 def DeprecatedDeclarations : DiagGroup<"deprecated-declarations">;
+def DeprecatedRedundantConstexprStaticDef : DiagGroup<"deprecated-redundant-constexpr-static-def">;
 def UnavailableDeclarations : DiagGroup<"unavailable-declarations">;
 def UnguardedAvailabilityNew : DiagGroup<"unguarded-availability-new">;
 def UnguardedAvailability : DiagGroup<"unguarded-availability",
@@ -219,12 +221,15 @@ def Deprecated : DiagGroup<"deprecated", [DeprecatedAnonEnumEnumConversion,
                                           DeprecatedEnumFloatConversion,
                                           DeprecatedBuiltins,
                                           DeprecatedIncrementBool,
+                                          DeprecatedLiteralOperator,
                                           DeprecatedPragma,
                                           DeprecatedRegister,
                                           DeprecatedThisCapture,
                                           DeprecatedType,
                                           DeprecatedVolatile,
-                                          DeprecatedWritableStr]>,
+                                          DeprecatedWritableStr,
+                                          DeprecatedRedundantConstexprStaticDef,
+                                          ]>,
                  DiagCategory<"Deprecations">;
 
 def CXX20Designator : DiagGroup<"c++20-designator">;
@@ -862,7 +867,7 @@ def SignedEnumBitfield : DiagGroup<"signed-enum-bitfield">;
 
 def ReservedModuleIdentifier : DiagGroup<"reserved-module-identifier">;
 def ReservedIdentifier : DiagGroup<"reserved-identifier",
-    [ReservedIdAsMacro, ReservedModuleIdentifier]>;
+    [ReservedIdAsMacro, ReservedModuleIdentifier, UserDefinedLiterals]>;
 
 // Unreachable code warning groups.
 //
@@ -1273,9 +1278,10 @@ def OpenMPMapping : DiagGroup<"openmp-mapping">;
 def OpenMPTarget : DiagGroup<"openmp-target", [OpenMPMapping]>;
 def OpenMPPre51Compat : DiagGroup<"pre-openmp-51-compat">;
 def OpenMP51Ext : DiagGroup<"openmp-51-extensions">;
+def OpenMPExtensions : DiagGroup<"openmp-extensions">;
 def OpenMP : DiagGroup<"openmp", [
     SourceUsesOpenMP, OpenMPClauses, OpenMPLoopForm, OpenMPTarget,
-    OpenMPMapping, OpenMP51Ext
+    OpenMPMapping, OpenMP51Ext, OpenMPExtensions
   ]>;
 
 // Backend warnings.
@@ -1293,10 +1299,12 @@ like YAML by adding the `-foptimization-record-file=<file>` command-line flag.
 Results can be filtered by function name by passing
 `-mllvm -filter-print-funcs=foo`, where `foo` is the target function's name.
 
-   .. code-block: console
+   .. code-block:: console
+
       clang -c a.cpp -Rpass-analysis=stack-frame-layout -mllvm -filter-print-funcs=foo
 
-   .. code-block: console
+   .. code-block:: console
+
       clang -c a.cpp -Rpass-analysis=stack-frame-layout -foptimization-record-file=<file>
 }];
 }
@@ -1335,6 +1343,9 @@ def HIPOnly : DiagGroup<"hip-only">;
 
 // Warning about mixed HIP and OpenMP compilation / target offloading.
 def HIPOpenMPOffloading: DiagGroup<"hip-omp-target-directives">;
+
+// Warning about multiple GPUs are detected.
+def MultiGPU: DiagGroup<"multi-gpu">;
 
 // Warnings which cause linking of the runtime libraries like
 // libc and the CRT to be skipped.
@@ -1385,19 +1396,22 @@ the token limit, which can be set in three ways:
 1. As a limit at a specific point in a file, using the ``clang max_tokens_here``
    pragma:
 
-   .. code-block: c++
+   .. code-block:: c++
+
       #pragma clang max_tokens_here 1234
 
 2. As a per-translation unit limit, using the ``-fmax-tokens=`` command-line
    flag:
 
-   .. code-block: console
+   .. code-block:: console
+
       clang -c a.cpp -fmax-tokens=1234
 
 3. As a per-translation unit limit using the ``clang max_tokens_total`` pragma,
    which works like and overrides the ``-fmax-tokens=`` flag:
 
-   .. code-block: c++
+   .. code-block:: c++
+
       #pragma clang max_tokens_total 1234
 
 These limits can be helpful in limiting code growth through included files.

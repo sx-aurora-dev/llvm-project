@@ -17,6 +17,9 @@
 ! RUN:     -fpass-plugin=Bye%pluginext \
 ! RUN:     -fversion-loops-for-stride \
 ! RUN:     -flang-experimental-polymorphism \
+! RUN:     -flang-experimental-hlfir \
+! RUN:     -fno-ppc-native-vector-element-order \
+! RUN:     -fppc-native-vector-element-order \
 ! RUN:     -mllvm -print-before-all \
 ! RUN:     -save-temps=obj \
 ! RUN:     -P \
@@ -36,7 +39,10 @@
 ! CHECK: "-freciprocal-math"
 ! CHECK: "-fconvert=little-endian"
 ! CHECK: "-fpass-plugin=Bye
-! CHECK: "-flang-experimental-polymorphism"
 ! CHECK: "-fversion-loops-for-stride"
+! CHECK: "-flang-experimental-polymorphism"
+! CHECK: "-flang-experimental-hlfir"
+! CHECK: "-fno-ppc-native-vector-element-order"
+! CHECK: "-fppc-native-vector-element-order"
 ! CHECK: "-mllvm" "-print-before-all"
 ! CHECK: "-save-temps=obj"

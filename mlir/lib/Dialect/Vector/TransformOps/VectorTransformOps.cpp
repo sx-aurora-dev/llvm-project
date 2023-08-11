@@ -32,6 +32,16 @@ void transform::ApplyCastAwayVectorLeadingOneDimPatternsOp::populatePatterns(
   vector::populateCastAwayVectorLeadingOneDimPatterns(patterns);
 }
 
+void transform::ApplyFoldArithExtensionPatternsOp::populatePatterns(
+    RewritePatternSet &patterns) {
+  vector::populateFoldArithExtensionPatterns(patterns);
+}
+
+void transform::ApplyVectorReductionToContractPatternsOp::populatePatterns(
+    RewritePatternSet &patterns) {
+  vector::populateVectorReductionToContractPatterns(patterns);
+}
+
 void transform::ApplyRankReducingSubviewPatternsOp::populatePatterns(
     RewritePatternSet &patterns) {
   vector::populateVectorTransferDropUnitDimsPatterns(patterns);

@@ -175,6 +175,11 @@ unsigned ConstantArrayType::getNumAddressingBits(const ASTContext &Context,
   return TotalSize.getActiveBits();
 }
 
+unsigned
+ConstantArrayType::getNumAddressingBits(const ASTContext &Context) const {
+  return getNumAddressingBits(Context, getElementType(), getSize());
+}
+
 unsigned ConstantArrayType::getMaxSizeBits(const ASTContext &Context) {
   unsigned Bits = Context.getTypeSize(Context.getSizeType());
 
@@ -2348,14 +2353,11 @@ bool Type::isIncompleteType(NamedDecl **Def) const {
 }
 
 bool Type::isSizelessBuiltinType() const {
+  if (isSVESizelessBuiltinType() || isRVVSizelessBuiltinType())
+    return true;
+
   if (const BuiltinType *BT = getAs<BuiltinType>()) {
     switch (BT->getKind()) {
-      // SVE Types
-#define SVE_TYPE(Name, Id, SingletonId) case BuiltinType::Id:
-#include "clang/Basic/AArch64SVEACLETypes.def"
-#define RVV_TYPE(Name, Id, SingletonId) case BuiltinType::Id:
-#include "clang/Basic/RISCVVTypes.def"
-      return true;
       // WebAssembly reference types
 #define WASM_TYPE(Name, Id, SingletonId) case BuiltinType::Id:
 #include "clang/Basic/WebAssemblyReferenceTypes.def"
@@ -4712,14 +4714,10 @@ AutoType::AutoType(QualType DeducedAsType, AutoTypeKeyword Keyword,
     auto *ArgBuffer =
         const_cast<TemplateArgument *>(getTypeConstraintArguments().data());
     for (const TemplateArgument &Arg : TypeConstraintArgs) {
-      // If we have a deduced type, our constraints never affect semantic
-      // dependence. Prior to deduction, however, our canonical type depends
-      // on the template arguments, so we are a dependent type if any of them
-      // is dependent.
-      TypeDependence ArgDependence = toTypeDependence(Arg.getDependence());
-      if (!DeducedAsType.isNull())
-        ArgDependence = toSyntacticDependence(ArgDependence);
-      addDependence(ArgDependence);
+      // We only syntactically depend on the constraint arguments. They don't
+      // affect the deduced type, only its validity.
+      addDependence(
+          toSyntacticDependence(toTypeDependence(Arg.getDependence())));
 
       new (ArgBuffer++) TemplateArgument(Arg);
     }

@@ -7,11 +7,201 @@
 //===----------------------------------------------------------------------===//
 //
 // This is the op definition spec of cooperative matrix multiply extension ops.
+// We support both cooperative matrix extensions:
+//  - SPV_NV_cooperative_matrix
+//  - SPV_KHR_cooperative_matrix
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef MLIR_DIALECT_SPIRV_IR_COOPERATIVE_MATRIX_OPS
 #define MLIR_DIALECT_SPIRV_IR_COOPERATIVE_MATRIX_OPS
+
+//===----------------------------------------------------------------------===//
+// SPV_KHR_cooperative_matrix extension ops.
+//===----------------------------------------------------------------------===//
+
+// -----
+
+def SPIRV_KHRCooperativeMatrixLengthOp :
+      SPIRV_KhrVendorOp<"CooperativeMatrixLength", [Pure]> {
+  let summary = "Queries the number of cooperative matrix components";
+
+  let description = [{
+    Number of components of a cooperative matrix type accessible to each
+    invocation when treated as a composite.
+
+    The type attribute must be a cooperative matrix type.
+
+    ``` {.ebnf}
+    cooperative-matrix-length-op ::= ssa-id `=` `spirv.KHR.CooperativeMatrixLength
+                                    ` : ` cooperative-matrix-type
+    ```
+
+    #### Example:
+
+    ```
+    %0 = spirv.KHR.CooperativeMatrixLength :
+           !spirv.coopmatrix<8x16xi32, Subgroup, MatrixA>
+    ```
+  }];
+
+  let assemblyFormat = "attr-dict `:` $cooperative_matrix_type";
+
+  let availability = [
+    MinVersion<SPIRV_V_1_6>,
+    MaxVersion<SPIRV_V_1_6>,
+    Extension<[SPV_KHR_cooperative_matrix]>,
+    Capability<[SPIRV_C_CooperativeMatrixKHR]>
+  ];
+
+  let arguments = (ins
+    TypeAttr:$cooperative_matrix_type
+  );
+
+  let results = (outs
+    SPIRV_Int32:$result
+  );
+}
+
+// -----
+
+def SPIRV_KHRCooperativeMatrixLoadOp : SPIRV_KhrVendorOp<"CooperativeMatrixLoad", []> {
+  let summary = "Loads a cooperative matrix through a pointer";
+
+  let description = [{
+    Load a cooperative matrix through a pointer.
+
+    Result Type is the type of the loaded object. It must be a cooperative
+    matrix type.
+
+    Pointer is a pointer. Its type must be an OpTypePointer whose Type operand is
+    a scalar or vector type. If the Shader capability was declared, Pointer must
+    point into an array and any ArrayStride decoration on Pointer is ignored.
+
+    MemoryLayout specifies how matrix elements are laid out in memory. It must
+    come from a 32-bit integer constant instruction whose value corresponds to a
+    Cooperative Matrix Layout. See the Cooperative Matrix Layout table for a
+    description of the layouts and detailed layout-specific rules.
+
+    Stride further qualifies how matrix elements are laid out in memory. It must
+    be a scalar integer type and its exact semantics depend on MemoryLayout.
+
+    Memory Operand must be a Memory Operand literal. If not present, it is the
+    same as specifying None.
+
+    NOTE: In earlier versions of the SPIR-V spec, 'Memory Operand' was known
+    as 'Memory Access'.
+
+    For a given dynamic instance of this instruction, all operands of this
+    instruction must be the same for all invocations in a given scope instance
+    (where the scope is the scope the cooperative matrix type was created with).
+    All invocations in a given scope instance must be active or all must be
+    inactive.
+
+    ``` {.ebnf}
+    cooperative-matrix-load-op ::= ssa-id `=` `spirv.KHR.CooperativeMatrixLoad`
+                              ssa-use `,` ssa-use `,`
+                              cooperative-matrix-layout `,`
+                              (`[` memory-operand `]`)? ` : `
+                                pointer-type `as` cooperative-matrix-type
+    ```
+
+    #### Example:
+
+    ```
+    %0 = spirv.KHR.CooperativeMatrixLoad %ptr, %stride, RowMajor
+         : !spirv.ptr<i32, StorageBuffer>
+             as !spirv.KHR.coopmatrix<16x8xi32, Workgroup, MatrixA>
+    ```
+  }];
+
+  let availability = [
+    MinVersion<SPIRV_V_1_6>,
+    MaxVersion<SPIRV_V_1_6>,
+    Extension<[SPV_KHR_cooperative_matrix]>,
+    Capability<[SPIRV_C_CooperativeMatrixKHR]>
+  ];
+
+  let arguments = (ins
+    SPIRV_AnyPtr:$pointer,
+    SPIRV_Integer:$stride,
+    SPIRV_KHR_CooperativeMatrixLayoutAttr:$matrix_layout,
+    OptionalAttr<SPIRV_MemoryAccessAttr>:$memory_operand
+  );
+
+  let results = (outs
+    SPIRV_AnyCooperativeMatrix:$result
+  );
+}
+
+// -----
+
+def SPIRV_KHRCooperativeMatrixStoreOp : SPIRV_KhrVendorOp<"CooperativeMatrixStore", []> {
+  let summary = "Stores a cooperative matrix through a pointer";
+
+  let description = [{
+    Store a cooperative matrix through a pointer.
+    Pointer is a pointer. Its type must be an OpTypePointer whose Type operand
+    is a scalar or vector type. If the Shader capability was declared, Pointer
+    must point into an array and any ArrayStride decoration on Pointer is
+    ignored.
+
+    Object is the object to store. Its type must be an
+    OpTypeCooperativeMatrixKHR.
+
+    MemoryLayout specifies how matrix elements are laid out in memory. It must
+    come from a 32-bit integer constant instruction whose value corresponds to a
+    Cooperative Matrix Layout. See the Cooperative Matrix Layout table for a
+    description of the layouts and detailed layout-specific rules.
+
+    Stride further qualifies how matrix elements are laid out in memory. It must
+    be a scalar integer type and its exact semantics depend on MemoryLayout.
+
+    Memory Operand must be a Memory Operand literal. If not present, it is the
+    same as specifying None.
+
+    NOTE: In earlier versions of the SPIR-V spec, 'Memory Operand' was known
+    as 'Memory Access'.
+
+    For a given dynamic instance of this instruction, all operands of this
+    instruction must be the same for all invocations in a given scope instance
+    (where the scope is the scope the cooperative matrix type was created with).
+    All invocations in a given scope instance must be active or all must be
+    inactive.
+
+    ``` {.ebnf}
+     coop-matrix-store-op ::= `spirv.KHR.CooperativeMatrixStore `
+                              ssa-use `, ` ssa-use `, `
+                              ssa-use `, ` cooperative-matrix-layout `, `
+                              (`[` memory-operand `]`)? `:`
+                              pointer-type `,` coop-matrix-type
+    ```
+
+    #### Example:
+
+    ```
+      spirv.KHR.CooperativeMatrixStore %ptr, %obj, %stride :
+        !spirv.ptr<i32, StorageBuffer>, !spirv.coopmatrix<16x8xi32, Workgroup, MatrixA>
+    ```
+  }];
+
+  let availability = [
+    MinVersion<SPIRV_V_1_6>,
+    MaxVersion<SPIRV_V_1_6>,
+    Extension<[SPV_KHR_cooperative_matrix]>,
+    Capability<[SPIRV_C_CooperativeMatrixKHR]>
+  ];
+
+  let arguments = (ins
+    SPIRV_AnyPtr:$pointer,
+    SPIRV_AnyCooperativeMatrix:$object,
+    SPIRV_Integer:$stride,
+    SPIRV_KHR_CooperativeMatrixLayoutAttr:$matrix_layout,
+    OptionalAttr<SPIRV_MemoryAccessAttr>:$memory_operand
+  );
+
+  let results = (outs);
+}
 
 //===----------------------------------------------------------------------===//
 // SPV_NV_cooperative_matrix extension ops.
@@ -59,7 +249,6 @@ def SPIRV_NVCooperativeMatrixLengthOp : SPIRV_NvVendorOp<"CooperativeMatrixLengt
   let results = (outs
     SPIRV_Int32:$result
   );
-  let hasVerifier = 0;
 }
 
 // -----
@@ -244,7 +433,7 @@ def SPIRV_NVCooperativeMatrixStoreOp : SPIRV_NvVendorOp<"CooperativeMatrixStore"
                               ssa-use `, ` ssa-use `, `
                               ssa-use `, ` ssa-use `, `
                               (`[` memory-access `]`)? `:`
-                              pointer-type `,` spirv-element-type
+                              pointer-type `,` coop-matrix-type
     ```
 
     For example:

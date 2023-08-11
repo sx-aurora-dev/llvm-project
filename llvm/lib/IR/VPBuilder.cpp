@@ -132,7 +132,7 @@ VectorType &VPBuilder::getVectorType(Type &ElementTy) {
 Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                         MaybeAlign AlignOpt) {
   auto &PointerTy = cast<PointerType>(*ElemPointer.getType());
-  auto &VecTy = getVectorType(*PointerTy.getPointerElementType());
+  auto &VecTy = getVectorType(*PointerTy.getNonOpaquePointerElementType());
   auto *VecPtrTy = VecTy.getPointerTo(PointerTy.getAddressSpace());
   auto *VecPtr = Builder.CreatePointerCast(&ElemPointer, VecPtrTy);
 

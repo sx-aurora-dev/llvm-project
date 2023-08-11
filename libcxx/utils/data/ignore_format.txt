@@ -109,7 +109,6 @@ libcxx/include/__bit/countl.h
 libcxx/include/__bit/countr.h
 libcxx/include/__bit/endian.h
 libcxx/include/__bit/popcount.h
-libcxx/include/__bit_reference
 libcxx/include/__bit/rotate.h
 libcxx/include/bitset
 libcxx/include/cctype
@@ -474,7 +473,6 @@ libcxx/include/__support/xlocale/__nop_locale_mgmt.h
 libcxx/include/__system_error/errc.h
 libcxx/include/thread
 libcxx/include/__thread/formatter.h
-libcxx/include/__thread/id.h
 libcxx/include/__threading_support
 libcxx/include/__thread/poll_with_backoff.h
 libcxx/include/__thread/this_thread.h
@@ -553,6 +551,7 @@ libcxx/src/mutex.cpp
 libcxx/src/mutex_destructor.cpp
 libcxx/src/new.cpp
 libcxx/src/optional.cpp
+libcxx/src/pstl/libdispatch.cpp
 libcxx/src/random.cpp
 libcxx/src/random_shuffle.cpp
 libcxx/src/regex.cpp

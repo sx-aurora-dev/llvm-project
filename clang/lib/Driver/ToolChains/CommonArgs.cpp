@@ -617,6 +617,11 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
                                 PluginName + Suffix,
                             Plugin);
     CmdArgs.push_back(Args.MakeArgString(Twine(PluginPrefix) + Plugin));
+  } else {
+    // Tell LLD to find and use .llvm.lto section in regular relocatable object
+    // files
+    if (Args.hasArg(options::OPT_ffat_lto_objects))
+      CmdArgs.push_back("--fat-lto-objects");
   }
 
   const char *PluginOptPrefix = IsOSAIX ? "-bplugin_opt:" : "-plugin-opt=";
@@ -666,8 +671,11 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
     CmdArgs.push_back(Args.MakeArgString(
         Twine(PluginOptPrefix) + "dwo_dir=" + Output.getFilename() + "_dwo"));
 
-  if (IsThinLTO)
+  if (IsThinLTO && !IsOSAIX)
     CmdArgs.push_back(Args.MakeArgString(Twine(PluginOptPrefix) + "thinlto"));
+  else if (IsThinLTO && IsOSAIX)
+    CmdArgs.push_back(Args.MakeArgString(Twine("-bdbg:thinlto")));
+
 
   StringRef Parallelism = getLTOParallelism(Args, D);
   if (!Parallelism.empty())
@@ -692,6 +700,10 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
   }
 
   if (IsOSAIX) {
+    if (!ToolChain.useIntegratedAs())
+      CmdArgs.push_back(
+          Args.MakeArgString(Twine(PluginOptPrefix) + "-no-integrated-as=1"));
+
     // On AIX, clang assumes strict-dwarf is true if any debug option is
     // specified, unless it is told explicitly not to assume so.
     Arg *A = Args.getLastArg(options::OPT_g_Group);
@@ -1274,7 +1286,7 @@ const char *tools::SplitDebugName(const JobAction &JA, const ArgList &Args,
     F += ".dwo";
   };
   if (Arg *A = Args.getLastArg(options::OPT_gsplit_dwarf_EQ))
-    if (StringRef(A->getValue()) == "single")
+    if (StringRef(A->getValue()) == "single" && Output.isFilename())
       return Args.MakeArgString(Output.getFilename());
 
   SmallString<128> T;
@@ -2416,10 +2428,10 @@ void tools::addOpenMPDeviceRTL(const Driver &D,
           << LibOmpTargetName << ArchPrefix;
   }
 }
-void tools::addHIPRuntimeLibArgs(const ToolChain &TC,
+void tools::addHIPRuntimeLibArgs(const ToolChain &TC, Compilation &C,
                                  const llvm::opt::ArgList &Args,
                                  llvm::opt::ArgStringList &CmdArgs) {
-  if (Args.hasArg(options::OPT_hip_link) &&
+  if ((C.getActiveOffloadKinds() & Action::OFK_HIP) &&
       !Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_no_hip_rt)) {
     TC.AddHIPRuntimeLibArgs(Args, CmdArgs);

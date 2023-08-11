@@ -1706,6 +1706,13 @@ struct Attributor {
         IRP.isAnyCallSitePosition())
       return false;
 
+    // Check if we require a calles but we can't see all.
+    if (AAType::requiresCallersForArgOrFunction())
+      if (IRP.getPositionKind() == IRPosition::IRP_FUNCTION ||
+          IRP.getPositionKind() == IRPosition::IRP_ARGUMENT)
+        if (!AssociatedFn->hasLocalLinkage())
+          return false;
+
     if (!AAType::isValidIRPositionForUpdate(*this, IRP))
       return false;
 
@@ -1949,7 +1956,8 @@ public:
                                   const AbstractAttribute *AA,
                                   SmallVectorImpl<AA::ValueAndContext> &Values,
                                   AA::ValueScope S,
-                                  bool &UsedAssumedInformation);
+                                  bool &UsedAssumedInformation,
+                                  bool RecurseForSelectAndPHI = true);
 
   /// Register \p CB as a simplification callback.
   /// `Attributor::getAssumedSimplified` will use these callbacks before
@@ -2264,22 +2272,15 @@ public:
                             bool &UsedAssumedInformation,
                             bool CheckPotentiallyDead = false);
 
-  /// Check \p Pred on all values potentially returned by \p F.
-  ///
-  /// This method will evaluate \p Pred on all values potentially returned by
-  /// the function associated with \p QueryingAA. The returned values are
-  /// matched with their respective return instructions. Returns true if \p Pred
-  /// holds on all of them.
-  bool checkForAllReturnedValuesAndReturnInsts(
-      function_ref<bool(Value &, const SmallSetVector<ReturnInst *, 4> &)> Pred,
-      const AbstractAttribute &QueryingAA);
-
   /// Check \p Pred on all values potentially returned by the function
   /// associated with \p QueryingAA.
   ///
   /// This is the context insensitive version of the method above.
-  bool checkForAllReturnedValues(function_ref<bool(Value &)> Pred,
-                                 const AbstractAttribute &QueryingAA);
+  bool
+  checkForAllReturnedValues(function_ref<bool(Value &)> Pred,
+                            const AbstractAttribute &QueryingAA,
+                            AA::ValueScope S = AA::ValueScope::Intraprocedural,
+                            bool RecurseForSelectAndPHI = true);
 
   /// Check \p Pred on all instructions in \p Fn with an opcode present in
   /// \p Opcodes.
@@ -2288,7 +2289,7 @@ public:
   /// present in \p Opcode and return true if \p Pred holds on all of them.
   bool checkForAllInstructions(function_ref<bool(Instruction &)> Pred,
                                const Function *Fn,
-                               const AbstractAttribute &QueryingAA,
+                               const AbstractAttribute *QueryingAA,
                                const ArrayRef<unsigned> &Opcodes,
                                bool &UsedAssumedInformation,
                                bool CheckBBLivenessOnly = false,
@@ -2385,6 +2386,10 @@ public:
 
   /// The allocator used to allocate memory, e.g. for `AbstractAttribute`s.
   BumpPtrAllocator &Allocator;
+
+  const SmallSetVector<Function *, 8> &getModifiedFunctions() {
+    return CGModifiedFunctions;
+  }
 
 private:
   /// This method will do fixpoint iteration until fixpoint or the
@@ -3242,6 +3247,10 @@ struct AbstractAttribute : public IRPosition, public AADepGraphNode {
   /// a call site positon. Default is optimistic to minimize AAs.
   static bool requiresCalleeForCallBase() { return true; }
 
+  /// Return true if this AA requires all callees for an argument or function
+  /// positon.
+  static bool requiresCallersForArgOrFunction() { return false; }
+
   /// Return false if an AA should not be created for \p IRP.
   static bool isValidIRPositionForInit(Attributor &A, const IRPosition &IRP) {
     return true;
@@ -3370,6 +3379,20 @@ struct AttributorCGSCCPass : public PassInfoMixin<AttributorCGSCCPass> {
                         LazyCallGraph &CG, CGSCCUpdateResult &UR);
 };
 
+/// A more lightweight version of the Attributor which only runs attribute
+/// inference but no simplifications.
+struct AttributorLightPass : public PassInfoMixin<AttributorLightPass> {
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
+/// A more lightweight version of the Attributor which only runs attribute
+/// inference but no simplifications.
+struct AttributorLightCGSCCPass
+    : public PassInfoMixin<AttributorLightCGSCCPass> {
+  PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
+                        LazyCallGraph &CG, CGSCCUpdateResult &UR);
+};
+
 /// Helper function to clamp a state \p S of type \p StateType with the
 /// information in \p R and indicate/return if \p S did change (as-in update is
 /// required to be run again).
@@ -3384,53 +3407,6 @@ ChangeStatus clampStateAndIndicateChange(StateType &S, const StateType &R) {
 /// ----------------------------------------------------------------------------
 ///                       Abstract Attribute Classes
 /// ----------------------------------------------------------------------------
-
-/// An abstract attribute for the returned values of a function.
-struct AAReturnedValues
-    : public IRAttribute<Attribute::Returned, AbstractAttribute,
-                         AAReturnedValues> {
-  AAReturnedValues(const IRPosition &IRP, Attributor &A) : IRAttribute(IRP) {}
-
-  /// Check \p Pred on all returned values.
-  ///
-  /// This method will evaluate \p Pred on returned values and return
-  /// true if (1) all returned values are known, and (2) \p Pred returned true
-  /// for all returned values.
-  ///
-  /// Note: Unlike the Attributor::checkForAllReturnedValuesAndReturnInsts
-  /// method, this one will not filter dead return instructions.
-  virtual bool checkForAllReturnedValuesAndReturnInsts(
-      function_ref<bool(Value &, const SmallSetVector<ReturnInst *, 4> &)> Pred)
-      const = 0;
-
-  using iterator =
-      MapVector<Value *, SmallSetVector<ReturnInst *, 4>>::iterator;
-  using const_iterator =
-      MapVector<Value *, SmallSetVector<ReturnInst *, 4>>::const_iterator;
-  virtual llvm::iterator_range<iterator> returned_values() = 0;
-  virtual llvm::iterator_range<const_iterator> returned_values() const = 0;
-
-  virtual size_t getNumReturnValues() const = 0;
-
-  /// Create an abstract attribute view for the position \p IRP.
-  static AAReturnedValues &createForPosition(const IRPosition &IRP,
-                                             Attributor &A);
-
-  /// See AbstractAttribute::getName()
-  const std::string getName() const override { return "AAReturnedValues"; }
-
-  /// See AbstractAttribute::getIdAddr()
-  const char *getIdAddr() const override { return &ID; }
-
-  /// This function should return true if the type of the \p AA is
-  /// AAReturnedValues
-  static bool classof(const AbstractAttribute *AA) {
-    return (AA->getIdAddr() == &ID);
-  }
-
-  /// Unique ID (due to the unique address)
-  static const char ID;
-};
 
 struct AANoUnwind
     : public IRAttribute<Attribute::NoUnwind,
@@ -3467,6 +3443,36 @@ struct AANoSync
                          StateWrapper<BooleanState, AbstractAttribute>,
                          AANoSync> {
   AANoSync(const IRPosition &IRP, Attributor &A) : IRAttribute(IRP) {}
+
+  static bool isImpliedByIR(Attributor &A, const IRPosition &IRP,
+                            Attribute::AttrKind ImpliedAttributeKind,
+                            bool IgnoreSubsumingPositions = false) {
+    // Note: This is also run for non-IPO amendable functions.
+    assert(ImpliedAttributeKind == Attribute::NoSync);
+    if (A.hasAttr(IRP, {Attribute::NoSync}, IgnoreSubsumingPositions,
+                  Attribute::NoSync))
+      return true;
+
+    // Check for readonly + non-convergent.
+    // TODO: We should be able to use hasAttr for Attributes, not only
+    // AttrKinds.
+    Function *F = IRP.getAssociatedFunction();
+    if (!F || F->isConvergent())
+      return false;
+
+    SmallVector<Attribute, 2> Attrs;
+    A.getAttrs(IRP, {Attribute::Memory}, Attrs, IgnoreSubsumingPositions);
+
+    MemoryEffects ME = MemoryEffects::unknown();
+    for (const Attribute &Attr : Attrs)
+      ME &= Attr.getMemoryEffects();
+
+    if (!ME.onlyReadsMemory())
+      return false;
+
+    A.manifestAttrs(IRP, Attribute::get(F->getContext(), Attribute::NoSync));
+    return true;
+  }
 
   /// See AbstractAttribute::isValidIRPositionForInit
   static bool isValidIRPositionForInit(Attributor &A, const IRPosition &IRP) {
@@ -3521,6 +3527,15 @@ struct AAMustProgress
                          StateWrapper<BooleanState, AbstractAttribute>,
                          AAMustProgress> {
   AAMustProgress(const IRPosition &IRP, Attributor &A) : IRAttribute(IRP) {}
+
+  static bool isImpliedByIR(Attributor &A, const IRPosition &IRP,
+                            Attribute::AttrKind ImpliedAttributeKind,
+                            bool IgnoreSubsumingPositions = false) {
+    // Note: This is also run for non-IPO amendable functions.
+    assert(ImpliedAttributeKind == Attribute::MustProgress);
+    return A.hasAttr(IRP, {Attribute::MustProgress, Attribute::WillReturn},
+                     IgnoreSubsumingPositions, Attribute::MustProgress);
+  }
 
   /// Return true if we assume that the underlying value is nonnull.
   bool isAssumedMustProgress() const { return getAssumed(); }
@@ -3640,6 +3655,8 @@ struct AAWillReturn
   static bool isImpliedByIR(Attributor &A, const IRPosition &IRP,
                             Attribute::AttrKind ImpliedAttributeKind,
                             bool IgnoreSubsumingPositions = false) {
+    // Note: This is also run for non-IPO amendable functions.
+    assert(ImpliedAttributeKind == Attribute::WillReturn);
     if (IRAttribute::isImpliedByIR(A, IRP, ImpliedAttributeKind,
                                    IgnoreSubsumingPositions))
       return true;
@@ -3785,6 +3802,9 @@ struct AANoAlias
   /// See AbstractAttribute::requiresCalleeForCallBase
   static bool requiresCalleeForCallBase() { return false; }
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// Return true if we assume that the underlying value is alias.
   bool isAssumedNoAlias() const { return getAssumed(); }
 
@@ -3815,6 +3835,17 @@ struct AANoFree
                          StateWrapper<BooleanState, AbstractAttribute>,
                          AANoFree> {
   AANoFree(const IRPosition &IRP, Attributor &A) : IRAttribute(IRP) {}
+
+  /// See IRAttribute::isImpliedByIR
+  static bool isImpliedByIR(Attributor &A, const IRPosition &IRP,
+                            Attribute::AttrKind ImpliedAttributeKind,
+                            bool IgnoreSubsumingPositions = false) {
+    // Note: This is also run for non-IPO amendable functions.
+    assert(ImpliedAttributeKind == Attribute::NoFree);
+    return A.hasAttr(
+        IRP, {Attribute::ReadNone, Attribute::ReadOnly, Attribute::NoFree},
+        IgnoreSubsumingPositions, Attribute::NoFree);
+  }
 
   /// See AbstractAttribute::isValidIRPositionForInit
   static bool isValidIRPositionForInit(Attributor &A, const IRPosition &IRP) {
@@ -4493,6 +4524,9 @@ struct AAPrivatizablePtr
   /// Returns true if pointer privatization is known to be possible.
   bool isKnownPrivatizablePtr() const { return getKnown(); }
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// Return the type we can choose for a private copy of the underlying
   /// value. std::nullopt means it is not clear yet, nullptr means there is
   /// none.
@@ -4789,6 +4823,9 @@ struct AAValueConstantRange
     return AbstractAttribute::isValidIRPositionForInit(A, IRP);
   }
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// See AbstractAttribute::getState(...).
   IntegerRangeState &getState() override { return *this; }
   const IntegerRangeState &getState() const override { return *this; }
@@ -5058,6 +5095,9 @@ struct AAPotentialConstantValues
     return AbstractAttribute::isValidIRPositionForInit(A, IRP);
   }
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// See AbstractAttribute::getState(...).
   PotentialConstantIntValuesState &getState() override { return *this; }
   const PotentialConstantIntValuesState &getState() const override {
@@ -5111,6 +5151,9 @@ struct AAPotentialValues
   using Base = StateWrapper<PotentialLLVMValuesState, AbstractAttribute>;
   AAPotentialValues(const IRPosition &IRP, Attributor &A) : Base(IRP) {}
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// See AbstractAttribute::getState(...).
   PotentialLLVMValuesState &getState() override { return *this; }
   const PotentialLLVMValuesState &getState() const override { return *this; }
@@ -5140,10 +5183,9 @@ struct AAPotentialValues
   static const char ID;
 
 private:
-  virtual bool
-  getAssumedSimplifiedValues(Attributor &A,
-                             SmallVectorImpl<AA::ValueAndContext> &Values,
-                             AA::ValueScope) const = 0;
+  virtual bool getAssumedSimplifiedValues(
+      Attributor &A, SmallVectorImpl<AA::ValueAndContext> &Values,
+      AA::ValueScope, bool RecurseForSelectAndPHI = false) const = 0;
 
   friend struct Attributor;
 };
@@ -5928,12 +5970,15 @@ struct AAPointerInfo : public AbstractAttribute {
   /// this function will perform reasoning to exclude write accesses that cannot
   /// affect the load even if they on the surface look as if they would. The
   /// flag \p HasBeenWrittenTo will be set to true if we know that \p I does not
-  /// read the intial value of the underlying memory.
+  /// read the initial value of the underlying memory. If \p SkipCB is given and
+  /// returns false for a potentially interfering access, that access is not
+  /// checked for actual interference.
   virtual bool forallInterferingAccesses(
       Attributor &A, const AbstractAttribute &QueryingAA, Instruction &I,
       bool FindInterferingWrites, bool FindInterferingReads,
       function_ref<bool(const Access &, bool)> CB, bool &HasBeenWrittenTo,
-      AA::RangeTy &Range) const = 0;
+      AA::RangeTy &Range,
+      function_ref<bool(const Access &)> SkipCB = nullptr) const = 0;
 
   /// This function should return true if the type of the \p AA is AAPointerInfo
   static bool classof(const AbstractAttribute *AA) {
@@ -5989,6 +6034,9 @@ struct AAUnderlyingObjects : AbstractAttribute {
     return AbstractAttribute::isValidIRPositionForInit(A, IRP);
   }
 
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
   /// Create an abstract attribute biew for the position \p IRP.
   static AAUnderlyingObjects &createForPosition(const IRPosition &IRP,
                                                 Attributor &A);
@@ -6015,6 +6063,49 @@ struct AAUnderlyingObjects : AbstractAttribute {
   virtual bool
   forallUnderlyingObjects(function_ref<bool(Value &)> Pred,
                           AA::ValueScope Scope = AA::Interprocedural) const = 0;
+};
+
+/// An abstract interface for address space information.
+struct AAAddressSpace : public StateWrapper<BooleanState, AbstractAttribute> {
+  AAAddressSpace(const IRPosition &IRP, Attributor &A)
+      : StateWrapper<BooleanState, AbstractAttribute>(IRP) {}
+
+  /// See AbstractAttribute::isValidIRPositionForInit
+  static bool isValidIRPositionForInit(Attributor &A, const IRPosition &IRP) {
+    if (!IRP.getAssociatedType()->isPtrOrPtrVectorTy())
+      return false;
+    return AbstractAttribute::isValidIRPositionForInit(A, IRP);
+  }
+
+  /// See AbstractAttribute::requiresCallersForArgOrFunction
+  static bool requiresCallersForArgOrFunction() { return true; }
+
+  /// Return the address space of the associated value. \p NoAddressSpace is
+  /// returned if the associated value is dead. This functions is not supposed
+  /// to be called if the AA is invalid.
+  virtual int32_t getAddressSpace() const = 0;
+
+  /// Create an abstract attribute view for the position \p IRP.
+  static AAAddressSpace &createForPosition(const IRPosition &IRP,
+                                           Attributor &A);
+
+  /// See AbstractAttribute::getName()
+  const std::string getName() const override { return "AAAddressSpace"; }
+
+  /// See AbstractAttribute::getIdAddr()
+  const char *getIdAddr() const override { return &ID; }
+
+  /// This function should return true if the type of the \p AA is
+  /// AAAssumptionInfo
+  static bool classof(const AbstractAttribute *AA) {
+    return (AA->getIdAddr() == &ID);
+  }
+
+  // No address space which indicates the associated value is dead.
+  static const int32_t NoAddressSpace = -1;
+
+  /// Unique ID (due to the unique address)
+  static const char ID;
 };
 
 raw_ostream &operator<<(raw_ostream &, const AAPointerInfo::Access &);

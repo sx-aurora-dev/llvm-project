@@ -2229,7 +2229,8 @@ private:
 
   void genFIR(const Fortran::parser::OpenACCDeclarativeConstruct &accDecl) {
     mlir::OpBuilder::InsertPoint insertPt = builder->saveInsertionPoint();
-    genOpenACCDeclarativeConstruct(*this, getEval(), accDecl);
+    genOpenACCDeclarativeConstruct(*this, bridge.getSemanticsContext(),
+                                   bridge.fctCtx(), getEval(), accDecl);
     for (Fortran::lower::pft::Evaluation &e : getEval().getNestedEvaluations())
       genFIR(e);
     builder->restoreInsertionPoint(insertPt);
@@ -4013,10 +4014,15 @@ private:
   void instantiateVar(const Fortran::lower::pft::Variable &var,
                       Fortran::lower::AggregateStoreMap &storeMap) {
     Fortran::lower::instantiateVariable(*this, var, localSymbols, storeMap);
-    if (var.hasSymbol() &&
-        var.getSymbol().test(
-            Fortran::semantics::Symbol::Flag::OmpThreadprivate))
-      Fortran::lower::genThreadprivateOp(*this, var);
+    if (var.hasSymbol()) {
+      if (var.getSymbol().test(
+              Fortran::semantics::Symbol::Flag::OmpThreadprivate))
+        Fortran::lower::genThreadprivateOp(*this, var);
+
+      if (var.getSymbol().test(
+              Fortran::semantics::Symbol::Flag::OmpDeclareTarget))
+        Fortran::lower::genDeclareTargetIntGlobal(*this, var);
+    }
   }
 
   /// Start translation of a function.
@@ -4251,6 +4257,10 @@ private:
 
   void eraseDeadCodeAndBlocks(mlir::RewriterBase &rewriter,
                               llvm::MutableArrayRef<mlir::Region> regions) {
+    // WARNING: Do not add passes that can do folding or code motion here
+    // because they might cross omp.target region boundaries, which can result
+    // in incorrect code. Optimization passes like these must be added after
+    // OMP early outlining has been done.
     (void)mlir::eraseUnreachableBlocks(rewriter, regions);
     (void)mlir::runRegionDCE(rewriter, regions);
   }

@@ -253,7 +253,8 @@ SCUDO_TYPED_TEST(ScudoPrimaryTest, PrimaryIterate) {
   Cache.init(nullptr, Allocator.get());
   std::vector<std::pair<scudo::uptr, void *>> V;
   for (scudo::uptr I = 0; I < 64U; I++) {
-    const scudo::uptr Size = std::rand() % Primary::SizeClassMap::MaxSize;
+    const scudo::uptr Size =
+        static_cast<scudo::uptr>(std::rand()) % Primary::SizeClassMap::MaxSize;
     const scudo::uptr ClassId = Primary::SizeClassMap::getClassIdBySize(Size);
     void *P = Cache.allocate(ClassId);
     V.push_back(std::make_pair(ClassId, P));
@@ -300,18 +301,26 @@ SCUDO_TYPED_TEST(ScudoPrimaryTest, PrimaryThreaded) {
           Cv.wait(Lock);
       }
       for (scudo::uptr I = 0; I < 256U; I++) {
-        const scudo::uptr Size =
-            std::rand() % Primary::SizeClassMap::MaxSize / 4;
+        const scudo::uptr Size = static_cast<scudo::uptr>(std::rand()) %
+                                 Primary::SizeClassMap::MaxSize / 4;
         const scudo::uptr ClassId =
             Primary::SizeClassMap::getClassIdBySize(Size);
         void *P = Cache.allocate(ClassId);
         if (P)
           V.push_back(std::make_pair(ClassId, P));
       }
+
+      // Try to interleave pushBlocks(), popBatch() and releaseToOS().
+      Allocator->releaseToOS(scudo::ReleaseToOS::Force);
+
       while (!V.empty()) {
         auto Pair = V.back();
         Cache.deallocate(Pair.first, Pair.second);
         V.pop_back();
+        // This increases the chance of having non-full TransferBatches and it
+        // will jump into the code path of merging TransferBatches.
+        if (std::rand() % 8 == 0)
+          Cache.drain();
       }
       Cache.destroy(nullptr);
     });

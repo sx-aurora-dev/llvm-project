@@ -32,7 +32,12 @@ clang_target_link_libraries(clangdMain
   clangToolingCore
   clangToolingRefactoring
   clangToolingSyntax
+  )
+
+target_link_libraries(clangdMain
+  PRIVATE
   clangTidy
+
   clangDaemon
   clangdRemoteIndex
   clangdSupport
@@ -41,5 +46,21 @@ clang_target_link_libraries(clangdMain
 
 clang_target_link_libraries(clangd
   PRIVATE
+  clangAST
+  clangBasic
+  clangFormat
+  clangFrontend
+  clangLex
+  clangSema
+  clangTooling
+  clangToolingCore
+  clangToolingRefactoring
+  clangToolingSyntax
+  )
+
+target_link_libraries(clangd
+  PRIVATE
   clangdMain
+  clangDaemon
+  clangdSupport
   )

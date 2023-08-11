@@ -213,6 +213,11 @@ Pointer InterpFrame::getParamPointer(unsigned Off) {
 }
 
 SourceInfo InterpFrame::getSource(CodePtr PC) const {
+  // Implicitly created functions don't have any code we could point at,
+  // so return the call site.
+  if (Func && Func->getDecl()->isImplicit() && Caller)
+    return Caller->getSource(RetPC);
+
   return S.getSource(Func, PC);
 }
 
@@ -224,3 +229,6 @@ SourceLocation InterpFrame::getLocation(CodePtr PC) const {
   return S.getLocation(Func, PC);
 }
 
+SourceRange InterpFrame::getRange(CodePtr PC) const {
+  return S.getRange(Func, PC);
+}

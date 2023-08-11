@@ -490,6 +490,20 @@ Every processor supports every OS ABI (see :ref:`amdgpu-os`) with the following 
                                                                         work-item                       Add product
                                                                         IDs                             names.
 
+     ``gfx1150``                 ``amdgcn``   APU   - cumode          - Architected                   *TBA*
+                                                    - wavefrontsize64   flat
+                                                                        scratch                       .. TODO::
+                                                                      - Packed
+                                                                        work-item                       Add product
+                                                                        IDs                             names.
+
+     ``gfx1151``                 ``amdgcn``   APU   - cumode          - Architected                   *TBA*
+                                                    - wavefrontsize64   flat
+                                                                        scratch                       .. TODO::
+                                                                      - Packed
+                                                                        work-item                       Add product
+                                                                        IDs                             names.
+
      =========== =============== ============ ===== ================= =============== =============== ======================
 
 .. _amdgpu-target-features:
@@ -951,6 +965,9 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
   =========================================  ==========================================================
   LLVM Intrinsic                             Description
   =========================================  ==========================================================
+  llvm.amdgcn.sqrt                           Provides direct access to v_sqrt_f64, v_sqrt_f32 and v_sqrt_f16
+                                             (on targets with half support). Peforms sqrt function.
+
   llvm.amdgcn.log                            Provides direct access to v_log_f32 and v_log_f16
                                              (on targets with half support). Peforms log2 function.
 
@@ -966,6 +983,8 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
                                              inputs. Backend will optimize out denormal scaling if
                                              marked with the :ref:`afn <fastmath_afn>` flag.
 
+  :ref:`llvm.sqrt <int_sqrt>`                Implemented for double, float and half (and vectors).
+
   :ref:`llvm.log <int_log>`                  Implemented for float and half (and vectors).
 
   :ref:`llvm.exp <int_exp>`                  Implemented for float and half (and vectors).
@@ -978,6 +997,26 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
                                              instruction does not natively support denormal
                                              inputs. Backend will optimize out denormal scaling if
                                              marked with the :ref:`afn <fastmath_afn>` flag.
+
+  llvm.amdgcn.wave.reduce.umin               Performs an arithmetic unsigned min reduction on the unsigned values
+                                             provided by each lane in the wavefront.
+                                             Intrinsic takes a hint for reduction strategy using second operand
+                                             0: Target default preference,
+                                             1: `Iterative strategy`, and
+                                             2: `DPP`.
+                                             If target does not support the DPP operations (e.g. gfx6/7),
+                                             reduction will be performed using default iterative strategy.
+                                             Intrinsic is currently only implemented for i32.
+
+  llvm.amdgcn.wave.reduce.umax               Performs an arithmetic unsigned max reduction on the unsigned values
+                                             provided by each lane in the wavefront.
+                                             Intrinsic takes a hint for reduction strategy using second operand
+                                             0: Target default preference,
+                                             1: `Iterative strategy`, and
+                                             2: `DPP`.
+                                             If target does not support the DPP operations (e.g. gfx6/7),
+                                             reduction will be performed using default iterative strategy.
+                                             Intrinsic is currently only implemented for i32.
 
   =========================================  ==========================================================
 
@@ -1089,6 +1128,14 @@ The AMDGPU backend supports the following LLVM IR attributes.
      "amdgpu-no-completion-action"           Similar to amdgpu-no-implicitarg-ptr, except specific to the implicit
                                              kernel argument that holds the completion action pointer. If this
                                              attribute is absent, then the amdgpu-no-implicitarg-ptr is also removed.
+
+     "amdgpu-lds-size"="min[,max]"           Min is the minimum number of bytes that will be allocated in the Local
+                                             Data Store at address zero. Variables are allocated within this frame
+                                             using absolute symbol metadata, primarily by the AMDGPULowerModuleLDS
+                                             pass. Optional max is the maximum number of bytes that will be allocated.
+                                             Note that min==max indicates that no further variables can be added to
+                                             the frame. This is an internal detail of how LDS variables are lowered,
+                                             language front ends should not set this attribute.
 
      ======================================= ==========================================================
 
@@ -1481,14 +1528,14 @@ The AMDGPU backend uses the following ELF header:
      ``EF_AMDGPU_MACH_AMDGCN_GFX940``     0x040      ``gfx940``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1100``    0x041      ``gfx1100``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1013``    0x042      ``gfx1013``
-     *reserved*                           0x043      Reserved.
+     ``EF_AMDGPU_MACH_AMDGCN_GFX1150``    0x043      ``gfx1150``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1103``    0x044      ``gfx1103``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1036``    0x045      ``gfx1036``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1101``    0x046      ``gfx1101``
      ``EF_AMDGPU_MACH_AMDGCN_GFX1102``    0x047      ``gfx1102``
      *reserved*                           0x048      Reserved.
      *reserved*                           0x049      Reserved.
-     *reserved*                           0x04a      Reserved.
+     ``EF_AMDGPU_MACH_AMDGCN_GFX1151``    0x04a      ``gfx1151``
      ``EF_AMDGPU_MACH_AMDGCN_GFX941``     0x04b      ``gfx941``
      ``EF_AMDGPU_MACH_AMDGCN_GFX942``     0x04c      ``gfx942``
      ==================================== ========== =============================

@@ -28,6 +28,19 @@ using namespace llvm::object;
 using namespace llvm::XCOFF;
 using namespace llvm::support;
 
+namespace {
+class XCOFFDumper : public objdump::Dumper {
+public:
+  XCOFFDumper(const object::XCOFFObjectFile &O) : Dumper(O) {}
+  void printPrivateHeaders() override {}
+};
+} // namespace
+
+std::unique_ptr<objdump::Dumper>
+objdump::createXCOFFDumper(const object::XCOFFObjectFile &Obj) {
+  return std::make_unique<XCOFFDumper>(Obj);
+}
+
 Error objdump::getXCOFFRelocationValueString(const XCOFFObjectFile &Obj,
                                              const RelocationRef &Rel,
                                              SmallVectorImpl<char> &Result) {

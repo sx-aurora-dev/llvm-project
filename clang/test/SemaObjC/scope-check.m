@@ -44,7 +44,6 @@ L3: ;
   } @catch (C *c) { // expected-note {{jump bypasses initialization of @catch block}}
   L8: ;
   }
-
   id X;
   goto L9;    // expected-error{{cannot jump}}
   @synchronized (X)  // expected-note {{jump bypasses initialization of @synchronized block}}
@@ -61,6 +60,7 @@ void test2(int a) {
   return;
 }
 
+// rdar://6803963
 void test3(void) {
   @try {
     goto blargh;

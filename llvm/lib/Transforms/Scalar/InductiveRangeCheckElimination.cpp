@@ -1717,6 +1717,28 @@ bool LoopConstrainer::run() {
     CanonicalizeLoop(PostL, false);
   CanonicalizeLoop(&OriginalLoop, true);
 
+  /// At this point:
+  /// - We've broken a "main loop" out of the loop in a way that the "main loop"
+  /// runs with the induction variable in a subset of [Begin, End).
+  /// - There is no overflow when computing "main loop" exit limit.
+  /// - Max latch taken count of the loop is limited.
+  /// It guarantees that induction variable will not overflow iterating in the
+  /// "main loop".
+  if (isa<OverflowingBinaryOperator>(MainLoopStructure.IndVarBase))
+    if (IsSignedPredicate)
+      cast<BinaryOperator>(MainLoopStructure.IndVarBase)
+          ->setHasNoSignedWrap(true);
+  /// TODO: support unsigned predicate.
+  /// To add NUW flag we need to prove that both operands of BO are
+  /// non-negative. E.g:
+  /// ...
+  /// %iv.next = add nsw i32 %iv, -1
+  /// %cmp = icmp ult i32 %iv.next, %n
+  /// br i1 %cmp, label %loopexit, label %loop
+  ///
+  /// -1 is MAX_UINT in terms of unsigned int. Adding anything but zero will
+  /// overflow, therefore NUW flag is not legal here.
+
   return true;
 }
 
@@ -1737,27 +1759,6 @@ InductiveRangeCheck::computeSafeIterationSpace(ScalarEvolution &SE,
     return std::nullopt;
   if (IVType->getBitWidth() > RCType->getBitWidth())
     return std::nullopt;
-
-  auto PrintRangeCheck = [&](raw_ostream &OS) {
-    auto L = IndVar->getLoop();
-    OS << "irce: in function ";
-    OS << L->getHeader()->getParent()->getName();
-    OS << ", in ";
-    L->print(OS);
-    OS << "there is range check with scaled boundary:\n";
-    print(OS);
-  };
-
-  if (EndType->getBitWidth() > RCType->getBitWidth()) {
-    assert(EndType->getBitWidth() == RCType->getBitWidth() * 2);
-    if (PrintScaledBoundaryRangeChecks)
-      PrintRangeCheck(errs());
-    // End is computed with extended type but will be truncated to a narrow one
-    // type of range check. Therefore we need a check that the result will not
-    // overflow in terms of narrow type.
-    // TODO: Support runtime overflow check for End
-    return std::nullopt;
-  }
 
   // IndVar is of the form "A + B * I" (where "I" is the canonical induction
   // variable, that may or may not exist as a real llvm::Value in the loop) and
@@ -1797,6 +1798,7 @@ InductiveRangeCheck::computeSafeIterationSpace(ScalarEvolution &SE,
   assert(!D->getValue()->isZero() && "Recurrence with zero step?");
   unsigned BitWidth = RCType->getBitWidth();
   const SCEV *SIntMax = SE.getConstant(APInt::getSignedMaxValue(BitWidth));
+  const SCEV *SIntMin = SE.getConstant(APInt::getSignedMinValue(BitWidth));
 
   // Subtract Y from X so that it does not go through border of the IV
   // iteration space. Mathematically, it is equivalent to:
@@ -1848,6 +1850,7 @@ InductiveRangeCheck::computeSafeIterationSpace(ScalarEvolution &SE,
   // This function returns SCEV equal to 1 if X is non-negative 0 otherwise.
   auto SCEVCheckNonNegative = [&](const SCEV *X) {
     const Loop *L = IndVar->getLoop();
+    const SCEV *Zero = SE.getZero(X->getType());
     const SCEV *One = SE.getOne(X->getType());
     // Can we trivially prove that X is a non-negative or negative value?
     if (isKnownNonNegativeInLoop(X, L, SE))
@@ -1859,6 +1862,25 @@ InductiveRangeCheck::computeSafeIterationSpace(ScalarEvolution &SE,
     const SCEV *NegOne = SE.getNegativeSCEV(One);
     return SE.getAddExpr(SE.getSMaxExpr(SE.getSMinExpr(X, Zero), NegOne), One);
   };
+
+  // This function returns SCEV equal to 1 if X will not overflow in terms of
+  // range check type, 0 otherwise.
+  auto SCEVCheckWillNotOverflow = [&](const SCEV *X) {
+    // X doesn't overflow if SINT_MAX >= X.
+    // Then if (SINT_MAX - X) >= 0, X doesn't overflow
+    const SCEV *SIntMaxExt = SE.getSignExtendExpr(SIntMax, X->getType());
+    const SCEV *OverflowCheck =
+        SCEVCheckNonNegative(SE.getMinusSCEV(SIntMaxExt, X));
+
+    // X doesn't underflow if X >= SINT_MIN.
+    // Then if (X - SINT_MIN) >= 0, X doesn't underflow
+    const SCEV *SIntMinExt = SE.getSignExtendExpr(SIntMin, X->getType());
+    const SCEV *UnderflowCheck =
+        SCEVCheckNonNegative(SE.getMinusSCEV(X, SIntMinExt));
+
+    return SE.getMulExpr(OverflowCheck, UnderflowCheck);
+  };
+
   // FIXME: Current implementation of ClampedSubtract implicitly assumes that
   // X is non-negative (in sense of a signed value). We need to re-implement
   // this function in a way that it will correctly handle negative X as well.
@@ -1868,10 +1890,35 @@ InductiveRangeCheck::computeSafeIterationSpace(ScalarEvolution &SE,
   // Note that this may pessimize elimination of unsigned range checks against
   // negative values.
   const SCEV *REnd = getEnd();
-  const SCEV *EndIsNonNegative = SCEVCheckNonNegative(REnd);
+  const SCEV *EndWillNotOverflow = SE.getOne(RCType);
 
-  const SCEV *Begin = SE.getMulExpr(ClampedSubtract(Zero, M), EndIsNonNegative);
-  const SCEV *End = SE.getMulExpr(ClampedSubtract(REnd, M), EndIsNonNegative);
+  auto PrintRangeCheck = [&](raw_ostream &OS) {
+    auto L = IndVar->getLoop();
+    OS << "irce: in function ";
+    OS << L->getHeader()->getParent()->getName();
+    OS << ", in ";
+    L->print(OS);
+    OS << "there is range check with scaled boundary:\n";
+    print(OS);
+  };
+
+  if (EndType->getBitWidth() > RCType->getBitWidth()) {
+    assert(EndType->getBitWidth() == RCType->getBitWidth() * 2);
+    if (PrintScaledBoundaryRangeChecks)
+      PrintRangeCheck(errs());
+    // End is computed with extended type but will be truncated to a narrow one
+    // type of range check. Therefore we need a check that the result will not
+    // overflow in terms of narrow type.
+    EndWillNotOverflow =
+        SE.getTruncateExpr(SCEVCheckWillNotOverflow(REnd), RCType);
+    REnd = SE.getTruncateExpr(REnd, RCType);
+  }
+
+  const SCEV *RuntimeChecks =
+      SE.getMulExpr(SCEVCheckNonNegative(REnd), EndWillNotOverflow);
+  const SCEV *Begin = SE.getMulExpr(ClampedSubtract(Zero, M), RuntimeChecks);
+  const SCEV *End = SE.getMulExpr(ClampedSubtract(REnd, M), RuntimeChecks);
+
   return InductiveRangeCheck::Range(Begin, End);
 }
 

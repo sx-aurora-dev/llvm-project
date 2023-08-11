@@ -18,6 +18,7 @@
 #include "GCNSubtarget.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -8240,23 +8241,7 @@ SIInstrInfo::splitFlatOffset(int64_t COffsetVal, unsigned AddrSpace,
   return {ImmField, RemainderOffset};
 }
 
-// This must be kept in sync with the SIEncodingFamily class in SIInstrInfo.td
-// and the columns of the getMCOpcodeGen table.
-enum SIEncodingFamily {
-  SI = 0,
-  VI = 1,
-  SDWA = 2,
-  SDWA9 = 3,
-  GFX80 = 4,
-  GFX9 = 5,
-  GFX10 = 6,
-  SDWA10 = 7,
-  GFX90A = 8,
-  GFX940 = 9,
-  GFX11 = 10,
-};
-
-static SIEncodingFamily subtargetEncodingFamily(const GCNSubtarget &ST) {
+static unsigned subtargetEncodingFamily(const GCNSubtarget &ST) {
   switch (ST.getGeneration()) {
   default:
     break;
@@ -8295,7 +8280,7 @@ bool SIInstrInfo::isAsmOnlyOpcode(int MCOp) const {
 }
 
 int SIInstrInfo::pseudoToMCOpcode(int Opcode) const {
-  SIEncodingFamily Gen = subtargetEncodingFamily(ST);
+  unsigned Gen = subtargetEncodingFamily(ST);
 
   if ((get(Opcode).TSFlags & SIInstrFlags::renamedInGFX9) != 0 &&
     ST.getGeneration() == AMDGPUSubtarget::GFX9)
@@ -8619,9 +8604,8 @@ unsigned SIInstrInfo::getInstrLatency(const InstrItineraryData *ItinData,
 InstructionUniformity
 SIInstrInfo::getGenericInstructionUniformity(const MachineInstr &MI) const {
   unsigned opcode = MI.getOpcode();
-  if (opcode == AMDGPU::G_INTRINSIC ||
-      opcode == AMDGPU::G_INTRINSIC_W_SIDE_EFFECTS) {
-    auto IID = static_cast<Intrinsic::ID>(MI.getIntrinsicID());
+  if (auto *GI = dyn_cast<GIntrinsic>(&MI)) {
+    auto IID = GI->getIntrinsicID();
     if (AMDGPU::isIntrinsicSourceOfDivergence(IID))
       return InstructionUniformity::NeverUniform;
     if (AMDGPU::isIntrinsicAlwaysUniform(IID))

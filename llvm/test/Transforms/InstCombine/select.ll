@@ -960,7 +960,7 @@ define void @test64(i32 %p, i16 %b, i1 %c1) noreturn {
 ; CHECK:       lor.rhs:
 ; CHECK-NEXT:    br label [[LOR_END]]
 ; CHECK:       lor.end:
-; CHECK-NEXT:    br i1 true, label [[COND_END17:%.*]], label [[COND_FALSE16:%.*]]
+; CHECK-NEXT:    br i1 poison, label [[COND_END17:%.*]], label [[COND_FALSE16:%.*]]
 ; CHECK:       cond.false16:
 ; CHECK-NEXT:    br label [[COND_END17]]
 ; CHECK:       cond.end17:
@@ -2892,10 +2892,9 @@ define i32 @select_replacement_loop2(i32 %arg, i32 %arg2) {
   ret i32 %sel
 }
 
-; TODO: Dropping the inbounds flag should not be necessary for this fold.
 define ptr @select_replacement_gep_inbounds(ptr %base, i64 %offset) {
 ; CHECK-LABEL: @select_replacement_gep_inbounds(
-; CHECK-NEXT:    [[GEP:%.*]] = getelementptr i8, ptr [[BASE:%.*]], i64 [[OFFSET:%.*]]
+; CHECK-NEXT:    [[GEP:%.*]] = getelementptr inbounds i8, ptr [[BASE:%.*]], i64 [[OFFSET:%.*]]
 ; CHECK-NEXT:    ret ptr [[GEP]]
 ;
   %cmp = icmp eq i64 %offset, 0

@@ -559,7 +559,7 @@ public:
 
   /// Fetch the type representing a pointer to an 8-bit integer value.
   PointerType *getInt8PtrTy(unsigned AddrSpace = 0) {
-    return Type::getInt8PtrTy(Context, AddrSpace);
+    return getPtrTy(AddrSpace);
   }
 
   /// Fetch the type of an integer with size at least as big as that of a
@@ -662,9 +662,13 @@ public:
 
   CallInst *
   CreateMemCpyInline(Value *Dst, MaybeAlign DstAlign, Value *Src,
-                     MaybeAlign SrcAlign, Value *Size, bool IsVolatile = false,
+                     MaybeAlign SrcAlign, Value *Size, bool isVolatile = false,
                      MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr,
-                     MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr);
+                     MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr) {
+    return CreateMemTransferInst(Intrinsic::memcpy_inline, Dst, DstAlign, Src,
+                                 SrcAlign, Size, isVolatile, TBAATag,
+                                 TBAAStructTag, ScopeTag, NoAliasTag);
+  }
 
   /// Create and insert an element unordered-atomic memcpy between the
   /// specified pointers.
@@ -693,7 +697,12 @@ public:
                           MaybeAlign SrcAlign, Value *Size,
                           bool isVolatile = false, MDNode *TBAATag = nullptr,
                           MDNode *ScopeTag = nullptr,
-                          MDNode *NoAliasTag = nullptr);
+                          MDNode *NoAliasTag = nullptr) {
+    return CreateMemTransferInst(Intrinsic::memmove, Dst, DstAlign, Src,
+                                 SrcAlign, Size, isVolatile, TBAATag,
+                                 /*TBAAStructTag=*/nullptr, ScopeTag,
+                                 NoAliasTag);
+  }
 
   /// \brief Create and insert an element unordered-atomic memmove between the
   /// specified pointers.
@@ -1039,8 +1048,6 @@ private:
   CallInst *CreateMaskedIntrinsic(Intrinsic::ID Id, ArrayRef<Value *> Ops,
                                   ArrayRef<Type *> OverloadedTypes,
                                   const Twine &Name = "");
-
-  Value *getCastedInt8PtrValue(Value *Ptr);
 
   //===--------------------------------------------------------------------===//
   // Instruction creation methods: Terminators
@@ -2545,11 +2552,6 @@ public:
   /// Return a vector value that contains \arg V broadcasted to \p
   /// EC elements.
   Value *CreateVectorSplat(ElementCount EC, Value *V, const Twine &Name = "");
-
-  /// Return a value that has been extracted from a larger integer type.
-  Value *CreateExtractInteger(const DataLayout &DL, Value *From,
-                              IntegerType *ExtractedTy, uint64_t Offset,
-                              const Twine &Name);
 
   Value *CreatePreserveArrayAccessIndex(Type *ElTy, Value *Base,
                                         unsigned Dimension, unsigned LastIndex,

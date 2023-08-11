@@ -124,6 +124,10 @@ bool isKnownToBeAPowerOfTwo(const Value *V, const DataLayout &DL,
                             const DominatorTree *DT = nullptr,
                             bool UseInstrInfo = true);
 
+/// Return true if the given instruction is only used in zero comparison
+bool isOnlyUsedInZeroComparison(const Instruction *CxtI);
+
+/// Return true if the given instruction is only used in zero equality comparison
 bool isOnlyUsedInZeroEqualityComparison(const Instruction *CxtI);
 
 /// Return true if the given value is known to be non-zero when defined. For
@@ -293,7 +297,8 @@ struct KnownFPClass {
     return isKnownNever(fcPosZero);
   }
 
-  /// Return true if it's known this can never be a literal negative zero.
+  /// Return true if it's known this can never be a negative zero. This means a
+  /// literal -0 and does not include denormal inputs implicitly treated as -0.
   bool isKnownNeverNegZero() const {
     return isKnownNever(fcNegZero);
   }
@@ -471,10 +476,19 @@ KnownFPClass computeKnownFPClass(
     bool UseInstrInfo = true);
 
 /// Return true if we can prove that the specified FP value is never equal to
-/// -0.0.
-bool CannotBeNegativeZero(const Value *V, const TargetLibraryInfo *TLI,
-                          unsigned Depth = 0);
-
+/// -0.0. Users should use caution when considering PreserveSign
+/// denormal-fp-math.
+inline bool cannotBeNegativeZero(const Value *V, const DataLayout &DL,
+                                 const TargetLibraryInfo *TLI = nullptr,
+                                 unsigned Depth = 0,
+                                 AssumptionCache *AC = nullptr,
+                                 const Instruction *CtxI = nullptr,
+                                 const DominatorTree *DT = nullptr,
+                                 bool UseInstrInfo = true) {
+  KnownFPClass Known = computeKnownFPClass(V, DL, fcNegZero, Depth, TLI, AC,
+                                           CtxI, DT, UseInstrInfo);
+  return Known.isKnownNeverNegZero();
+}
 
 bool CannotBeOrderedLessThanZero(const Value *V, const DataLayout &DL,
                                  const TargetLibraryInfo *TLI);

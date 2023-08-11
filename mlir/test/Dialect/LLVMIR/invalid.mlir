@@ -874,7 +874,7 @@ func.func @switch_wrong_number_of_weights(%arg0 : i32) {
   // expected-error@+1 {{expects number of branch weights to match number of successors: 3 vs 2}}
   llvm.switch %arg0 : i32, ^bb1 [
     42: ^bb2(%arg0, %arg0 : i32, i32)
-  ] {branch_weights = dense<[13, 17, 19]> : vector<3xi32>}
+  ] {branch_weights = array<i32: 13, 17, 19>}
 
 ^bb1: // pred: ^bb0
   llvm.return
@@ -887,7 +887,7 @@ func.func @switch_wrong_number_of_weights(%arg0 : i32) {
 
 func.func @switch_case_type_mismatch(%arg0 : i64) {
   // expected-error@below {{expects case value type to match condition value type}}
-  "llvm.switch"(%arg0)[^bb1, ^bb2] <{case_operand_segments = array<i32: 0>, case_values = dense<42> : vector<1xi32>, operand_segment_sizes = array<i32: 1, 0, 0>}> : (i64) -> ()
+  "llvm.switch"(%arg0)[^bb1, ^bb2] <{case_operand_segments = array<i32: 0>, case_values = dense<42> : vector<1xi32>, odsOperandSegmentSizes = array<i32: 1, 0, 0>}> : (i64) -> ()
 ^bb1: // pred: ^bb0
   llvm.return
 ^bb2: // pred: ^bb0
@@ -912,35 +912,8 @@ llvm.mlir.global appending @non_array_type_global_appending_linkage() : i32
 // -----
 
 module {
-  llvm.func @loopOptions() {
-      // expected-error@below {{expected '@func1' to reference a metadata op}}
-      llvm.br ^bb4 {loop_annotation = #llvm.loop_annotation<parallelAccesses = @func1>}
-    ^bb4:
-      llvm.return
-  }
-  llvm.func @func1() {
-    llvm.return
-  }
-}
-
-// -----
-
-module {
-  llvm.func @loopOptions() {
-      // expected-error@below {{expected '@metadata' to reference an access_group op}}
-      llvm.br ^bb4 {loop_annotation = #llvm.loop_annotation<parallelAccesses = @metadata>}
-    ^bb4:
-      llvm.return
-  }
-  llvm.metadata @metadata {
-  }
-}
-
-// -----
-
-module {
   llvm.func @accessGroups(%arg0 : !llvm.ptr) {
-      // expected-error@below {{expected '@func1' to specify a fully qualified reference}}
+      // expected-error@below {{attribute 'access_groups' failed to satisfy constraint: LLVM dialect access group metadata array}}
       %0 = llvm.load %arg0 { "access_groups" = [@func1] } : !llvm.ptr -> i32
       llvm.return
   }
@@ -952,38 +925,13 @@ module {
 // -----
 
 module {
-  llvm.func @accessGroups(%arg0 : i32, %arg1 : !llvm.ptr) {
-      // expected-error@below {{expected '@accessGroups::@group1' to reference a metadata op}}
-      llvm.store %arg0, %arg1 { "access_groups" = [@accessGroups::@group1] } : i32, !llvm.ptr
-      llvm.return
-  }
-  llvm.metadata @metadata {
-  }
-}
-
-// -----
-
-module {
-  llvm.func @accessGroups(%arg0 : !llvm.ptr, %arg1 : f32) {
-      // expected-error@below {{expected '@metadata::@group1' to be a valid reference}}
-      %0 = llvm.atomicrmw fadd %arg0, %arg1 monotonic { "access_groups" = [@metadata::@group1] } : !llvm.ptr, f32
-      llvm.return
-  }
-  llvm.metadata @metadata {
-  }
-}
-
-// -----
-
-module {
   llvm.func @accessGroups(%arg0 : !llvm.ptr, %arg1 : i32, %arg2 : i32) {
-      // expected-error@below {{expected '@metadata::@scope' to resolve to a llvm.access_group}}
+      // expected-error@below {{attribute 'access_groups' failed to satisfy constraint: LLVM dialect access group metadata array}}
       %0 = llvm.cmpxchg %arg0, %arg1, %arg2 acq_rel monotonic { "access_groups" = [@metadata::@scope] } : !llvm.ptr, i32
       llvm.return
   }
   llvm.metadata @metadata {
-    llvm.alias_scope_domain @domain
-    llvm.alias_scope @scope { domain = @domain }
+    llvm.func @scope()
   }
 }
 
@@ -991,7 +939,7 @@ module {
 
 module {
   llvm.func @aliasScope(%arg0 : !llvm.ptr, %arg1 : i32, %arg2 : i32) {
-      // expected-error@below {{attribute 'alias_scopes' failed to satisfy constraint: symbol ref array attribute}}
+      // expected-error@below {{attribute 'alias_scopes' failed to satisfy constraint: LLVM dialect alias scope array}}
       %0 = llvm.cmpxchg %arg0, %arg1, %arg2 acq_rel monotonic { "alias_scopes" = "test" } : !llvm.ptr, i32
       llvm.return
   }
@@ -1001,57 +949,9 @@ module {
 
 module {
   llvm.func @noAliasScopes(%arg0 : !llvm.ptr) {
-      // expected-error@below {{attribute 'noalias_scopes' failed to satisfy constraint: symbol ref array attribute}}
+      // expected-error@below {{attribute 'noalias_scopes' failed to satisfy constraint: LLVM dialect alias scope array}}
       %0 = llvm.load %arg0 { "noalias_scopes" = "test" } : !llvm.ptr -> i32
       llvm.return
-  }
-}
-
-// -----
-
-module {
-  llvm.func @aliasScope(%arg0 : i32, %arg1 : !llvm.ptr) {
-      // expected-error@below {{expected '@metadata::@group' to resolve to a llvm.alias_scope}}
-      llvm.store %arg0, %arg1 { "alias_scopes" = [@metadata::@group] } : i32, !llvm.ptr
-      llvm.return
-  }
-  llvm.metadata @metadata {
-    llvm.access_group @group
-  }
-}
-
-// -----
-
-module {
-  llvm.func @aliasScope(%arg0 : !llvm.ptr, %arg1 : f32) {
-      // expected-error@below {{expected '@metadata::@group' to resolve to a llvm.alias_scope}}
-      %0 = llvm.atomicrmw fadd %arg0, %arg1 monotonic { "noalias_scopes" = [@metadata::@group] } : !llvm.ptr, f32
-      llvm.return
-  }
-  llvm.metadata @metadata {
-    llvm.access_group @group
-  }
-}
-
-// -----
-
-module {
-  llvm.metadata @metadata {
-    llvm.access_group @group
-    // expected-error@below {{expected 'group' to reference a domain operation in the same region}}
-    llvm.alias_scope @scope { domain = @group }
-  }
-}
-
-// -----
-
-module {
-  llvm.metadata @metadata {
-    // expected-error@below {{expected 'domain' to reference a domain operation in the same region}}
-    llvm.alias_scope @scope { domain = @domain }
-  }
-  llvm.metadata @other_metadata {
-    llvm.alias_scope_domain @domain
   }
 }
 
