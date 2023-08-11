@@ -358,7 +358,7 @@ PPCIntrinsicLibrary::genVecAnyCompare(mlir::Type resultType,
   assert(vop == VecOp::Anyge && "unknown vector compare operation");
   auto argBases{getBasesForArgs(args)};
   VecTypeInfo vTypeInfo{getVecTypeFromFir(argBases[0])};
-  const auto isSupportedTy{
+  [[maybe_unused]] const auto isSupportedTy{
       mlir::isa<mlir::Float32Type, mlir::Float64Type, mlir::IntegerType>(
           vTypeInfo.eleTy)};
   assert(isSupportedTy && "unsupported vector type");
@@ -614,7 +614,7 @@ PPCIntrinsicLibrary::genVecCmp(mlir::Type resultType,
       break;
     }
     default:
-      assert(false && "Invalid vector operation for generator");
+      llvm_unreachable("Invalid vector operation for generator");
     }
   } else if (vecTyInfo.isFloat()) {
     mlir::Value vargs[2];
@@ -631,12 +631,12 @@ PPCIntrinsicLibrary::genVecCmp(mlir::Type resultType,
       vargs[1] = argBases[0];
       break;
     default:
-      assert(false && "Invalid vector operation for generator");
+      llvm_unreachable("Invalid vector operation for generator");
     }
     auto callOp{builder.create<fir::CallOp>(loc, funcOp, vargs)};
     res = callOp.getResult(0);
   } else
-    assert(false && "invalid vector type");
+    llvm_unreachable("invalid vector type");
 
   return res;
 }
