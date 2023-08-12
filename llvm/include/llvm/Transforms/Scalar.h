@@ -21,7 +21,6 @@ namespace llvm {
 
 class Function;
 class FunctionPass;
-class ModulePass;
 class Pass;
 
 //===----------------------------------------------------------------------===//
@@ -195,12 +194,6 @@ FunctionPass *createSinkingPass();
 // LowerAtomic - Lower atomic intrinsics to non-atomic form
 //
 Pass *createLowerAtomicPass();
-
-//===----------------------------------------------------------------------===//
-//
-// LowerGuardIntrinsic - Lower guard intrinsics to normal control flow.
-//
-Pass *createLowerGuardIntrinsicPass();
 
 //===----------------------------------------------------------------------===//
 //

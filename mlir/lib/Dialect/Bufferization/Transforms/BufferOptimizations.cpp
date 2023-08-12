@@ -14,6 +14,7 @@
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 
 #include "mlir/Dialect/Bufferization/Transforms/BufferUtils.h"
+#include "mlir/Dialect/Bufferization/Transforms/Transforms.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Operation.h"
@@ -74,7 +75,8 @@ leavesAllocationScope(Region *parentRegion,
       // If there is at least one alias that leaves the parent region, we know
       // that this alias escapes the whole region and hence the associated
       // allocation leaves allocation scope.
-      if (isRegionReturnLike(use) && use->getParentRegion() == parentRegion)
+      if (isa<RegionBranchTerminatorOpInterface>(use) &&
+          use->getParentRegion() == parentRegion)
         return true;
     }
   }
@@ -389,9 +391,7 @@ struct BufferLoopHoistingPass
 
   void runOnOperation() override {
     // Hoist all allocations out of loops.
-    BufferAllocationHoisting<BufferAllocationLoopHoistingState> optimizer(
-        getOperation());
-    optimizer.hoist();
+    hoistBuffersFromLoops(getOperation());
   }
 };
 
@@ -431,6 +431,11 @@ private:
 };
 
 } // namespace
+
+void mlir::bufferization::hoistBuffersFromLoops(Operation *op) {
+  BufferAllocationHoisting<BufferAllocationLoopHoistingState> optimizer(op);
+  optimizer.hoist();
+}
 
 std::unique_ptr<Pass> mlir::bufferization::createBufferHoistingPass() {
   return std::make_unique<BufferHoistingPass>();

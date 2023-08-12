@@ -347,8 +347,13 @@ template <class ELFT> void elf::createSyntheticSections() {
 
     if (config->emachine == EM_AARCH64 &&
         config->androidMemtagMode != ELF::NT_MEMTAG_LEVEL_NONE) {
+      if (!config->relocatable && !config->shared && !needsInterpSection())
+        error("--android-memtag-mode is incompatible with fully-static "
+              "executables (-static)");
       part.memtagAndroidNote = std::make_unique<MemtagAndroidNote>();
       add(*part.memtagAndroidNote);
+      part.memtagDescriptors = std::make_unique<MemtagDescriptors>();
+      add(*part.memtagDescriptors);
     }
 
     if (config->androidPackDynRelocs)
@@ -453,6 +458,11 @@ template <class ELFT> void elf::createSyntheticSections() {
   add(*in.gotPlt);
   in.igotPlt = std::make_unique<IgotPltSection>();
   add(*in.igotPlt);
+
+  if (config->emachine == EM_ARM) {
+    in.armCmseSGSection = std::make_unique<ArmCmseSGSection>();
+    add(*in.armCmseSGSection);
+  }
 
   // _GLOBAL_OFFSET_TABLE_ is defined relative to either .got.plt or .got. Treat
   // it as a relocation and ensure the referenced section is created.
@@ -595,6 +605,9 @@ template <class ELFT> void Writer<ELFT>::run() {
     if (auto e = buffer->commit())
       fatal("failed to write output '" + buffer->getPath() +
             "': " + toString(std::move(e)));
+
+    if (!config->cmseOutputLib.empty())
+      writeARMCmseImportLib<ELFT>();
   }
 }
 
@@ -664,7 +677,7 @@ static bool shouldKeepInSymtab(const Defined &sym) {
   return true;
 }
 
-static bool includeInSymtab(const Symbol &b) {
+bool lld::elf::includeInSymtab(const Symbol &b) {
   if (auto *d = dyn_cast<Defined>(&b)) {
     // Always include absolute symbols.
     SectionBase *sec = d->section;
@@ -1644,6 +1657,8 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
       changed |= part.relaDyn->updateAllocSize();
       if (part.relrDyn)
         changed |= part.relrDyn->updateAllocSize();
+      if (part.memtagDescriptors)
+        changed |= part.memtagDescriptors->updateAllocSize();
     }
 
     const Defined *changedSym = script->assignAddresses();
@@ -1983,6 +1998,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
 
   removeUnusedSyntheticSections();
   script->diagnoseOrphanHandling();
+  script->diagnoseMissingSGSectionAddress();
 
   sortSections();
 
@@ -2134,6 +2150,7 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
     // static symbol table.
     finalizeSynthetic(in.symTab.get());
     finalizeSynthetic(in.ppc64LongBranchTarget.get());
+    finalizeSynthetic(in.armCmseSGSection.get());
   }
 
   // Relaxation to delete inter-basic block jumps created by basic block
@@ -2983,7 +3000,7 @@ template <class ELFT> void Writer<ELFT>::writeBuildId() {
   switch (config->buildId) {
   case BuildIdKind::Fast:
     computeHash(output, input, [](uint8_t *dest, ArrayRef<uint8_t> arr) {
-      write64le(dest, xxHash64(arr));
+      write64le(dest, xxh3_64bits(arr));
     });
     break;
   case BuildIdKind::Md5:

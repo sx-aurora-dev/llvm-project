@@ -1,10 +1,10 @@
 // RUN: %check_clang_tidy -check-suffixes=,STRICT \
 // RUN:   -std=c++23 %s modernize-use-std-print %t -- \
-// RUN:   -config="{CheckOptions: [{key: StrictMode, value: true}]}" \
+// RUN:   -config="{CheckOptions: {StrictMode: true}}" \
 // RUN:   -- -isystem %clang_tidy_headers -fexceptions
 // RUN: %check_clang_tidy -check-suffixes=,NOTSTRICT \
 // RUN:   -std=c++23 %s modernize-use-std-print %t -- \
-// RUN:   -config="{CheckOptions: [{key: StrictMode, value: false}]}" \
+// RUN:   -config="{CheckOptions: {StrictMode: false}}" \
 // RUN:   -- -isystem %clang_tidy_headers -fexceptions
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +42,16 @@ void printf_deceptive_newline() {
   printf("Hello\x0a");
   // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::println' instead of 'printf' [modernize-use-std-print]
   // CHECK-FIXES: std::println("Hello");
+}
+
+void printf_crlf_newline() {
+  printf("Hello\r\n");
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::print("Hello\r\n");
+
+  printf("Hello\r\\n");
+  // CHECK-MESSAGES: [[@LINE-1]]:3: warning: use 'std::print' instead of 'printf' [modernize-use-std-print]
+  // CHECK-FIXES: std::print("Hello\r\\n");
 }
 
 // std::print returns nothing, so any callers that use the return

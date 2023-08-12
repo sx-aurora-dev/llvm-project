@@ -507,14 +507,17 @@ static bool isExtHandlingFromDiagsError(DiagnosticsEngine &Diags) {
 }
 
 static bool checkDiagnosticMappings(DiagnosticsEngine &StoredDiags,
-                                    DiagnosticsEngine &Diags,
-                                    bool IsSystem, bool Complain) {
+                                    DiagnosticsEngine &Diags, bool IsSystem,
+                                    bool SystemHeaderWarningsInModule,
+                                    bool Complain) {
   // Top-level options
   if (IsSystem) {
     if (Diags.getSuppressSystemWarnings())
       return false;
-    // If -Wsystem-headers was not enabled before, be conservative
-    if (StoredDiags.getSuppressSystemWarnings()) {
+    // If -Wsystem-headers was not enabled before, and it was not explicit,
+    // be conservative
+    if (StoredDiags.getSuppressSystemWarnings() &&
+        !SystemHeaderWarningsInModule) {
       if (Complain)
         Diags.Report(diag::err_pch_diagopt_mismatch) << "-Wsystem-headers";
       return true;
@@ -586,10 +589,17 @@ bool PCHValidator::ReadDiagnosticOptions(
   if (!TopM)
     return false;
 
+  Module *Importer = PP.getCurrentModule();
+
+  DiagnosticOptions &ExistingOpts = ExistingDiags.getDiagnosticOptions();
+  bool SystemHeaderWarningsInModule =
+      Importer && llvm::is_contained(ExistingOpts.SystemHeaderWarningsModules,
+                                     Importer->Name);
+
   // FIXME: if the diagnostics are incompatible, save a DiagnosticOptions that
   // contains the union of their flags.
   return checkDiagnosticMappings(*Diags, ExistingDiags, TopM->IsSystem,
-                                 Complain);
+                                 SystemHeaderWarningsInModule, Complain);
 }
 
 /// Collect the macro definitions provided by the given preprocessor
@@ -1875,6 +1885,21 @@ ASTReader::getGlobalPreprocessedEntityID(ModuleFile &M,
   return LocalID + I->second;
 }
 
+const FileEntry *HeaderFileInfoTrait::getFile(const internal_key_type &Key) {
+  FileManager &FileMgr = Reader.getFileManager();
+  if (!Key.Imported) {
+    if (auto File = FileMgr.getFile(Key.Filename))
+      return *File;
+    return nullptr;
+  }
+
+  std::string Resolved = std::string(Key.Filename);
+  Reader.ResolveImportedPath(M, Resolved);
+  if (auto File = FileMgr.getFile(Resolved))
+    return *File;
+  return nullptr;
+}
+
 unsigned HeaderFileInfoTrait::ComputeHash(internal_key_ref ikey) {
   return llvm::hash_combine(ikey.Size, ikey.ModTime);
 }
@@ -1895,23 +1920,8 @@ bool HeaderFileInfoTrait::EqualKey(internal_key_ref a, internal_key_ref b) {
     return true;
 
   // Determine whether the actual files are equivalent.
-  FileManager &FileMgr = Reader.getFileManager();
-  auto GetFile = [&](const internal_key_type &Key) -> const FileEntry* {
-    if (!Key.Imported) {
-      if (auto File = FileMgr.getFile(Key.Filename))
-        return *File;
-      return nullptr;
-    }
-
-    std::string Resolved = std::string(Key.Filename);
-    Reader.ResolveImportedPath(M, Resolved);
-    if (auto File = FileMgr.getFile(Resolved))
-      return *File;
-    return nullptr;
-  };
-
-  const FileEntry *FEA = GetFile(a);
-  const FileEntry *FEB = GetFile(b);
+  const FileEntry *FEA = getFile(a);
+  const FileEntry *FEB = getFile(b);
   return FEA && FEA == FEB;
 }
 
@@ -1940,6 +1950,14 @@ HeaderFileInfoTrait::ReadData(internal_key_ref key, const unsigned char *d,
   const unsigned char *End = d + DataLen;
   HeaderFileInfo HFI;
   unsigned Flags = *d++;
+
+  bool Included = (Flags >> 6) & 0x01;
+  if (Included)
+    if (const FileEntry *FE = getFile(key))
+      // Not using \c Preprocessor::markIncluded(), since that would attempt to
+      // deserialize this header file info again.
+      Reader.getPreprocessor().getIncludedFiles().insert(FE);
+
   // FIXME: Refactor with mergeHeaderFileInfo in HeaderSearch.cpp.
   HFI.isImport |= (Flags >> 5) & 0x01;
   HFI.isPragmaOnce |= (Flags >> 4) & 0x01;
@@ -2334,9 +2352,22 @@ InputFileInfo ASTReader::getInputFileInfo(ModuleFile &F, unsigned ID) {
   R.StoredTime = static_cast<time_t>(Record[2]);
   R.Overridden = static_cast<bool>(Record[3]);
   R.Transient = static_cast<bool>(Record[4]);
-  R.TopLevelModuleMap = static_cast<bool>(Record[5]);
-  R.Filename = std::string(Blob);
-  ResolveImportedPath(F, R.Filename);
+  R.TopLevel = static_cast<bool>(Record[5]);
+  R.ModuleMap = static_cast<bool>(Record[6]);
+  std::tie(R.FilenameAsRequested, R.Filename) = [&]() {
+    uint16_t AsRequestedLength = Record[7];
+
+    std::string NameAsRequested = Blob.substr(0, AsRequestedLength).str();
+    std::string Name = Blob.substr(AsRequestedLength).str();
+
+    ResolveImportedPath(F, NameAsRequested);
+    ResolveImportedPath(F, Name);
+
+    if (Name.empty())
+      Name = NameAsRequested;
+
+    return std::make_pair(std::move(NameAsRequested), std::move(Name));
+  }();
 
   Expected<llvm::BitstreamEntry> MaybeEntry = Cursor.advance();
   if (!MaybeEntry) // FIXME this drops errors on the floor.
@@ -2387,7 +2418,7 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
   time_t StoredTime = FI.StoredTime;
   bool Overridden = FI.Overridden;
   bool Transient = FI.Transient;
-  StringRef Filename = FI.Filename;
+  StringRef Filename = FI.FilenameAsRequested;
   uint64_t StoredContentHash = FI.ContentHash;
 
   // For standard C++ modules, we don't need to check the inputs.
@@ -2734,9 +2765,9 @@ ASTReader::ReadControlBlock(ModuleFile &F,
         for (unsigned I = 0; I < N; ++I) {
           bool IsSystem = I >= NumUserInputs;
           InputFileInfo FI = getInputFileInfo(F, I + 1);
-          Listener->visitInputFile(FI.Filename, IsSystem, FI.Overridden,
-                                   F.Kind == MK_ExplicitModule ||
-                                   F.Kind == MK_PrebuiltModule);
+          Listener->visitInputFile(
+              FI.FilenameAsRequested, IsSystem, FI.Overridden,
+              F.Kind == MK_ExplicitModule || F.Kind == MK_PrebuiltModule);
         }
       }
 
@@ -2982,6 +3013,9 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       BaseDirectoryAsWritten = Blob;
       assert(!F.ModuleName.empty() &&
              "MODULE_DIRECTORY found before MODULE_NAME");
+      F.BaseDirectory = std::string(Blob);
+      if (!PP.getPreprocessorOpts().ModulesCheckRelocated)
+        break;
       // If we've already loaded a module map file covering this module, we may
       // have a better path for it (relative to the current build).
       Module *M = PP.getHeaderSearchInfo().lookupModule(
@@ -3003,8 +3037,6 @@ ASTReader::ReadControlBlock(ModuleFile &F,
           }
         }
         F.BaseDirectory = std::string(M->Directory->getName());
-      } else {
-        F.BaseDirectory = std::string(Blob);
       }
       break;
     }
@@ -3025,22 +3057,6 @@ ASTReader::ReadControlBlock(ModuleFile &F,
       F.NumUserInputFiles = NumUserInputs;
       break;
     }
-  }
-}
-
-void ASTReader::readIncludedFiles(ModuleFile &F, StringRef Blob,
-                                  Preprocessor &PP) {
-  using namespace llvm::support;
-
-  const unsigned char *D = (const unsigned char *)Blob.data();
-  unsigned FileCount = endian::readNext<uint32_t, little, unaligned>(D);
-
-  for (unsigned I = 0; I < FileCount; ++I) {
-    size_t ID = endian::readNext<uint32_t, little, unaligned>(D);
-    InputFileInfo IFI = getInputFileInfo(F, ID);
-    if (llvm::ErrorOr<const FileEntry *> File =
-            PP.getFileManager().getFile(IFI.Filename))
-      PP.getIncludedFiles().insert(*File);
   }
 }
 
@@ -3795,10 +3811,6 @@ llvm::Error ASTReader::ReadASTBlock(ModuleFile &F,
       break;
     }
 
-    case PP_INCLUDED_FILES:
-      readIncludedFiles(F, Blob, PP);
-      break;
-
     case LATE_PARSED_TEMPLATE:
       LateParsedTemplates.emplace_back(
           std::piecewise_construct, std::forward_as_tuple(&F),
@@ -4002,7 +4014,8 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
   // usable header search context.
   assert(!F.ModuleName.empty() &&
          "MODULE_NAME should come before MODULE_MAP_FILE");
-  if (F.Kind == MK_ImplicitModule && ModuleMgr.begin()->Kind != MK_MainFile) {
+  if (PP.getPreprocessorOpts().ModulesCheckRelocated &&
+      F.Kind == MK_ImplicitModule && ModuleMgr.begin()->Kind != MK_MainFile) {
     // An implicitly-loaded module file should have its module listed in some
     // module map file that we've already loaded.
     Module *M =
@@ -5619,7 +5632,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
       break;
 
     case SUBMODULE_DEFINITION: {
-      if (Record.size() < 12)
+      if (Record.size() < 13)
         return llvm::createStringError(std::errc::illegal_byte_sequence,
                                        "malformed module definition");
 
@@ -5628,6 +5641,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
       SubmoduleID GlobalID = getGlobalSubmoduleID(F, Record[Idx++]);
       SubmoduleID Parent = getGlobalSubmoduleID(F, Record[Idx++]);
       Module::ModuleKind Kind = (Module::ModuleKind)Record[Idx++];
+      SourceLocation DefinitionLoc = ReadSourceLocation(F, Record[Idx++]);
       bool IsFramework = Record[Idx++];
       bool IsExplicit = Record[Idx++];
       bool IsSystem = Record[Idx++];
@@ -5648,8 +5662,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
           ModMap.findOrCreateModule(Name, ParentModule, IsFramework, IsExplicit)
               .first;
 
-      // FIXME: set the definition loc for CurrentModule, or call
-      // ModMap.setInferredModuleAllowedBy()
+      // FIXME: Call ModMap.setInferredModuleAllowedBy()
 
       SubmoduleID GlobalIndex = GlobalID - NUM_PREDEF_SUBMODULE_IDS;
       if (GlobalIndex >= SubmodulesLoaded.size() ||
@@ -5678,6 +5691,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
       }
 
       CurrentModule->Kind = Kind;
+      CurrentModule->DefinitionLoc = DefinitionLoc;
       CurrentModule->Signature = F.Signature;
       CurrentModule->IsFromModuleFile = true;
       CurrentModule->IsSystem = IsSystem || CurrentModule->IsSystem;
@@ -9316,6 +9330,22 @@ void ASTReader::ReadComments() {
   }
 }
 
+void ASTReader::visitInputFileInfos(
+    serialization::ModuleFile &MF, bool IncludeSystem,
+    llvm::function_ref<void(const serialization::InputFileInfo &IFI,
+                            bool IsSystem)>
+        Visitor) {
+  unsigned NumUserInputs = MF.NumUserInputFiles;
+  unsigned NumInputs = MF.InputFilesLoaded.size();
+  assert(NumUserInputs <= NumInputs);
+  unsigned N = IncludeSystem ? NumInputs : NumUserInputs;
+  for (unsigned I = 0; I < N; ++I) {
+    bool IsSystem = I >= NumUserInputs;
+    InputFileInfo IFI = getInputFileInfo(MF, I+1);
+    Visitor(IFI, IsSystem);
+  }
+}
+
 void ASTReader::visitInputFiles(serialization::ModuleFile &MF,
                                 bool IncludeSystem, bool Complain,
                     llvm::function_ref<void(const serialization::InputFile &IF,
@@ -9337,7 +9367,7 @@ void ASTReader::visitTopLevelModuleMaps(
   unsigned NumInputs = MF.InputFilesLoaded.size();
   for (unsigned I = 0; I < NumInputs; ++I) {
     InputFileInfo IFI = getInputFileInfo(MF, I + 1);
-    if (IFI.TopLevelModuleMap)
+    if (IFI.TopLevel && IFI.ModuleMap)
       if (auto FE = getInputFile(MF, I + 1).getFile())
         Visitor(*FE);
   }
@@ -10379,6 +10409,9 @@ OMPClause *OMPClauseReader::readClause() {
     C = OMPDoacrossClause::CreateEmpty(Context, NumVars, NumLoops);
     break;
   }
+  case llvm::omp::OMPC_ompx_attribute:
+    C = new (Context) OMPXAttributeClause();
+    break;
 #define OMP_CLAUSE_NO_CLASS(Enum, Str)                                         \
   case llvm::omp::Enum:                                                        \
     break;
@@ -11469,6 +11502,15 @@ void OMPClauseReader::VisitOMPDoacrossClause(OMPDoacrossClause *C) {
   C->setVarRefs(Vars);
   for (unsigned I = 0, E = C->getNumLoops(); I < E; ++I)
     C->setLoopData(I, Record.readSubExpr());
+}
+
+void OMPClauseReader::VisitOMPXAttributeClause(OMPXAttributeClause *C) {
+  AttrVec Attrs;
+  Record.readAttributes(Attrs);
+  C->setAttrs(Attrs);
+  C->setLocStart(Record.readSourceLocation());
+  C->setLParenLoc(Record.readSourceLocation());
+  C->setLocEnd(Record.readSourceLocation());
 }
 
 OMPTraitInfo *ASTRecordReader::readOMPTraitInfo() {

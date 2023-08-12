@@ -10,6 +10,7 @@ pipeline {
         // Job pool
         COMPILE_THREADS = 24
         LINK_THREADS = 8
+        // URL
         REPO_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*\$::'").trim()
@@ -117,9 +118,10 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
+                                VERSION=`grep 'set.*LLVM_VERSION_MAJOR  *' ${TOP}/llvm-project/llvm/CMakeLists.txt | sed -e 's/.*LLVM_VERSION_MAJOR //' -e 's/[^0-9][^0-9]*//'`
                                 ${CMAKEO} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
-                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/17/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
+                                    -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/\${VERSION}/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
                                     -DNCC_VERSION=-3.0.6 ..
                                 # make -j often crash
                                 make -j${COMPILE_THREADS}

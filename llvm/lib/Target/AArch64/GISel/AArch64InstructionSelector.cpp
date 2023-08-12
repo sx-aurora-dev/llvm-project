@@ -21,9 +21,9 @@
 #include "MCTargetDesc/AArch64AddressingModes.h"
 #include "MCTargetDesc/AArch64MCTargetDesc.h"
 #include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/CodeGen/GlobalISel/GIMatchTableExecutorImpl.h"
 #include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
-#include "llvm/CodeGen/GlobalISel/InstructionSelectorImpl.h"
 #include "llvm/CodeGen/GlobalISel/MIPatternMatch.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
@@ -76,7 +76,7 @@ public:
   static const char *getName() { return DEBUG_TYPE; }
 
   void setupMF(MachineFunction &MF, GISelKnownBits *KB,
-               CodeGenCoverage &CoverageInfo, ProfileSummaryInfo *PSI,
+               CodeGenCoverage *CoverageInfo, ProfileSummaryInfo *PSI,
                BlockFrequencyInfo *BFI) override {
     InstructionSelector::setupMF(MF, KB, CoverageInfo, PSI, BFI);
     MIB.setMF(MF);
@@ -435,6 +435,8 @@ private:
                               MachineIRBuilder &MIB) const;
 
   ComplexRendererFns selectArithExtendedRegister(MachineOperand &Root) const;
+
+  ComplexRendererFns selectExtractHigh(MachineOperand &Root) const;
 
   void renderTruncImm(MachineInstrBuilder &MIB, const MachineInstr &MI,
                       int OpIdx = -1) const;
@@ -1785,7 +1787,7 @@ bool AArch64InstructionSelector::selectCompareBranch(
       MIB.buildInstr(AArch64::ANDSWri, {LLT::scalar(32)}, {CondReg}).addImm(1);
   constrainSelectedInstRegOperands(*TstMI, TII, TRI, RBI);
   auto Bcc = MIB.buildInstr(AArch64::Bcc)
-                 .addImm(AArch64CC::EQ)
+                 .addImm(AArch64CC::NE)
                  .addMBB(I.getOperand(1).getMBB());
   I.eraseFromParent();
   return constrainSelectedInstRegOperands(*Bcc, TII, TRI, RBI);
@@ -5740,7 +5742,7 @@ bool AArch64InstructionSelector::selectVectorLoadIntrinsic(unsigned Opc,
 bool AArch64InstructionSelector::selectIntrinsicWithSideEffects(
     MachineInstr &I, MachineRegisterInfo &MRI) {
   // Find the intrinsic ID.
-  unsigned IntrinID = I.getIntrinsicID();
+  unsigned IntrinID = cast<GIntrinsic>(I).getIntrinsicID();
 
   const LLT S8 = LLT::scalar(8);
   const LLT S16 = LLT::scalar(16);
@@ -5889,7 +5891,7 @@ bool AArch64InstructionSelector::selectIntrinsicWithSideEffects(
 
 bool AArch64InstructionSelector::selectIntrinsic(MachineInstr &I,
                                                  MachineRegisterInfo &MRI) {
-  unsigned IntrinID = I.getIntrinsicID();
+  unsigned IntrinID = cast<GIntrinsic>(I).getIntrinsicID();
 
   switch (IntrinID) {
   default:
@@ -6875,6 +6877,23 @@ AArch64InstructionSelector::selectArithExtendedRegister(
            [=](MachineInstrBuilder &MIB) {
              MIB.addImm(getArithExtendImm(Ext, ShiftVal));
            }}};
+}
+
+InstructionSelector::ComplexRendererFns
+AArch64InstructionSelector::selectExtractHigh(MachineOperand &Root) const {
+  if (!Root.isReg())
+    return std::nullopt;
+  MachineRegisterInfo &MRI =
+      Root.getParent()->getParent()->getParent()->getRegInfo();
+
+  MachineInstr *Extract = getDefIgnoringCopies(Root.getReg(), MRI);
+  if (Extract && Extract->getOpcode() == TargetOpcode::G_UNMERGE_VALUES &&
+      Root.getReg() == Extract->getOperand(1).getReg()) {
+    Register ExtReg = Extract->getOperand(2).getReg();
+    return {{[=](MachineInstrBuilder &MIB) { MIB.addUse(ExtReg); }}};
+  }
+
+  return std::nullopt;
 }
 
 void AArch64InstructionSelector::renderTruncImm(MachineInstrBuilder &MIB,

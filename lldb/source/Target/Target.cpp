@@ -23,7 +23,6 @@
 #include "lldb/Core/SearchFilter.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/SourceManager.h"
-#include "lldb/Core/StreamFile.h"
 #include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectConstResult.h"
@@ -34,6 +33,7 @@
 #include "lldb/Expression/UtilityFunction.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/PosixApi.h"
+#include "lldb/Host/StreamFile.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/OptionGroupWatchpoint.h"
@@ -1393,8 +1393,8 @@ static void LoadScriptingResourceForModule(const ModuleSP &module_sp,
                                            Target *target) {
   Status error;
   StreamString feedback_stream;
-  if (module_sp && !module_sp->LoadScriptingResourceInTarget(
-                       target, error, &feedback_stream)) {
+  if (module_sp && !module_sp->LoadScriptingResourceInTarget(target, error,
+                                                             feedback_stream)) {
     if (error.AsCString())
       target->GetDebugger().GetErrorStream().Printf(
           "unable to load scripting data for module %s - error reported was "
@@ -2129,19 +2129,48 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
                      // of the library
     bool did_create_module = false;
     FileSpecList search_paths = GetExecutableSearchPaths();
-    // If there are image search path entries, try to use them first to acquire
-    // a suitable image.
-    if (m_image_search_paths.GetSize()) {
-      ModuleSpec transformed_spec(module_spec);
-      ConstString transformed_dir;
-      if (m_image_search_paths.RemapPath(
-              module_spec.GetFileSpec().GetDirectory(), transformed_dir)) {
-        transformed_spec.GetFileSpec().SetDirectory(transformed_dir);
-        transformed_spec.GetFileSpec().SetFilename(
-              module_spec.GetFileSpec().GetFilename());
-        error = ModuleList::GetSharedModule(transformed_spec, module_sp,
-                                            &search_paths, &old_modules,
-                                            &did_create_module);
+    FileSpec symbol_file_spec;
+
+    // Call locate module callback if set. This allows users to implement their
+    // own module cache system. For example, to leverage build system artifacts,
+    // to bypass pulling files from remote platform, or to search symbol files
+    // from symbol servers.
+    if (m_platform_sp)
+      m_platform_sp->CallLocateModuleCallbackIfSet(
+          module_spec, module_sp, symbol_file_spec, &did_create_module);
+
+    // The result of this CallLocateModuleCallbackIfSet is one of the following.
+    // 1. module_sp:loaded, symbol_file_spec:set
+    //      The callback found a module file and a symbol file for the
+    //      module_spec. We will call module_sp->SetSymbolFileFileSpec with
+    //      the symbol_file_spec later.
+    // 2. module_sp:loaded, symbol_file_spec:empty
+    //      The callback only found a module file for the module_spec.
+    // 3. module_sp:empty, symbol_file_spec:set
+    //      The callback only found a symbol file for the module. We continue
+    //      to find a module file for this module_spec and we will call
+    //      module_sp->SetSymbolFileFileSpec with the symbol_file_spec later.
+    // 4. module_sp:empty, symbol_file_spec:empty
+    //      Platform does not exist, the callback is not set, the callback did
+    //      not find any module files nor any symbol files, the callback failed,
+    //      or something went wrong. We continue to find a module file for this
+    //      module_spec.
+
+    if (!module_sp) {
+      // If there are image search path entries, try to use them to acquire a
+      // suitable image.
+      if (m_image_search_paths.GetSize()) {
+        ModuleSpec transformed_spec(module_spec);
+        ConstString transformed_dir;
+        if (m_image_search_paths.RemapPath(
+                module_spec.GetFileSpec().GetDirectory(), transformed_dir)) {
+          transformed_spec.GetFileSpec().SetDirectory(transformed_dir);
+          transformed_spec.GetFileSpec().SetFilename(
+                module_spec.GetFileSpec().GetFilename());
+          error = ModuleList::GetSharedModule(transformed_spec, module_sp,
+                                              &search_paths, &old_modules,
+                                              &did_create_module);
+        }
       }
     }
 
@@ -2232,11 +2261,15 @@ ModuleSP Target::GetOrCreateModule(const ModuleSpec &module_spec, bool notify,
           });
         }
 
+        // If the locate module callback had found a symbol file, set it to the
+        // module_sp before preloading symbols.
+        if (symbol_file_spec)
+          module_sp->SetSymbolFileFileSpec(symbol_file_spec);
+
         // Preload symbols outside of any lock, so hopefully we can do this for
         // each library in parallel.
         if (GetPreloadSymbols())
           module_sp->PreloadSymbols();
-
         llvm::SmallVector<ModuleSP, 1> replaced_modules;
         for (ModuleSP &old_module_sp : old_modules) {
           if (m_images.GetIndexForModule(old_module_sp.get()) !=
@@ -2831,12 +2864,12 @@ bool Target::RunStopHooks() {
   if (!any_active_hooks)
     return false;
 
-  // <rdar://problem/12027563> make sure we check that we are not stopped
-  // because of us running a user expression since in that case we do not want
-  // to run the stop-hooks.  Note, you can't just check whether the last stop
-  // was for a User Expression, because breakpoint commands get run before
-  // stop hooks, and one of them might have run an expression.  You have
-  // to ensure you run the stop hooks once per natural stop.
+  // Make sure we check that we are not stopped because of us running a user
+  // expression since in that case we do not want to run the stop-hooks. Note,
+  // you can't just check whether the last stop was for a User Expression,
+  // because breakpoint commands get run before stop hooks, and one of them
+  // might have run an expression. You have to ensure you run the stop hooks
+  // once per natural stop.
   uint32_t last_natural_stop = m_process_sp->GetModIDRef().GetLastNaturalStopID();
   if (last_natural_stop != 0 && m_latest_stop_hook_id == last_natural_stop)
     return false;
@@ -4205,6 +4238,10 @@ bool TargetProperties::SetPreferDynamicValue(lldb::DynamicValueType d) {
 }
 
 bool TargetProperties::GetPreloadSymbols() const {
+  if (INTERRUPT_REQUESTED(m_target->GetDebugger(), 
+      "Interrupted checking preload symbols")) {
+    return false;
+  }
   const uint32_t idx = ePropertyPreloadSymbols;
   return GetPropertyAtIndexAs<bool>(
       idx, g_target_properties[idx].default_uint_value != 0);

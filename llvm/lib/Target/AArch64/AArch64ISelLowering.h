@@ -165,9 +165,6 @@ enum NodeType : unsigned {
   // Floating point comparison
   FCMP,
 
-  // Scalar extract
-  EXTR,
-
   // Scalar-to-vector duplication
   DUP,
   DUPLANE8,
@@ -217,6 +214,9 @@ enum NodeType : unsigned {
   SQSHLU_I,
   SRSHR_I,
   URSHR_I,
+
+  // Vector narrowing shift by immediate (bottom)
+  RSHRNB_I,
 
   // Vector shift by constant and insert
   VSLI,

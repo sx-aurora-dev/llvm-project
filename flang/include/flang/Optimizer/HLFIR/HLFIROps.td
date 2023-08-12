@@ -144,9 +144,13 @@ def fir_AssignOp : hlfir_Op<"assign", [MemoryEffects<[MemWrite]>]> {
     generated temporary. In this case the temporary is initialized if needed
     (e.g. the LHS is of derived type with allocatable/pointer components),
     and the assignment is done without LHS (or its subobjects) finalization
-    and with automatic allocation. Since LHS is uninitialized in this case,
-    "keep_lhs_length_if_realloc" attribute does not make sense. "realloc"
-    attribute is allowed with "temporary_lhs", though, it is implied.
+    and with automatic allocation.
+    If "temporary_lhs" and "keep_lhs_length_if_realloc" are both set,
+    this assign operation denotes special case of character allocatable
+    LHS with explicit length. The LHS that must preserve its length
+    during the assignment regardless of the the RHS's length or/and
+    allocation status. This assign operation will be lowered into a call
+    to AssignExplicitLengthCharacter().
   }];
 
   let arguments = (ins AnyFortranEntity:$rhs,
@@ -439,6 +443,24 @@ def hlfir_SetLengthOp : hlfir_Op<"set_length", []> {
   let builders = [OpBuilder<(ins "mlir::Value":$string,"mlir::Value":$len)>];
 }
 
+def hlfir_GetLengthOp : hlfir_Op<"get_length", [Pure]> {
+  let summary = "get the length of a character entity";
+  let description = [{
+    Get the length of character entity represented as hlfir.expr.
+  }];
+
+  let arguments = (ins AnyScalarOrArrayCharacterExpr:$expr);
+  let results = (outs Index);
+
+  let assemblyFormat = [{
+    $expr attr-dict `:` functional-type(operands, results)
+  }];
+
+  // If character length is know via the type, then the operation
+  // may be immediately canonicalized into arith::ConstantOp.
+  let hasCanonicalizeMethod = 1;
+}
+
 def hlfir_SumOp : hlfir_Op<"sum", [AttrSizedOperandSegments,
     DeclareOpInterfaceMethods<ArithFastMathInterface>]> {
   let summary = "SUM transformational intrinsic";
@@ -718,7 +740,7 @@ def hlfir_ElementalOpInterface : OpInterface<"ElementalOpInterface"> {
   let cppNamespace = "hlfir";
 }
 
-def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_ElementalOpInterface]> {
+def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_ElementalOpInterface, AttrSizedOperandSegments]> {
   let summary = "elemental expression";
   let description = [{
     Represent an elemental expression as a function of the indices.
@@ -730,6 +752,12 @@ def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_Ele
 
     The shape and typeparams operands represent the extents and type
     parameters of the resulting array value.
+
+    The optional mold is an entity carrying the information about
+    the dynamic type of the polymorphic result. Note that the shape
+    of the mold does not necessarily match the shape of the result,
+    for example, the result of `merge(poly_scalar1, poly_scalar2, mask_array)`
+    will have the shape of `mask_array` and the dynamic type of `poly_scalar*`.
 
     The unordered attribute can be set to allow out of order processing
     of the indices. This is safe only if the operations in the body
@@ -753,6 +781,7 @@ def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_Ele
 
   let arguments = (ins
     AnyShapeType:$shape,
+    Optional<AnyPolymorphicObject>:$mold,
     Variadic<AnyIntegerType>:$typeparams,
     OptionalAttr<UnitAttr>:$unordered
   );
@@ -761,7 +790,8 @@ def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_Ele
   let regions = (region SizedRegion<1>:$region);
 
   let assemblyFormat = [{
-    $shape (`typeparams` $typeparams^)? (`unordered` $unordered^)?
+    $shape (`mold` $mold^)? (`typeparams` $typeparams^)?
+    (`unordered` $unordered^)?
     attr-dict `:` functional-type(operands, results)
     $region
     }];
@@ -786,10 +816,12 @@ def hlfir_ElementalOp : hlfir_Op<"elemental", [RecursiveMemoryEffects, hlfir_Ele
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::Type":$result_type, "mlir::Value":$shape,
+      CArg<"mlir::Value", "{}">:$mold,
       CArg<"mlir::ValueRange", "{}">:$typeparams,
       CArg<"bool", "false">:$isUnordered)>
   ];
 
+  let hasVerifier = 1;
 }
 
 def hlfir_YieldElementOp : hlfir_Op<"yield_element", [Terminator, HasParent<"ElementalOp">, Pure]> {
@@ -872,7 +904,7 @@ def hlfir_DestroyOp : hlfir_Op<"destroy", [MemoryEffects<[MemFree]>]> {
     buffer of an hlfir.expr, if any, will be deallocated if it was heap
     allocated.
     It is not required to create an hlfir.destroy operation for and hlfir.expr
-    created inside an hlfir.elemental an returned in the hlfir.yield_element.
+    created inside an hlfir.elemental and returned in the hlfir.yield_element.
     The last use of such expression is implicit and an hlfir.destroy could
     not be emitted after the hlfir.yield_element since it is a terminator.
 

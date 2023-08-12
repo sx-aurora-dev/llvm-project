@@ -3367,6 +3367,9 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
   case OMPC_exclusive:
   case OMPC_affinity:
   case OMPC_doacross:
+    if (getLangOpts().OpenMP >= 52 && DKind == OMPD_ordered &&
+        CKind == OMPC_depend)
+      Diag(Tok, diag::warn_omp_depend_in_ordered_deprecated);
     Clause = ParseOpenMPVarListClause(DKind, CKind, WrongDirective);
     break;
   case OMPC_sizes:
@@ -3407,6 +3410,9 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
       Diag(Tok, diag::err_omp_unexpected_clause)
           << getOpenMPClauseName(CKind) << getOpenMPDirectiveName(DKind);
     SkipUntil(tok::comma, tok::annot_pragma_openmp_end, StopBeforeMatch);
+    break;
+  case OMPC_ompx_attribute:
+    Clause = ParseOpenMPOMPXAttributesClause(WrongDirective);
     break;
   default:
     break;
@@ -3686,6 +3692,62 @@ OMPClause *Parser::ParseOpenMPInteropClause(OpenMPClauseKind Kind,
                                             T.getOpenLocation(), VarLoc, RLoc);
 
   llvm_unreachable("Unexpected interop variable clause.");
+}
+
+OMPClause *Parser::ParseOpenMPOMPXAttributesClause(bool ParseOnly) {
+  SourceLocation Loc = ConsumeToken();
+  // Parse '('.
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_openmp_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after,
+                         getOpenMPClauseName(OMPC_ompx_attribute).data()))
+    return nullptr;
+
+  ParsedAttributes ParsedAttrs(AttrFactory);
+  ParseAttributes(PAKM_GNU | PAKM_CXX11, ParsedAttrs);
+
+  // Parse ')'.
+  if (T.consumeClose())
+    return nullptr;
+
+  if (ParseOnly)
+    return nullptr;
+
+  SmallVector<Attr *> Attrs;
+  for (const ParsedAttr &PA : ParsedAttrs) {
+    switch (PA.getKind()) {
+    case ParsedAttr::AT_AMDGPUFlatWorkGroupSize:
+      if (!PA.checkExactlyNumArgs(Actions, 2))
+        continue;
+      if (auto *A = Actions.CreateAMDGPUFlatWorkGroupSizeAttr(
+              PA, PA.getArgAsExpr(0), PA.getArgAsExpr(1)))
+        Attrs.push_back(A);
+      continue;
+    case ParsedAttr::AT_AMDGPUWavesPerEU:
+      if (!PA.checkAtLeastNumArgs(Actions, 1) ||
+          !PA.checkAtMostNumArgs(Actions, 2))
+        continue;
+      if (auto *A = Actions.CreateAMDGPUWavesPerEUAttr(
+              PA, PA.getArgAsExpr(0),
+              PA.getNumArgs() > 1 ? PA.getArgAsExpr(1) : nullptr))
+        Attrs.push_back(A);
+      continue;
+    case ParsedAttr::AT_CUDALaunchBounds:
+      if (!PA.checkAtLeastNumArgs(Actions, 1) ||
+          !PA.checkAtMostNumArgs(Actions, 2))
+        continue;
+      if (auto *A = Actions.CreateLaunchBoundsAttr(
+              PA, PA.getArgAsExpr(0),
+              PA.getNumArgs() > 1 ? PA.getArgAsExpr(1) : nullptr))
+        Attrs.push_back(A);
+      continue;
+    default:
+      Diag(Loc, diag::warn_omp_invalid_attribute_for_ompx_attributes) << PA;
+      continue;
+    };
+  }
+
+  return Actions.ActOnOpenMPXAttributeClause(Attrs, Loc, T.getOpenLocation(),
+                                             T.getCloseLocation());
 }
 
 /// Parsing of simple OpenMP clauses like 'default' or 'proc_bind'.
@@ -4410,16 +4472,55 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
     }
     if (Tok.is(tok::colon)) {
       Data.ColonLoc = ConsumeToken();
-    } else {
+    } else if (Kind != OMPC_doacross || Tok.isNot(tok::r_paren)) {
       Diag(Tok, DKind == OMPD_ordered ? diag::warn_pragma_expected_colon_r_paren
                                       : diag::warn_pragma_expected_colon)
           << (Kind == OMPC_depend ? "dependency type" : "dependence-type");
     }
-    // Special processing for doacross(source) clause.
-    if (Kind == OMPC_doacross && Data.ExtraModifier == OMPC_DOACROSS_source) {
-      // Parse ')'.
-      T.consumeClose();
-      return false;
+    if (Kind == OMPC_doacross) {
+      if (Tok.is(tok::identifier) &&
+          Tok.getIdentifierInfo()->isStr("omp_cur_iteration")) {
+        Data.ExtraModifier = Data.ExtraModifier == OMPC_DOACROSS_source
+                                 ? OMPC_DOACROSS_source_omp_cur_iteration
+                                 : OMPC_DOACROSS_sink_omp_cur_iteration;
+        ConsumeToken();
+      }
+      if (Data.ExtraModifier == OMPC_DOACROSS_sink_omp_cur_iteration) {
+        if (Tok.isNot(tok::minus)) {
+          Diag(Tok, diag::err_omp_sink_and_source_iteration_not_allowd)
+              << getOpenMPClauseName(Kind) << 0 << 0;
+          SkipUntil(tok::r_paren);
+          return false;
+        } else {
+          ConsumeToken();
+          SourceLocation Loc = Tok.getLocation();
+          uint64_t Value = 0;
+          if (Tok.isNot(tok::numeric_constant) ||
+              (PP.parseSimpleIntegerLiteral(Tok, Value) && Value != 1)) {
+            Diag(Loc, diag::err_omp_sink_and_source_iteration_not_allowd)
+                << getOpenMPClauseName(Kind) << 0 << 0;
+            SkipUntil(tok::r_paren);
+            return false;
+          }
+        }
+      }
+      if (Data.ExtraModifier == OMPC_DOACROSS_source_omp_cur_iteration) {
+        if (Tok.isNot(tok::r_paren)) {
+          Diag(Tok, diag::err_omp_sink_and_source_iteration_not_allowd)
+              << getOpenMPClauseName(Kind) << 1 << 1;
+          SkipUntil(tok::r_paren);
+          return false;
+        }
+      }
+      // Only the 'sink' case has the expression list.
+      if (Kind == OMPC_doacross &&
+          (Data.ExtraModifier == OMPC_DOACROSS_source ||
+           Data.ExtraModifier == OMPC_DOACROSS_source_omp_cur_iteration ||
+           Data.ExtraModifier == OMPC_DOACROSS_sink_omp_cur_iteration)) {
+        // Parse ')'.
+        T.consumeClose();
+        return false;
+      }
     }
   } else if (Kind == OMPC_linear) {
     // Try to parse modifier if any.

@@ -262,7 +262,9 @@ def UseNegativeImmediates
 
 def UseScalarIncVL : Predicate<"Subtarget->useScalarIncVL()">;
 
-def NotInStreamingSVEMode  : Predicate<"!Subtarget->forceStreamingCompatibleSVE()">;
+def UseSVEFPLD1R : Predicate<"!Subtarget->noSVEFPLD1R()">;
+
+def IsNeonAvailable : Predicate<"Subtarget->isNeonAvailable()">;
 
 def AArch64LocalRecover : SDNode<"ISD::LOCAL_RECOVER",
                                   SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
@@ -819,6 +821,12 @@ def AArch64tbl : SDNode<"AArch64ISD::TBL", SDT_AArch64TBL>;
 def AArch64mrs : SDNode<"AArch64ISD::MRS",
                         SDTypeProfile<1, 1, [SDTCisVT<0, i64>, SDTCisVT<1, i32>]>,
                         [SDNPHasChain, SDNPOutGlue]>;
+
+def SD_AArch64rshrnb : SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisVec<1>, SDTCisInt<2>]>;
+def AArch64rshrnb : SDNode<"AArch64ISD::RSHRNB_I", SD_AArch64rshrnb>;
+def AArch64rshrnb_pf : PatFrags<(ops node:$rs, node:$i),
+                            [(AArch64rshrnb node:$rs, node:$i),
+                            (int_aarch64_sve_rshrnb node:$rs, node:$i)]>;
 
 // Match add node and also treat an 'or' node is as an 'add' if the or'ed operands
 // have no common bits.
@@ -4355,16 +4363,23 @@ def FMOVS0 : Pseudo<(outs FPR32:$Rd), (ins), [(set f32:$Rd, (fpimm0))]>,
 def FMOVD0 : Pseudo<(outs FPR64:$Rd), (ins), [(set f64:$Rd, (fpimm0))]>,
     Sched<[WriteF]>;
 }
+
 // Similarly add aliases
 def : InstAlias<"fmov $Rd, #0.0", (FMOVWHr FPR16:$Rd, WZR), 0>,
     Requires<[HasFullFP16]>;
 def : InstAlias<"fmov $Rd, #0.0", (FMOVWSr FPR32:$Rd, WZR), 0>;
 def : InstAlias<"fmov $Rd, #0.0", (FMOVXDr FPR64:$Rd, XZR), 0>;
 
-// Pattern for FP16 immediates
+def : Pat<(bf16 fpimm0),
+          (FMOVH0)>;
+
+// Pattern for FP16 and BF16 immediates
 let Predicates = [HasFullFP16] in {
   def : Pat<(f16 fpimm:$in),
-    (FMOVWHr (MOVi32imm (bitcast_fpimm_to_i32 f16:$in)))>;
+            (FMOVWHr (MOVi32imm (bitcast_fpimm_to_i32 f16:$in)))>;
+
+  def : Pat<(bf16 fpimm:$in),
+            (FMOVWHr (MOVi32imm (bitcast_fpimm_to_i32 bf16:$in)))>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -4617,6 +4632,11 @@ let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 defm FMOV : FPMoveImmediate<"fmov">;
 }
 
+let Predicates = [HasFullFP16] in {
+  def : Pat<(bf16 fpimmbf16:$in),
+            (FMOVHi (fpimm16XForm bf16:$in))>;
+}
+
 //===----------------------------------------------------------------------===//
 // Advanced SIMD two vector instructions.
 //===----------------------------------------------------------------------===//
@@ -4690,11 +4710,16 @@ defm FCVTL  : SIMDFPWidenTwoVector<0, 0, 0b10111, "fcvtl">;
 def : Pat<(v4f32 (int_aarch64_neon_vcvthf2fp (v4i16 V64:$Rn))),
           (FCVTLv4i16 V64:$Rn)>;
 def : Pat<(v4f32 (int_aarch64_neon_vcvthf2fp (extract_subvector (v8i16 V128:$Rn),
-                                                              (i64 4)))),
+                                                                (i64 4)))),
           (FCVTLv8i16 V128:$Rn)>;
-def : Pat<(v2f64 (any_fpextend (v2f32 V64:$Rn))), (FCVTLv2i32 V64:$Rn)>;
-
-def : Pat<(v4f32 (any_fpextend (v4f16 V64:$Rn))), (FCVTLv4i16 V64:$Rn)>;
+def : Pat<(v2f64 (any_fpextend (v2f32 V64:$Rn))),
+          (FCVTLv2i32 V64:$Rn)>;
+def : Pat<(v2f64 (any_fpextend (v2f32 (extract_high_v4f32 (v4f32 V128:$Rn))))),
+          (FCVTLv4i32 V128:$Rn)>;
+def : Pat<(v4f32 (any_fpextend (v4f16 V64:$Rn))),
+          (FCVTLv4i16 V64:$Rn)>;
+def : Pat<(v4f32 (any_fpextend (v4f16 (extract_high_v8f16 (v8f16 V128:$Rn))))),
+          (FCVTLv8i16 V128:$Rn)>;
 
 defm FCVTMS : SIMDTwoVectorFPToInt<0,0,0b11011, "fcvtms",int_aarch64_neon_fcvtms>;
 defm FCVTMU : SIMDTwoVectorFPToInt<1,0,0b11011, "fcvtmu",int_aarch64_neon_fcvtmu>;
@@ -5653,6 +5678,34 @@ defm : Neon_mul_acc_widen_patterns<sub, AArch64umull,
      UMLSLv8i8_v8i16, UMLSLv4i16_v4i32, UMLSLv2i32_v2i64>;
 defm : Neon_mul_acc_widen_patterns<sub, AArch64smull,
      SMLSLv8i8_v8i16, SMLSLv4i16_v4i32, SMLSLv2i32_v2i64>;
+
+
+multiclass Neon_addl_extract_patterns<SDPatternOperator opnode, SDPatternOperator ext, string Inst> {
+  def : Pat<(v4i16 (opnode (extract_subvector (ext (v8i8 V64:$Rn)), (i64 0)),
+                           (extract_subvector (ext (v8i8 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v8i16 (!cast<Instruction>(Inst#"Lv8i8_v8i16") V64:$Rn, V64:$Rm)), dsub)>;
+  def : Pat<(v2i32 (opnode (extract_subvector (ext (v4i16 V64:$Rn)), (i64 0)),
+                           (extract_subvector (ext (v4i16 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v4i32 (!cast<Instruction>(Inst#"Lv4i16_v4i32") V64:$Rn, V64:$Rm)), dsub)>;
+  def : Pat<(v1i64 (opnode (extract_subvector (ext (v2i32 V64:$Rn)), (i64 0)),
+                           (extract_subvector (ext (v2i32 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v2i64 (!cast<Instruction>(Inst#"Lv2i32_v2i64") V64:$Rn, V64:$Rm)), dsub)>;
+
+  def : Pat<(v4i16 (opnode (v4i16 V64:$Rn),
+                           (extract_subvector (ext (v8i8 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v8i16 (!cast<Instruction>(Inst#"Wv8i8_v8i16") (INSERT_SUBREG (v8i16 (IMPLICIT_DEF)), V64:$Rn, dsub), V64:$Rm)), dsub)>;
+  def : Pat<(v2i32 (opnode (v2i32 V64:$Rn),
+                           (extract_subvector (ext (v4i16 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v4i32 (!cast<Instruction>(Inst#"Wv4i16_v4i32") (INSERT_SUBREG (v4i32 (IMPLICIT_DEF)), V64:$Rn, dsub), V64:$Rm)), dsub)>;
+  def : Pat<(v1i64 (opnode (v1i64 V64:$Rn),
+                           (extract_subvector (ext (v2i32 V64:$Rm)), (i64 0)))),
+            (EXTRACT_SUBREG (v2i64 (!cast<Instruction>(Inst#"Wv2i32_v2i64") (INSERT_SUBREG (v2i64 (IMPLICIT_DEF)), V64:$Rn, dsub), V64:$Rm)), dsub)>;
+}
+
+defm : Neon_addl_extract_patterns<add, zanyext, "UADD">;
+defm : Neon_addl_extract_patterns<add, sext, "SADD">;
+defm : Neon_addl_extract_patterns<sub, zanyext, "USUB">;
+defm : Neon_addl_extract_patterns<sub, sext, "SSUB">;
 
 // CodeGen patterns for addhn and subhn instructions, which can actually be
 // written in LLVM IR without too much difficulty.
@@ -7567,7 +7620,7 @@ def : Ld1Lane64IdxOpPat<extloadi8, VectorIndexH, v4i16, i32, LD1i8, VectorIndexH
 
 // Same as above, but the first element is populated using
 // scalar_to_vector + insert_subvector instead of insert_vector_elt.
-let Predicates = [NotInStreamingSVEMode] in {
+let Predicates = [IsNeonAvailable] in {
   class Ld1Lane128FirstElm<ValueType ResultTy, ValueType VecTy,
                           SDPatternOperator ExtLoad, Instruction LD1>
     : Pat<(ResultTy (scalar_to_vector (i32 (ExtLoad GPR64sp:$Rn)))),

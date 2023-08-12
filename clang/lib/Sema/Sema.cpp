@@ -1491,6 +1491,18 @@ NamedDecl *Sema::getCurFunctionOrMethodDecl() const {
   return nullptr;
 }
 
+Decl *Sema::getCurLocalScopeDecl() {
+  if (const BlockScopeInfo *BSI = getCurBlock())
+    return BSI->TheDecl;
+  if (const LambdaScopeInfo *LSI = getCurLambda())
+    return LSI->CallOperator;
+  if (const CapturedRegionScopeInfo *CSI = getCurCapturedRegion())
+    return CSI->TheCapturedDecl;
+  if (NamedDecl *ND = getCurFunctionOrMethodDecl())
+    return ND;
+  return nullptr;
+}
+
 LangAS Sema::getDefaultCXXMethodAddrSpace() const {
   if (getLangOpts().OpenCL)
     return getASTContext().getDefaultOpenCLPointeeAddrSpace();
@@ -1880,8 +1892,9 @@ Sema::SemaDiagnosticBuilder
 Sema::targetDiag(SourceLocation Loc, unsigned DiagID, const FunctionDecl *FD) {
   FD = FD ? FD : getCurFunctionDecl();
   if (LangOpts.OpenMP)
-    return LangOpts.OpenMPIsDevice ? diagIfOpenMPDeviceCode(Loc, DiagID, FD)
-                                   : diagIfOpenMPHostCode(Loc, DiagID, FD);
+    return LangOpts.OpenMPIsTargetDevice
+               ? diagIfOpenMPDeviceCode(Loc, DiagID, FD)
+               : diagIfOpenMPHostCode(Loc, DiagID, FD);
   if (getLangOpts().CUDA)
     return getLangOpts().CUDAIsDevice ? CUDADiagIfDeviceCode(Loc, DiagID)
                                       : CUDADiagIfHostCode(Loc, DiagID);
@@ -2006,7 +2019,8 @@ void Sema::checkTypeSupport(QualType Ty, SourceLocation Loc, ValueDecl *D) {
   };
 
   auto CheckType = [&](QualType Ty, bool IsRetTy = false) {
-    if (LangOpts.SYCLIsDevice || (LangOpts.OpenMP && LangOpts.OpenMPIsDevice) ||
+    if (LangOpts.SYCLIsDevice ||
+        (LangOpts.OpenMP && LangOpts.OpenMPIsTargetDevice) ||
         LangOpts.CUDAIsDevice)
       CheckDeviceType(Ty);
 

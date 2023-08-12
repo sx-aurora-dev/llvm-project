@@ -362,6 +362,7 @@ StringRef MCSymbolRefExpr::getVariantKindName(VariantKind Kind) {
   case VK_WASM_TLSREL: return "TLSREL";
   case VK_WASM_TBREL: return "TBREL";
   case VK_WASM_GOT_TLS: return "GOT@TLS";
+  case VK_WASM_FUNCINDEX: return "FUNCINDEX";
   case VK_AMDGPU_GOTPCREL32_LO: return "gotpcrel32@lo";
   case VK_AMDGPU_GOTPCREL32_HI: return "gotpcrel32@hi";
   case VK_AMDGPU_REL32_LO: return "rel32@lo";
@@ -505,6 +506,7 @@ MCSymbolRefExpr::getVariantKindForName(StringRef Name) {
     .Case("mbrel", VK_WASM_MBREL)
     .Case("tlsrel", VK_WASM_TLSREL)
     .Case("got@tls", VK_WASM_GOT_TLS)
+    .Case("funcindex", VK_WASM_FUNCINDEX)
     .Case("gotpcrel32@lo", VK_AMDGPU_GOTPCREL32_LO)
     .Case("gotpcrel32@hi", VK_AMDGPU_GOTPCREL32_HI)
     .Case("rel32@lo", VK_AMDGPU_REL32_LO)
@@ -604,11 +606,6 @@ static void AttemptToFoldSymbolOffsetDifference(
     return;
 
   auto FinalizeFolding = [&]() {
-    // Pointers to Thumb symbols need to have their low-bit set to allow
-    // for interworking.
-    if (Asm->isThumbFunc(&SA))
-      Addend |= 1;
-
     // If symbol is labeled as micromips, we set low-bit to ensure
     // correct offset in .gcc_except_table
     if (Asm->getBackend().isMicroMips(&SA))
@@ -626,7 +623,14 @@ static void AttemptToFoldSymbolOffsetDifference(
   if ((&SecA != &SecB) && !Addrs)
     return;
 
-  if (Layout) {
+  // When layout is available, we can generally compute the difference using the
+  // getSymbolOffset path, which also avoids the possible slow fragment walk.
+  // However, linker relaxation may cause incorrect fold of A-B if A and B are
+  // separated by a linker-relaxable instruction. If the section contains
+  // instructions and InSet is false (not expressions in directive like
+  // .size/.fill), disable the fast path.
+  if (Layout && (InSet || !SecA.hasInstructions() ||
+                 !Asm->getContext().getTargetTriple().isRISCV())) {
     // If both symbols are in the same fragment, return the difference of their
     // offsets. canGetFragmentOffset(FA) may be false.
     if (FA == FB && !SA.isVariable() && !SB.isVariable()) {

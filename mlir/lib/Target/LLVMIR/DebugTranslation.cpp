@@ -62,20 +62,6 @@ void DebugTranslation::translate(LLVMFuncOp func, llvm::Function &llvmFunc) {
   if (!debugEmissionIsEnabled)
     return;
 
-  // If we are to create debug info for the function, we need to ensure that all
-  // inlinable calls in it are with debug info, otherwise the LLVM verifier will
-  // complain. For now, be more restricted and treat all calls as inlinable.
-  const bool hasCallWithoutDebugInfo =
-      func.walk([&](LLVM::CallOp call) {
-            return call.getLoc()->walk([](Location l) {
-              return isa<UnknownLoc>(l) ? WalkResult::interrupt()
-                                        : WalkResult::advance();
-            });
-          })
-          .wasInterrupted();
-  if (hasCallWithoutDebugInfo)
-    return;
-
   // Look for a sub program attached to the function.
   auto spLoc =
       func.getLoc()->findInstanceOf<FusedLocWith<LLVM::DISubprogramAttr>>();
@@ -119,13 +105,34 @@ llvm::DICompileUnit *DebugTranslation::translateImpl(DICompileUnitAttr attr) {
       /*Flags=*/"", /*RV=*/0);
 }
 
+/// Returns a new `DINodeT` that is either distinct or not, depending on
+/// `isDistinct`.
+template <class DINodeT, class... Ts>
+static DINodeT *getDistinctOrUnique(bool isDistinct, Ts &&...args) {
+  if (isDistinct)
+    return DINodeT::getDistinct(std::forward<Ts>(args)...);
+  return DINodeT::get(std::forward<Ts>(args)...);
+}
+
 llvm::DICompositeType *
 DebugTranslation::translateImpl(DICompositeTypeAttr attr) {
   SmallVector<llvm::Metadata *> elements;
   for (auto member : attr.getElements())
     elements.push_back(translate(member));
-  return llvm::DICompositeType::get(
-      llvmCtx, attr.getTag(), getMDStringOrNull(attr.getName()),
+
+  // TODO: Use distinct attributes to model this, once they have landed.
+  // Depending on the tag, composite types must be distinct.
+  bool isDistinct = false;
+  switch (attr.getTag()) {
+  case llvm::dwarf::DW_TAG_class_type:
+  case llvm::dwarf::DW_TAG_enumeration_type:
+  case llvm::dwarf::DW_TAG_structure_type:
+  case llvm::dwarf::DW_TAG_union_type:
+    isDistinct = true;
+  }
+
+  return getDistinctOrUnique<llvm::DICompositeType>(
+      isDistinct, llvmCtx, attr.getTag(), getMDStringOrNull(attr.getName()),
       translate(attr.getFile()), attr.getLine(), translate(attr.getScope()),
       translate(attr.getBaseType()), attr.getSizeInBits(),
       attr.getAlignInBits(),
@@ -186,19 +193,10 @@ llvm::DIScope *DebugTranslation::translateImpl(DIScopeAttr attr) {
   return cast<llvm::DIScope>(translate(DINodeAttr(attr)));
 }
 
-/// Return a new subprogram that is either distinct or not, depending on
-/// `isDistinct`.
-template <class... Ts>
-static llvm::DISubprogram *getSubprogram(bool isDistinct, Ts &&...args) {
-  if (isDistinct)
-    return llvm::DISubprogram::getDistinct(std::forward<Ts>(args)...);
-  return llvm::DISubprogram::get(std::forward<Ts>(args)...);
-}
-
 llvm::DISubprogram *DebugTranslation::translateImpl(DISubprogramAttr attr) {
   bool isDefinition = static_cast<bool>(attr.getSubprogramFlags() &
                                         LLVM::DISubprogramFlags::Definition);
-  return getSubprogram(
+  return getDistinctOrUnique<llvm::DISubprogram>(
       isDefinition, llvmCtx, translate(attr.getScope()),
       getMDStringOrNull(attr.getName()),
       getMDStringOrNull(attr.getLinkageName()), translate(attr.getFile()),
@@ -207,6 +205,15 @@ llvm::DISubprogram *DebugTranslation::translateImpl(DISubprogramAttr attr) {
       /*ThisAdjustment=*/0, llvm::DINode::FlagZero,
       static_cast<llvm::DISubprogram::DISPFlags>(attr.getSubprogramFlags()),
       translate(attr.getCompileUnit()));
+}
+
+llvm::DIModule *DebugTranslation::translateImpl(DIModuleAttr attr) {
+  return llvm::DIModule::get(
+      llvmCtx, translate(attr.getFile()), translate(attr.getScope()),
+      getMDStringOrNull(attr.getName()),
+      getMDStringOrNull(attr.getConfigMacros()),
+      getMDStringOrNull(attr.getIncludePath()),
+      getMDStringOrNull(attr.getApinotes()), attr.getLine(), attr.getIsDecl());
 }
 
 llvm::DINamespace *DebugTranslation::translateImpl(DINamespaceAttr attr) {
@@ -254,9 +261,9 @@ llvm::DINode *DebugTranslation::translate(DINodeAttr attr) {
       TypeSwitch<DINodeAttr, llvm::DINode *>(attr)
           .Case<DIBasicTypeAttr, DICompileUnitAttr, DICompositeTypeAttr,
                 DIDerivedTypeAttr, DIFileAttr, DILabelAttr, DILexicalBlockAttr,
-                DILexicalBlockFileAttr, DILocalVariableAttr, DINamespaceAttr,
-                DINullTypeAttr, DISubprogramAttr, DISubrangeAttr,
-                DISubroutineTypeAttr>(
+                DILexicalBlockFileAttr, DILocalVariableAttr, DIModuleAttr,
+                DINamespaceAttr, DINullTypeAttr, DISubprogramAttr,
+                DISubrangeAttr, DISubroutineTypeAttr>(
               [&](auto attr) { return translateImpl(attr); });
   attrToNode.insert({attr, node});
   return node;

@@ -12,7 +12,6 @@
 #include "AMDKernelCodeT.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -1233,16 +1232,16 @@ bool shouldEmitConstantsToTextSection(const Triple &TT) {
   return TT.getArch() == Triple::r600;
 }
 
-std::pair<int, int> getIntegerPairAttribute(const Function &F,
-                                            StringRef Name,
-                                            std::pair<int, int> Default,
-                                            bool OnlyFirstRequired) {
+std::pair<unsigned, unsigned>
+getIntegerPairAttribute(const Function &F, StringRef Name,
+                        std::pair<unsigned, unsigned> Default,
+                        bool OnlyFirstRequired) {
   Attribute A = F.getFnAttribute(Name);
   if (!A.isStringAttribute())
     return Default;
 
   LLVMContext &Ctx = F.getContext();
-  std::pair<int, int> Ints = Default;
+  std::pair<unsigned, unsigned> Ints = Default;
   std::pair<StringRef, StringRef> Strs = A.getValueAsString().split(',');
   if (Strs.first.trim().getAsInteger(0, Ints.first)) {
     Ctx.emitError("can't parse first integer attribute " + Name);
@@ -2001,6 +2000,10 @@ bool hasPackedD16(const MCSubtargetInfo &STI) {
          !isSI(STI);
 }
 
+bool hasGDS(const MCSubtargetInfo &STI) {
+  return STI.hasFeature(AMDGPU::FeatureGDS);
+}
+
 unsigned getNSAMaxSize(const MCSubtargetInfo &STI) {
   auto Version = getIsaVersion(STI.getCPU());
   if (Version.Major == 10)
@@ -2420,10 +2423,6 @@ unsigned getRegBitWidth(unsigned RCID) {
 }
 
 unsigned getRegBitWidth(const MCRegisterClass &RC) {
-  return getRegBitWidth(RC.getID());
-}
-
-unsigned getRegBitWidth(const TargetRegisterClass &RC) {
   return getRegBitWidth(RC.getID());
 }
 

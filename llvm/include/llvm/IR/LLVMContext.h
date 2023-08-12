@@ -95,8 +95,9 @@ public:
     OB_clang_arc_attachedcall = 6, // "clang.arc.attachedcall"
     OB_ptrauth = 7,                // "ptrauth"
     OB_kcfi = 8,                   // "kcfi"
-    OB_cfp_round = 9,              // "cfp-round"
-    OB_cfp_except = 10,            // "cfp-except"
+    OB_convergencectrl = 9,        // "convergencectrl"
+    OB_cfp_round = 10,             // "cfp-round"
+    OB_cfp_except = 11,            // "cfp-except"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.
@@ -317,9 +318,11 @@ public:
   /// times, but only with the same value. Note that creating a pointer type or
   /// otherwise querying the opaque pointer mode performs an implicit set to
   /// the default value.
+  [[deprecated("Opaque pointers are always enabled")]]
   void setOpaquePointers(bool Enable) const;
 
   /// Whether typed pointers are supported. If false, all pointers are opaque.
+  [[deprecated("Always returns false")]]
   bool supportsTypedPointers() const;
 
 private:

@@ -117,6 +117,9 @@ protected:
       *this, "gpu-binary-annotation",
       llvm::cl::desc("Annotation attribute string for GPU binary"),
       llvm::cl::init(getDefaultGpuBinaryAnnotation())};
+  Option<bool> dumpPtx{*this, "dump-ptx",
+                       ::llvm::cl::desc("Dump generated PTX"),
+                       llvm::cl::init(false)};
 };
 } // namespace gpu
 
@@ -137,7 +140,8 @@ void registerGpuSerializeToHsacoPass();
 std::unique_ptr<Pass> createGpuSerializeToCubinPass(StringRef triple,
                                                     StringRef chip,
                                                     StringRef features,
-                                                    int optLevel = 2);
+                                                    int optLevel = 2,
+                                                    bool dumpPtx = false);
 
 /// Create an instance of the GPU kernel function to HSAco binary serialization
 /// pass.
@@ -145,6 +149,12 @@ std::unique_ptr<Pass> createGpuSerializeToHsacoPass(StringRef triple,
                                                     StringRef arch,
                                                     StringRef features,
                                                     int optLevel);
+
+/// Collect a set of patterns to decompose memrefs ops.
+void populateGpuDecomposeMemrefsPatterns(RewritePatternSet &patterns);
+
+/// Pass decomposes memref ops inside `gpu.launch` body.
+std::unique_ptr<Pass> createGpuDecomposeMemrefsPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

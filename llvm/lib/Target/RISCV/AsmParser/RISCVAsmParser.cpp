@@ -1546,15 +1546,6 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_InvalidRnumArg: {
     return generateImmOutOfRangeError(Operands, ErrorInfo, 0, 10);
   }
-  case Match_InvalidRnumArg_0_7: {
-    return generateImmOutOfRangeError(Operands, ErrorInfo, 0, 7);
-  }
-  case Match_InvalidRnumArg_1_10: {
-    return generateImmOutOfRangeError(Operands, ErrorInfo, 1, 10);
-  }
-  case Match_InvalidRnumArg_2_14: {
-    return generateImmOutOfRangeError(Operands, ErrorInfo, 2, 14);
-  }
   }
 
   llvm_unreachable("Unknown match type detected!");
@@ -1803,18 +1794,57 @@ ParseStatus RISCVAsmParser::parseCSRSystemRegister(OperandVector &Operands) {
     if (getParser().parseIdentifier(Identifier))
       return ParseStatus::Failure;
 
+    // Check for CSR names conflicts.
+    // Custom CSR names might conflict with CSR names in privileged spec.
+    // E.g. - SiFive mnscratch(0x350) and privileged spec mnscratch(0x740).
+    auto CheckCSRNameConflict = [&]() {
+      if (!(RISCVSysReg::lookupSysRegByName(Identifier))) {
+        Error(S, "system register use requires an option to be enabled");
+        return true;
+      }
+      return false;
+    };
+
+    // First check for vendor specific CSRs.
+    auto SiFiveReg = RISCVSysReg::lookupSiFiveRegByName(Identifier);
+    if (SiFiveReg) {
+      if (SiFiveReg->haveVendorRequiredFeatures(getSTI().getFeatureBits())) {
+        Operands.push_back(
+            RISCVOperand::createSysReg(Identifier, S, SiFiveReg->Encoding));
+        return ParseStatus::Success;
+      }
+      if (CheckCSRNameConflict())
+        return ParseStatus::Failure;
+    }
+
     auto SysReg = RISCVSysReg::lookupSysRegByName(Identifier);
-    if (!SysReg)
-      SysReg = RISCVSysReg::lookupSysRegByAltName(Identifier);
     if (!SysReg)
       if ((SysReg = RISCVSysReg::lookupSysRegByDeprecatedName(Identifier)))
         Warning(S, "'" + Identifier + "' is a deprecated alias for '" +
                        SysReg->Name + "'");
 
-    // Accept a named Sys Reg if the required features are present.
+    // Check for CSR encoding conflicts.
+    // Custom CSR encoding might conflict with CSR encoding in privileged spec.
+    // E.g. - SiFive mnscratch(0x350) and privileged spec miselect(0x350).
+    auto CheckCSREncodingConflict = [&]() {
+      auto Reg = RISCVSysReg::lookupSiFiveRegByEncoding(SysReg->Encoding);
+      if (Reg && Reg->haveVendorRequiredFeatures(getSTI().getFeatureBits())) {
+        Warning(S, "'" + Identifier + "' CSR is not available on the current " +
+                       "subtarget. Instead '" + Reg->Name +
+                       "' CSR will be used.");
+        Operands.push_back(
+            RISCVOperand::createSysReg(Reg->Name, S, Reg->Encoding));
+        return true;
+      }
+      return false;
+    };
+
+    // Accept a named SysReg if the required features are present.
     if (SysReg) {
       if (!SysReg->haveRequiredFeatures(getSTI().getFeatureBits()))
         return Error(S, "system register use requires an option to be enabled");
+      if (CheckCSREncodingConflict())
+        return ParseStatus::Success;
       Operands.push_back(
           RISCVOperand::createSysReg(Identifier, S, SysReg->Encoding));
       return ParseStatus::Success;
@@ -3276,6 +3306,27 @@ bool RISCVAsmParser::validateInstruction(MCInst &Inst,
     return Error(Loc, "Operand must be constant 4.");
   }
 
+  bool IsAMOCAS_D = Opcode == RISCV::AMOCAS_D || Opcode == RISCV::AMOCAS_D_AQ ||
+                    Opcode == RISCV::AMOCAS_D_RL ||
+                    Opcode == RISCV::AMOCAS_D_AQ_RL;
+  bool IsAMOCAS_Q = Opcode == RISCV::AMOCAS_Q || Opcode == RISCV::AMOCAS_Q_AQ ||
+                    Opcode == RISCV::AMOCAS_Q_RL ||
+                    Opcode == RISCV::AMOCAS_Q_AQ_RL;
+  if ((!isRV64() && IsAMOCAS_D) || IsAMOCAS_Q) {
+    unsigned Rd = Inst.getOperand(0).getReg();
+    unsigned Rs2 = Inst.getOperand(2).getReg();
+    assert(Rd >= RISCV::X0 && Rd <= RISCV::X31);
+    if ((Rd - RISCV::X0) % 2 != 0) {
+      SMLoc Loc = Operands[1]->getStartLoc();
+      return Error(Loc, "The destination register must be even.");
+    }
+    assert(Rs2 >= RISCV::X0 && Rs2 <= RISCV::X31);
+    if ((Rs2 - RISCV::X0) % 2 != 0) {
+      SMLoc Loc = Operands[2]->getStartLoc();
+      return Error(Loc, "The source register must be even.");
+    }
+  }
+
   const MCInstrDesc &MCID = MII.get(Opcode);
   if (!(MCID.TSFlags & RISCVII::ConstraintMask))
     return false;
@@ -3301,16 +3352,21 @@ bool RISCVAsmParser::validateInstruction(MCInst &Inst,
   }
 
   unsigned DestReg = Inst.getOperand(0).getReg();
+  unsigned Offset = 0;
+  int TiedOp = MCID.getOperandConstraint(1, MCOI::TIED_TO);
+  if (TiedOp == 0)
+    Offset = 1;
+
   // Operands[1] will be the first operand, DestReg.
   SMLoc Loc = Operands[1]->getStartLoc();
   if (MCID.TSFlags & RISCVII::VS2Constraint) {
-    unsigned CheckReg = Inst.getOperand(1).getReg();
+    unsigned CheckReg = Inst.getOperand(Offset + 1).getReg();
     if (DestReg == CheckReg)
       return Error(Loc, "The destination vector register group cannot overlap"
                         " the source vector register group.");
   }
-  if ((MCID.TSFlags & RISCVII::VS1Constraint) && (Inst.getOperand(2).isReg())) {
-    unsigned CheckReg = Inst.getOperand(2).getReg();
+  if ((MCID.TSFlags & RISCVII::VS1Constraint) && Inst.getOperand(Offset + 2).isReg()) {
+    unsigned CheckReg = Inst.getOperand(Offset + 2).getReg();
     if (DestReg == CheckReg)
       return Error(Loc, "The destination vector register group cannot overlap"
                         " the source vector register group.");

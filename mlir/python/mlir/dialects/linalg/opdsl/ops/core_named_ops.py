@@ -17,6 +17,7 @@ def copy(
     Numeric casting is performed on the input operand, promoting it to the same
     data type as the accumulator/output.
     """
+    defines(Canonicalizer)
     O[None] = cast(U, I[None])
 
 
@@ -33,6 +34,78 @@ def elemwise_unary(
     data type as the accumulator/output.
     """
     O[None] = fun(cast(U, I[None]))
+
+
+@linalg_structured_op
+def exp(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies exp(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.exp(I[None])
+
+
+@linalg_structured_op
+def log(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies log(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.log(I[None])
+
+
+@linalg_structured_op
+def abs(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies abs(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.abs(I[None])
+
+
+@linalg_structured_op
+def ceil(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies ceil(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.ceil(I[None])
+
+
+@linalg_structured_op
+def floor(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies floor(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.floor(I[None])
+
+
+@linalg_structured_op
+def negf(
+    I=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Applies negf(x) elementwise.
+
+    No numeric casting is performed on the input operand.
+    """
+    O[None] = UnaryFn.negf(I[None])
 
 
 @linalg_structured_op
@@ -57,7 +130,7 @@ def add(
     rhs=TensorDef(T1),
     O=TensorDef(T1, output=True),
 ):
-    """ Adds two tensors elementwise.
+    """Adds two tensors elementwise.
 
     The shapes and element types must be identical. The appropriate casts,
     broadcasts and reductions should be done previously to calling this op.
@@ -67,7 +140,103 @@ def add(
     a `linalg.broadcast` + `linalg.add` sequence can be lowered to a
     `linalg.generic` with different affine maps for the two operands.
     """
-    O[None] = lhs[None] + rhs[None]
+    O[None] = BinaryFn.add(lhs[None], rhs[None])
+
+
+@linalg_structured_op
+def sub(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Subtracts two tensors elementwise.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.sub` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = BinaryFn.sub(lhs[None], rhs[None])
+
+
+@linalg_structured_op
+def mul(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Multiplies two tensors elementwise.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.mul` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = BinaryFn.mul(lhs[None], rhs[None])
+
+
+@linalg_structured_op
+def div(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Divides the first tensor by the second tensor, elementwise.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.div` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = BinaryFn.div(lhs[None], rhs[None])
+
+
+@linalg_structured_op
+def div_unsigned(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Divides the first tensor by the second tensor, elementwise. For integer
+    types, performs an unsigned division.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.div` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = lhs[None] / rhs[None]
+
+
+@linalg_structured_op
+def max(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """Takes the max (signed) between two inputs, elementwise.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.div` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = BinaryFn.max_signed(lhs[None], rhs[None])
 
 
 @linalg_structured_op
@@ -179,6 +348,27 @@ def mmt4d(
     accum[D.m, D.n, D.m0, D.n0] += TypeFn.cast_signed(
         TV.AccumType, lhs[D.m, D.k, D.m0, D.k0]
     ) * TypeFn.cast_signed(TV.AccumType, rhs[D.n, D.k, D.n0, D.k0])
+
+
+@linalg_structured_op
+def batch_mmt4d(
+    lhs=TensorDef(TV.LhsType, Batch, S.M, S.K, S.M0, S.K0),
+    rhs=TensorDef(TV.RhsType, Batch, S.N, S.K, S.N0, S.K0),
+    accum=TensorDef(TV.AccumType, Batch, S.M, S.N, S.M0, S.N0, output=True),
+):
+    """Performs a batched matrix-matrix-transpose multiplication of two
+    batched-4D (5D) inputs.
+
+    Besides the outermost batch dimension has the same semantic as
+    linalg.batch_matmul, the differences from linalg.batch_matmul in the
+    non-batch dimensions are the same as linalg.mmt4d vs. linalg.matmul. See the
+    description of lingalg.mmt4d.
+    """
+    domain(D.b, D.m, D.n, D.k, D.m0, D.n0, D.k0)
+    implements(ContractionOpInterface)
+    accum[D.b, D.m, D.n, D.m0, D.n0] += TypeFn.cast_signed(
+        TV.AccumType, lhs[D.b, D.m, D.k, D.m0, D.k0]
+    ) * TypeFn.cast_signed(TV.AccumType, rhs[D.b, D.n, D.k, D.n0, D.k0])
 
 
 @linalg_structured_op

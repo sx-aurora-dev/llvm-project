@@ -148,12 +148,11 @@ function(create_libc_unittest fq_target_name)
     ${fq_build_target_name}
     PRIVATE
       ${LIBC_SOURCE_DIR}
-      ${LIBC_BUILD_DIR}
-      ${LIBC_BUILD_DIR}/include
+      ${LIBC_INCLUDE_DIR}
   )
   target_compile_options(
     ${fq_build_target_name}
-    PRIVATE -fpie ${LIBC_COMPILE_OPTIONS_DEFAULT}
+    PRIVATE -fpie -ffreestanding ${LIBC_COMPILE_OPTIONS_DEFAULT}
   )
   if(LIBC_UNITTEST_COMPILE_OPTIONS)
     target_compile_options(
@@ -381,8 +380,7 @@ function(add_libc_fuzzer target_name)
     ${fq_target_name}
     PRIVATE
       ${LIBC_SOURCE_DIR}
-      ${LIBC_BUILD_DIR}
-      ${LIBC_BUILD_DIR}/include
+      ${LIBC_INCLUDE_DIR}
   )
 
   target_link_libraries(${fq_target_name} PRIVATE 
@@ -512,8 +510,7 @@ function(add_integration_test test_name)
     ${fq_build_target_name}
     PRIVATE
       ${LIBC_SOURCE_DIR}
-      ${LIBC_BUILD_DIR}
-      ${LIBC_BUILD_DIR}/include
+      ${LIBC_INCLUDE_DIR}
   )
   target_compile_options(${fq_build_target_name}
       PRIVATE -fpie -ffreestanding -fno-exceptions -fno-rtti ${INTEGRATION_TEST_COMPILE_OPTIONS})
@@ -677,8 +674,7 @@ function(add_libc_hermetic_test test_name)
     ${fq_build_target_name}
     PRIVATE
       ${LIBC_SOURCE_DIR}
-      ${LIBC_BUILD_DIR}
-      ${LIBC_BUILD_DIR}/include
+      ${LIBC_INCLUDE_DIR}
   )
   target_compile_options(${fq_build_target_name}
       PRIVATE ${LIBC_HERMETIC_TEST_COMPILE_OPTIONS} ${HERMETIC_TEST_COMPILE_OPTIONS})

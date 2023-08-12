@@ -40,35 +40,12 @@ class SiFive7GetCyclesDefault<string mx> {
   );
 }
 
-class SiFive7GetCyclesWidening<string mx> {
-  int c = !cond(
-    !eq(mx, "M1") : 2,
-    !eq(mx, "M2") : 4,
-    !eq(mx, "M4") : 8,
-    !eq(mx, "MF2") : 1,
-    !eq(mx, "MF4") : 1,
-    !eq(mx, "MF8") : 1
-  );
-}
-
 class SiFive7GetCyclesNarrowing<string mx> {
   int c = !cond(
     !eq(mx, "M1") : 4,
     !eq(mx, "M2") : 8,
     !eq(mx, "M4") : 16,
     !eq(mx, "MF2") : 2,
-    !eq(mx, "MF4") : 1,
-    !eq(mx, "MF8") : 1
-  );
-}
-
-class SiFive7GetCyclesOutputLMUL<string mx> {
-  int c = !cond(
-    !eq(mx, "M1") : 1,
-    !eq(mx, "M2") : 2,
-    !eq(mx, "M4") : 4,
-    !eq(mx, "M8") : 8,
-    !eq(mx, "MF2") : 1,
     !eq(mx, "MF4") : 1,
     !eq(mx, "MF8") : 1
   );
@@ -313,6 +290,16 @@ def : WriteRes<WriteREV8, [SiFive7PipeAB]>;
 // shNadd[.uw] is on the early-B and late-B ALUs.
 def : WriteRes<WriteSHXADD, [SiFive7PipeB]>;
 def : WriteRes<WriteSHXADD32, [SiFive7PipeB]>;
+}
+
+// Single-bit instructions
+// BEXT[I] instruction is available on all ALUs and the other instructions
+// are only available on the SiFive7B pipe.
+let Latency = 3 in {
+def : WriteRes<WriteSingleBit, [SiFive7PipeB]>;
+def : WriteRes<WriteSingleBitImm, [SiFive7PipeB]>;
+def : WriteRes<WriteBEXT, [SiFive7PipeAB]>;
+def : WriteRes<WriteBEXTI, [SiFive7PipeAB]>;
 }
 
 // Memory
@@ -629,7 +616,7 @@ foreach mx = SchedMxList in {
   }
 }
 foreach mx = SchedMxList in {
-  defvar Cycles = SiFive7GetCyclesOutputLMUL<mx>.c;
+  defvar Cycles = SiFive7GetCyclesDefault<mx>.c;
   defvar IsWorstCase = SiFive7IsWorstCaseMX<mx, SchedMxList>.c;
   let Latency = 4, ResourceCycles = [Cycles] in {
     defm "" : LMULWriteResMX<"WriteVExtV",      [SiFive7VA], mx, IsWorstCase>;
@@ -649,7 +636,7 @@ foreach mx = SchedMxList in {
 
 // Widening
 foreach mx = SchedMxListW in {
-  defvar Cycles = SiFive7GetCyclesWidening<mx>.c;
+  defvar Cycles = SiFive7GetCyclesDefault<mx>.c;
   defvar IsWorstCase = SiFive7IsWorstCaseMX<mx, SchedMxListW>.c;
   let Latency = 8, ResourceCycles = [Cycles] in {
     defm "" : LMULWriteResMX<"WriteVIWALUV",    [SiFive7VA], mx, IsWorstCase>;
@@ -731,7 +718,7 @@ foreach mx = SchedMxList in {
   }
 }
 foreach mx = SchedMxListF in {
-  foreach sew = SchedSEWSet<mx, /*isF*/ 1>.val in {
+  foreach sew = SchedSEWSet<mx, isF=1>.val in {
     defvar Cycles = !mul(SiFive7GetDivOrSqrtFactor<sew>.c,
                          !div(SiFive7GetCyclesOnePerElement<mx, sew>.c, 4));
     defvar IsWorstCase = SiFive7IsWorstCaseMXSEW<mx, sew, SchedMxListF, 1>.c;
@@ -745,14 +732,14 @@ foreach mx = SchedMxListF in {
 
 // Widening
 foreach mx = SchedMxListW in {
-  defvar Cycles = SiFive7GetCyclesWidening<mx>.c;
+  defvar Cycles = SiFive7GetCyclesDefault<mx>.c;
   defvar IsWorstCase = SiFive7IsWorstCaseMX<mx, SchedMxListW>.c;
   let Latency = 8, ResourceCycles = [Cycles] in {
     defm "" : LMULWriteResMX<"WriteVFWCvtIToFV", [SiFive7VA], mx, IsWorstCase>;
   }
 }
 foreach mx = SchedMxListFW in {
-  defvar Cycles = SiFive7GetCyclesWidening<mx>.c;
+  defvar Cycles = SiFive7GetCyclesDefault<mx>.c;
   defvar IsWorstCase = SiFive7IsWorstCaseMX<mx, SchedMxListFW>.c;
   let Latency = 8, ResourceCycles = [Cycles] in {
     defm "" : LMULWriteResMX<"WriteVFWALUV",     [SiFive7VA], mx, IsWorstCase>;
@@ -789,6 +776,8 @@ foreach mx = SchedMxList in {
     defvar IsWorstCase = SiFive7IsWorstCaseMXSEW<mx, sew, SchedMxList>.c;
     let Latency = Cycles, ResourceCycles = [Cycles] in
     defm "" : LMULSEWWriteResMXSEW<"WriteVIRedV_From", [SiFive7VA],
+                                   mx, sew, IsWorstCase>;
+    defm "" : LMULSEWWriteResMXSEW<"WriteVIRedMinMaxV_From", [SiFive7VA],
                                    mx, sew, IsWorstCase>;
   }
 }
@@ -1008,6 +997,9 @@ def : SiFive7AnyToGPRBypass<ReadORCB>;
 def : SiFive7AnyToGPRBypass<ReadREV8>;
 def : SiFive7AnyToGPRBypass<ReadSHXADD>;
 def : SiFive7AnyToGPRBypass<ReadSHXADD32>;
+// Single-bit instructions
+def : SiFive7AnyToGPRBypass<ReadSingleBit>;
+def : SiFive7AnyToGPRBypass<ReadSingleBitImm>;
 
 // 6. Configuration-Setting Instructions
 def : ReadAdvance<ReadVSETVLI, 2>;
@@ -1175,11 +1167,16 @@ def : ReadAdvance<ReadVMov8V, 0>;
 
 // Others
 def : ReadAdvance<ReadVMask, 0>;
+def : ReadAdvance<ReadVMergeOp_WorstCase, 0>;
+foreach mx = SchedMxList in {
+  def : ReadAdvance<!cast<SchedRead>("ReadVMergeOp_" # mx), 0>;
+  foreach sew = SchedSEWSet<mx>.val in
+    def : ReadAdvance<!cast<SchedRead>("ReadVMergeOp_" # mx  # "_E" # sew), 0>;
+}
 
 //===----------------------------------------------------------------------===//
 // Unsupported extensions
 defm : UnsupportedSchedZbc;
-defm : UnsupportedSchedZbs;
 defm : UnsupportedSchedZbkb;
 defm : UnsupportedSchedZbkx;
 defm : UnsupportedSchedZfa;

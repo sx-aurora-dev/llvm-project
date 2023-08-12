@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64InstrInfo.h"
+#include "AArch64FrameLowering.h"
 #include "AArch64MachineFunctionInfo.h"
 #include "AArch64Subtarget.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
@@ -79,6 +80,7 @@ AArch64InstrInfo::AArch64InstrInfo(const AArch64Subtarget &STI)
 unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   const MachineBasicBlock &MBB = *MI.getParent();
   const MachineFunction *MF = MBB.getParent();
+  const Function &F = MF->getFunction();
   const MCAsmInfo *MAI = MF->getTarget().getMCAsmInfo();
 
   {
@@ -127,9 +129,20 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
       NumBytes = 4;
     break;
   case TargetOpcode::PATCHABLE_FUNCTION_ENTER:
+    // If `patchable-function-entry` is set, PATCHABLE_FUNCTION_ENTER
+    // instructions are expanded to the specified number of NOPs. Otherwise,
+    // they are expanded to 36-byte XRay sleds.
+    NumBytes =
+        F.getFnAttributeAsParsedInteger("patchable-function-entry", 9) * 4;
+    break;
   case TargetOpcode::PATCHABLE_FUNCTION_EXIT:
+  case TargetOpcode::PATCHABLE_TYPED_EVENT_CALL:
     // An XRay sled can be 4 bytes of alignment plus a 32-byte block.
     NumBytes = 36;
+    break;
+  case TargetOpcode::PATCHABLE_EVENT_CALL:
+    // EVENT_CALL XRay sleds are exactly 6 instructions long (no alignment).
+    NumBytes = 24;
     break;
 
   case AArch64::SPACE:
@@ -3719,16 +3732,16 @@ void AArch64InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 
   if (AArch64::FPR128RegClass.contains(DestReg) &&
       AArch64::FPR128RegClass.contains(SrcReg)) {
-    if (Subtarget.forceStreamingCompatibleSVE()) {
+    if (Subtarget.hasSVEorSME() && !Subtarget.isNeonAvailable())
       BuildMI(MBB, I, DL, get(AArch64::ORR_ZZZ))
           .addReg(AArch64::Z0 + (DestReg - AArch64::Q0), RegState::Define)
           .addReg(AArch64::Z0 + (SrcReg - AArch64::Q0))
           .addReg(AArch64::Z0 + (SrcReg - AArch64::Q0));
-    } else if (Subtarget.hasNEON()) {
+    else if (Subtarget.hasNEON())
       BuildMI(MBB, I, DL, get(AArch64::ORRv16i8), DestReg)
           .addReg(SrcReg)
           .addReg(SrcReg, getKillRegState(KillSrc));
-    } else {
+    else {
       BuildMI(MBB, I, DL, get(AArch64::STRQpre))
           .addReg(AArch64::SP, RegState::Define)
           .addReg(SrcReg, getKillRegState(KillSrc))
@@ -4513,9 +4526,6 @@ MachineInstr *AArch64InstrInfo::foldMemoryOperandImpl(
   // register class, TargetInstrInfo::foldMemoryOperand() is going to try.
   //
   // To prevent that, we are going to constrain the %0 register class here.
-  //
-  // <rdar://problem/11522048>
-  //
   if (MI.isFullCopy()) {
     Register DstReg = MI.getOperand(0).getReg();
     Register SrcReg = MI.getOperand(1).getReg();
@@ -7670,6 +7680,23 @@ AArch64InstrInfo::getOutliningCandidateInfo(
                                     NumBytesToCreateFrame, FrameID);
 }
 
+void AArch64InstrInfo::mergeOutliningCandidateAttributes(
+    Function &F, std::vector<outliner::Candidate> &Candidates) const {
+  // If a bunch of candidates reach this point they must agree on their return
+  // address signing. It is therefore enough to just consider the signing
+  // behaviour of one of them
+  const auto &CFn = Candidates.front().getMF()->getFunction();
+
+  // Since all candidates belong to the same module, just copy the
+  // function-level attributes of an arbitrary function.
+  if (CFn.hasFnAttribute("sign-return-address"))
+    F.addFnAttr(CFn.getFnAttribute("sign-return-address"));
+  if (CFn.hasFnAttribute("sign-return-address-key"))
+    F.addFnAttr(CFn.getFnAttribute("sign-return-address-key"));
+
+  AArch64GenInstrInfo::mergeOutliningCandidateAttributes(F, Candidates);
+}
+
 bool AArch64InstrInfo::isFunctionSafeToOutlineFrom(
     MachineFunction &MF, bool OutlineFromLinkOnceODRs) const {
   const Function &F = MF.getFunction();
@@ -7982,65 +8009,15 @@ void AArch64InstrInfo::fixupPostOutline(MachineBasicBlock &MBB) const {
 }
 
 static void signOutlinedFunction(MachineFunction &MF, MachineBasicBlock &MBB,
-                                 bool ShouldSignReturnAddr,
-                                 bool ShouldSignReturnAddrWithBKey) {
-  if (ShouldSignReturnAddr) {
-    MachineBasicBlock::iterator MBBPAC = MBB.begin();
-    MachineBasicBlock::iterator MBBAUT = MBB.getFirstTerminator();
-    const AArch64Subtarget &Subtarget = MF.getSubtarget<AArch64Subtarget>();
-    const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-    DebugLoc DL;
+                                 bool ShouldSignReturnAddr) {
+  if (!ShouldSignReturnAddr)
+    return;
 
-    if (MBBAUT != MBB.end())
-      DL = MBBAUT->getDebugLoc();
+  AArch64FrameLowering::signLR(MF, MBB, MBB.begin(),
+                               /*NeedsWinCFI=*/false, /*HasWinCFI=*/nullptr);
 
-    // At the very beginning of the basic block we insert the following
-    // depending on the key type
-    //
-    // a_key:                   b_key:
-    //    PACIASP                   EMITBKEY
-    //    CFI_INSTRUCTION           PACIBSP
-    //                              CFI_INSTRUCTION
-    if (ShouldSignReturnAddrWithBKey) {
-      BuildMI(MBB, MBBPAC, DebugLoc(), TII->get(AArch64::EMITBKEY))
-          .setMIFlag(MachineInstr::FrameSetup);
-    }
-
-    BuildMI(MBB, MBBPAC, DebugLoc(),
-            TII->get(ShouldSignReturnAddrWithBKey ? AArch64::PACIBSP
-                                                  : AArch64::PACIASP))
-        .setMIFlag(MachineInstr::FrameSetup);
-
-    if (MF.getInfo<AArch64FunctionInfo>()->needsDwarfUnwindInfo(MF)) {
-      unsigned CFIIndex =
-          MF.addFrameInst(MCCFIInstruction::createNegateRAState(nullptr));
-      BuildMI(MBB, MBBPAC, DebugLoc(), TII->get(AArch64::CFI_INSTRUCTION))
-          .addCFIIndex(CFIIndex)
-          .setMIFlags(MachineInstr::FrameSetup);
-    }
-
-    // If v8.3a features are available we can replace a RET instruction by
-    // RETAA or RETAB and omit the AUT instructions. In this case the
-    // DW_CFA_AARCH64_negate_ra_state can't be emitted.
-    if (Subtarget.hasPAuth() && MBBAUT != MBB.end() &&
-        MBBAUT->getOpcode() == AArch64::RET) {
-      BuildMI(MBB, MBBAUT, DL,
-              TII->get(ShouldSignReturnAddrWithBKey ? AArch64::RETAB
-                                                    : AArch64::RETAA))
-          .copyImplicitOps(*MBBAUT);
-      MBB.erase(MBBAUT);
-    } else {
-      BuildMI(MBB, MBBAUT, DL,
-              TII->get(ShouldSignReturnAddrWithBKey ? AArch64::AUTIBSP
-                                                    : AArch64::AUTIASP))
-          .setMIFlag(MachineInstr::FrameDestroy);
-      unsigned CFIIndexAuth =
-          MF.addFrameInst(MCCFIInstruction::createNegateRAState(nullptr));
-      BuildMI(MBB, MBBAUT, DL, TII->get(TargetOpcode::CFI_INSTRUCTION))
-          .addCFIIndex(CFIIndexAuth)
-          .setMIFlags(MachineInstr::FrameDestroy);
-    }
-  }
+  AArch64FrameLowering::authenticateLR(MF, MBB, /*NeedsWinCFI=*/false,
+                                       /*HasWinCFI=*/nullptr);
 }
 
 void AArch64InstrInfo::buildOutlinedFrame(
@@ -8140,20 +8117,12 @@ void AArch64InstrInfo::buildOutlinedFrame(
     Et = MBB.insert(Et, LDRXpost);
   }
 
-  // If a bunch of candidates reach this point they must agree on their return
-  // address signing. It is therefore enough to just consider the signing
-  // behaviour of one of them
-  const auto &MFI = *OF.Candidates.front().getMF()->getInfo<AArch64FunctionInfo>();
-  bool ShouldSignReturnAddr = MFI.shouldSignReturnAddress(!IsLeafFunction);
-
-  // a_key is the default
-  bool ShouldSignReturnAddrWithBKey = MFI.shouldSignWithBKey();
+  bool ShouldSignReturnAddr = FI->shouldSignReturnAddress(!IsLeafFunction);
 
   // If this is a tail call outlined function, then there's already a return.
   if (OF.FrameConstructionID == MachineOutlinerTailCall ||
       OF.FrameConstructionID == MachineOutlinerThunk) {
-    signOutlinedFunction(MF, MBB, ShouldSignReturnAddr,
-                         ShouldSignReturnAddrWithBKey);
+    signOutlinedFunction(MF, MBB, ShouldSignReturnAddr);
     return;
   }
 
@@ -8167,8 +8136,7 @@ void AArch64InstrInfo::buildOutlinedFrame(
                           .addReg(AArch64::LR);
   MBB.insert(MBB.end(), ret);
 
-  signOutlinedFunction(MF, MBB, ShouldSignReturnAddr,
-                       ShouldSignReturnAddrWithBKey);
+  signOutlinedFunction(MF, MBB, ShouldSignReturnAddr);
 
   FI->setOutliningStyle("Function");
 

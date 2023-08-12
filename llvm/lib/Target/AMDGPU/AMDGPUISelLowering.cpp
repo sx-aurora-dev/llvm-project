@@ -323,7 +323,8 @@ AMDGPUTargetLowering::AMDGPUTargetLowering(const TargetMachine &TM,
 
   setOperationAction({ISD::BR_JT, ISD::BRIND}, MVT::Other, Expand);
 
-  // This is totally unsupported, just custom lower to produce an error.
+  // For R600, this is totally unsupported, just custom lower to produce an
+  // error.
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
 
   // Library functions.  These default to Expand, but we have instructions
@@ -1496,6 +1497,17 @@ static SDValue peekFNeg(SDValue Val) {
 
   return Val;
 }
+
+static SDValue peekFPSignOps(SDValue Val) {
+  if (Val.getOpcode() == ISD::FNEG)
+    Val = Val.getOperand(0);
+  if (Val.getOpcode() == ISD::FABS)
+    Val = Val.getOperand(0);
+  if (Val.getOpcode() == ISD::FCOPYSIGN)
+    Val = Val.getOperand(0);
+  return Val;
+}
+
 SDValue AMDGPUTargetLowering::combineFMinMaxLegacyImpl(
     const SDLoc &DL, EVT VT, SDValue LHS, SDValue RHS, SDValue True,
     SDValue False, SDValue CC, DAGCombinerInfo &DCI) const {
@@ -1872,7 +1884,8 @@ SDValue AMDGPUTargetLowering::LowerDIVREM24(SDValue Op, SelectionDAG &DAG,
   bool UseFmadFtz = false;
   if (Subtarget->isGCN()) {
     const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
-    UseFmadFtz = MFI->getMode().allFP32Denormals();
+    UseFmadFtz =
+        MFI->getMode().FP32Denormals != DenormalMode::getPreserveSign();
   }
 
   // float fr = mad(fqneg, fb, fa);
@@ -1964,11 +1977,11 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
     const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
 
     // Compute denominator reciprocal.
-    unsigned FMAD = !Subtarget->hasMadMacF32Insts() ?
-                    (unsigned)ISD::FMA :
-                    !MFI->getMode().allFP32Denormals() ?
-                    (unsigned)ISD::FMAD :
-                    (unsigned)AMDGPUISD::FMAD_FTZ;
+    unsigned FMAD =
+        !Subtarget->hasMadMacF32Insts() ? (unsigned)ISD::FMA
+        : MFI->getMode().FP32Denormals == DenormalMode::getPreserveSign()
+            ? (unsigned)ISD::FMAD
+            : (unsigned)AMDGPUISD::FMAD_FTZ;
 
     SDValue Cvt_Lo = DAG.getNode(ISD::UINT_TO_FP, DL, MVT::f32, RHS_Lo);
     SDValue Cvt_Hi = DAG.getNode(ISD::UINT_TO_FP, DL, MVT::f32, RHS_Hi);
@@ -2816,6 +2829,8 @@ SDValue AMDGPUTargetLowering::lowerFEXP(SDValue Op, SelectionDAG &DAG) const {
   //    q = r + (r^2)/2! + (r^3)/3! + (r^4)/4! + (r^5)/5!
   //
   //    e^x = (2^m) * ( (2^(j/64)) + q*(2^(j/64)) )
+  SDNodeFlags FlagsNoContract = Flags;
+  FlagsNoContract.setAllowContract(false);
 
   SDValue PH, PL;
   if (Subtarget->hasFastFMAF32()) {
@@ -2855,7 +2870,10 @@ SDValue AMDGPUTargetLowering::lowerFEXP(SDValue Op, SelectionDAG &DAG) const {
   }
 
   SDValue E = DAG.getNode(ISD::FRINT, SL, VT, PH, Flags);
-  SDValue PHSubE = DAG.getNode(ISD::FSUB, SL, VT, PH, E, Flags);
+
+  // It is unsafe to contract this fsub into the PH multiply.
+  SDValue PHSubE = DAG.getNode(ISD::FSUB, SL, VT, PH, E, FlagsNoContract);
+
   SDValue A = DAG.getNode(ISD::FADD, SL, VT, PHSubE, PL, Flags);
   SDValue IntE = DAG.getNode(ISD::FP_TO_SINT, SL, MVT::i32, E);
   SDValue Exp2 = DAG.getNode(AMDGPUISD::EXP, SL, VT, A, Flags);
@@ -3663,6 +3681,17 @@ SDValue AMDGPUTargetLowering::performIntrinsicWOChainCombine(
     // FIXME: This is probably wrong. If src is an sNaN, it won't be quieted
     SDValue Src = N->getOperand(1);
     return Src.isUndef() ? Src : SDValue();
+  }
+  case Intrinsic::amdgcn_frexp_exp: {
+    // frexp_exp (fneg x) -> frexp_exp x
+    // frexp_exp (fabs x) -> frexp_exp x
+    // frexp_exp (fneg (fabs x)) -> frexp_exp x
+    SDValue Src = N->getOperand(1);
+    SDValue PeekSign = peekFPSignOps(Src);
+    if (PeekSign == Src)
+      return SDValue();
+    return SDValue(DCI.DAG.UpdateNodeOperands(N, N->getOperand(0), PeekSign),
+                   0);
   }
   default:
     return SDValue();
@@ -5091,6 +5120,7 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(TC_RETURN_GFX)
   NODE_NAME_CASE(TRAP)
   NODE_NAME_CASE(RET_GLUE)
+  NODE_NAME_CASE(WAVE_ADDRESS)
   NODE_NAME_CASE(RETURN_TO_EPILOG)
   NODE_NAME_CASE(ENDPGM)
   NODE_NAME_CASE(ENDPGM_TRAP)
@@ -5659,7 +5689,7 @@ bool AMDGPUTargetLowering::isKnownNeverNaNForTargetNode(SDValue Op,
 
 bool AMDGPUTargetLowering::isReassocProfitable(MachineRegisterInfo &MRI,
                                                Register N0, Register N1) const {
-  return true; // FIXME: handle regbanks
+  return MRI.hasOneNonDBGUse(N0); // FIXME: handle regbanks
 }
 
 TargetLowering::AtomicExpansionKind

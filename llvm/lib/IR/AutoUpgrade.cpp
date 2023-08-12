@@ -897,21 +897,20 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
         Name == "arm.cde.vcx3qa.predicated.v2i64.v4i1")
       return true;
 
-    if (Name.startswith("amdgcn."))
-      Name = Name.substr(7); // Strip off "amdgcn."
+    if (Name.consume_front("amdgcn.")) {
+      if (Name == "alignbit") {
+        // Target specific intrinsic became redundant
+        NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::fshr,
+                                          {F->getReturnType()});
+        return true;
+      }
 
-    if (Name == "alignbit") {
-      // Target specific intrinsic became redundant
-      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::fshr,
-                                        {F->getReturnType()});
-      return true;
-    }
-
-    if (Name.startswith("atomic.inc") || Name.startswith("atomic.dec")) {
-      // This was replaced with atomicrmw uinc_wrap and udec_wrap, so there's no
-      // new declaration.
-      NewFn = nullptr;
-      return true;
+      if (Name.startswith("atomic.inc") || Name.startswith("atomic.dec")) {
+        // This was replaced with atomicrmw uinc_wrap and udec_wrap, so there's no
+        // new declaration.
+        NewFn = nullptr;
+        return true;
+      }
     }
 
     break;
@@ -1103,21 +1102,18 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
     // Updating the memory intrinsics (memcpy/memmove/memset) that have an
     // alignment parameter to embedding the alignment as an attribute of
     // the pointer args.
-    if (Name.startswith("memcpy.") && F->arg_size() == 5) {
-      rename(F);
-      // Get the types of dest, src, and len
-      ArrayRef<Type *> ParamTypes = F->getFunctionType()->params().slice(0, 3);
-      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::memcpy,
-                                        ParamTypes);
-      return true;
-    }
-    if (Name.startswith("memmove.") && F->arg_size() == 5) {
-      rename(F);
-      // Get the types of dest, src, and len
-      ArrayRef<Type *> ParamTypes = F->getFunctionType()->params().slice(0, 3);
-      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::memmove,
-                                        ParamTypes);
-      return true;
+    if (unsigned ID = StringSwitch<unsigned>(Name)
+                          .StartsWith("memcpy.", Intrinsic::memcpy)
+                          .StartsWith("memmove.", Intrinsic::memmove)
+                          .Default(0)) {
+      if (F->arg_size() == 5) {
+        rename(F);
+        // Get the types of dest, src, and len
+        ArrayRef<Type *> ParamTypes =
+            F->getFunctionType()->params().slice(0, 3);
+        NewFn = Intrinsic::getDeclaration(F->getParent(), ID, ParamTypes);
+        return true;
+      }
     }
     if (Name.startswith("memset.") && F->arg_size() == 5) {
       rename(F);
@@ -1235,17 +1231,57 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
       return true;
     }
     if (Name.startswith("riscv.sm4ks") &&
-        !F->getFunctionType()->getParamType(2)->isIntegerTy(32)) {
+        (!F->getFunctionType()->getParamType(2)->isIntegerTy(32) ||
+         F->getFunctionType()->getReturnType()->isIntegerTy(64))) {
       rename(F);
-      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm4ks,
-                                        F->getReturnType());
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm4ks);
       return true;
     }
     if (Name.startswith("riscv.sm4ed") &&
-        !F->getFunctionType()->getParamType(2)->isIntegerTy(32)) {
+        (!F->getFunctionType()->getParamType(2)->isIntegerTy(32) ||
+         F->getFunctionType()->getReturnType()->isIntegerTy(64))) {
       rename(F);
-      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm4ed,
-                                        F->getReturnType());
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm4ed);
+      return true;
+    }
+    if (Name.startswith("riscv.sha256sig0") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(),
+                                        Intrinsic::riscv_sha256sig0);
+      return true;
+    }
+    if (Name.startswith("riscv.sha256sig1") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(),
+                                        Intrinsic::riscv_sha256sig1);
+      return true;
+    }
+    if (Name.startswith("riscv.sha256sum0") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(),
+                                        Intrinsic::riscv_sha256sum0);
+      return true;
+    }
+    if (Name.startswith("riscv.sha256sum1") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(),
+                                        Intrinsic::riscv_sha256sum1);
+      return true;
+    }
+    if (Name.startswith("riscv.sm3p0") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm3p0);
+      return true;
+    }
+    if (Name.startswith("riscv.sm3p1") &&
+        F->getFunctionType()->getReturnType()->isIntegerTy(64)) {
+      rename(F);
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::riscv_sm3p1);
       return true;
     }
     break;
@@ -1373,15 +1409,15 @@ GlobalVariable *llvm::UpgradeGlobalVariable(GlobalVariable *GV) {
   LLVMContext &C = GV->getContext();
   IRBuilder<> IRB(C);
   auto EltTy = StructType::get(STy->getElementType(0), STy->getElementType(1),
-                               IRB.getInt8PtrTy());
+                               IRB.getPtrTy());
   Constant *Init = GV->getInitializer();
   unsigned N = Init->getNumOperands();
   std::vector<Constant *> NewCtors(N);
   for (unsigned i = 0; i != N; ++i) {
     auto Ctor = cast<Constant>(Init->getOperand(i));
-    NewCtors[i] = ConstantStruct::get(
-        EltTy, Ctor->getAggregateElement(0u), Ctor->getAggregateElement(1),
-        Constant::getNullValue(IRB.getInt8PtrTy()));
+    NewCtors[i] = ConstantStruct::get(EltTy, Ctor->getAggregateElement(0u),
+                                      Ctor->getAggregateElement(1),
+                                      Constant::getNullValue(IRB.getPtrTy()));
   }
   Constant *NewInit = ConstantArray::get(ArrayType::get(EltTy, N), NewCtors);
 
@@ -2265,7 +2301,11 @@ static Value *UpgradeAMDGCNIntrinsicCall(StringRef Name, CallBase *CI,
         Order == AtomicOrdering::Unordered)
       Order = AtomicOrdering::SequentiallyConsistent;
 
-    AtomicRMWInst *RMW = Builder.CreateAtomicRMW(RMWOp, Ptr, Val, std::nullopt, Order);
+    // The scope argument never really worked correctly. Use agent as the most
+    // conservative option which should still always produce the instruction.
+    SyncScope::ID SSID = F->getContext().getOrInsertSyncScopeID("agent");
+    AtomicRMWInst *RMW =
+        Builder.CreateAtomicRMW(RMWOp, Ptr, Val, std::nullopt, Order, SSID);
 
     if (!VolatileArg || !VolatileArg->isZero())
       RMW->setVolatile(true);
@@ -4394,10 +4434,10 @@ void llvm::UpgradeIntrinsicCall(CallBase *CI, Function *NewFn) {
     }
 
     // Create a new call with an added null annotation attribute argument.
-    NewCall = Builder.CreateCall(
-        NewFn,
-        {CI->getArgOperand(0), CI->getArgOperand(1), CI->getArgOperand(2),
-         CI->getArgOperand(3), Constant::getNullValue(Builder.getInt8PtrTy())});
+    NewCall =
+        Builder.CreateCall(NewFn, {CI->getArgOperand(0), CI->getArgOperand(1),
+                                   CI->getArgOperand(2), CI->getArgOperand(3),
+                                   Constant::getNullValue(Builder.getPtrTy())});
     NewCall->takeName(CI);
     CI->replaceAllUsesWith(NewCall);
     CI->eraseFromParent();
@@ -4410,10 +4450,10 @@ void llvm::UpgradeIntrinsicCall(CallBase *CI, Function *NewFn) {
       return;
     }
     // Create a new call with an added null annotation attribute argument.
-    NewCall = Builder.CreateCall(
-        NewFn,
-        {CI->getArgOperand(0), CI->getArgOperand(1), CI->getArgOperand(2),
-         CI->getArgOperand(3), Constant::getNullValue(Builder.getInt8PtrTy())});
+    NewCall =
+        Builder.CreateCall(NewFn, {CI->getArgOperand(0), CI->getArgOperand(1),
+                                   CI->getArgOperand(2), CI->getArgOperand(3),
+                                   Constant::getNullValue(Builder.getPtrTy())});
     NewCall->takeName(CI);
     CI->replaceAllUsesWith(NewCall);
     CI->eraseFromParent();
@@ -4426,15 +4466,51 @@ void llvm::UpgradeIntrinsicCall(CallBase *CI, Function *NewFn) {
   case Intrinsic::riscv_sm4ks:
   case Intrinsic::riscv_sm4ed: {
     // The last argument to these intrinsics used to be i8 and changed to i32.
+    // The type overload for sm4ks and sm4ed was removed.
     Value *Arg2 = CI->getArgOperand(2);
-    if (Arg2->getType()->isIntegerTy(32))
+    if (Arg2->getType()->isIntegerTy(32) && !CI->getType()->isIntegerTy(64))
       return;
 
-    Arg2 = ConstantInt::get(Type::getInt32Ty(C), cast<ConstantInt>(Arg2)->getZExtValue());
+    Value *Arg0 = CI->getArgOperand(0);
+    Value *Arg1 = CI->getArgOperand(1);
+    if (CI->getType()->isIntegerTy(64)) {
+      Arg0 = Builder.CreateTrunc(Arg0, Builder.getInt32Ty());
+      Arg1 = Builder.CreateTrunc(Arg1, Builder.getInt32Ty());
+    }
 
-    NewCall = Builder.CreateCall(NewFn, {CI->getArgOperand(0),
-                                 CI->getArgOperand(1), Arg2});
-    break;
+    Arg2 = ConstantInt::get(Type::getInt32Ty(C),
+                            cast<ConstantInt>(Arg2)->getZExtValue());
+
+    NewCall = Builder.CreateCall(NewFn, {Arg0, Arg1, Arg2});
+    Value *Res = NewCall;
+    if (Res->getType() != CI->getType())
+      Res = Builder.CreateIntCast(NewCall, CI->getType(), /*isSigned*/ true);
+    NewCall->takeName(CI);
+    CI->replaceAllUsesWith(Res);
+    CI->eraseFromParent();
+    return;
+  }
+  case Intrinsic::riscv_sha256sig0:
+  case Intrinsic::riscv_sha256sig1:
+  case Intrinsic::riscv_sha256sum0:
+  case Intrinsic::riscv_sha256sum1:
+  case Intrinsic::riscv_sm3p0:
+  case Intrinsic::riscv_sm3p1: {
+    // The last argument to these intrinsics used to be i8 and changed to i32.
+    // The type overload for sm4ks and sm4ed was removed.
+    if (!CI->getType()->isIntegerTy(64))
+      return;
+
+    Value *Arg =
+        Builder.CreateTrunc(CI->getArgOperand(0), Builder.getInt32Ty());
+
+    NewCall = Builder.CreateCall(NewFn, Arg);
+    Value *Res =
+        Builder.CreateIntCast(NewCall, CI->getType(), /*isSigned*/ true);
+    NewCall->takeName(CI);
+    CI->replaceAllUsesWith(Res);
+    CI->eraseFromParent();
+    return;
   }
 
   case Intrinsic::x86_xop_vfrcz_ss:

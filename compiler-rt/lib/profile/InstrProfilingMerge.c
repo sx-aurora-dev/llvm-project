@@ -38,6 +38,11 @@ uint64_t lprofGetLoadModuleSignature(void) {
          __llvm_profile_get_magic();
 }
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
+
 /* Returns 1 if profile is not structurally compatible.  */
 COMPILER_RT_VISIBILITY
 int __llvm_profile_check_compatibility(const char *ProfileData,
@@ -102,6 +107,12 @@ int __llvm_profile_merge_from_buffer(const char *ProfileData,
         "%s\n",
         "Debug info correlation does not support profile merging at runtime. "
         "Instead, merge raw profiles using the llvm-profdata tool.");
+    return 1;
+  }
+  if (__llvm_profile_get_version() & VARIANT_MASK_TEMPORAL_PROF) {
+    PROF_ERR("%s\n",
+             "Temporal profiles do not support profile merging at runtime. "
+             "Instead, merge raw profiles using the llvm-profdata tool.");
     return 1;
   }
 
@@ -183,3 +194,7 @@ int __llvm_profile_merge_from_buffer(const char *ProfileData,
 
   return 0;
 }
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif

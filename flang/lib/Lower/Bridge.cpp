@@ -95,6 +95,11 @@ struct IncrementLoopInfo {
     return fir::unwrapRefType(loopVariable.getType());
   }
 
+  bool hasLocalitySpecs() const {
+    return !localSymList.empty() || !localInitSymList.empty() ||
+           !sharedSymList.empty();
+  }
+
   // Data members common to both structured and unstructured loops.
   const Fortran::semantics::Symbol &loopVariableSym;
   const Fortran::lower::SomeExpr *lowerExpr;
@@ -102,6 +107,7 @@ struct IncrementLoopInfo {
   const Fortran::lower::SomeExpr *stepExpr;
   const Fortran::lower::SomeExpr *maskExpr = nullptr;
   bool isUnordered; // do concurrent, forall
+  llvm::SmallVector<const Fortran::semantics::Symbol *> localSymList;
   llvm::SmallVector<const Fortran::semantics::Symbol *> localInitSymList;
   llvm::SmallVector<const Fortran::semantics::Symbol *> sharedSymList;
   mlir::Value loopVariable = nullptr;
@@ -1514,6 +1520,10 @@ private:
     info.maskExpr = Fortran::semantics::GetExpr(
         std::get<std::optional<Fortran::parser::ScalarLogicalExpr>>(header.t));
     for (const Fortran::parser::LocalitySpec &x : localityList) {
+      if (const auto *localList =
+              std::get_if<Fortran::parser::LocalitySpec::Local>(&x.u))
+        for (const Fortran::parser::Name &x : localList->v)
+          info.localSymList.push_back(x.symbol);
       if (const auto *localInitList =
               std::get_if<Fortran::parser::LocalitySpec::LocalInit>(&x.u))
         for (const Fortran::parser::Name &x : localInitList->v)
@@ -1522,10 +1532,36 @@ private:
               std::get_if<Fortran::parser::LocalitySpec::Shared>(&x.u))
         for (const Fortran::parser::Name &x : sharedList->v)
           info.sharedSymList.push_back(x.symbol);
-      if (std::get_if<Fortran::parser::LocalitySpec::Local>(&x.u))
-        TODO(toLocation(), "do concurrent locality specs not implemented");
     }
     return incrementLoopNestInfo;
+  }
+
+  /// Create DO CONCURRENT construct symbol bindings and generate LOCAL_INIT
+  /// assignments.
+  void handleLocalitySpecs(const IncrementLoopInfo &info) {
+    Fortran::semantics::SemanticsContext &semanticsContext =
+        bridge.getSemanticsContext();
+    for (const Fortran::semantics::Symbol *sym : info.localSymList)
+      createHostAssociateVarClone(*sym);
+    for (const Fortran::semantics::Symbol *sym : info.localInitSymList) {
+      createHostAssociateVarClone(*sym);
+      const auto *hostDetails =
+          sym->detailsIf<Fortran::semantics::HostAssocDetails>();
+      assert(hostDetails && "missing locality spec host symbol");
+      const Fortran::semantics::Symbol *hostSym = &hostDetails->symbol();
+      Fortran::evaluate::ExpressionAnalyzer ea{semanticsContext};
+      Fortran::evaluate::Assignment assign{
+          ea.Designate(Fortran::evaluate::DataRef{*sym}).value(),
+          ea.Designate(Fortran::evaluate::DataRef{*hostSym}).value()};
+      if (Fortran::semantics::IsPointer(*sym))
+        assign.u = Fortran::evaluate::Assignment::BoundsSpec{};
+      genAssignment(assign);
+    }
+    for (const Fortran::semantics::Symbol *sym : info.sharedSymList) {
+      const auto *hostDetails =
+          sym->detailsIf<Fortran::semantics::HostAssocDetails>();
+      copySymbolBinding(hostDetails->symbol(), *sym);
+    }
   }
 
   /// Generate FIR for a DO construct. There are six variants:
@@ -1656,25 +1692,6 @@ private:
         return builder->createRealConstant(loc, controlType, 1u);
       return builder->createIntegerConstant(loc, controlType, 1); // step
     };
-    auto handleLocalitySpec = [&](IncrementLoopInfo &info) {
-      // Generate Local Init Assignments
-      for (const Fortran::semantics::Symbol *sym : info.localInitSymList) {
-        const auto *hostDetails =
-            sym->detailsIf<Fortran::semantics::HostAssocDetails>();
-        assert(hostDetails && "missing local_init variable host variable");
-        const Fortran::semantics::Symbol &hostSym = hostDetails->symbol();
-        (void)hostSym;
-        TODO(loc, "do concurrent locality specs not implemented");
-      }
-      // Handle shared locality spec
-      for (const Fortran::semantics::Symbol *sym : info.sharedSymList) {
-        const auto *hostDetails =
-            sym->detailsIf<Fortran::semantics::HostAssocDetails>();
-        assert(hostDetails && "missing shared variable host variable");
-        const Fortran::semantics::Symbol &hostSym = hostDetails->symbol();
-        copySymbolBinding(hostSym, *sym);
-      }
-    };
     for (IncrementLoopInfo &info : incrementLoopNestInfo) {
       info.loopVariable =
           genLoopVariableAddress(loc, info.loopVariableSym, info.isUnordered);
@@ -1714,7 +1731,8 @@ private:
                                                  /*withElseRegion=*/false);
           builder->setInsertionPointToStart(&ifOp.getThenRegion().front());
         }
-        handleLocalitySpec(info);
+        if (info.hasLocalitySpecs())
+          handleLocalitySpecs(info);
         continue;
       }
 
@@ -1771,10 +1789,10 @@ private:
         if (&info != &incrementLoopNestInfo.back()) // not innermost
           startBlock(info.bodyBlock); // preheader block of enclosed dimension
       }
-      if (!info.localInitSymList.empty()) {
+      if (info.hasLocalitySpecs()) {
         mlir::OpBuilder::InsertPoint insertPt = builder->saveInsertionPoint();
         builder->setInsertionPointToStart(info.bodyBlock);
-        handleLocalitySpec(info);
+        handleLocalitySpecs(info);
         builder->restoreInsertionPoint(insertPt);
       }
     }
@@ -2229,7 +2247,8 @@ private:
 
   void genFIR(const Fortran::parser::OpenACCDeclarativeConstruct &accDecl) {
     mlir::OpBuilder::InsertPoint insertPt = builder->saveInsertionPoint();
-    genOpenACCDeclarativeConstruct(*this, getEval(), accDecl);
+    genOpenACCDeclarativeConstruct(*this, bridge.getSemanticsContext(),
+                                   bridge.fctCtx(), getEval(), accDecl);
     for (Fortran::lower::pft::Evaluation &e : getEval().getNestedEvaluations())
       genFIR(e);
     builder->restoreInsertionPoint(insertPt);
@@ -4013,10 +4032,15 @@ private:
   void instantiateVar(const Fortran::lower::pft::Variable &var,
                       Fortran::lower::AggregateStoreMap &storeMap) {
     Fortran::lower::instantiateVariable(*this, var, localSymbols, storeMap);
-    if (var.hasSymbol() &&
-        var.getSymbol().test(
-            Fortran::semantics::Symbol::Flag::OmpThreadprivate))
-      Fortran::lower::genThreadprivateOp(*this, var);
+    if (var.hasSymbol()) {
+      if (var.getSymbol().test(
+              Fortran::semantics::Symbol::Flag::OmpThreadprivate))
+        Fortran::lower::genThreadprivateOp(*this, var);
+
+      if (var.getSymbol().test(
+              Fortran::semantics::Symbol::Flag::OmpDeclareTarget))
+        Fortran::lower::genDeclareTargetIntGlobal(*this, var);
+    }
   }
 
   /// Start translation of a function.
@@ -4251,6 +4275,10 @@ private:
 
   void eraseDeadCodeAndBlocks(mlir::RewriterBase &rewriter,
                               llvm::MutableArrayRef<mlir::Region> regions) {
+    // WARNING: Do not add passes that can do folding or code motion here
+    // because they might cross omp.target region boundaries, which can result
+    // in incorrect code. Optimization passes like these must be added after
+    // OMP early outlining has been done.
     (void)mlir::eraseUnreachableBlocks(rewriter, regions);
     (void)mlir::runRegionDCE(rewriter, regions);
   }

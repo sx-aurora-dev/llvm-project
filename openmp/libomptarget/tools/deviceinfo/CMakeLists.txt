@@ -10,12 +10,6 @@
 #
 ##===----------------------------------------------------------------------===##
 
-# Disable llvm-omp-device-info tool for VE.
-# For the case of VE, we run compile twice.  The llvm-omp-device-info is
-# compiled at first build for a host machine.  Then, openmp is compiled
-# for VE using generated llvm from first build.  Therefore, we disable
-# llvm-omp-device-info if the LIBOMP_ARCH is equal to VE.
-if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
 libomptarget_say("Building the llvm-omp-device-info tool")
 
 add_openmp_tool(llvm-omp-device-info llvm-omp-device-info.cpp)
@@ -29,4 +23,3 @@ target_link_libraries(llvm-omp-device-info PRIVATE
   omp
   omptarget
 )
-endif(NOT "${LIBOMP_ARCH}" STREQUAL "ve")

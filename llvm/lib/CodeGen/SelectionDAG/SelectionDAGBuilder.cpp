@@ -2516,10 +2516,12 @@ void SelectionDAGBuilder::visitBr(const BranchInst &I) {
 
     // If this is not a fall-through branch or optimizations are switched off,
     // emit the branch.
-    if (Succ0MBB != NextBlock(BrMBB) || TM.getOptLevel() == CodeGenOpt::None)
-      DAG.setRoot(DAG.getNode(ISD::BR, getCurSDLoc(),
-                              MVT::Other, getControlRoot(),
-                              DAG.getBasicBlock(Succ0MBB)));
+    if (Succ0MBB != NextBlock(BrMBB) || TM.getOptLevel() == CodeGenOpt::None) {
+      auto Br = DAG.getNode(ISD::BR, getCurSDLoc(), MVT::Other,
+                            getControlRoot(), DAG.getBasicBlock(Succ0MBB));
+      setValue(&I, Br);
+      DAG.setRoot(Br);
+    }
 
     return;
   }
@@ -2811,7 +2813,7 @@ void SelectionDAGBuilder::visitSPDescriptorParent(StackProtectorDescriptor &SPD,
   SDValue StackSlotPtr = DAG.getFrameIndex(FI, PtrTy);
   const Module &M = *ParentBB->getParent()->getFunction().getParent();
   Align Align =
-      DAG.getDataLayout().getPrefTypeAlign(Type::getInt8PtrTy(M.getContext()));
+      DAG.getDataLayout().getPrefTypeAlign(PointerType::get(M.getContext(), 0));
 
   // Generate code to load the content of the guard slot.
   SDValue GuardVal = DAG.getLoad(
@@ -4255,14 +4257,8 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
   if (isVolatile)
     Root = TLI.prepareVolatileOrAtomicLoad(Root, dl, DAG);
 
-  // An aggregate load cannot wrap around the address space, so offsets to its
-  // parts don't wrap either.
-  SDNodeFlags Flags;
-  Flags.setNoUnsignedWrap(true);
-
   SmallVector<SDValue, 4> Values(NumValues);
   SmallVector<SDValue, 4> Chains(std::min(MaxParallelChains, NumValues));
-  EVT PtrVT = Ptr.getValueType();
 
   unsigned ChainI = 0;
   for (unsigned i = 0; i != NumValues; ++i, ++ChainI) {
@@ -4279,11 +4275,8 @@ void SelectionDAGBuilder::visitLoad(const LoadInst &I) {
       Root = Chain;
       ChainI = 0;
     }
-    SDValue A = DAG.getNode(ISD::ADD, dl,
-                            PtrVT, Ptr,
-                            DAG.getConstant(Offsets[i], dl, PtrVT),
-                            Flags);
 
+    SDValue A = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(Offsets[i]));
     SDValue L = DAG.getLoad(MemVTs[i], dl, Root, A,
                             MachinePointerInfo(SV, Offsets[i]), Alignment,
                             MMOFlags, AAInfo, Ranges);
@@ -4408,11 +4401,6 @@ void SelectionDAGBuilder::visitStore(const StoreInst &I) {
 
   auto MMOFlags = TLI.getStoreMemOperandFlags(I, DAG.getDataLayout());
 
-  // An aggregate load cannot wrap around the address space, so offsets to its
-  // parts don't wrap either.
-  SDNodeFlags Flags;
-  Flags.setNoUnsignedWrap(true);
-
   unsigned ChainI = 0;
   for (unsigned i = 0; i != NumValues; ++i, ++ChainI) {
     // See visitLoad comments.
@@ -4422,8 +4410,8 @@ void SelectionDAGBuilder::visitStore(const StoreInst &I) {
       Root = Chain;
       ChainI = 0;
     }
-    SDValue Add =
-        DAG.getMemBasePlusOffset(Ptr, TypeSize::Fixed(Offsets[i]), dl, Flags);
+
+    SDValue Add = DAG.getObjectPtrOffset(dl, Ptr, TypeSize::Fixed(Offsets[i]));
     SDValue Val = SDValue(Src.getNode(), Src.getResNo() + i);
     if (MemVTs[i] != ValueVTs[i])
       Val = DAG.getPtrExtOrTrunc(Val, dl, MemVTs[i]);
@@ -7432,7 +7420,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     }
 
     SDValue TripCount = getValue(I.getOperand(1));
-    auto VecTy = CCVT.changeVectorElementType(ElementVT);
+    EVT VecTy = EVT::getVectorVT(*DAG.getContext(), ElementVT,
+                                 CCVT.getVectorElementCount());
 
     SDValue VectorIndex = DAG.getSplat(VecTy, sdl, Index);
     SDValue VectorTripCount = DAG.getSplat(VecTy, sdl, TripCount);
@@ -9419,10 +9408,6 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call,
       }
 
       if (OpInfo.ConstraintType == TargetLowering::C_Address) {
-        assert(InOperandVal.getValueType() ==
-                   TLI.getPointerTy(DAG.getDataLayout()) &&
-               "Address operands expect pointer values");
-
         unsigned ConstraintID =
             TLI.getInlineAsmMemConstraint(OpInfo.ConstraintCode);
         assert(ConstraintID != InlineAsm::Constraint_Unknown &&
@@ -11363,8 +11348,32 @@ void SelectionDAGBuilder::lowerWorkItem(SwitchWorkListItem W, Value *Cond,
           }
         }
 
-        if (FallthroughUnreachable)
-          JTH->FallthroughUnreachable = true;
+        // If the default clause is unreachable, propagate that knowledge into
+        // JTH->FallthroughUnreachable which will use it to suppress the range
+        // check.
+        //
+        // However, don't do this if we're doing branch target enforcement,
+        // because a table branch _without_ a range check can be a tempting JOP
+        // gadget - out-of-bounds inputs that are impossible in correct
+        // execution become possible again if an attacker can influence the
+        // control flow. So if an attacker doesn't already have a BTI bypass
+        // available, we don't want them to be able to get one out of this
+        // table branch.
+        if (FallthroughUnreachable) {
+          Function &CurFunc = CurMF->getFunction();
+          bool HasBranchTargetEnforcement = false;
+          if (CurFunc.hasFnAttribute("branch-target-enforcement")) {
+            HasBranchTargetEnforcement =
+                CurFunc.getFnAttribute("branch-target-enforcement")
+                    .getValueAsBool();
+          } else {
+            HasBranchTargetEnforcement =
+                CurMF->getMMI().getModule()->getModuleFlag(
+                    "branch-target-enforcement");
+          }
+          if (!HasBranchTargetEnforcement)
+            JTH->FallthroughUnreachable = true;
+        }
 
         if (!JTH->FallthroughUnreachable)
           addSuccessorWithProb(CurMBB, Fallthrough, FallthroughProb);

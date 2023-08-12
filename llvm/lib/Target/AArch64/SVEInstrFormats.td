@@ -953,6 +953,42 @@ multiclass sve_int_count_r_x64<bits<5> opc, string asm,
             (!cast<Instruction>(NAME # _S) PPRAny:$pred, $Rn)>;
   def : Pat<(i64 (combine_op GPR64:$Rn, (int_aarch64_sve_cntp_oneuse (nxv2i1 PPRAny:$pred), (nxv2i1 PPRAny:$pred)))),
             (!cast<Instruction>(NAME # _D) PPRAny:$pred, $Rn)>;
+
+  // combine_op(x, trunc(cntp(all_active, p))) ==> inst p, x
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv16i1 (SVEAllActive)), (nxv16i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _B) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv8i1 (SVEAllActive)), (nxv8i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _H) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv4i1 (SVEAllActive)), (nxv4i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _S) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv2i1 (SVEAllActive)), (nxv2i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _D) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+
+  // combine_op(x, trunc(cntp(p, p))) ==> inst p, x
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv16i1 PPRAny:$pred), (nxv16i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _B) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv8i1 PPRAny:$pred), (nxv8i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _H) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv4i1 PPRAny:$pred), (nxv4i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _S) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
+  def : Pat<(i32 (combine_op GPR32:$Rn, (trunc (int_aarch64_sve_cntp_oneuse (nxv2i1 PPRAny:$pred), (nxv2i1 PPRAny:$pred))))),
+            (i32 (EXTRACT_SUBREG (!cast<Instruction>(NAME # _D) PPRAny:$pred,
+                                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), GPR32:$Rn, sub_32)),
+                                 sub_32))>;
 }
 
 class sve_int_count_v<bits<2> sz8_64, bits<5> opc, string asm,
@@ -2281,7 +2317,10 @@ multiclass sve_fp_3op_p_zds_a<bits<2> opc, string asm, string Ps,
            SVEPseudo2Instr<Ps # _D, 1>, SVEInstr2Rev<NAME # _D, revname # _D, isReverseInstr>;
 
   def : SVE_4_Op_Pat<nxv8f16, op, nxv8i1, nxv8f16, nxv8f16, nxv8f16, !cast<Instruction>(NAME # _H)>;
+  def : SVE_4_Op_Pat<nxv4f16, op, nxv4i1, nxv4f16, nxv4f16, nxv4f16, !cast<Instruction>(NAME # _H)>;
+  def : SVE_4_Op_Pat<nxv2f16, op, nxv2i1, nxv2f16, nxv2f16, nxv2f16, !cast<Instruction>(NAME # _H)>;
   def : SVE_4_Op_Pat<nxv4f32, op, nxv4i1, nxv4f32, nxv4f32, nxv4f32, !cast<Instruction>(NAME # _S)>;
+  def : SVE_4_Op_Pat<nxv2f32, op, nxv2i1, nxv2f32, nxv2f32, nxv2f32, !cast<Instruction>(NAME # _S)>;
   def : SVE_4_Op_Pat<nxv2f64, op, nxv2i1, nxv2f64, nxv2f64, nxv2f64, !cast<Instruction>(NAME # _D)>;
 }
 
@@ -7164,6 +7203,10 @@ multiclass sve_int_perm_cpy_v<string asm, SDPatternOperator op> {
 
   def : Pat<(nxv8f16 (op nxv8i1:$pg, f16:$splat, nxv8f16:$passthru)),
             (!cast<Instruction>(NAME # _H) $passthru, $pg, $splat)>;
+  def : Pat<(nxv4f16 (op nxv4i1:$pg, f16:$splat, nxv4f16:$passthru)),
+            (!cast<Instruction>(NAME # _H) $passthru, $pg, $splat)>;
+  def : Pat<(nxv2f16 (op nxv2i1:$pg, f16:$splat, nxv2f16:$passthru)),
+            (!cast<Instruction>(NAME # _H) $passthru, $pg, $splat)>;
   def : Pat<(nxv2f32 (op nxv2i1:$pg, f32:$splat, nxv2f32:$passthru)),
             (!cast<Instruction>(NAME # _S) $passthru, $pg, $splat)>;
   def : Pat<(nxv4f32 (op nxv4i1:$pg, f32:$splat, nxv4f32:$passthru)),
@@ -9343,6 +9386,12 @@ class sve2p1_mem_cld_ss_2z<string mnemonic, bits<2> msz, bit n,
   let mayLoad = 1;
 }
 
+multiclass sve2p1_mem_cld_ss_2z<string mnemonic, bits<2> msz, bit n,
+                         RegisterOperand vector_ty, RegisterOperand gpr_ty, RegisterOperand vector_pseudo_ty> {
+  def NAME # _PSEUDO : Pseudo<(outs vector_pseudo_ty:$Zt), (ins PNRAny_p8to15:$PNg, GPR64sp:$Rn, gpr_ty:$Rm), []>;
+  def NAME : sve2p1_mem_cld_ss_2z<mnemonic, msz, n, vector_ty, gpr_ty>;
+}
+
 // SME2 multi-vec contiguous load (scalar plus immediate, two registers)
 class sve2p1_mem_cld_si_2z<string mnemonic, bits<2> msz, bit n,
                          RegisterOperand vector_ty>
@@ -9368,11 +9417,11 @@ class sve2p1_mem_cld_si_2z<string mnemonic, bits<2> msz, bit n,
 }
 
 multiclass sve2p1_mem_cld_si_2z<string mnemonic, bits<2> msz, bit n,
-                              RegisterOperand vector_ty> {
+                              RegisterOperand vector_ty, RegisterOperand vector_pseudo_ty> {
   def NAME : sve2p1_mem_cld_si_2z<mnemonic, msz, n, vector_ty>;
-
   def : InstAlias<mnemonic # " $Zt, $PNg/z, [$Rn]",
                   (!cast<Instruction>(NAME) vector_ty:$Zt, PNRAny_p8to15:$PNg, GPR64sp:$Rn, 0), 1>;
+  def NAME # _PSEUDO : Pseudo<(outs vector_pseudo_ty:$Zt), (ins PNRAny_p8to15:$PNg, GPR64sp:$Rn, simm4s2:$imm4), []>;
 }
 
 // SME2 multi-vec contiguous load (scalar plus scalar, four registers)
@@ -9398,6 +9447,12 @@ class sve2p1_mem_cld_ss_4z<string mnemonic, bits<2> msz, bit n,
 
   let hasSideEffects = 0;
   let mayLoad = 1;
+}
+
+multiclass sve2p1_mem_cld_ss_4z<string mnemonic, bits<2> msz, bit n,
+                         RegisterOperand vector_ty, RegisterOperand gpr_ty, RegisterOperand vector_pseudo_ty> {
+  def NAME # _PSEUDO : Pseudo<(outs vector_pseudo_ty:$Zt), (ins PNRAny_p8to15:$PNg, GPR64sp:$Rn, gpr_ty:$Rm), []>;
+  def NAME : sve2p1_mem_cld_ss_4z<mnemonic, msz, n, vector_ty, gpr_ty>;
 }
 
 // SME2 multi-vec contiguous load (scalar plus immediate, four registers)
@@ -9426,13 +9481,12 @@ class sve2p1_mem_cld_si_4z<string mnemonic, bits<2> msz, bit n,
 }
 
 multiclass sve2p1_mem_cld_si_4z<string mnemonic, bits<2> msz, bit n,
-                              RegisterOperand vector_ty> {
+                              RegisterOperand vector_ty, RegisterOperand vector_pseudo_ty> {
   def NAME : sve2p1_mem_cld_si_4z<mnemonic, msz, n, vector_ty>;
-
   def : InstAlias<mnemonic # " $Zt, $PNg/z, [$Rn]",
                   (!cast<Instruction>(NAME) vector_ty:$Zt, PNRAny_p8to15:$PNg, GPR64sp:$Rn, 0), 1>;
+  def NAME # _PSEUDO : Pseudo<(outs vector_pseudo_ty:$Zt), (ins PNRAny_p8to15:$PNg, GPR64sp:$Rn, simm4s4:$imm4), []>;
 }
-
 
 // SME2 multi-vec contiguous store (scalar plus scalar, two registers)
 class sve2p1_mem_cst_ss_2z<string mnemonic, bits<2> msz, bit n,

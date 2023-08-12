@@ -28,7 +28,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/StreamFile.h"
 #include "lldb/Core/Value.h"
 #include "lldb/DataFormatters/FormatManager.h"
 #include "lldb/Host/ConnectionFileDescriptor.h"
@@ -36,6 +35,7 @@
 #include "lldb/Host/HostThread.h"
 #include "lldb/Host/PosixApi.h"
 #include "lldb/Host/PseudoTerminal.h"
+#include "lldb/Host/StreamFile.h"
 #include "lldb/Host/ThreadLauncher.h"
 #include "lldb/Host/XML.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
@@ -113,7 +113,7 @@ void DumpProcessGDBRemotePacketHistory(void *p, const char *path) {
     return;
   }
   StreamFile stream(std::move(file.get()));
-  ((ProcessGDBRemote *)p)->GetGDBRemote().DumpHistory(stream);
+  ((Process *)p)->DumpPluginHistory(stream);
 }
 } // namespace lldb
 
@@ -203,6 +203,11 @@ lldb::ProcessSP ProcessGDBRemote::CreateInstance(
     process_sp = std::shared_ptr<ProcessGDBRemote>(
         new ProcessGDBRemote(target_sp, listener_sp));
   return process_sp;
+}
+
+void ProcessGDBRemote::DumpPluginHistory(Stream &s) {
+  GDBRemoteCommunicationClient &gdb_comm(GetGDBRemote());
+  gdb_comm.DumpHistory(s);
 }
 
 std::chrono::seconds ProcessGDBRemote::GetPacketTimeout() {
@@ -996,10 +1001,11 @@ void ProcessGDBRemote::LoadStubBinaries() {
       const bool force_symbol_search = true;
       const bool notify = true;
       const bool set_address_in_target = true;
+      const bool allow_memory_image_last_resort = false;
       DynamicLoader::LoadBinaryWithUUIDAndAddress(
           this, "", standalone_uuid, standalone_value,
           standalone_value_is_offset, force_symbol_search, notify,
-          set_address_in_target);
+          set_address_in_target, allow_memory_image_last_resort);
     }
   }
 
@@ -1028,10 +1034,12 @@ void ProcessGDBRemote::LoadStubBinaries() {
 
       const bool force_symbol_search = true;
       const bool set_address_in_target = true;
+      const bool allow_memory_image_last_resort = false;
       // Second manually load this binary into the Target.
       DynamicLoader::LoadBinaryWithUUIDAndAddress(
           this, llvm::StringRef(), uuid, addr, value_is_slide,
-          force_symbol_search, notify, set_address_in_target);
+          force_symbol_search, notify, set_address_in_target,
+          allow_memory_image_last_resort);
     }
   }
 }
@@ -5217,7 +5225,7 @@ public:
     ProcessGDBRemote *process =
         (ProcessGDBRemote *)m_interpreter.GetExecutionContext().GetProcessPtr();
     if (process) {
-      process->GetGDBRemote().DumpHistory(result.GetOutputStream());
+      process->DumpPluginHistory(result.GetOutputStream());
       result.SetStatus(eReturnStatusSuccessFinishResult);
       return true;
     }

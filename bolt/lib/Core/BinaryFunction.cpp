@@ -182,9 +182,9 @@ static SMLoc findDebugLineInformationForInstructionAt(
   // We use the pointer in SMLoc to store an instance of DebugLineTableRowRef,
   // which occupies 64 bits. Thus, we can only proceed if the struct fits into
   // the pointer itself.
-  assert(sizeof(decltype(SMLoc().getPointer())) >=
-             sizeof(DebugLineTableRowRef) &&
-         "Cannot fit instruction debug line information into SMLoc's pointer");
+  static_assert(
+      sizeof(decltype(SMLoc().getPointer())) >= sizeof(DebugLineTableRowRef),
+      "Cannot fit instruction debug line information into SMLoc's pointer");
 
   SMLoc NullResult = DebugLineTableRowRef::NULL_ROW.toSMLoc();
   uint32_t RowIndex = LineTable->lookupAddress(
@@ -1639,16 +1639,20 @@ void BinaryFunction::postProcessJumpTables() {
         JT.Entries.push_back(Label);
         continue;
       }
-      // Create local label for targets cannot be reached by other fragments
-      // Otherwise, secondary entry point to target function
+      // Create a local label for targets that cannot be reached by other
+      // fragments. Otherwise, create a secondary entry point in the target
+      // function.
       BinaryFunction *TargetBF =
           BC.getBinaryFunctionContainingAddress(EntryAddress);
-      if (uint64_t Offset = EntryAddress - TargetBF->getAddress()) {
-        MCSymbol *Label = (HasOneParent && TargetBF == this)
-                              ? getOrCreateLocalLabel(EntryAddress, true)
-                              : TargetBF->addEntryPointAtOffset(Offset);
-        JT.Entries.push_back(Label);
+      MCSymbol *Label;
+      if (HasOneParent && TargetBF == this) {
+        Label = getOrCreateLocalLabel(EntryAddress, true);
+      } else {
+        const uint64_t Offset = EntryAddress - TargetBF->getAddress();
+        Label = Offset ? TargetBF->addEntryPointAtOffset(Offset)
+                       : TargetBF->getSymbol();
       }
+      JT.Entries.push_back(Label);
     }
   }
 
@@ -1988,19 +1992,13 @@ bool BinaryFunction::buildCFG(MCPlusBuilder::AllocatorIdTy AllocatorId) {
         updateOffset(LastInstrOffset);
     }
 
-    const uint64_t InstrInputAddr = I->first + Address;
-    bool IsSDTMarker =
-        MIB->isNoop(Instr) && BC.SDTMarkers.count(InstrInputAddr);
-    bool IsLKMarker = BC.LKMarkers.count(InstrInputAddr);
     // Mark all nops with Offset for profile tracking purposes.
-    if (MIB->isNoop(Instr) || IsLKMarker) {
-      if (!MIB->getOffset(Instr))
-        MIB->setOffset(Instr, static_cast<uint32_t>(Offset), AllocatorId);
-      if (IsSDTMarker || IsLKMarker)
-        HasSDTMarker = true;
-      else
-        // Annotate ordinary nops, so we can safely delete them if required.
-        MIB->addAnnotation(Instr, "NOP", static_cast<uint32_t>(1), AllocatorId);
+    if (MIB->isNoop(Instr) && !MIB->getOffset(Instr)) {
+      // If "Offset" annotation is not present, set it and mark the nop for
+      // deletion.
+      MIB->setOffset(Instr, static_cast<uint32_t>(Offset), AllocatorId);
+      // Annotate ordinary nops, so we can safely delete them if required.
+      MIB->addAnnotation(Instr, "NOP", static_cast<uint32_t>(1), AllocatorId);
     }
 
     if (!InsertBB) {
@@ -2223,8 +2221,8 @@ void BinaryFunction::calculateMacroOpFusionStats() {
                       << Twine::utohexstr(getAddress() + Offset)
                       << " in function " << *this << "; executed "
                       << BB.getKnownExecutionCount() << " times.\n");
-    ++BC.MissedMacroFusionPairs;
-    BC.MissedMacroFusionExecCount += BB.getKnownExecutionCount();
+    ++BC.Stats.MissedMacroFusionPairs;
+    BC.Stats.MissedMacroFusionExecCount += BB.getKnownExecutionCount();
   }
 }
 
@@ -2307,6 +2305,12 @@ void BinaryFunction::removeConditionalTailCalls() {
 
     // This branch is no longer a conditional tail call.
     BC.MIB->unsetConditionalTailCall(*CTCInstr);
+
+    // Move offset from CTCInstr to TailCallInstr.
+    if (std::optional<uint32_t> Offset = BC.MIB->getOffset(*CTCInstr)) {
+      BC.MIB->setOffset(TailCallInstr, *Offset);
+      BC.MIB->clearOffset(*CTCInstr);
+    }
   }
 
   insertBasicBlocks(std::prev(end()), std::move(NewBlocks),

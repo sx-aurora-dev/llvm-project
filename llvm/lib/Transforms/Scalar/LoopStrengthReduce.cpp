@@ -3507,8 +3507,8 @@ LSRInstance::CollectLoopInvariantFixupsAndFormulae() {
       if (const Instruction *Inst = dyn_cast<Instruction>(V)) {
         // Look for instructions defined outside the loop.
         if (L->contains(Inst)) continue;
-      } else if (isa<UndefValue>(V))
-        // Undef doesn't have a live range, so it doesn't matter.
+      } else if (isa<Constant>(V))
+        // Constants can be re-materialized.
         continue;
       for (const Use &U : V->uses()) {
         const Instruction *UserInst = dyn_cast<Instruction>(U.getUser());
@@ -6468,13 +6468,13 @@ static void UpdateDbgValueInst(DVIRecoveryRec &DVIRec,
   }
 }
 
-/// Cached location ops may be erased during LSR, in which case an undef is
+/// Cached location ops may be erased during LSR, in which case a poison is
 /// required when restoring from the cache. The type of that location is no
-/// longer available, so just use int8. The undef will be replaced by one or
+/// longer available, so just use int8. The poison will be replaced by one or
 /// more locations later when a SCEVDbgValueBuilder selects alternative
 /// locations to use for the salvage.
-static Value *getValueOrUndef(WeakVH &VH, LLVMContext &C) {
-  return (VH) ? VH : UndefValue::get(llvm::Type::getInt8Ty(C));
+static Value *getValueOrPoison(WeakVH &VH, LLVMContext &C) {
+  return (VH) ? VH : PoisonValue::get(llvm::Type::getInt8Ty(C));
 }
 
 /// Restore the DVI's pre-LSR arguments. Substitute undef for any erased values.
@@ -6493,12 +6493,12 @@ static void restorePreTransformState(DVIRecoveryRec &DVIRec) {
     // this case was not present before, so force the location back to a single
     // uncontained Value.
     Value *CachedValue =
-        getValueOrUndef(DVIRec.LocationOps[0], DVIRec.DVI->getContext());
+        getValueOrPoison(DVIRec.LocationOps[0], DVIRec.DVI->getContext());
     DVIRec.DVI->setRawLocation(ValueAsMetadata::get(CachedValue));
   } else {
     SmallVector<ValueAsMetadata *, 3> MetadataLocs;
     for (WeakVH VH : DVIRec.LocationOps) {
-      Value *CachedValue = getValueOrUndef(VH, DVIRec.DVI->getContext());
+      Value *CachedValue = getValueOrPoison(VH, DVIRec.DVI->getContext());
       MetadataLocs.push_back(ValueAsMetadata::get(CachedValue));
     }
     auto ValArrayRef = llvm::ArrayRef<llvm::ValueAsMetadata *>(MetadataLocs);

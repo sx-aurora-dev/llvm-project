@@ -440,8 +440,9 @@ MachineInstr &TargetInstrInfo::duplicate(MachineBasicBlock &MBB,
 // If the COPY instruction in MI can be folded to a stack operation, return
 // the register class to use.
 static const TargetRegisterClass *canFoldCopy(const MachineInstr &MI,
+                                              const TargetInstrInfo &TII,
                                               unsigned FoldIdx) {
-  assert(MI.isCopy() && "MI must be a COPY instruction");
+  assert(TII.isCopyInstr(MI) && "MI must be a COPY instruction");
   if (MI.getNumOperands() != 2)
     return nullptr;
   assert(FoldIdx<2 && "FoldIdx refers no nonexistent operand");
@@ -630,10 +631,10 @@ MachineInstr *TargetInstrInfo::foldMemoryOperand(MachineInstr &MI,
   }
 
   // Straight COPY may fold as load/store.
-  if (!MI.isCopy() || Ops.size() != 1)
+  if (!isCopyInstr(MI) || Ops.size() != 1)
     return nullptr;
 
-  const TargetRegisterClass *RC = canFoldCopy(MI, Ops[0]);
+  const TargetRegisterClass *RC = canFoldCopy(MI, *this, Ops[0]);
   if (!RC)
     return nullptr;
 
@@ -1118,7 +1119,7 @@ MachineTraceStrategy TargetInstrInfo::getMachineCombinerTraceStrategy() const {
   return MachineTraceStrategy::TS_MinInstrCount;
 }
 
-bool TargetInstrInfo::isReallyTriviallyReMaterializableGeneric(
+bool TargetInstrInfo::isReallyTriviallyReMaterializable(
     const MachineInstr &MI) const {
   const MachineFunction &MF = *MI.getMF();
   const MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -1448,6 +1449,22 @@ TargetInstrInfo::describeLoadedValue(const MachineInstr &MI,
   }
 
   return std::nullopt;
+}
+
+// Get the call frame size just before MI.
+unsigned TargetInstrInfo::getCallFrameSizeAt(MachineInstr &MI) const {
+  // Search backwards from MI for the most recent call frame instruction.
+  MachineBasicBlock *MBB = MI.getParent();
+  for (auto &AdjI : reverse(make_range(MBB->instr_begin(), MI.getIterator()))) {
+    if (AdjI.getOpcode() == getCallFrameSetupOpcode())
+      return getFrameTotalSize(AdjI);
+    if (AdjI.getOpcode() == getCallFrameDestroyOpcode())
+      return 0;
+  }
+
+  // If none was found, use the call frame size from the start of the basic
+  // block.
+  return MBB->getCallFrameSize();
 }
 
 /// Both DefMI and UseMI must be valid.  By default, call directly to the

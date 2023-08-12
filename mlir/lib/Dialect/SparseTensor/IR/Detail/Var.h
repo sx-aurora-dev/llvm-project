@@ -60,7 +60,7 @@ namespace ir_detail {
 /// representation.
 enum class VarKind { Symbol = 1, Dimension = 0, Level = 2 };
 
-constexpr bool isWF(VarKind vk) {
+[[nodiscard]] constexpr bool isWF(VarKind vk) {
   const auto vk_ = to_underlying(vk);
   return 0 <= vk_ && vk_ <= 2;
 }
@@ -94,56 +94,108 @@ using VarKindArray = llvm::EnumeratedArray<T, VarKind, VarKind::Level>;
 //===----------------------------------------------------------------------===//
 /// A concrete variable, to be used in our variant of `AffineExpr`.
 class Var {
+  // Design Note: This class makes several distinctions which may at first
+  // seem unnecessary but are in fact needed for implementation reasons.
+  // These distinctions are summarized as follows:
+  //
+  // * `Var`
+  //   Client-facing class for `VarKind` + `Var::Num` pairs, with RTTI
+  //   support for subclasses with a fixed `VarKind`.
+  // * `Var::Num`
+  //   Client-facing typedef for the type of variable numbers; defined
+  //   so that client code can use it to disambiguate/document when things
+  //   are intended to be variable numbers, as opposed to some other thing
+  //   which happens to be represented as `unsigned`.
+  // * `Var::Storage`
+  //   Private typedef for the storage of `Var::Impl`; defined only because
+  //   it's also needed for defining `kMaxNum`.  Note that this type must be
+  //   kept distinct from `Var::Num`: not only can they be different C++ types
+  //   (even though they currently happen to be the same), but also because
+  //   they use different bitwise representations.
+  // * `Var::Impl`
+  //   The underlying implementation of `Var`; needed by RTTI to serve as
+  //   an intermediary between `Var` and `Var::Storage`.  That is, we want
+  //   the RTTI methods to select the `U(Var::Impl)` ctor, without any
+  //   possibility of confusing that with the `U(Var::Num)` ctor nor with
+  //   the copy-ctor.  (Although the `U(Var::Impl)` ctor is effectively
+  //   identical to the copy-ctor, it doesn't have the type that C++ expects
+  //   for a copy-ctor.)
+  //
+  // TODO: See if it'd be cleaner to use "llvm/ADT/Bitfields.h" in lieu
+  // of doing our own bitbashing (though that seems to only be used by LLVM
+  // for defining machine/assembly ops, and not anywhere else in LLVM/MLIR).
 public:
-  /// Typedef to help disambiguate different uses of `unsigned`.
+  /// Typedef for the type of variable numbers.
   using Num = unsigned;
 
 private:
-  /// The underlying storage representation of `Var`.  Note that this type
-  /// should be kept distinct from `Num`.  Not only can they be different
-  /// C++ types (even though they currently happen to be the same), but
-  /// they also use different bitwise representations.
-  //
-  // FUTURE_CL(wrengr): Rather than rolling our own, we should
-  // consider using "llvm/ADT/Bitfields.h"; though that seems to only
-  // be used by LLVM for the sake of defining machine/assembly ops.
-  // Or we could consider abusing `PointerIntPair`...
-  using Impl = unsigned;
-  Impl impl;
+  /// Typedef for the underlying storage of `Var::Impl`.
+  using Storage = unsigned;
 
-  /// The largest `Var::Num` supported by `Var::Impl`.  Two low-order
-  /// bits are reserved for storing the `VarKind`, and one high-order bit
-  /// is reserved for future use (e.g., to support `DenseMapInfo<Var>` while
-  /// maintaining the usual numeric values for "empty" and "tombstone").
+  /// The largest `Var::Num` supported by `Var`/`Var::Impl`/`Var::Storage`.
+  /// Two low-order bits are reserved for storing the `VarKind`,
+  /// and one high-order bit is reserved for future use (e.g., to support
+  /// `DenseMapInfo<Var>` while maintaining the usual numeric values for
+  /// "empty" and "tombstone").
   static constexpr Num kMaxNum =
-      static_cast<Num>(std::numeric_limits<Impl>::max() >> 3);
+      static_cast<Num>(std::numeric_limits<Storage>::max() >> 3);
 
 public:
+  /// Checks whether the number would be accepted by `Var(VarKind,Var::Num)`.
+  //
   // This must be public for `VarInfo` to use it (whereas we don't want
   // to expose the `impl` field via friendship).
-  static constexpr bool isWF_Num(Num n) { return n <= kMaxNum; }
+  [[nodiscard]] static constexpr bool isWF_Num(Num n) { return n <= kMaxNum; }
 
-  constexpr Var(VarKind vk, Num n)
-      : impl((static_cast<Impl>(n) << 2) |
-             static_cast<Impl>(to_underlying(vk))) {
-    assert(isWF(vk) && "unknown VarKind");
-    assert(isWF_Num(n) && "Var::Num is too large");
-  }
+protected:
+  /// The underlying implementation of `Var`.  Note that this must be kept
+  /// distinct from `Var` itself, since we want to ensure that the RTTI
+  /// methods will select the `U(Var::Impl)` ctor rather than selecting
+  /// the `U(Var::Num)` ctor.
+  class Impl final {
+    Storage data;
+
+  public:
+    constexpr Impl(VarKind vk, Num n)
+        : data((static_cast<Storage>(n) << 2) |
+               static_cast<Storage>(to_underlying(vk))) {
+      assert(isWF(vk) && "unknown VarKind");
+      assert(isWF_Num(n) && "Var::Num is too large");
+    }
+    constexpr bool operator==(Impl other) const { return data == other.data; }
+    constexpr bool operator!=(Impl other) const { return !(*this == other); }
+    constexpr VarKind getKind() const { return static_cast<VarKind>(data & 3); }
+    constexpr Num getNum() const { return static_cast<Num>(data >> 2); }
+  };
+  static_assert(IsZeroCostAbstraction<Impl>);
+
+private:
+  Impl impl;
+
+protected:
+  /// Protected ctor for the RTTI methods to use.
+  constexpr explicit Var(Impl impl) : impl(impl) {}
+
+public:
+  constexpr Var(VarKind vk, Num n) : impl(Impl(vk, n)) {}
   Var(AffineSymbolExpr sym) : Var(VarKind::Symbol, sym.getPosition()) {}
-  Var(VarKind vk, AffineDimExpr var) : Var(vk, var.getPosition()) {}
+  // TODO(wrengr): Should make the first argument an `ExprKind` instead...?
+  Var(VarKind vk, AffineDimExpr var) : Var(vk, var.getPosition()) {
+    assert(vk != VarKind::Symbol);
+  }
 
   constexpr bool operator==(Var other) const { return impl == other.impl; }
   constexpr bool operator!=(Var other) const { return !(*this == other); }
 
-  constexpr VarKind getKind() const { return static_cast<VarKind>(impl & 3); }
-  constexpr Num getNum() const { return static_cast<Num>(impl >> 2); }
+  constexpr VarKind getKind() const { return impl.getKind(); }
+  constexpr Num getNum() const { return impl.getNum(); }
 
   template <typename U>
   constexpr bool isa() const;
   template <typename U>
   constexpr U cast() const;
   template <typename U>
-  constexpr U dyn_cast() const;
+  constexpr std::optional<U> dyn_cast() const;
 
   void print(llvm::raw_ostream &os) const;
   void print(AsmPrinter &printer) const;
@@ -152,6 +204,7 @@ public:
 static_assert(IsZeroCostAbstraction<Var>);
 
 class SymVar final : public Var {
+  using Var::Var; // inherit `Var(Impl)` ctor for RTTI use.
 public:
   static constexpr VarKind Kind = VarKind::Symbol;
   static constexpr bool classof(Var const *var) {
@@ -163,6 +216,7 @@ public:
 static_assert(IsZeroCostAbstraction<SymVar>);
 
 class DimVar final : public Var {
+  using Var::Var; // inherit `Var(Impl)` ctor for RTTI use.
 public:
   static constexpr VarKind Kind = VarKind::Dimension;
   static constexpr bool classof(Var const *var) {
@@ -174,6 +228,7 @@ public:
 static_assert(IsZeroCostAbstraction<DimVar>);
 
 class LvlVar final : public Var {
+  using Var::Var; // inherit `Var(Impl)` ctor for RTTI use.
 public:
   static constexpr VarKind Kind = VarKind::Level;
   static constexpr bool classof(Var const *var) {
@@ -202,12 +257,14 @@ constexpr bool Var::isa() const {
 template <typename U>
 constexpr U Var::cast() const {
   assert(isa<U>());
-  return U(impl >> 2); // NOTE TO Wren: confirm this fix
+  // NOTE: This should select the `U(Var::Impl)` ctor, *not* `U(Var::Num)`
+  return U(impl);
 }
 
 template <typename U>
-constexpr U Var::dyn_cast() const {
-  return isa<U>() ? U(impl >> 2) : U();
+constexpr std::optional<U> Var::dyn_cast() const {
+  // NOTE: This should select the `U(Var::Impl)` ctor, *not* `U(Var::Num)`
+  return isa<U>() ? std::make_optional(U(impl)) : std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
@@ -217,7 +274,6 @@ class DimLvlExpr;
 //===----------------------------------------------------------------------===//
 class Ranks final {
   // Not using `VarKindArray` since `EnumeratedArray` doesn't support constexpr.
-  // TODO(wrengr): to what extent do we actually care about constexpr here?
   unsigned impl[3];
 
   static constexpr unsigned to_index(VarKind vk) {
@@ -236,19 +292,30 @@ public:
       : Ranks(ranks[VarKind::Symbol], ranks[VarKind::Dimension],
               ranks[VarKind::Level]) {}
 
+  bool operator==(Ranks const &other) const;
+  bool operator!=(Ranks const &other) const { return !(*this == other); }
+
   constexpr unsigned getRank(VarKind vk) const { return impl[to_index(vk)]; }
   constexpr unsigned getSymRank() const { return getRank(VarKind::Symbol); }
   constexpr unsigned getDimRank() const { return getRank(VarKind::Dimension); }
   constexpr unsigned getLvlRank() const { return getRank(VarKind::Level); }
 
-  constexpr bool isValid(Var var) const {
+  [[nodiscard]] constexpr bool isValid(Var var) const {
     return var.getNum() < getRank(var.getKind());
   }
-  bool isValid(DimLvlExpr expr) const;
+  [[nodiscard]] bool isValid(DimLvlExpr expr) const;
 };
 static_assert(IsZeroCostAbstraction<Ranks>);
 
 //===----------------------------------------------------------------------===//
+/// Efficient representation of a set of `Var`.
+///
+/// NOTE: For the `contains`/`occursIn` methods: if variables occurring in
+/// the method parameter are OOB for the `VarSet`, then these methods will
+/// always return false.  However, for the `add` methods: OOB parameters
+/// cause undefined behavior.  Currently the `add` methods will raise an
+/// assertion error; though we may change that behavior in the future
+/// (e.g., to resize the underlying bitvectors).
 class VarSet final {
   // If we're willing to give up the possibility of resizing the
   // individual bitvectors, then we could flatten this into a single
@@ -260,14 +327,20 @@ class VarSet final {
 public:
   explicit VarSet(Ranks const &ranks);
 
-  // TODO(wrengr): can we come up with a single name that works for all three of
-  // these?
+  unsigned getRank(VarKind vk) const { return impl[vk].size(); }
+  unsigned getSymRank() const { return getRank(VarKind::Symbol); }
+  unsigned getDimRank() const { return getRank(VarKind::Dimension); }
+  unsigned getLvlRank() const { return getRank(VarKind::Level); }
+  Ranks getRanks() const {
+    return Ranks(getSymRank(), getDimRank(), getLvlRank());
+  }
+
   bool contains(Var var) const;
   bool occursIn(VarSet const &vars) const;
   bool occursIn(DimLvlExpr expr) const;
 
   void add(Var var);
-  // TODO(wrengr): void add(VarSet const& vars);
+  void add(VarSet const &vars);
   void add(DimLvlExpr expr);
 };
 
@@ -286,13 +359,8 @@ public:
   enum class ID : unsigned {};
 
 private:
-  // FUTURE_CL(wrengr): We could use the high-bit of `Var::Impl` to
-  // store the `std::optional` bit, therefore allowing us to bitbash the
-  // `num` and `kind` fields together.
-  //
   StringRef name;              // The bare-id used in the MLIR source.
   llvm::SMLoc loc;             // The location of the first occurence.
-                               // TODO(wrengr): See the above `LocatedVar` note.
   ID id;                       // The unique `VarInfo`-identifier.
   std::optional<Var::Num> num; // The unique `Var`-identifier (if resolved).
   VarKind kind;                // The kind of variable.
@@ -302,9 +370,9 @@ public:
                     std::optional<Var::Num> n = {})
       : name(name), loc(loc), id(id), num(n), kind(vk) {
     assert(!name.empty() && "null StringRef");
+    assert(loc.isValid() && "null SMLoc");
     assert(isWF(vk) && "unknown VarKind");
     assert((!n || Var::isWF_Num(*n)) && "Var::Num is too large");
-    // NOTE TO Wren: windows did not like loc.isValid constexpr
   }
 
   constexpr StringRef getName() const { return name; }
@@ -327,11 +395,13 @@ public:
 };
 // We don't actually require this, since `VarInfo` is a proper struct
 // rather than a newtype.  But it passes, so for now we'll keep it around.
-static_assert(IsZeroCostAbstraction<VarInfo>);
+// TODO: Uncomment the static assert, it fails the build with gcc7 right now.
+// static_assert(IsZeroCostAbstraction<VarInfo>);
 
 //===----------------------------------------------------------------------===//
-enum class CreationPolicy { MustNot, May, Must };
+enum class Policy { MustNot, May, Must };
 
+//===----------------------------------------------------------------------===//
 class VarEnv final {
   /// Map from `VarKind` to the next free `Var::Num`; used by `bindVar`.
   VarKindArray<Var::Num> nextNum;
@@ -343,7 +413,6 @@ class VarEnv final {
   VarInfo::ID nextID() const { return static_cast<VarInfo::ID>(vars.size()); }
 
 public:
-  // NOTE TO Wren: initializer needed!
   VarEnv() : nextNum(0) {}
 
   /// Gets the underlying storage for the `VarInfo` identified by
@@ -363,8 +432,6 @@ public:
   VarInfo const *access(std::optional<VarInfo::ID> oid) const {
     return oid ? &access(*oid) : nullptr;
   }
-
-  Var toVar(VarInfo::ID id) const { return vars[to_underlying(id)].getVar(); }
 
 private:
   VarInfo &access(VarInfo::ID id) {
@@ -389,7 +456,7 @@ public:
                                       VarKind vk, bool verifyUsage = false);
 
   /// Attempts to lookup or create a variable according to the given
-  /// `CreationPolicy`.  Returns nullopt in one of two circumstances:
+  /// `Policy`.  Returns nullopt in one of two circumstances:
   /// (1) the policy says we `Must` create, yet the variable already exists;
   /// (2) the policy says we `MustNot` create, yet no such variable exists.
   /// Otherwise, if the variable already exists then it is validated against
@@ -399,7 +466,7 @@ public:
   // TODO(wrengr): Prolly want to rename this to `create` and move the
   // current method of that name to being a private `createImpl`.
   std::optional<std::pair<VarInfo::ID, bool>>
-  lookupOrCreate(CreationPolicy policy, StringRef name, llvm::SMLoc loc,
+  lookupOrCreate(Policy creationPolicy, StringRef name, llvm::SMLoc loc,
                  VarKind vk);
 
   /// Binds the given variable to the next free `Var::Num` for its `VarKind`.
@@ -412,12 +479,20 @@ public:
 
   InFlightDiagnostic emitErrorIfAnyUnbound(AsmParser &parser) const;
 
+  /// Returns the current ranks of bound variables.  This method should
+  /// only be used after the environment is "finished", since binding new
+  /// variables will (semantically) invalidate any previously returned `Ranks`.
   Ranks getRanks() const { return Ranks(nextNum); }
 
-  /// Adds all variables of given kind to the vector.
-  void
-  addVars(SmallVectorImpl<std::pair<StringRef, AffineExpr>> &dimsAndSymbols,
-          VarKind vk, MLIRContext *context) const;
+  /// Gets the `Var` identified by the `VarInfo::ID`, raising an assertion
+  /// failure if the variable is not bound.
+  Var getVar(VarInfo::ID id) const { return access(id).getVar(); }
+
+  /// Gets the `Var` identified by the `VarInfo::ID`, returning nullopt
+  /// if the variable is not bound.
+  std::optional<Var> tryGetVar(VarInfo::ID id) const {
+    return access(id).tryGetVar();
+  }
 };
 
 //===----------------------------------------------------------------------===//

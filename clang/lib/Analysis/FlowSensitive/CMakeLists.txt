@@ -3,6 +3,7 @@ add_clang_library(clangAnalysisFlowSensitive
   ControlFlowContext.cpp
   DataflowAnalysisContext.cpp
   DataflowEnvironment.cpp
+  Formula.cpp
   HTMLLogger.cpp
   Logger.cpp
   RecordOps.cpp
@@ -17,6 +18,7 @@ add_clang_library(clangAnalysisFlowSensitive
   LINK_LIBS
   clangAnalysis
   clangAST
+  clangASTMatchers
   clangBasic
   clangLex
   )

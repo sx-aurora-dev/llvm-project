@@ -109,9 +109,6 @@ public:
     AbstractInfo = abstractInfo;
     assert(functionPtr && "configuring callee without function pointer");
     assert(functionPtr->getType()->isPointerTy());
-    assert(functionPtr->getType()->isOpaquePointerTy() ||
-           functionPtr->getType()->getNonOpaquePointerElementType()
-               ->isFunctionTy());
   }
 
   static CGCallee forBuiltin(unsigned builtinID,
@@ -385,6 +382,35 @@ void mergeDefaultFunctionDefinitionAttributes(llvm::Function &F,
                                               const LangOptions &LangOpts,
                                               const TargetOptions &TargetOpts,
                                               bool WillInternalize);
+
+enum class FnInfoOpts {
+  None = 0,
+  IsInstanceMethod = 1 << 0,
+  IsChainCall = 1 << 1,
+  IsDelegateCall = 1 << 2,
+};
+
+inline FnInfoOpts operator|(FnInfoOpts A, FnInfoOpts B) {
+  return static_cast<FnInfoOpts>(
+      static_cast<std::underlying_type_t<FnInfoOpts>>(A) |
+      static_cast<std::underlying_type_t<FnInfoOpts>>(B));
+}
+
+inline FnInfoOpts operator&(FnInfoOpts A, FnInfoOpts B) {
+  return static_cast<FnInfoOpts>(
+      static_cast<std::underlying_type_t<FnInfoOpts>>(A) &
+      static_cast<std::underlying_type_t<FnInfoOpts>>(B));
+}
+
+inline FnInfoOpts operator|=(FnInfoOpts A, FnInfoOpts B) {
+  A = A | B;
+  return A;
+}
+
+inline FnInfoOpts operator&=(FnInfoOpts A, FnInfoOpts B) {
+  A = A & B;
+  return A;
+}
 
 } // end namespace CodeGen
 } // end namespace clang

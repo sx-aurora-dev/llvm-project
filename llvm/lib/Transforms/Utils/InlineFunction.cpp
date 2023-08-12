@@ -1480,8 +1480,6 @@ static Value *HandleByValArgument(Type *ByValType, Value *Arg,
                                   const Function *CalledFunc,
                                   InlineFunctionInfo &IFI,
                                   MaybeAlign ByValAlignment) {
-  assert(cast<PointerType>(Arg->getType())
-             ->isOpaqueOrPointeeTypeMatches(ByValType));
   Function *Caller = TheCall->getFunction();
   const DataLayout &DL = Caller->getParent()->getDataLayout();
 
@@ -2456,14 +2454,9 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
   // If the inlined code contained dynamic alloca instructions, wrap the inlined
   // code with llvm.stacksave/llvm.stackrestore intrinsics.
   if (InlinedFunctionInfo.ContainsDynamicAllocas) {
-    Module *M = Caller->getParent();
-    // Get the two intrinsics we care about.
-    Function *StackSave = Intrinsic::getDeclaration(M, Intrinsic::stacksave);
-    Function *StackRestore=Intrinsic::getDeclaration(M,Intrinsic::stackrestore);
-
     // Insert the llvm.stacksave.
     CallInst *SavedPtr = IRBuilder<>(&*FirstNewBlock, FirstNewBlock->begin())
-                             .CreateCall(StackSave, {}, "savedstack");
+                             .CreateStackSave("savedstack");
 
     // Insert a call to llvm.stackrestore before any return instructions in the
     // inlined function.
@@ -2474,7 +2467,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
         continue;
       if (InlinedDeoptimizeCalls && RI->getParent()->getTerminatingDeoptimizeCall())
         continue;
-      IRBuilder<>(RI).CreateCall(StackRestore, SavedPtr);
+      IRBuilder<>(RI).CreateStackRestore(SavedPtr);
     }
   }
 
@@ -2659,7 +2652,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
     if (!CB.use_empty()) {
       ReturnInst *R = Returns[0];
       if (&CB == R->getReturnValue())
-        CB.replaceAllUsesWith(UndefValue::get(CB.getType()));
+        CB.replaceAllUsesWith(PoisonValue::get(CB.getType()));
       else
         CB.replaceAllUsesWith(R->getReturnValue());
     }
@@ -2771,7 +2764,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
     // using the return value of the call with the computed value.
     if (!CB.use_empty()) {
       if (&CB == Returns[0]->getReturnValue())
-        CB.replaceAllUsesWith(UndefValue::get(CB.getType()));
+        CB.replaceAllUsesWith(PoisonValue::get(CB.getType()));
       else
         CB.replaceAllUsesWith(Returns[0]->getReturnValue());
     }

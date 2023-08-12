@@ -112,7 +112,6 @@ void header_exportable_declarations::registerMatchers(clang::ast_matchers::Match
 
   switch (file_type_) {
   case FileType::Header:
-
     finder->addMatcher(
         namedDecl(
             // Looks at the common locations where headers store their data
@@ -223,14 +222,21 @@ void header_exportable_declarations::check(const clang::ast_matchers::MatchFinde
     if (is_reserved_name(name))
       return;
 
-    // For modules (std, std.compat) only take the declarations exported from the partitions.
-    // Making sure no declatations of headers are compared.
-    if (file_type_ == FileType::Module)
-      if (clang::Module* M = decl->getOwningModule(); M && M->Kind != clang::Module::ModulePartitionInterface)
+    // For modules only take the declarations exported.
+    if (file_type_ == FileType::ModulePartition || file_type_ == FileType::Module)
+      if (decl->getModuleOwnershipKind() != clang::Decl::ModuleOwnershipKind::VisibleWhenImported)
         return;
 
-    if (decls_.contains(name))
-      return;
+    if (decls_.contains(name)) {
+      // For modules avoid exporting the same named declaration twice. For
+      // header files this is common and valid.
+      if (file_type_ == FileType::ModulePartition)
+        // After the warning the script continues.
+        // The test will fail since modules have duplicated entries and headers not.
+        llvm::errs() << "Duplicated export of '" << name << "'.\n";
+      else
+        return;
+    }
 
     std::cout << "using " << std::string{name} << ";\n";
     decls_.insert(name);

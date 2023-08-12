@@ -747,6 +747,12 @@ void mlir::test::TestDummyPayloadOp::getEffects(
     transform::producesHandle(result, effects);
 }
 
+LogicalResult mlir::test::TestDummyPayloadOp::verify() {
+  if (getFailToVerify())
+    return emitOpError() << "fail_to_verify is set";
+  return success();
+}
+
 DiagnosedSilenceableFailure
 mlir::test::TestTrackedRewriteOp::apply(transform::TransformRewriter &rewriter,
                                         transform::TransformResults &results,
@@ -890,6 +896,82 @@ void mlir::test::TestNotifyPayloadOpReplacedOp::getEffects(
     SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
   transform::onlyReadsHandle(getOriginal(), effects);
   transform::onlyReadsHandle(getReplacement(), effects);
+}
+
+DiagnosedSilenceableFailure mlir::test::TestProduceInvalidIR::applyToOne(
+    transform::TransformRewriter &rewriter, Operation *target,
+    transform::ApplyToEachResultList &results,
+    transform::TransformState &state) {
+  // Provide some IR that does not verify.
+  rewriter.setInsertionPointToStart(&target->getRegion(0).front());
+  rewriter.create<TestDummyPayloadOp>(target->getLoc(), TypeRange(),
+                                      ValueRange(), /*failToVerify=*/true);
+  return DiagnosedSilenceableFailure::success();
+}
+
+void mlir::test::TestProduceInvalidIR::getEffects(
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  transform::onlyReadsHandle(getTarget(), effects);
+  transform::modifiesPayload(effects);
+}
+
+namespace {
+/// Test conversion pattern that replaces ops with the "replace_with_new_op"
+/// attribute with "test.new_op".
+class ReplaceWithNewOpConversion : public ConversionPattern {
+public:
+  ReplaceWithNewOpConversion(TypeConverter &typeConverter, MLIRContext *context)
+      : ConversionPattern(typeConverter, RewritePattern::MatchAnyOpTypeTag(),
+                          /*benefit=*/1, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!op->hasAttr("replace_with_new_op"))
+      return failure();
+    SmallVector<Type> newResultTypes;
+    if (failed(getTypeConverter()->convertTypes(op->getResultTypes(),
+                                                newResultTypes)))
+      return failure();
+    Operation *newOp = rewriter.create(
+        op->getLoc(),
+        OperationName("test.new_op", op->getContext()).getIdentifier(),
+        operands, newResultTypes);
+    rewriter.replaceOp(op, newOp->getResults());
+    return success();
+  }
+};
+} // namespace
+
+void mlir::test::ApplyTestConversionPatternsOp::populatePatterns(
+    TypeConverter &typeConverter, RewritePatternSet &patterns) {
+  patterns.insert<ReplaceWithNewOpConversion>(typeConverter,
+                                              patterns.getContext());
+}
+
+namespace {
+/// Test type converter that converts tensor types to memref types.
+class TestTypeConverter : public TypeConverter {
+public:
+  TestTypeConverter() {
+    addConversion([](RankedTensorType type) -> Type {
+      return MemRefType::get(type.getShape(), type.getElementType());
+    });
+    addSourceMaterialization([&](OpBuilder &builder, Type resultType,
+                                 ValueRange inputs,
+                                 Location loc) -> std::optional<Value> {
+      if (inputs.size() != 1)
+        return std::nullopt;
+      return builder.create<UnrealizedConversionCastOp>(loc, resultType, inputs)
+          .getResult(0);
+    });
+  }
+};
+} // namespace
+
+std::unique_ptr<::mlir::TypeConverter>
+mlir::test::TestTypeConverterOp::getTypeConverter() {
+  return std::make_unique<TestTypeConverter>();
 }
 
 namespace {

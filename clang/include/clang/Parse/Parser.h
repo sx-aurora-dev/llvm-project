@@ -1091,9 +1091,9 @@ private:
     StmtExprBegin,
     /// A '}' ')' ending a statement-expression.
     StmtExprEnd,
-    /// A '[' '[' beginning a C++11 or C2x attribute.
+    /// A '[' '[' beginning a C++11 or C23 attribute.
     AttrBegin,
-    /// A ']' ']' ending a C++11 or C2x attribute.
+    /// A ']' ']' ending a C++11 or C23 attribute.
     AttrEnd,
     /// A '::' '*' forming a C++ pointer-to-member declaration.
     MemberPtr,
@@ -1788,8 +1788,12 @@ public:
                                   bool IsUnevaluated);
 
   ExprResult ParseStringLiteralExpression(bool AllowUserDefinedLiteral = false);
+  ExprResult ParseUnevaluatedStringLiteralExpression();
 
 private:
+  ExprResult ParseStringLiteralExpression(bool AllowUserDefinedLiteral,
+                                          bool Unevaluated);
+
   ExprResult ParseExpressionWithLeadingAt(SourceLocation AtLoc);
 
   ExprResult ParseExpressionWithLeadingExtension(SourceLocation ExtLoc);
@@ -2708,12 +2712,6 @@ public:
 private:
   void ParseBlockId(SourceLocation CaretLoc);
 
-  /// Are [[]] attributes enabled?
-  bool standardAttributesAllowed() const {
-    const LangOptions &LO = getLangOpts();
-    return LO.DoubleSquareBracketAttributes;
-  }
-
   /// Return true if the next token should be treated as a [[]] attribute,
   /// or as a keyword that behaves like one.  The former is only true if
   /// [[]] attributes are enabled, whereas the latter is true whenever
@@ -2722,15 +2720,14 @@ private:
   bool isAllowedCXX11AttributeSpecifier(bool Disambiguate = false,
                                         bool OuterMightBeMessageSend = false) {
     return (Tok.isRegularKeywordAttribute() ||
-            (standardAttributesAllowed() &&
-             isCXX11AttributeSpecifier(Disambiguate, OuterMightBeMessageSend)));
+            isCXX11AttributeSpecifier(Disambiguate, OuterMightBeMessageSend));
   }
 
   // Check for the start of an attribute-specifier-seq in a context where an
   // attribute is not allowed.
   bool CheckProhibitedCXX11Attribute() {
     assert(Tok.is(tok::l_square));
-    if (!standardAttributesAllowed() || NextToken().isNot(tok::l_square))
+    if (NextToken().isNot(tok::l_square))
       return false;
     return DiagnoseProhibitedCXX11Attribute();
   }
@@ -2738,13 +2735,10 @@ private:
   bool DiagnoseProhibitedCXX11Attribute();
   void CheckMisplacedCXX11Attribute(ParsedAttributes &Attrs,
                                     SourceLocation CorrectLocation) {
-    if (!Tok.isRegularKeywordAttribute()) {
-      if (!standardAttributesAllowed())
-        return;
-      if ((Tok.isNot(tok::l_square) || NextToken().isNot(tok::l_square)) &&
-          Tok.isNot(tok::kw_alignas))
-        return;
-    }
+    if (!Tok.isRegularKeywordAttribute() &&
+        (Tok.isNot(tok::l_square) || NextToken().isNot(tok::l_square)) &&
+        Tok.isNot(tok::kw_alignas))
+      return;
     DiagnoseMisplacedCXX11Attribute(Attrs, CorrectLocation);
   }
   void DiagnoseMisplacedCXX11Attribute(ParsedAttributes &Attrs,
@@ -2772,7 +2766,7 @@ private:
   void DiagnoseProhibitedAttributes(const ParsedAttributesView &Attrs,
                                     SourceLocation FixItLoc);
 
-  // Forbid C++11 and C2x attributes that appear on certain syntactic locations
+  // Forbid C++11 and C23 attributes that appear on certain syntactic locations
   // which standard permits but we don't supported yet, for example, attributes
   // appertain to decl specifiers.
   // For the most cases we don't want to warn on unknown type attributes, but
@@ -2783,16 +2777,16 @@ private:
                                bool DiagnoseEmptyAttrs = false,
                                bool WarnOnUnknownAttrs = false);
 
-  /// Skip C++11 and C2x attributes and return the end location of the
+  /// Skip C++11 and C23 attributes and return the end location of the
   /// last one.
   /// \returns SourceLocation() if there are no attributes.
   SourceLocation SkipCXX11Attributes();
 
-  /// Diagnose and skip C++11 and C2x attributes that appear in syntactic
+  /// Diagnose and skip C++11 and C23 attributes that appear in syntactic
   /// locations where attributes are not allowed.
   void DiagnoseAndSkipCXX11Attributes();
 
-  /// Emit warnings for C++11 and C2x attributes that are in a position that
+  /// Emit warnings for C++11 and C23 attributes that are in a position that
   /// clang accepts as an extension.
   void DiagnoseCXX11AttributeExtension(ParsedAttributes &Attrs);
 
@@ -2914,7 +2908,7 @@ private:
     ReplayOpenMPAttributeTokens(OpenMPTokens);
   }
   void ParseCXX11Attributes(ParsedAttributes &attrs);
-  /// Parses a C++11 (or C2x)-style attribute argument list. Returns true
+  /// Parses a C++11 (or C23)-style attribute argument list. Returns true
   /// if this results in adding an attribute to the ParsedAttributes list.
   bool ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
                                SourceLocation AttrNameLoc,
@@ -3495,6 +3489,13 @@ private:
   /// nullptr.
   //
   OMPClause *ParseOpenMPInteropClause(OpenMPClauseKind Kind, bool ParseOnly);
+
+  /// Parses a ompx_attribute clause
+  ///
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  //
+  OMPClause *ParseOpenMPOMPXAttributesClause(bool ParseOnly);
 
 public:
   /// Parses simple expression in parens for single-expression clauses of OpenMP

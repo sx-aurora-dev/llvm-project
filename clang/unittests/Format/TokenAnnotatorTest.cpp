@@ -272,6 +272,19 @@ TEST_F(TokenAnnotatorTest, UnderstandsUsesOfStarAndAmp) {
   Tokens = annotate("template <enable_if_t<foo && !bar>* = nullptr> void f();");
   ASSERT_EQ(Tokens.size(), 19u) << Tokens;
   EXPECT_TOKEN(Tokens[5], tok::ampamp, TT_BinaryOperator);
+
+  FormatStyle Style = getLLVMStyle();
+  Style.TypeNames.push_back("MYI");
+  Tokens = annotate("if (MYI *p{nullptr})", Style);
+  ASSERT_EQ(Tokens.size(), 10u) << Tokens;
+  EXPECT_TOKEN(Tokens[2], tok::identifier, TT_TypeName);
+  EXPECT_TOKEN(Tokens[3], tok::star, TT_PointerOrReference);
+
+  Style.TypeNames.push_back("Class");
+  Tokens = annotate("if (Class *obj {getObj()})", Style);
+  ASSERT_EQ(Tokens.size(), 12u) << Tokens;
+  EXPECT_TOKEN(Tokens[2], tok::identifier, TT_TypeName);
+  EXPECT_TOKEN(Tokens[3], tok::star, TT_PointerOrReference);
 }
 
 TEST_F(TokenAnnotatorTest, UnderstandsUsesOfPlusAndMinus) {
@@ -717,6 +730,16 @@ TEST_F(TokenAnnotatorTest, UnderstandsOverloadedOperators) {
   EXPECT_TOKEN(Tokens[9], tok::plus, TT_OverloadedOperator);
   EXPECT_TOKEN(Tokens[10], tok::l_paren, TT_OverloadedOperatorLParen);
   EXPECT_TOKEN(Tokens[12], tok::star, TT_BinaryOperator);
+
+  Tokens = annotate("std::vector<Foo> operator()(Foo &foo);");
+  ASSERT_EQ(Tokens.size(), 16u) << Tokens;
+  EXPECT_TOKEN(Tokens[3], tok::less, TT_TemplateOpener);
+  EXPECT_TOKEN(Tokens[5], tok::greater, TT_TemplateCloser);
+  EXPECT_TOKEN(Tokens[6], tok::kw_operator, TT_FunctionDeclarationName);
+  EXPECT_TOKEN(Tokens[7], tok::l_paren, TT_OverloadedOperator);
+  EXPECT_TOKEN(Tokens[8], tok::r_paren, TT_OverloadedOperator);
+  EXPECT_TOKEN(Tokens[9], tok::l_paren, TT_OverloadedOperatorLParen);
+  EXPECT_TOKEN(Tokens[11], tok::amp, TT_PointerOrReference);
 }
 
 TEST_F(TokenAnnotatorTest, OverloadedOperatorInTemplate) {

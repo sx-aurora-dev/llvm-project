@@ -346,9 +346,16 @@ public:
     m_use_dynamic = dynamic;
   }
 
-  const Timeout<std::micro> &GetTimeout() const { return m_timeout; }
+  const Timeout<std::micro> &GetTimeout() const {
+    assert(m_timeout && m_timeout->count() > 0);
+    return m_timeout;
+  }
 
-  void SetTimeout(const Timeout<std::micro> &timeout) { m_timeout = timeout; }
+  void SetTimeout(const Timeout<std::micro> &timeout) {
+    // Disallow setting a non-zero timeout.
+    if (timeout && timeout->count() > 0)
+      m_timeout = timeout;
+  }
 
   const Timeout<std::micro> &GetOneThreadTimeout() const {
     return m_one_thread_timeout;
@@ -939,7 +946,7 @@ public:
       LoadDependentFiles load_dependent_files = eLoadDependentsDefault);
 
   bool LoadScriptingResources(std::list<Status> &errors,
-                              Stream *feedback_stream = nullptr,
+                              Stream &feedback_stream,
                               bool continue_on_error = true) {
     return m_images.LoadScriptingResourcesInTarget(
         this, errors, feedback_stream, continue_on_error);

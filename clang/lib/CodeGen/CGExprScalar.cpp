@@ -2152,7 +2152,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
           llvm::Value *UndefVec = llvm::UndefValue::get(DstTy);
           llvm::Value *Zero = llvm::Constant::getNullValue(CGF.CGM.Int64Ty);
           llvm::Value *Result = Builder.CreateInsertVector(
-              DstTy, UndefVec, Src, Zero, "castScalableSve");
+              DstTy, UndefVec, Src, Zero, "cast.scalable");
           if (NeedsBitCast)
             Result = Builder.CreateBitCast(Result, OrigType);
           return Result;
@@ -2176,7 +2176,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
         }
         if (ScalableSrc->getElementType() == FixedDst->getElementType()) {
           llvm::Value *Zero = llvm::Constant::getNullValue(CGF.CGM.Int64Ty);
-          return Builder.CreateExtractVector(DstTy, Src, Zero, "castFixedSve");
+          return Builder.CreateExtractVector(DstTy, Src, Zero, "cast.fixed");
         }
       }
     }
@@ -2764,8 +2764,8 @@ ScalarExprEmitter::EmitScalarPrePostIncDec(const UnaryOperator *E, LValue LV,
       amt = llvm::ConstantFP::get(VMContext,
                                   llvm::APFloat(static_cast<double>(amount)));
     else {
-      // Remaining types are Half, LongDouble, __ibm128 or __float128. Convert
-      // from float.
+      // Remaining types are Half, Bfloat16, LongDouble, __ibm128 or __float128.
+      // Convert from float.
       llvm::APFloat F(static_cast<float>(amount));
       bool ignored;
       const llvm::fltSemantics *FS;
@@ -2775,6 +2775,8 @@ ScalarExprEmitter::EmitScalarPrePostIncDec(const UnaryOperator *E, LValue LV,
         FS = &CGF.getTarget().getFloat128Format();
       else if (value->getType()->isHalfTy())
         FS = &CGF.getTarget().getHalfFormat();
+      else if (value->getType()->isBFloatTy())
+        FS = &CGF.getTarget().getBFloat16Format();
       else if (value->getType()->isPPC_FP128Ty())
         FS = &CGF.getTarget().getIbm128Format();
       else
@@ -3478,21 +3480,7 @@ Value *ScalarExprEmitter::EmitDiv(const BinOpInfo &Ops) {
     llvm::Value *Val;
     CodeGenFunction::CGFPOptionsRAII FPOptsRAII(CGF, Ops.FPFeatures);
     Val = Builder.CreateFDiv(Ops.LHS, Ops.RHS, "div");
-    if ((CGF.getLangOpts().OpenCL &&
-         !CGF.CGM.getCodeGenOpts().OpenCLCorrectlyRoundedDivSqrt) ||
-        (CGF.getLangOpts().HIP && CGF.getLangOpts().CUDAIsDevice &&
-         !CGF.CGM.getCodeGenOpts().HIPCorrectlyRoundedDivSqrt)) {
-      // OpenCL v1.1 s7.4: minimum accuracy of single precision / is 2.5ulp
-      // OpenCL v1.2 s5.6.4.2: The -cl-fp32-correctly-rounded-divide-sqrt
-      // build option allows an application to specify that single precision
-      // floating-point divide (x/y and 1/x) and sqrt used in the program
-      // source are correctly rounded.
-      llvm::Type *ValTy = Val->getType();
-      if (ValTy->isFloatTy() ||
-          (isa<llvm::VectorType>(ValTy) &&
-           cast<llvm::VectorType>(ValTy)->getElementType()->isFloatTy()))
-        CGF.SetFPAccuracy(Val, 2.5);
-    }
+    CGF.SetDivFPAccuracy(Val);
     return Val;
   }
   else if (Ops.isFixedPointOp())
@@ -3702,8 +3690,8 @@ static Value *emitPointerArithmetic(CodeGenFunction &CGF,
 
     index = CGF.Builder.CreateMul(index, objectSize);
 
-    Value *result = CGF.Builder.CreateBitCast(pointer, CGF.VoidPtrTy);
-    result = CGF.Builder.CreateGEP(CGF.Int8Ty, result, index, "add.ptr");
+    Value *result =
+        CGF.Builder.CreateGEP(CGF.Int8Ty, pointer, index, "add.ptr");
     return CGF.Builder.CreateBitCast(result, pointer->getType());
   }
 
