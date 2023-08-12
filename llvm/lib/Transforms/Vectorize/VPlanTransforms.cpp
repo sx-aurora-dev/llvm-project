@@ -507,8 +507,7 @@ void VPlanTransforms::optimizeInductions(VPlan &Plan, ScalarEvolution &SE) {
     if (Instruction *TruncI = WideIV->getTruncInst())
       ResultTy = TruncI->getType();
     const InductionDescriptor &ID = WideIV->getInductionDescriptor();
-    VPValue *Step =
-        vputils::getOrCreateVPValueForSCEVExpr(Plan, ID.getStep(), SE);
+    VPValue *Step = WideIV->getStepValue();
     VPValue *BaseIV = CanonicalIV;
     if (!CanonicalIV->isCanonical(ID.getKind(), WideIV->getStartValue(), Step,
                                   ResultTy)) {
@@ -665,6 +664,9 @@ sinkRecurrenceUsersAfterPrevious(VPFirstOrderRecurrencePHIRecipe *FOR,
         properlyDominates(Previous, SinkCandidate, VPDT))
       return true;
 
+    if (SinkCandidate->mayHaveSideEffects())
+      return false;
+
     WorkList.push_back(SinkCandidate);
     return true;
   };
@@ -675,6 +677,7 @@ sinkRecurrenceUsersAfterPrevious(VPFirstOrderRecurrencePHIRecipe *FOR,
     VPRecipeBase *Current = WorkList[I];
     assert(Current->getNumDefinedValues() == 1 &&
            "only recipes with a single defined value expected");
+
     for (VPUser *User : Current->getVPSingleValue()->users()) {
       if (auto *R = dyn_cast<VPRecipeBase>(User))
         if (!TryToPushSinkCandidate(R))

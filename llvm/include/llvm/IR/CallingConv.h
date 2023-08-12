@@ -237,6 +237,14 @@ namespace CallingConv {
     /// Preserve X2-X15, X19-X29, SP, Z0-Z31, P0-P15.
     AArch64_SME_ABI_Support_Routines_PreserveMost_From_X2 = 103,
 
+    /// Used on AMDGPUs to give the middle-end more control over argument
+    /// placement.
+    AMDGPU_CS_Chain = 104,
+
+    /// Used on AMDGPUs to give the middle-end more control over argument
+    /// placement. Preserves active lane values for input VGPRs.
+    AMDGPU_CS_ChainPreserve = 105,
+
     /// Calling convention used for NEC SX-Aurora VE vec_expf intrinsic
     /// function.
     VE_VEC_EXPF = 150,

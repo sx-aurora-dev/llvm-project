@@ -1392,7 +1392,8 @@ Value *SCEVExpander::expandAddRecExprLiterally(const SCEVAddRecExpr *S) {
   if (PostIncLoops.count(L)) {
     PostIncLoopSet Loops;
     Loops.insert(L);
-    Normalized = cast<SCEVAddRecExpr>(normalizeForPostIncUse(S, Loops, SE));
+    Normalized = cast<SCEVAddRecExpr>(
+        normalizeForPostIncUse(S, Loops, SE, /*CheckInvertible=*/false));
   }
 
   // Strip off any non-loop-dominating component from the addrec start.
@@ -2562,7 +2563,7 @@ Value *SCEVExpander::fixupLCSSAFormFor(Value *V) {
   ToUpdate.push_back(DefI);
   SmallVector<PHINode *, 16> PHIsToRemove;
   SmallVector<PHINode *, 16> InsertedPHIs;
-  formLCSSAForInstructions(ToUpdate, SE.DT, SE.LI, &PHIsToRemove,
+  formLCSSAForInstructions(ToUpdate, SE.DT, SE.LI, &SE, &PHIsToRemove,
                            &InsertedPHIs);
   for (PHINode *PN : InsertedPHIs)
     rememberInstruction(PN);

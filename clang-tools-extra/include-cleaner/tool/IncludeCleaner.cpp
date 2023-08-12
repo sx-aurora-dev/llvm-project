@@ -95,6 +95,15 @@ class Action : public clang::ASTFrontendAction {
   RecordedPP PP;
   PragmaIncludes PI;
 
+  bool BeginInvocation(CompilerInstance &CI) override {
+    // We only perform include-cleaner analysis. So we disable diagnostics that
+    // won't affect our analysis to make the tool more robust against
+    // in-development code.
+    CI.getLangOpts().ModulesDeclUse = false;
+    CI.getLangOpts().ModulesStrictDeclUse = false;
+    return true;
+  }
+
   void ExecuteAction() override {
     auto &P = getCompilerInstance().getPreprocessor();
     P.addPPCallbacks(PP.record(P));
@@ -108,10 +117,18 @@ class Action : public clang::ASTFrontendAction {
   }
 
   void EndSourceFile() override {
+    const auto &SM = getCompilerInstance().getSourceManager();
+    if (SM.getDiagnostics().hasUncompilableErrorOccurred()) {
+      llvm::errs()
+          << "Skipping file " << getCurrentFile()
+          << " due to compiler errors. clang-include-cleaner expects to "
+             "work on compilable source code.\n";
+      return;
+    }
+
     if (!HTMLReportPath.empty())
       writeHTML();
 
-    const auto &SM = getCompilerInstance().getSourceManager();
     auto &HS = getCompilerInstance().getPreprocessor().getHeaderSearchInfo();
     llvm::StringRef Path =
         SM.getFileEntryForID(SM.getMainFileID())->tryGetRealPathName();
@@ -140,7 +157,7 @@ class Action : public clang::ASTFrontendAction {
       }
     }
 
-    if (Edit) {
+    if (Edit && (!Results.Missing.empty() || !Results.Unused.empty())) {
       if (auto Err = llvm::writeToOutput(
               Path, [&](llvm::raw_ostream &OS) -> llvm::Error {
                 OS << Final;

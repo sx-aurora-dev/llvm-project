@@ -52,6 +52,25 @@ def elemwise_binary(
 
 
 @linalg_structured_op
+def add(
+    lhs=TensorDef(T1),
+    rhs=TensorDef(T1),
+    O=TensorDef(T1, output=True),
+):
+    """ Adds two tensors elementwise.
+
+    The shapes and element types must be identical. The appropriate casts,
+    broadcasts and reductions should be done previously to calling this op.
+
+    This means reduction/broadcast/element cast semantics is explicit. Further
+    passes can take that into account when lowering this code. For example,
+    a `linalg.broadcast` + `linalg.add` sequence can be lowered to a
+    `linalg.generic` with different affine maps for the two operands.
+    """
+    O[None] = lhs[None] + rhs[None]
+
+
+@linalg_structured_op
 def matmul(
     A=TensorDef(T1, S.M, S.K),
     B=TensorDef(T2, S.K, S.N),
@@ -108,6 +127,38 @@ def quantized_matmul(
 
 
 @linalg_structured_op
+def matmul_transpose_a(A=TensorDef(T1, S.K, S.N),
+                       B=TensorDef(T2, S.K, S.M),
+                       C=TensorDef(U, S.M, S.N, output=True),
+                       cast=TypeFnAttrDef(default=TypeFn.cast_signed)):
+  """Performs a matrix multiplication of two 2D inputs with lhs operand
+  transposed.
+
+  Numeric casting is performed on the operands to the inner multiply, promoting
+  them to the same data type as the accumulator/output.
+  """
+  domain(D.m, D.n, D.k)
+  implements(ContractionOpInterface)
+  C[D.m, D.n] += cast(U, A[D.k, D.m]) * cast(U, B[D.k, D.n])
+
+
+@linalg_structured_op
+def matmul_transpose_b(A=TensorDef(T1, S.M, S.K),
+                       B=TensorDef(T2, S.N, S.K),
+                       C=TensorDef(U, S.M, S.N, output=True),
+                       cast=TypeFnAttrDef(default=TypeFn.cast_signed)):
+  """Performs a matrix multiplication of two 2D inputs with rhs operand
+  transposed.
+
+  Numeric casting is performed on the operands to the inner multiply, promoting
+  them to the same data type as the accumulator/output.
+  """
+  domain(D.m, D.n, D.k)
+  implements(ContractionOpInterface)
+  C[D.m, D.n] += cast(U, A[D.m, D.k]) * cast(U, B[D.n, D.k])
+
+
+@linalg_structured_op
 def mmt4d(
     lhs=TensorDef(TV.LhsType, S.M, S.K, S.M0, S.K0),
     rhs=TensorDef(TV.RhsType, S.N, S.K, S.N0, S.K0),
@@ -146,6 +197,39 @@ def batch_matmul(
     C[D.b, D.m, D.n] += TypeFn.cast_signed(U, A[D.b, D.m, D.k]) * TypeFn.cast_signed(
         U, B[D.b, D.k, D.n]
     )
+
+
+@linalg_structured_op
+def batch_matmul_transpose_a(A=TensorDef(T1, Batch, S.K, S.M),
+                             B=TensorDef(T2, Batch, S.K, S.N),
+                             C=TensorDef(U, Batch, S.M, S.N, output=True)):
+  """Performs a batched matrix multiplication of two 3D inputs where lhs operand
+  has its non-batch dimensions transposed.
+
+  Numeric casting is performed on the operands to the inner multiply, promoting
+  them to the same data type as the accumulator/output.
+  """
+  domain(D.b, D.m, D.n, D.k)
+  implements(ContractionOpInterface)
+  C[D.b, D.m, D.n] += TypeFn.cast_signed(U, A[D.b, D.k, D.m]) \
+                    * TypeFn.cast_signed(U, B[D.b, D.k, D.n])
+
+
+@linalg_structured_op
+def batch_matmul_transpose_b(A=TensorDef(T1, Batch, S.M, S.K),
+                             B=TensorDef(T2, Batch, S.N, S.K),
+                             C=TensorDef(U, Batch, S.M, S.N, output=True)):
+  """Performs a batched matrix multiplication of two 3D inputs where rhs operand
+  has its non-batch dimensions transposed.
+
+  Numeric casting is performed on the operands to the inner multiply, promoting
+  them to the same data type as the accumulator/output.
+  """
+  domain(D.b, D.m, D.n, D.k)
+  implements(ContractionOpInterface)
+  C[D.b, D.m,
+    D.n] += TypeFn.cast_signed(U, A[D.b, D.m, D.k]) * TypeFn.cast_signed(
+        U, B[D.b, D.n, D.k])
 
 
 @linalg_structured_op

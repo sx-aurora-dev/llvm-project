@@ -33,6 +33,7 @@
 #include "clang/Analysis/FlowSensitive/DataflowAnalysisContext.h"
 #include "clang/Analysis/FlowSensitive/DataflowEnvironment.h"
 #include "clang/Analysis/FlowSensitive/MatchSwitch.h"
+#include "clang/Analysis/FlowSensitive/NoopAnalysis.h"
 #include "clang/Analysis/FlowSensitive/WatchedLiteralsSolver.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Serialization/PCHContainerOperations.h"
@@ -241,7 +242,7 @@ checkDataflow(AnalysisInputs<AnalysisT> AI,
           llvm::errc::invalid_argument, "Could not find the target function.");
 
     // Build the control flow graph for the target function.
-    auto MaybeCFCtx = ControlFlowContext::build(*Target, Context);
+    auto MaybeCFCtx = ControlFlowContext::build(*Target);
     if (!MaybeCFCtx) return MaybeCFCtx.takeError();
     auto &CFCtx = *MaybeCFCtx;
 
@@ -363,7 +364,7 @@ checkDataflow(AnalysisInputs<AnalysisT> AI,
         if (It == StmtToAnnotations.end())
           return;
         auto [_, InsertSuccess] = AnnotationStates.insert(
-            {It->second, StateT{State.Lattice, State.Env}});
+            {It->second, StateT{State.Lattice, State.Env.fork()}});
         (void)_;
         (void)InsertSuccess;
         assert(InsertSuccess);
@@ -381,12 +382,49 @@ checkDataflow(AnalysisInputs<AnalysisT> AI,
       });
 }
 
+using BuiltinOptions = DataflowAnalysisContext::Options;
+
+/// Runs dataflow on `Code` with a `NoopAnalysis` and calls `VerifyResults` to
+/// verify the results.
+llvm::Error checkDataflowWithNoopAnalysis(
+    llvm::StringRef Code,
+    std::function<
+        void(const llvm::StringMap<DataflowAnalysisState<NoopLattice>> &,
+             ASTContext &)>
+        VerifyResults,
+    DataflowAnalysisOptions Options,
+    LangStandard::Kind Std = LangStandard::lang_cxx17,
+    llvm::StringRef TargetFun = "target");
+
 /// Returns the `ValueDecl` for the given identifier.
 ///
 /// Requirements:
 ///
 ///   `Name` must be unique in `ASTCtx`.
 const ValueDecl *findValueDecl(ASTContext &ASTCtx, llvm::StringRef Name);
+
+/// Returns the `IndirectFieldDecl` for the given identifier.
+///
+/// Requirements:
+///
+///   `Name` must be unique in `ASTCtx`.
+const IndirectFieldDecl *findIndirectFieldDecl(ASTContext &ASTCtx,
+                                               llvm::StringRef Name);
+
+/// Returns the storage location (of type `LocT`) for the given identifier.
+/// `LocT` must be a subclass of `StorageLocation` and must be of the
+/// appropriate type.
+///
+/// Requirements:
+///
+///   `Name` must be unique in `ASTCtx`.
+template <class LocT>
+LocT &getLocForDecl(ASTContext &ASTCtx, const Environment &Env,
+                    llvm::StringRef Name) {
+  const ValueDecl *VD = findValueDecl(ASTCtx, Name);
+  assert(VD != nullptr);
+  return *cast<LocT>(Env.getStorageLocation(*VD));
+}
 
 /// Returns the value (of type `ValueT`) for the given identifier.
 /// `ValueT` must be a subclass of `Value` and must be of the appropriate type.

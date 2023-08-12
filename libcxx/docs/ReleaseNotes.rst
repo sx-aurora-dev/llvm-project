@@ -35,6 +35,9 @@ see the `releases page <https://llvm.org/releases/>`_.
 What's New in Libc++ 17.0.0?
 ============================
 
+There is an experimental implementation of the C++23 ``std`` module. See
+:ref:`ModulesInLibcxx` for more information.
+
 Implemented Papers
 ------------------
 - P2520R0 - ``move_iterator<T*>`` should be a random access iterator
@@ -44,6 +47,7 @@ Implemented Papers
 - P2505R5 - Monadic operations for ``std::expected``
 - P2711R1 - Making Multi-Param Constructors Of views explicit (``join_with_view`` is not done yet)
 - P2572R1 - ``std::format`` fill character allowances
+- P2510R3 - Formatting pointers
 
 Improvements and New Features
 -----------------------------
@@ -64,8 +68,19 @@ Improvements and New Features
   in the specialization has not been implemented in libc++. This prevents the
   feature-test macro to be set.
 
+- Platforms that don't have support for a filesystem can now still take advantage of some parts of ``<filesystem>``.
+  Anything that does not rely on having an actual filesystem available will now work, such as ``std::filesystem::path``,
+  ``std::filesystem::perms`` and similar classes.
+
 Deprecations and Removals
 -------------------------
+
+- The legacy debug mode has been removed in this release. Defining the macro
+  `_LIBCPP_ENABLE_DEBUG_MODE` is now a no-op, and the `LIBCXX_ENABLE_DEBUG_MODE`
+  CMake variable has been removed. The legacy debug mode will be replaced by
+  finer-grained hardened modes. For additional context, refer to the `Discourse
+  post
+  <https://discourse.llvm.org/t/rfc-removing-the-legacy-debug-mode-from-libc/71026>`_.
 
 - The ``<experimental/coroutine>`` header has been removed in this release. The ``<coroutine>`` header
   has been shipping since LLVM 14, so the Coroutines TS implementation is being removed per our policy
@@ -79,6 +94,10 @@ Deprecations and Removals
            ``stdexcept``, ``system_error``, ``type_traits``, ``typeinfo``
 
 - ``<algorithm>`` no longer includes ``<chrono>`` in any C++ version (it was previously included in C++17 and earlier).
+
+- ``<limits>`` no longer includes ``<type_traits>`` in any C++ version (it was previously included in C++20 and earlier).
+
+- ``<new>`` no longer includes ``<exception>`` or ``<type_traits>`` in any C++ version (they were previously included in C++20 and earlier).
 
 - ``<string>`` no longer includes ``<vector>`` in any C++ version (it was previously included in C++20 and earlier).
 
@@ -104,6 +123,12 @@ Deprecations and Removals
   make progress on support for C++20 modules.
 
 - The ``_LIBCPP_ABI_OLD_LOGNORMAL_DISTRIBUTION`` macro has been removed.
+
+- The classes ``strstreambuf`` , ``istrstream``, ``ostrstream``, and ``strstream`` have been deprecated.
+  They have been deprecated in the Standard since C++98, but were never marked as deprecated in libc++.
+
+- LWG3631 ``basic_format_arg(T&&) should use remove_cvref_t<T> throughout`` removed
+  support for ``volatile`` qualified formatters.
 
 Upcoming Deprecations and Removals
 ----------------------------------
@@ -150,3 +175,17 @@ Build System Changes
 - Building libc++ and libc++abi for Apple platforms now requires targeting macOS 10.13 and later.
   This is relevant for vendors building the libc++ shared library and for folks statically linking
   libc++ into an application that has back-deployment requirements on Apple platforms.
+
+- ``LIBCXX_ENABLE_FILESYSTEM`` now represents whether a filesystem is supported on the platform instead
+  of representing merely whether ``<filesystem>`` should be provided. This means that vendors building
+  with ``LIBCXX_ENABLE_FILESYSTEM=OFF`` will now also get ``<fstream>`` excluded from their configuration
+  of the library.
+
+- ``LIBCXX_ENABLE_FSTREAM`` is not supported anymore, please use ``LIBCXX_ENABLE_FILESYSTEM=OFF`` if your
+  platform does not have support for a filesystem.
+
+- The lit test parameter ``enable_modules`` changed from a Boolean to an enum. The changes are
+
+  - ``False`` became ``none``. This option does not test with modules enabled.
+  - ``True`` became ``clang``. This option tests using Clang modules.
+  - ``std`` is a new optional and tests with the experimental C++23 ``std`` module.

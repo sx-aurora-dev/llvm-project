@@ -18,6 +18,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DependenceFlags.h"
@@ -2366,13 +2367,19 @@ bool Type::isSizelessBuiltinType() const {
   return false;
 }
 
-bool Type::isWebAssemblyReferenceType() const {
-  return isWebAssemblyExternrefType();
-}
-
 bool Type::isWebAssemblyExternrefType() const {
   if (const auto *BT = getAs<BuiltinType>())
     return BT->getKind() == BuiltinType::WasmExternRef;
+  return false;
+}
+
+bool Type::isWebAssemblyTableType() const {
+  if (const auto *ATy = dyn_cast<ArrayType>(this))
+    return ATy->getElementType().isWebAssemblyReferenceType();
+
+  if (const auto *PTy = dyn_cast<PointerType>(this))
+    return PTy->getPointeeType().isWebAssemblyReferenceType();
+
   return false;
 }
 
@@ -2434,7 +2441,7 @@ bool Type::isVLSTBuiltinType() const {
 QualType Type::getSveEltType(const ASTContext &Ctx) const {
   assert(isVLSTBuiltinType() && "unsupported type!");
 
-  const BuiltinType *BTy = getAs<BuiltinType>();
+  const BuiltinType *BTy = castAs<BuiltinType>();
   if (BTy->getKind() == BuiltinType::SveBool)
     // Represent predicates as i8 rather than i1 to avoid any layout issues.
     // The type is bitcasted to a scalable predicate type when casting between
@@ -2447,10 +2454,9 @@ QualType Type::getSveEltType(const ASTContext &Ctx) const {
 bool Type::isRVVVLSBuiltinType() const {
   if (const BuiltinType *BT = getAs<BuiltinType>()) {
     switch (BT->getKind()) {
-    // FIXME: Support more than LMUL 1.
 #define RVV_VECTOR_TYPE(Name, Id, SingletonId, NumEls, ElBits, NF, IsSigned, IsFP) \
     case BuiltinType::Id: \
-      return NF == 1 && (NumEls * ElBits) == llvm::RISCV::RVVBitsPerBlock;
+      return NF == 1;
 #include "clang/Basic/RISCVVTypes.def"
     default:
       return false;
@@ -2462,7 +2468,7 @@ bool Type::isRVVVLSBuiltinType() const {
 QualType Type::getRVVEltType(const ASTContext &Ctx) const {
   assert(isRVVVLSBuiltinType() && "unsupported type!");
 
-  const BuiltinType *BTy = getAs<BuiltinType>();
+  const BuiltinType *BTy = castAs<BuiltinType>();
   return Ctx.getBuiltinVectorTypeInfo(BTy).ElementType;
 }
 
@@ -2640,18 +2646,28 @@ HasNonDeletedDefaultedEqualityComparison(const CXXRecordDecl *Decl) {
   if (Decl->isUnion())
     return false;
 
-  if (llvm::none_of(Decl->methods(), [](const CXXMethodDecl *MemberFunction) {
-        return MemberFunction->isOverloadedOperator() &&
-               MemberFunction->getOverloadedOperator() ==
-                   OverloadedOperatorKind::OO_EqualEqual &&
-               MemberFunction->isDefaulted();
+  auto IsDefaultedOperatorEqualEqual = [&](const FunctionDecl *Function) {
+    return Function->getOverloadedOperator() ==
+               OverloadedOperatorKind::OO_EqualEqual &&
+           Function->isDefaulted() && Function->getNumParams() > 0 &&
+           (Function->getParamDecl(0)->getType()->isReferenceType() ||
+            Decl->isTriviallyCopyable());
+  };
+
+  if (llvm::none_of(Decl->methods(), IsDefaultedOperatorEqualEqual) &&
+      llvm::none_of(Decl->friends(), [&](const FriendDecl *Friend) {
+        if (NamedDecl *ND = Friend->getFriendDecl()) {
+          return ND->isFunctionOrFunctionTemplate() &&
+                 IsDefaultedOperatorEqualEqual(ND->getAsFunction());
+        }
+        return false;
       }))
     return false;
 
   return llvm::all_of(Decl->bases(),
                       [](const CXXBaseSpecifier &BS) {
                         if (const auto *RD = BS.getType()->getAsCXXRecordDecl())
-                          HasNonDeletedDefaultedEqualityComparison(RD);
+                          return HasNonDeletedDefaultedEqualityComparison(RD);
                         return true;
                       }) &&
          llvm::all_of(Decl->fields(), [](const FieldDecl *FD) {
@@ -2668,7 +2684,7 @@ bool QualType::isTriviallyEqualityComparableType(
     const ASTContext &Context) const {
   QualType CanonicalType = getCanonicalType();
   if (CanonicalType->isIncompleteType() || CanonicalType->isDependentType() ||
-      CanonicalType->isEnumeralType())
+      CanonicalType->isEnumeralType() || CanonicalType->isArrayType())
     return false;
 
   if (const auto *RD = CanonicalType->getAsCXXRecordDecl()) {
@@ -2696,6 +2712,19 @@ bool QualType::hasNonTrivialToPrimitiveDestructCUnion(const RecordDecl *RD) {
 
 bool QualType::hasNonTrivialToPrimitiveCopyCUnion(const RecordDecl *RD) {
   return RD->hasNonTrivialToPrimitiveCopyCUnion();
+}
+
+bool QualType::isWebAssemblyReferenceType() const {
+  return isWebAssemblyExternrefType() || isWebAssemblyFuncrefType();
+}
+
+bool QualType::isWebAssemblyExternrefType() const {
+  return getTypePtr()->isWebAssemblyExternrefType();
+}
+
+bool QualType::isWebAssemblyFuncrefType() const {
+  return getTypePtr()->isFunctionPointerType() &&
+         getAddressSpace() == LangAS::wasm_funcref;
 }
 
 QualType::PrimitiveDefaultInitializeKind
@@ -3360,7 +3389,10 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
   // Fill in the exception type array if present.
   if (getExceptionSpecType() == EST_Dynamic) {
     auto &ExtraBits = *getTrailingObjects<FunctionTypeExtraBitfields>();
-    ExtraBits.NumExceptionType = epi.ExceptionSpec.Exceptions.size();
+    size_t NumExceptions = epi.ExceptionSpec.Exceptions.size();
+    assert(NumExceptions <= UINT16_MAX &&
+           "Not enough bits to encode exceptions");
+    ExtraBits.NumExceptionType = NumExceptions;
 
     assert(hasExtraBitfields() && "missing trailing extra bitfields!");
     auto *exnSlot =

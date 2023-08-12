@@ -142,7 +142,7 @@ ParseLLVMLineTable(lldb_private::DWARFContext &context,
                    dw_offset_t unit_offset) {
   Log *log = GetLog(DWARFLog::DebugInfo);
 
-  llvm::DWARFDataExtractor data = context.getOrLoadLineData().GetAsLLVM();
+  llvm::DWARFDataExtractor data = context.getOrLoadLineData().GetAsLLVMDWARF();
   llvm::DWARFContext &ctx = context.GetAsLLVM();
   llvm::Expected<const llvm::DWARFDebugLine::LineTable *> line_table =
       line.getOrParseLineTable(
@@ -166,7 +166,7 @@ static bool ParseLLVMLineTablePrologue(lldb_private::DWARFContext &context,
                                        dw_offset_t unit_offset) {
   Log *log = GetLog(DWARFLog::DebugInfo);
   bool success = true;
-  llvm::DWARFDataExtractor data = context.getOrLoadLineData().GetAsLLVM();
+  llvm::DWARFDataExtractor data = context.getOrLoadLineData().GetAsLLVMDWARF();
   llvm::DWARFContext &ctx = context.GetAsLLVM();
   uint64_t offset = line_offset;
   llvm::Error error = prologue.parse(
@@ -830,7 +830,7 @@ Function *SymbolFileDWARF::ParseFunction(CompileUnit &comp_unit,
   auto type_system_or_err = GetTypeSystemForLanguage(GetLanguage(*die.GetCU()));
   if (auto err = type_system_or_err.takeError()) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Unable to parse function");
+                   "Unable to parse function: {0}");
     return nullptr;
   }
   auto ts = *type_system_or_err;
@@ -878,7 +878,7 @@ SymbolFileDWARF::ConstructFunctionDemangledName(const DWARFDIE &die) {
   auto type_system_or_err = GetTypeSystemForLanguage(GetLanguage(*die.GetCU()));
   if (auto err = type_system_or_err.takeError()) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Unable to construct demangled name for function");
+                   "Unable to construct demangled name for function: {0}");
     return ConstString();
   }
 
@@ -1058,14 +1058,15 @@ SymbolFileDWARF::GetTypeUnitSupportFiles(DWARFTypeUnit &tu) {
   FileSpecList &list = iter_bool.first->second;
   if (iter_bool.second) {
     uint64_t line_table_offset = offset;
-    llvm::DWARFDataExtractor data = m_context.getOrLoadLineData().GetAsLLVM();
+    llvm::DWARFDataExtractor data =
+        m_context.getOrLoadLineData().GetAsLLVMDWARF();
     llvm::DWARFContext &ctx = m_context.GetAsLLVM();
     llvm::DWARFDebugLine::Prologue prologue;
     auto report = [](llvm::Error error) {
       Log *log = GetLog(DWARFLog::DebugInfo);
       LLDB_LOG_ERROR(log, std::move(error),
                      "SymbolFileDWARF::GetTypeUnitSupportFiles failed to parse "
-                     "the line table prologue");
+                     "the line table prologue: {0}");
     };
     ElapsedTime elapsed(m_parse_time);
     llvm::Error error = prologue.parse(data, &line_table_offset, report, ctx);
@@ -2130,7 +2131,7 @@ bool SymbolFileDWARF::DeclContextMatchesThisSymbolFile(
       decl_ctx_type_system->GetMinimumLanguage(nullptr));
   if (auto err = type_system_or_err.takeError()) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Unable to match namespace decl using TypeSystem");
+                   "Unable to match namespace decl using TypeSystem: {0}");
     return false;
   }
 
@@ -2976,7 +2977,7 @@ SymbolFileDWARF::FindDefinitionTypeForDWARFDeclContext(const DWARFDIE &die) {
       auto type_system_or_err = GetTypeSystemForLanguage(language);
       if (auto err = type_system_or_err.takeError()) {
         LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                       "Cannot get TypeSystem for language {}",
+                       "Cannot get TypeSystem for language {1}: {0}",
                        Language::GetNameForLanguageType(language));
       } else {
         type_system = *type_system_or_err;
@@ -3099,7 +3100,7 @@ TypeSP SymbolFileDWARF::ParseType(const SymbolContext &sc, const DWARFDIE &die,
   auto type_system_or_err = GetTypeSystemForLanguage(GetLanguage(*die.GetCU()));
   if (auto err = type_system_or_err.takeError()) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Unable to parse type");
+                   "Unable to parse type: {0}");
     return {};
   }
   auto ts = *type_system_or_err;
@@ -3456,8 +3457,8 @@ VariableSP SymbolFileDWARF::ParseVariableDIE(const SymbolContext &sc,
       bool op_error = false;
       const DWARFExpression* location = location_list.GetAlwaysValidExpr();
       if (location)
-        location_DW_OP_addr = location->GetLocation_DW_OP_addr(
-            location_form.GetUnit(), 0, op_error);
+        location_DW_OP_addr =
+            location->GetLocation_DW_OP_addr(location_form.GetUnit(), op_error);
       if (op_error) {
         StreamString strm;
         location->DumpLocation(&strm, eDescriptionLevelFull, nullptr);
@@ -4161,7 +4162,7 @@ DWARFASTParser *SymbolFileDWARF::GetDWARFParser(DWARFUnit &unit) {
   auto type_system_or_err = GetTypeSystem(unit);
   if (auto err = type_system_or_err.takeError()) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Symbols), std::move(err),
-                   "Unable to get DWARFASTParser");
+                   "Unable to get DWARFASTParser: {0}");
     return nullptr;
   }
   if (auto ts = *type_system_or_err)

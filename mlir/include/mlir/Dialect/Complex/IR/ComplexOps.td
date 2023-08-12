@@ -290,6 +290,7 @@ def ImOp : ComplexUnaryOp<"im",
 
   let results = (outs AnyFloat:$imaginary);
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -350,6 +351,8 @@ def MulOp : ComplexArithmeticOp<"mul"> {
     %a = complex.mul %b, %c : complex<f32>
     ```
   }];
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -436,6 +439,7 @@ def ReOp : ComplexUnaryOp<"re",
 
   let results = (outs AnyFloat:$real);
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//

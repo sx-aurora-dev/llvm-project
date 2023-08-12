@@ -272,3 +272,42 @@ func.func @batch_reduce_gemm(%lhs: memref<7x8x9xf32>, %rhs: memref<7x9x8xf32>, %
 // CHECK:         %[[MUL:.+]] = arith.mulf %[[BBARG0]], %[[BBARG1]] : f32
 // CHECK:         %[[ADD:.+]] = arith.addf %[[BBARG2]], %[[MUL]] : f32
 // CHECK:         linalg.yield %[[ADD]] : f32
+
+// -----
+
+// CHECK-LABEL: generalize_linalg_map
+func.func @generalize_linalg_map(%arg0: memref<1x8x8x8xf32>) {
+  %cst = arith.constant 0.000000e+00 : f32
+  // CHECK: linalg.map
+  // CHECK-NOT: linalg.generic
+  linalg.map outs(%arg0 : memref<1x8x8x8xf32>)
+    () {
+      linalg.yield %cst : f32
+    }
+  return
+}
+
+// -----
+
+func.func @generalize_add(%lhs: memref<7x14x21xf32>, %rhs: memref<7x14x21xf32>,
+                          %out: memref<7x14x21xf32>) {
+  linalg.add ins(%lhs, %rhs : memref<7x14x21xf32>, memref<7x14x21xf32>)
+             outs(%out : memref<7x14x21xf32>)
+  return
+}
+
+// CHECK-DAG: #[[MAP:.+]] = affine_map<(d0, d1, d2) -> (d0, d1, d2)>
+
+// CHECK: func @generalize_add
+// CHECK-SAME: (%[[LHS:.+]]: memref<7x14x21xf32>, %[[RHS:.+]]: memref<7x14x21xf32>,
+// CHECK-SAME:  %[[OUT:.+]]: memref<7x14x21xf32>)
+
+// CHECK: linalg.generic
+// CHECK-SAME: indexing_maps = [#[[MAP]], #[[MAP]], #[[MAP]]]
+// CHECK-SAME: iterator_types = ["parallel", "parallel", "parallel"]}
+// CHECK-SAME:  ins(%[[LHS]], %[[RHS]] : memref<7x14x21xf32>, memref<7x14x21xf32>)
+// CHECK-SAME: outs(%[[OUT]] : memref<7x14x21xf32>)
+
+// CHECK:         ^{{.+}}(%[[BBARG0:.+]]: f32, %[[BBARG1:.+]]: f32, %[[BBARG2:.+]]: f32)
+// CHECK-NEXT:      %[[SUM:.+]] = arith.addf %[[BBARG0]], %[[BBARG1]] : f32
+// CHECK-NEXT:      linalg.yield %[[SUM]] : f32

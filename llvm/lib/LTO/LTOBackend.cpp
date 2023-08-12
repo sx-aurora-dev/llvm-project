@@ -25,7 +25,6 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/LTO/LTO.h"
-#include "llvm/MC/SubtargetFeature.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/ModuleSymbolTable.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -41,6 +40,7 @@
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/TargetParser/SubtargetFeature.h"
 #include "llvm/Transforms/IPO/WholeProgramDevirt.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils/FunctionImportUtils.h"
@@ -259,7 +259,8 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   ModuleAnalysisManager MAM;
 
   PassInstrumentationCallbacks PIC;
-  StandardInstrumentations SI(Mod.getContext(), Conf.DebugPassManager);
+  StandardInstrumentations SI(Mod.getContext(), Conf.DebugPassManager,
+                              Conf.VerifyEach);
   SI.registerCallbacks(PIC, &MAM);
   PassBuilder PB(TM, Conf.PTO, PGOOpt, &PIC);
 
@@ -503,6 +504,7 @@ Error lto::backend(const Config &C, AddStreamFn AddStream,
 
   std::unique_ptr<TargetMachine> TM = createTargetMachine(C, *TOrErr, Mod);
 
+  LLVM_DEBUG(dbgs() << "Running regular LTO\n");
   if (!C.CodeGenOnly) {
     if (!opt(C, TM.get(), 0, Mod, /*IsThinLTO=*/false,
              /*ExportSummary=*/&CombinedIndex, /*ImportSummary=*/nullptr,
@@ -565,6 +567,7 @@ Error lto::thinBackend(const Config &Conf, unsigned Task, AddStreamFn AddStream,
   // the module, if applicable.
   Mod.setPartialSampleProfileRatio(CombinedIndex);
 
+  LLVM_DEBUG(dbgs() << "Running ThinLTO\n");
   if (Conf.CodeGenOnly) {
     codegen(Conf, TM.get(), AddStream, Task, Mod, CombinedIndex);
     return finalizeOptimizationRemarks(std::move(DiagnosticOutputFile));
