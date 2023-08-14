@@ -2258,13 +2258,11 @@ SDValue VETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "::LowerOperation "; Op.dump(&DAG));
-  unsigned Opcode = Op.getOpcode();
-  switch (Opcode) {
+  switch (Op.getOpcode()) {
   default:
-    if (Subtarget->enableVPU())
-      return LowerOperation_VVP(Op, DAG);
-    llvm_unreachable("Unexpected Opcode in LowerOperation");
+    llvm_unreachable("Should not custom lower this!");
 
+  // Scalar isel.
   case ISD::ATOMIC_FENCE:
     return lowerATOMIC_FENCE(Op, DAG);
   case ISD::ATOMIC_SWAP:
@@ -2305,6 +2303,110 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return lowerVASTART(Op, DAG);
   case ISD::VAARG:
     return lowerVAARG(Op, DAG);
+
+  // Element transfer.
+  case ISD::INSERT_VECTOR_ELT:
+    if (Subtarget->enableVPU())
+      return lowerVVP_INSERT_VECTOR_ELT(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+  case ISD::EXTRACT_VECTOR_ELT:
+    if (Subtarget->enableVPU())
+      return lowerVVP_EXTRACT_VECTOR_ELT(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  // Bitcast for both scalar and vector.
+  case ISD::BITCAST:
+    if (Subtarget->enableVPU())
+      return lowerVVP_Bitcast(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  // Vector composition.
+  case ISD::BUILD_VECTOR:
+  case ISD::VECTOR_SHUFFLE:
+    if (Subtarget->enableVPU())
+      return lowerVectorShuffleOp(Op, DAG, VVPExpansionMode::ToNativeWidth);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+  case ISD::EXTRACT_SUBVECTOR:
+    if (Subtarget->enableVPU())
+      return lowerVVP_EXTRACT_SUBVECTOR(Op, DAG,
+                                        VVPExpansionMode::ToNativeWidth);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+  case ISD::SCALAR_TO_VECTOR:
+    if (Subtarget->enableVPU())
+      return lowerVVP_SCALAR_TO_VECTOR(Op, DAG,
+                                       VVPExpansionMode::ToNativeWidth);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+#if 0
+  case ISD::CONCAT_VECTORS:
+    if (Subtarget->enableVPU())
+      return lowerVVP_CONCAT_VECTOR(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+#endif
+
+  ///// LLVM-VP --> vvp_* /////
+#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, ...) case ISD::VP_NAME:
+#include "llvm/IR/VPIntrinsics.def"
+    if (Subtarget->enableVPU())
+      return lowerVPToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  // Helper macros to disable case statements for particular opcodes.  For
+  // example, DELETED_NODE is used repeatedly in VVPNodes.def as a marker for
+  // VVP ops without matching SDNode.  So, we don't want to generate case
+  // statements for DELETED_NODE here.
+#define PRIMITIVE_CAT(a, ...) a##__VA_ARGS__
+#define MIF(c) PRIMITIVE_CAT(MIF_, c)
+#define MIF_0(t, ...) __VA_ARGS__
+#define MIF_1(t, ...) t
+#define IS_DISABLED(NAME) CHECK_DISABLED(CHECK_DISABLED_NAME(NAME), 0, 0)
+#define CHECK_DISABLED(...) CHECK_DISABLED_PROXY(__VA_ARGS__)
+#define CHECK_DISABLED_PROXY(a, b, ...) b
+#define CHECK_DISABLED_NAME(NAME)                                              \
+  CHECK_DISABLED_NAME_PROXY(PRIMITIVE_CAT(DISABLE_, NAME))
+#define CHECK_DISABLED_NAME_PROXY(NAME)                                        \
+  PRIMITIVE_CAT(CHECK_DISABLED_NAME_, NAME)()
+#define CHECK_DISABLED_NAME_(...) x, 1
+
+  ///// non-VP --> vvp_* with native type /////
+  // Convert this standard vector op to VVP
+  case ISD::MLOAD:
+  case ISD::MSTORE:
+  case ISD::SELECT:
+  // Deinitions of opcodes to prohibit generation of case statements.
+#define DISABLE_DELETED_NODE
+#define DISABLE_LOAD
+#define DISABLE_STORE
+  // Create opcode entries for non-VP opcodes
+#define ADD_VVP_OP(VVP_NAME, ISD_NAME)                                         \
+  MIF(IS_DISABLED(ISD_NAME))(/* nothing */, case ISD::ISD_NAME:)
+#include "VVPNodes.def"
+    if (Subtarget->enableVPU())
+      return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  ///// Lower this VVP operation ////
+  // 1. Legalize AVL and Mask if this is a proper packed operation.
+  // 2. Split the operation if it does not support packed mode
+#define ADD_VVP_OP(VVP_NAME, ...) case VEISD::VVP_NAME:
+#include "VVPNodes.def"
+  case VEISD::VM_POPCOUNT:
+  case VEISD::VEC_TOMASK:
+  case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_VMV:
+  case VEISD::VEC_SEQ:
+    if (Subtarget->enableVPU()) {
+      // AVL already legalized.
+      if (getAnnotatedNodeAVL(Op).second)
+        return Op;
+      return legalizeInternalVectorOp(Op, DAG);
+    }
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  // "forget" about the narrowing
+  case VEISD::VEC_NARROW:
+    if (Subtarget->enableVPU())
+      return Op->getOperand(0);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
   }
 }
 
