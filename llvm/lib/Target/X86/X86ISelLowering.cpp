@@ -20090,17 +20090,14 @@ static SDValue truncateVectorWithPACK(unsigned Opcode, EVT DstVT, SDValue In,
   return truncateVectorWithPACK(Opcode, DstVT, Res, DL, DAG, Subtarget);
 }
 
-/// Truncate using ISD::AND mask and X86ISD::PACKUS.
+/// Truncate using inreg zero extension (AND mask) and X86ISD::PACKUS.
 /// e.g. trunc <8 x i32> X to <8 x i16> -->
 /// MaskX = X & 0xffff (clear high bits to prevent saturation)
 /// packus (extract_subv MaskX, 0), (extract_subv MaskX, 1)
 static SDValue truncateVectorWithPACKUS(EVT DstVT, SDValue In, const SDLoc &DL,
                                         const X86Subtarget &Subtarget,
                                         SelectionDAG &DAG) {
-  EVT SrcVT = In.getValueType();
-  APInt Mask = APInt::getLowBitsSet(SrcVT.getScalarSizeInBits(),
-                                    DstVT.getScalarSizeInBits());
-  In = DAG.getNode(ISD::AND, DL, SrcVT, In, DAG.getConstant(Mask, DL, SrcVT));
+  In = DAG.getZeroExtendInReg(In, DL, DstVT);
   return truncateVectorWithPACK(X86ISD::PACKUS, DstVT, In, DL, DAG, Subtarget);
 }
 
@@ -22424,6 +22421,11 @@ static SDValue EmitCmp(SDValue Op0, SDValue Op1, unsigned X86CC,
   SDVTList VTs = DAG.getVTList(CmpVT, MVT::i32);
   SDValue Sub = DAG.getNode(X86ISD::SUB, dl, VTs, Op0, Op1);
   return Sub.getValue(1);
+}
+
+bool X86TargetLowering::isXAndYEqZeroPreferableToXAndYEqY(ISD::CondCode Cond,
+                                                          EVT VT) const {
+  return !VT.isVector() || Cond != ISD::CondCode::SETEQ;
 }
 
 /// Check if replacement of SQRT with RSQRT should be disabled.
@@ -25698,7 +25700,7 @@ SDValue X86TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
       return DAG.getNode(IntrData->Opc0, dl, Op.getValueType(),
                          Op.getOperand(1), Control);
     }
-    // ADC/ADCX/SBB
+    // ADC/SBB
     case ADX: {
       SDVTList CFVTs = DAG.getVTList(Op->getValueType(0), MVT::i32);
       SDVTList VTs = DAG.getVTList(Op.getOperand(2).getValueType(), MVT::i32);
@@ -44137,7 +44139,7 @@ static SDValue combineToExtendBoolVectorInReg(
   Vec = DAG.getNode(ISD::AND, DL, VT, Vec, BitMask);
 
   // Compare against the bitmask and extend the result.
-  EVT CCVT = VT.changeVectorElementType(MVT::i1);
+  EVT CCVT = EVT::getVectorVT(*DAG.getContext(), MVT::i1, NumElts);
   Vec = DAG.getSetCC(DL, CCVT, Vec, BitMask, ISD::SETEQ);
   Vec = DAG.getSExtOrTrunc(Vec, DL, VT);
 
@@ -55983,6 +55985,12 @@ SDValue X86TargetLowering::PerformDAGCombine(SDNode *N,
 
 bool X86TargetLowering::preferABDSToABSWithNSW(EVT VT) const {
   return false;
+}
+
+// Prefer (non-AVX512) vector TRUNCATE(SIGN_EXTEND_INREG(X)) to use of PACKSS.
+bool X86TargetLowering::preferSextInRegOfTruncate(EVT TruncVT, EVT VT,
+                                                  EVT ExtVT) const {
+  return Subtarget.hasAVX512() || !VT.isVector();
 }
 
 bool X86TargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {

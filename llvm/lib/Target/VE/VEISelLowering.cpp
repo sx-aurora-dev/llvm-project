@@ -1867,10 +1867,10 @@ static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
 
 SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
-
-  // always expand non-mask vector loads to VVP
   EVT MemVT = LdNode->getMemoryVT();
-  if (MemVT.isVector() && !isMaskType(MemVT))
+
+  // If VPU is enabled, always expand non-mask vector loads to VVP
+  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT))
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   SDValue BasePtr = LdNode->getBasePtr();
@@ -1980,10 +1980,10 @@ static SDValue lowerStoreI1(SDValue Op, SelectionDAG &DAG) {
 SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   StoreSDNode *StNode = cast<StoreSDNode>(Op.getNode());
   assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
-
-  // always expand non-mask vector loads to VVP
   EVT MemVT = StNode->getMemoryVT();
-  if (MemVT.isVector() && !isMaskType(MemVT))
+
+  // If VPU is enabled, always expand non-mask vector stores to VVP
+  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT))
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   SDValue BasePtr = StNode->getBasePtr();
@@ -2257,7 +2257,7 @@ SDValue VETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
 }
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "::LowerOperation"; Op->print(dbgs()););
+  LLVM_DEBUG(dbgs() << "::LowerOperation "; Op.dump(&DAG));
   unsigned Opcode = Op.getOpcode();
   switch (Opcode) {
   default:

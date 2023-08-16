@@ -24,7 +24,7 @@
 // REDEFINE: %{sparse_compiler_opts} = enable-runtime-library=false vl=4
 // RUN: %if mlir_arm_sve_tests %{ %{compile_sve} | %{run_sve} | FileCheck %s %}
 
-// TODO: Pack only support CodeGen Path
+// TODO: support sparse_tensor.unpack on libgen path.
 
 #SortedCOO = #sparse_tensor.encoding<{
   lvlTypes = [ "compressed-nu", "singleton" ]
