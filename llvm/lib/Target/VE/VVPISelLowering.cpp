@@ -468,7 +468,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 VETargetLowering::LegalizeTypeAction
 VETargetLowering::getPreferredVectorAction(MVT VT) const {
   if (!Subtarget->enableVPU())
-    return TypeScalarizeVector;
+    return TypePromoteInteger;
 
   // The default action for one element vectors is to scalarize
   if (VT.getVectorMinNumElements() == 1)

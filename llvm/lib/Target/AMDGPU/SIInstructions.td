@@ -270,7 +270,7 @@ let usesCustomInserter = 1, hasSideEffects = 0, mayLoad = 0, mayStore = 0, Uses 
   }
 }
 
-let usesCustomInserter = 1, Defs = [VCC, EXEC] in {
+let usesCustomInserter = 1, Defs = [VCC] in {
 def V_ADD_U64_PSEUDO : VPseudoInstSI <
   (outs VReg_64:$vdst), (ins VSrc_b64:$src0, VSrc_b64:$src1),
   [(set VReg_64:$vdst, (DivergentBinFrag<add> i64:$src0, i64:$src1))]
@@ -280,7 +280,7 @@ def V_SUB_U64_PSEUDO : VPseudoInstSI <
   (outs VReg_64:$vdst), (ins VSrc_b64:$src0, VSrc_b64:$src1),
   [(set VReg_64:$vdst, (DivergentBinFrag<sub> i64:$src0, i64:$src1))]
 >;
-} // End usesCustomInserter = 1, Defs = [VCC, EXEC]
+} // End usesCustomInserter = 1, Defs = [VCC]
 
 let usesCustomInserter = 1, Defs = [SCC] in {
 def S_ADD_U64_PSEUDO : SPseudoInstSI <
@@ -2313,8 +2313,16 @@ class FPToI1Pat<Instruction Inst, int KOne, ValueType kone_type, ValueType vt, S
   (i1 (Inst 0, (kone_type KOne), $src0_modifiers, $src0, DSTCLAMP.NONE))
 >;
 
-def : FPToI1Pat<V_CMP_EQ_F16_e64, CONST.FP16_ONE, i16, f16, fp_to_uint>;
-def : FPToI1Pat<V_CMP_EQ_F16_e64, CONST.FP16_NEG_ONE, i16, f16, fp_to_sint>;
+let OtherPredicates = [NotHasTrue16BitInsts] in {
+  def : FPToI1Pat<V_CMP_EQ_F16_e64, CONST.FP16_ONE, i16, f16, fp_to_uint>;
+  def : FPToI1Pat<V_CMP_EQ_F16_e64, CONST.FP16_NEG_ONE, i16, f16, fp_to_sint>;
+} // end OtherPredicates = [NotHasTrue16BitInsts]
+
+let OtherPredicates = [HasTrue16BitInsts] in {
+  def : FPToI1Pat<V_CMP_EQ_F16_t16_e64, CONST.FP16_ONE, i16, f16, fp_to_uint>;
+  def : FPToI1Pat<V_CMP_EQ_F16_t16_e64, CONST.FP16_NEG_ONE, i16, f16, fp_to_sint>;
+} // end OtherPredicates = [HasTrue16BitInsts]
+
 def : FPToI1Pat<V_CMP_EQ_F32_e64, CONST.FP32_ONE, i32, f32, fp_to_uint>;
 def : FPToI1Pat<V_CMP_EQ_F32_e64, CONST.FP32_NEG_ONE, i32, f32, fp_to_sint>;
 def : FPToI1Pat<V_CMP_EQ_F64_e64, CONST.FP64_ONE, i64, f64, fp_to_uint>;

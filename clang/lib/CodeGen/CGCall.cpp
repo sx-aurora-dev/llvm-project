@@ -13,6 +13,7 @@
 
 #include "CGCall.h"
 #include "ABIInfo.h"
+#include "ABIInfoImpl.h"
 #include "CGBlocks.h"
 #include "CGCXXABI.h"
 #include "CGCleanup.h"
@@ -2156,7 +2157,8 @@ static bool DetermineNoUndef(QualType QTy, CodeGenTypes &Types,
                              const llvm::DataLayout &DL, const ABIArgInfo &AI,
                              bool CheckCoerce = true) {
   llvm::Type *Ty = Types.ConvertTypeForMem(QTy);
-  if (AI.getKind() == ABIArgInfo::Indirect)
+  if (AI.getKind() == ABIArgInfo::Indirect ||
+      AI.getKind() == ABIArgInfo::IndirectAliased)
     return true;
   if (AI.getKind() == ABIArgInfo::Extend)
     return true;
@@ -5126,12 +5128,15 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
           auto LV = I->getKnownLValue();
           auto AS = LV.getAddressSpace();
 
-          if (!ArgInfo.getIndirectByVal() ||
+          bool isByValOrRef =
+              ArgInfo.isIndirectAliased() || ArgInfo.getIndirectByVal();
+
+          if (!isByValOrRef ||
               (LV.getAlignment() < getContext().getTypeAlignInChars(I->Ty))) {
             NeedCopy = true;
           }
           if (!getLangOpts().OpenCL) {
-            if ((ArgInfo.getIndirectByVal() &&
+            if ((isByValOrRef &&
                 (AS != LangAS::Default &&
                  AS != CGM.getASTAllocaAddressSpace()))) {
               NeedCopy = true;
@@ -5139,7 +5144,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
           }
           // For OpenCL even if RV is located in default or alloca address space
           // we don't want to perform address space cast for it.
-          else if ((ArgInfo.getIndirectByVal() &&
+          else if ((isByValOrRef &&
                     Addr.getType()->getAddressSpace() != IRFuncTy->
                       getParamType(FirstIRArg)->getPointerAddressSpace())) {
             NeedCopy = true;
@@ -5777,9 +5782,14 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         DestIsVolatile = false;
       }
 
-      // If the value is offset in memory, apply the offset now.
-      Address StorePtr = emitAddressAtOffset(*this, DestPtr, RetAI);
-      CreateCoercedStore(CI, StorePtr, DestIsVolatile, *this);
+      // An empty record can overlap other data (if declared with
+      // no_unique_address); omit the store for such types - as there is no
+      // actual data to store.
+      if (!isEmptyRecord(getContext(), RetTy, true)) {
+        // If the value is offset in memory, apply the offset now.
+        Address StorePtr = emitAddressAtOffset(*this, DestPtr, RetAI);
+        CreateCoercedStore(CI, StorePtr, DestIsVolatile, *this);
+      }
 
       return convertTempToRValue(DestPtr, RetTy, SourceLocation());
     }

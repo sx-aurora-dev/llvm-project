@@ -62,6 +62,7 @@ enum ID {
 #include "Opts.inc"
 #undef PREFIX
 
+using namespace llvm::opt;
 static constexpr opt::OptTable::Info InfoTable[] = {
 #define OPTION(...) LLVM_CONSTRUCT_OPT_INFO(__VA_ARGS__),
 #include "Opts.inc"
@@ -393,8 +394,6 @@ static void filterMarkup(const opt::InputArgList &Args, LLVMSymbolizer &Symboliz
   }
   Filter.finish();
 }
-
-ExitOnError ExitOnErr;
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);

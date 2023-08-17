@@ -39,6 +39,7 @@
 
 using namespace llvm;
 using namespace llvm::object;
+using namespace llvm::opt;
 using namespace llvm::sys;
 using namespace llvm::wasm;
 
@@ -111,9 +112,13 @@ bool link(ArrayRef<const char *> args, llvm::raw_ostream &stdoutOS,
 
 // Create table mapping all options defined in Options.td
 static constexpr opt::OptTable::Info optInfo[] = {
-#define OPTION(X1, X2, ID, KIND, GROUP, ALIAS, X7, X8, X9, X10, X11, X12)      \
-  {X1, X2, X10,         X11,         OPT_##ID, opt::Option::KIND##Class,       \
-   X9, X8, OPT_##GROUP, OPT_##ALIAS, X7,       X12},
+#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS,         \
+               VISIBILITY, PARAM, HELPTEXT, METAVAR, VALUES)                   \
+  {PREFIX,      NAME,        HELPTEXT,                                         \
+   METAVAR,     OPT_##ID,    opt::Option::KIND##Class,                         \
+   PARAM,       FLAGS,       VISIBILITY,                                       \
+   OPT_##GROUP, OPT_##ALIAS, ALIASARGS,                                        \
+   VALUES},
 #include "Options.inc"
 #undef OPTION
 };
@@ -453,6 +458,7 @@ static void readConfigs(opt::InputArgList &args) {
   }
 
   config->sharedMemory = args.hasArg(OPT_shared_memory);
+  config->soName = args.getLastArgValue(OPT_soname);
   config->importTable = args.hasArg(OPT_import_table);
   config->importUndefined = args.hasArg(OPT_import_undefined);
   config->ltoo = args::getInteger(args, OPT_lto_O, 2);
