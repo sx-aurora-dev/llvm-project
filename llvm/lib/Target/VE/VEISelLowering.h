@@ -317,8 +317,6 @@ public:
                        EVT LegalResVT, VECustomDAG &CDAG, SDValue AVL) const;
 
   /// Custom Lower for VVP {
-  SDValue LowerOperation_VVP(SDValue Op, SelectionDAG &DAG) const;
-
   SDValue lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue lowerVVP_TRUNCATE(SDValue Op, SelectionDAG &DAG) const;
