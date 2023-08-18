@@ -66,7 +66,6 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAArch64.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/OperandTraits.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
@@ -76,7 +75,6 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/InstructionCost.h"
@@ -16456,7 +16454,7 @@ static SDValue performMulCombine(SDNode *N, SelectionDAG &DAG,
     } else if (SCVPlus1.isPowerOf2()) {
       ShiftAmt = SCVPlus1.logBase2() + TrailingZeroes;
       return Sub(Shl(N0, ShiftAmt), Shl(N0, TrailingZeroes));
-    } else if (Subtarget->hasLSLFast() &&
+    } else if (Subtarget->hasALULSLFast() &&
                isPowPlusPlusConst(ConstValue, CVM, CVN)) {
       APInt CVMMinus1 = CVM - 1;
       APInt CVNMinus1 = CVN - 1;
