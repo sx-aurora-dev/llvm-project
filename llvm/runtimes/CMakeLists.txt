@@ -131,51 +131,6 @@ function(builtin_register_target compiler_rt_path name)
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 endfunction()
 
-function(builtin_crt_register_target compiler_rt_path target)
-  cmake_parse_arguments(ARG "" "" "DEPENDS" ${ARGN})
-
-  check_apple_target(${target} builtin)
-
-  set(${target}_extra_args ${ARG_CMAKE_ARGS})
-  get_cmake_property(variableNames VARIABLES)
-  foreach(variableName ${variableNames})
-    string(FIND "${variableName}" "BUILTINS_${target}" out)
-    if("${out}" EQUAL 0)
-      string(REPLACE "BUILTINS_${target}_" "" new_name ${variableName})
-      string(REPLACE ";" "|" new_value "${${variableName}}")
-      list(APPEND ${target}_extra_args "-D${new_name}=${new_value}")
-    endif()
-  endforeach()
-
-  llvm_ExternalProject_Add(builtins-crt-${target}
-                           ${compiler_rt_path}
-                           DEPENDS ${ARG_DEPENDS}
-                           CMAKE_ARGS -DLLVM_LIBRARY_OUTPUT_INTDIR=${LLVM_LIBRARY_DIR}
-                                      -DLLVM_RUNTIME_OUTPUT_INTDIR=${LLVM_TOOLS_BINARY_DIR}
-                                      -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
-                                      -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON
-                                      -DCMAKE_C_COMPILER_WORKS=ON
-                                      -DCMAKE_ASM_COMPILER_WORKS=ON
-                                      -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
-                                      -DCOMPILER_RT_BUILD_BUILTINS=OFF
-                                      -DCOMPILER_RT_BUILD_CRT=ON
-                                      -DCOMPILER_RT_BUILD_SANITIZERS=OFF
-                                      -DCOMPILER_RT_BUILD_XRAY=OFF
-                                      -DCOMPILER_RT_BUILD_LIBFUZZER=OFF
-                                      -DCOMPILER_RT_BUILD_PROFILE=OFF
-                                      -DCOMPILER_RT_BUILD_MEMPROF=OFF
-                                      -DCOMPILER_RT_BUILD_ORC=OFF
-                                      -DCOMPILER_RT_BUILD_GWP_ASAN=OFF
-                                      -DTEST_COMPILE_ONLY=ON
-                                      -DCMAKE_C_FLAGS=-nostdlib
-                                      -DCMAKE_CXX_FLAGS=-nostdlib
-                                      ${COMMON_CMAKE_ARGS}
-                                      ${${target}_extra_args}
-                           USE_TOOLCHAIN
-                           TARGET_TRIPLE ${target}
-                           ${EXTRA_ARGS})
-endfunction()
-
 # If compiler-rt is present we need to build the builtin libraries first. This
 # is required because the other runtimes need the builtin libraries present
 # before the just-built compiler can pass the configuration tests.
@@ -206,19 +161,6 @@ if(compiler_rt_path)
       add_dependencies(builtins builtins-${target})
       add_dependencies(install-builtins install-builtins-${target})
       add_dependencies(install-builtins-stripped install-builtins-${target}-stripped)
-      # If compiler-rt is present and compiling for VE, we need to build not
-      # only the builtin libraries but also crtbegin/end object files first.
-      # This is required because the other runtimes need the builtin libraries
-      # and crtbegin/end object files present before the just-built compiler
-      # can pass the configuration tests.  And those crtbegin/end object files
-      # for VE are a part of NEC SDK and not distributed freely.
-      if(${target} MATCHES "^ve-")
-        builtin_crt_register_target(${compiler_rt_path} ${target}
-          DEPENDS clang-resource-headers)
-        add_dependencies(builtins builtins-crt-${target})
-        add_dependencies(install-builtins install-builtins-crt-${target})
-        add_dependencies(install-builtins-stripped install-builtins-crt-${target}-stripped)
-      endif()
     endforeach()
   endif()
   set(builtins_dep builtins)
