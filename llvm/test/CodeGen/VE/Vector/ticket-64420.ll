@@ -10,11 +10,9 @@
 
 ; CHECK-LABEL: func:
 ; CHECK:       # %bb.1:
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0, 0
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrd %v0, 0
 ; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
 
