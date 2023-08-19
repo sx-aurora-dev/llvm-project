@@ -1,17 +1,12 @@
-//===-- C standard library header limits.h ---------------------------------===//
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_LIMITS_H
-#define LLVM_LIBC_LIMITS_H
+#include "src/__support/File/file.h"
+#include "test/UnitTest/Test.h"
 
-#include <__llvm-libc-common.h>
-#include <llvm-libc-macros/limits-macros.h>
-
-%%public_api()
-
-#endif // LLVM_LIBC_LIMITS_H
+TEST(LlvmLibcPlatformStreamTest, StdOutSmokeTest) {
+  EXPECT_FALSE(__llvm_libc::stdout == nullptr);
+}

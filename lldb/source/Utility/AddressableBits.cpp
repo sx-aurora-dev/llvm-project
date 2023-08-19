@@ -23,28 +23,29 @@ void AddressableBits::SetAddressableBits(uint32_t lowmem_addressing_bits,
   m_high_memory_addr_bits = highmem_addressing_bits;
 }
 
-void AddressableBits::Clear() {
-  m_low_memory_addr_bits = m_high_memory_addr_bits = 0;
+void AddressableBits::SetLowmemAddressableBits(
+    uint32_t lowmem_addressing_bits) {
+  m_low_memory_addr_bits = lowmem_addressing_bits;
+}
+
+void AddressableBits::SetHighmemAddressableBits(
+    uint32_t highmem_addressing_bits) {
+  m_high_memory_addr_bits = highmem_addressing_bits;
 }
 
 void AddressableBits::SetProcessMasks(Process &process) {
-  // In case either value is set to 0, indicating it was not set, use the
-  // other value.
-  if (m_low_memory_addr_bits == 0)
-    m_low_memory_addr_bits = m_high_memory_addr_bits;
-  if (m_high_memory_addr_bits == 0)
-    m_high_memory_addr_bits = m_low_memory_addr_bits;
-
-  if (m_low_memory_addr_bits == 0)
+  if (m_low_memory_addr_bits == 0 && m_high_memory_addr_bits == 0)
     return;
 
-  addr_t address_mask = ~((1ULL << m_low_memory_addr_bits) - 1);
-  process.SetCodeAddressMask(address_mask);
-  process.SetDataAddressMask(address_mask);
+  if (m_low_memory_addr_bits != 0) {
+    addr_t low_addr_mask = ~((1ULL << m_low_memory_addr_bits) - 1);
+    process.SetCodeAddressMask(low_addr_mask);
+    process.SetDataAddressMask(low_addr_mask);
+  }
 
-  if (m_low_memory_addr_bits != m_high_memory_addr_bits) {
-    lldb::addr_t hi_address_mask = ~((1ULL << m_high_memory_addr_bits) - 1);
-    process.SetHighmemCodeAddressMask(hi_address_mask);
-    process.SetHighmemDataAddressMask(hi_address_mask);
+  if (m_high_memory_addr_bits != 0) {
+    addr_t hi_addr_mask = ~((1ULL << m_high_memory_addr_bits) - 1);
+    process.SetHighmemCodeAddressMask(hi_addr_mask);
+    process.SetHighmemDataAddressMask(hi_addr_mask);
   }
 }
