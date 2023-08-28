@@ -92,13 +92,6 @@ public:
 
   const LowerToLLVMOptions &getOptions() const { return options; }
 
-  /// Set the lowering options to `newOptions`. Note: using this after some
-  /// some conversions have been performed can lead to inconsistencies in the
-  /// IR.
-  void dangerousSetOptions(LowerToLLVMOptions newOptions) {
-    options = std::move(newOptions);
-  }
-
   /// Promote the LLVM representation of all operands including promoting MemRef
   /// descriptors to stack and use pointers to struct to avoid the complexity
   /// of the platform-specific C/C++ ABI lowering related to struct argument
@@ -168,6 +161,12 @@ public:
 protected:
   /// Pointer to the LLVM dialect.
   LLVM::LLVMDialect *llvmDialect;
+
+  // Recursive structure detection.
+  // We store one entry per thread here, and rely on locking.
+  DenseMap<uint64_t, std::unique_ptr<SmallVector<Type>>> conversionCallStack;
+  llvm::sys::SmartRWMutex<true> callStackMutex;
+  SmallVector<Type> &getCurrentThreadRecursiveStack();
 
 private:
   /// Convert a function type.  The arguments and results are converted one by

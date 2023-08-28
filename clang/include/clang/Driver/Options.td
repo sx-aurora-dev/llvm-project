@@ -820,6 +820,7 @@ are searched. If the same directory is in the SYSTEM include search
 paths, for example if also specified with -isystem, the -I option
 will be ignored}]>;
 def L : JoinedOrSeparate<["-"], "L">, Flags<[RenderJoined]>, Group<Link_Group>,
+    Visibility<[ClangOption, FlangOption]>,
     MetaVarName<"<dir>">, HelpText<"Add directory to library search path">;
 def MD : Flag<["-"], "MD">, Group<M_Group>,
     HelpText<"Write a depfile containing user and system headers">;
@@ -914,7 +915,8 @@ def Wdeprecated : Flag<["-"], "Wdeprecated">, Group<W_Group>,
   HelpText<"Enable warnings for deprecated constructs and define __DEPRECATED">;
 def Wno_deprecated : Flag<["-"], "Wno-deprecated">, Group<W_Group>,
   Visibility<[ClangOption, CC1Option]>;
-def Wl_COMMA : CommaJoined<["-"], "Wl,">, Flags<[LinkerInput, RenderAsInput]>,
+def Wl_COMMA : CommaJoined<["-"], "Wl,">, Visibility<[ClangOption, FlangOption]>,
+  Flags<[LinkerInput, RenderAsInput]>,
   HelpText<"Pass the comma separated arguments in <arg> to the linker">,
   MetaVarName<"<arg>">, Group<Link_Group>;
 // FIXME: This is broken; these should not be Joined arguments.
@@ -1397,10 +1399,6 @@ def fmax_tokens_EQ : Joined<["-"], "fmax-tokens=">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Max total number of preprocessed tokens for -Wmax-tokens.">,
   MarshallingInfoInt<LangOpts<"MaxTokens">>;
-def fPIC : Flag<["-"], "fPIC">, Group<f_Group>;
-def fno_PIC : Flag<["-"], "fno-PIC">, Group<f_Group>;
-def fPIE : Flag<["-"], "fPIE">, Group<f_Group>;
-def fno_PIE : Flag<["-"], "fno-PIE">, Group<f_Group>;
 defm access_control : BoolFOption<"access-control",
   LangOpts<"AccessControl">, DefaultTrue,
   NegFlag<SetFalse, [], [ClangOption, CC1Option],
@@ -1876,9 +1874,11 @@ defm safe_buffer_usage_suggestions : BoolFOption<"safe-buffer-usage-suggestions"
   PosFlag<SetTrue, [], [ClangOption, CC1Option],
           "Display suggestions to update code associated with -Wunsafe-buffer-usage warnings">,
   NegFlag<SetFalse>>;
-def fdiscard_value_names : Flag<["-"], "fdiscard-value-names">, Group<f_clang_Group>,
+def fdiscard_value_names : Flag<["-"], "fdiscard-value-names">,
+  Group<f_clang_Group>, Visibility<[ClangOption, DXCOption]>,
   HelpText<"Discard value names in LLVM IR">, Flags<[NoXarchOption]>;
-def fno_discard_value_names : Flag<["-"], "fno-discard-value-names">, Group<f_clang_Group>,
+def fno_discard_value_names : Flag<["-"], "fno-discard-value-names">,
+  Group<f_clang_Group>, Visibility<[ClangOption, DXCOption]>,
   HelpText<"Do not discard value names in LLVM IR">, Flags<[NoXarchOption]>;
 defm dollars_in_identifiers : BoolFOption<"dollars-in-identifiers",
   LangOpts<"DollarIdents">, Default<!strconcat("!", asm_preprocessor.KeyPath)>,
@@ -3369,10 +3369,6 @@ def fpcc_struct_return : Flag<["-"], "fpcc-struct-return">, Group<f_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Override the default ABI to return all structs on the stack">;
 def fpch_preprocess : Flag<["-"], "fpch-preprocess">, Group<f_Group>;
-def fpic : Flag<["-"], "fpic">, Group<f_Group>;
-def fno_pic : Flag<["-"], "fno-pic">, Group<f_Group>;
-def fpie : Flag<["-"], "fpie">, Visibility<[ClangOption, FlangOption]>, Group<f_Group>;
-def fno_pie : Flag<["-"], "fno-pie">, Visibility<[ClangOption, FlangOption]>, Group<f_Group>;
 defm pic_data_is_text_relative : SimpleMFlag<"pic-data-is-text-relative",
      "Assume", "Don't assume", " data segments are relative to text segment">;
 def fdirect_access_external_data : Flag<["-"], "fdirect-access-external-data">, Group<f_Group>,
@@ -3388,12 +3384,12 @@ defm plt : BoolFOption<"plt",
   PosFlag<SetFalse>>;
 defm ropi : BoolFOption<"ropi",
   LangOpts<"ROPI">, DefaultFalse,
-  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+  PosFlag<SetTrue, [], [ClangOption, FlangOption, CC1Option],
           "Generate read-only position independent code (ARM only)">,
   NegFlag<SetFalse>>;
 defm rwpi : BoolFOption<"rwpi",
   LangOpts<"RWPI">, DefaultFalse,
-  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+  PosFlag<SetTrue, [], [ClangOption, FlangOption, CC1Option],
           "Generate read-write position independent code (ARM only)">,
   NegFlag<SetFalse>>;
 def fplugin_EQ : Joined<["-"], "fplugin=">, Group<f_Group>,
@@ -4142,7 +4138,7 @@ def imultilib : Separate<["-"], "imultilib">, Group<gfortran_Group>;
 def K : Flag<["-"], "K">, Flags<[LinkerInput]>;
 def keep__private__externs : Flag<["-"], "keep_private_externs">;
 def l : JoinedOrSeparate<["-"], "l">, Flags<[LinkerInput, RenderJoined]>,
-        Group<Link_Group>;
+        Visibility<[ClangOption, FlangOption]>, Group<Link_Group>;
 def lazy__framework : Separate<["-"], "lazy_framework">, Flags<[LinkerInput]>;
 def lazy__library : Separate<["-"], "lazy_library">, Flags<[LinkerInput]>;
 def mlittle_endian : Flag<["-"], "mlittle-endian">, Group<m_Group>,
@@ -4256,7 +4252,6 @@ def mguard_EQ : Joined<["-"], "mguard=">, Group<m_Group>,
   Values<"none,cf,cf-nochecks">;
 def mmcu_EQ : Joined<["-"], "mmcu=">, Group<m_Group>;
 def msim : Flag<["-"], "msim">, Group<m_Group>;
-def mdynamic_no_pic : Joined<["-"], "mdynamic-no-pic">, Group<m_Group>;
 def mfix_and_continue : Flag<["-"], "mfix-and-continue">, Group<clang_ignored_m_Group>;
 def mieee_fp : Flag<["-"], "mieee-fp">, Group<clang_ignored_m_Group>;
 def minline_all_stringops : Flag<["-"], "minline-all-stringops">, Group<clang_ignored_m_Group>;
@@ -4591,6 +4586,8 @@ def mreference_types : Flag<["-"], "mreference-types">, Group<m_wasm_Features_Gr
 def mno_reference_types : Flag<["-"], "mno-reference-types">, Group<m_wasm_Features_Group>;
 def mextended_const : Flag<["-"], "mextended-const">, Group<m_wasm_Features_Group>;
 def mno_extended_const : Flag<["-"], "mno-extended-const">, Group<m_wasm_Features_Group>;
+def mmultimemory : Flag<["-"], "mmultimemory">, Group<m_wasm_Features_Group>;
+def mno_multimemory : Flag<["-"], "mno-multimemory">, Group<m_wasm_Features_Group>;
 def mexec_model_EQ : Joined<["-"], "mexec-model=">, Group<m_wasm_Features_Driver_Group>,
                      Values<"command,reactor">,
                      HelpText<"Execution model (WebAssembly only)">,
@@ -5279,7 +5276,7 @@ def undef : Flag<["-"], "undef">, Group<u_Group>,
 def unexported__symbols__list : Separate<["-"], "unexported_symbols_list">;
 def u : JoinedOrSeparate<["-"], "u">, Group<u_Group>;
 def v : Flag<["-"], "v">,
-  Visibility<[ClangOption, CC1Option, CLOption, DXCOption]>,
+  Visibility<[ClangOption, CC1Option, CLOption, DXCOption, FlangOption]>,
   HelpText<"Show commands to run and use verbose output">,
   MarshallingInfoFlag<HeaderSearchOpts<"Verbose">>;
 def altivec_src_compat : Joined<["-"], "faltivec-src-compat=">,
@@ -5472,6 +5469,22 @@ def _sysroot_EQ : Joined<["--"], "sysroot=">, Visibility<[ClangOption, FlangOpti
 def _sysroot : Separate<["--"], "sysroot">, Alias<_sysroot_EQ>;
 
 //===----------------------------------------------------------------------===//
+// pie/pic options (clang + flang-new)
+//===----------------------------------------------------------------------===//
+let Visibility = [ClangOption, FlangOption] in {
+
+def fPIC : Flag<["-"], "fPIC">, Group<f_Group>;
+def fno_PIC : Flag<["-"], "fno-PIC">, Group<f_Group>;
+def fPIE : Flag<["-"], "fPIE">, Group<f_Group>;
+def fno_PIE : Flag<["-"], "fno-PIE">, Group<f_Group>;
+def fpic : Flag<["-"], "fpic">, Group<f_Group>;
+def fno_pic : Flag<["-"], "fno-pic">, Group<f_Group>;
+def fpie : Flag<["-"], "fpie">, Group<f_Group>;
+def fno_pie : Flag<["-"], "fno-pie">, Group<f_Group>;
+
+} // let Vis = [Default, FlangOption]
+
+//===----------------------------------------------------------------------===//
 // Target Options (clang + flang-new)
 //===----------------------------------------------------------------------===//
 let Flags = [TargetSpecific] in {
@@ -5479,6 +5492,7 @@ let Visibility = [ClangOption, FlangOption] in {
 
 def mcpu_EQ : Joined<["-"], "mcpu=">, Group<m_Group>,
   HelpText<"For a list of available CPUs for the target use '-mcpu=help'">;
+def mdynamic_no_pic : Joined<["-"], "mdynamic-no-pic">, Group<m_Group>;
 
 } // let Vis = [Default, FlangOption]
 } // let Flags = [TargetSpecific]
@@ -5886,7 +5900,7 @@ def fbinutils_version_EQ : Joined<["-"], "fbinutils-version=">,
   "generated assembly will consider GNU as support. 'none' means that all ELF "
   "features can be used, regardless of binutils support. Defaults to 2.26.">;
 def fuse_ld_EQ : Joined<["-"], "fuse-ld=">, Group<f_Group>,
-  Flags<[LinkOption]>, Visibility<[ClangOption, CLOption]>;
+  Flags<[LinkOption]>, Visibility<[ClangOption, FlangOption, CLOption]>;
 def ld_path_EQ : Joined<["--"], "ld-path=">, Group<Link_Group>;
 
 defm align_labels : BooleanFFlag<"align-labels">, Group<clang_ignored_gcc_optimization_f_Group>;

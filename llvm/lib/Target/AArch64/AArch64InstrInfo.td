@@ -2259,7 +2259,7 @@ def : Pat<(int_aarch64_irg_sp i64:$Rm), (IRGstack SP, i64:$Rm)>;
 
 // Large STG to be expanded into a loop. $sz is the size, $Rn is start address.
 // $Rn_wback is one past the end of the range. $Rm is the loop counter.
-let isCodeGenOnly=1, mayStore=1 in {
+let isCodeGenOnly=1, mayStore=1, Defs=[NZCV] in {
 def STGloop_wback
     : Pseudo<(outs GPR64common:$Rm, GPR64sp:$Rn_wback), (ins i64imm:$sz, GPR64sp:$Rn),
              [], "$Rn = $Rn_wback,@earlyclobber $Rn_wback,@earlyclobber $Rm" >,
@@ -7285,23 +7285,23 @@ def : Pat<(v2i64 (sext   (v2i32 V64:$Rn))), (SSHLLv2i32_shift V64:$Rn, (i32 0))>
 def : Pat<(v2i64 (zext   (v2i32 V64:$Rn))), (USHLLv2i32_shift V64:$Rn, (i32 0))>;
 def : Pat<(v2i64 (anyext (v2i32 V64:$Rn))), (USHLLv2i32_shift V64:$Rn, (i32 0))>;
 // Also match an extend from the upper half of a 128 bit source register.
-def : Pat<(v8i16 (anyext (v8i8 (extract_subvector V128:$Rn, (i64 8)) ))),
+def : Pat<(v8i16 (anyext (v8i8 (extract_high_v16i8 (v16i8 V128:$Rn)) ))),
           (USHLLv16i8_shift V128:$Rn, (i32 0))>;
-def : Pat<(v8i16 (zext   (v8i8 (extract_subvector V128:$Rn, (i64 8)) ))),
+def : Pat<(v8i16 (zext   (v8i8 (extract_high_v16i8 (v16i8 V128:$Rn)) ))),
           (USHLLv16i8_shift V128:$Rn, (i32 0))>;
-def : Pat<(v8i16 (sext   (v8i8 (extract_subvector V128:$Rn, (i64 8)) ))),
+def : Pat<(v8i16 (sext   (v8i8 (extract_high_v16i8 (v16i8 V128:$Rn)) ))),
           (SSHLLv16i8_shift V128:$Rn, (i32 0))>;
-def : Pat<(v4i32 (anyext (v4i16 (extract_subvector V128:$Rn, (i64 4)) ))),
+def : Pat<(v4i32 (anyext (v4i16 (extract_high_v8i16 (v8i16 V128:$Rn)) ))),
           (USHLLv8i16_shift V128:$Rn, (i32 0))>;
-def : Pat<(v4i32 (zext   (v4i16 (extract_subvector V128:$Rn, (i64 4)) ))),
+def : Pat<(v4i32 (zext   (v4i16 (extract_high_v8i16 (v8i16 V128:$Rn)) ))),
           (USHLLv8i16_shift V128:$Rn, (i32 0))>;
-def : Pat<(v4i32 (sext   (v4i16 (extract_subvector V128:$Rn, (i64 4)) ))),
+def : Pat<(v4i32 (sext   (v4i16 (extract_high_v8i16 (v8i16 V128:$Rn)) ))),
           (SSHLLv8i16_shift V128:$Rn, (i32 0))>;
-def : Pat<(v2i64 (anyext (v2i32 (extract_subvector V128:$Rn, (i64 2)) ))),
+def : Pat<(v2i64 (anyext (v2i32 (extract_high_v4i32 (v4i32 V128:$Rn)) ))),
           (USHLLv4i32_shift V128:$Rn, (i32 0))>;
-def : Pat<(v2i64 (zext   (v2i32 (extract_subvector V128:$Rn, (i64 2)) ))),
+def : Pat<(v2i64 (zext   (v2i32 (extract_high_v4i32 (v4i32 V128:$Rn)) ))),
           (USHLLv4i32_shift V128:$Rn, (i32 0))>;
-def : Pat<(v2i64 (sext   (v2i32 (extract_subvector V128:$Rn, (i64 2)) ))),
+def : Pat<(v2i64 (sext   (v2i32 (extract_high_v4i32 (v4i32 V128:$Rn)) ))),
           (SSHLLv4i32_shift V128:$Rn, (i32 0))>;
 
 // Vector shift sxtl aliases
