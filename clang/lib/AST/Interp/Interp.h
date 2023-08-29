@@ -201,13 +201,14 @@ bool Ret(InterpState &S, CodePtr &PC, APValue &Result) {
       return false;
   }
 
+  assert(S.Current);
   assert(S.Current->getFrameOffset() == S.Stk.size() && "Invalid frame");
   if (!S.checkingPotentialConstantExpression() || S.Current->Caller) {
     // Certain builtin functions are declared as func-name(...), so the
     // parameters are checked in Sema and only available through the CallExpr.
     // The interp::Function we create for them has 0 parameters, so we need to
     // remove them from the stack by checking the CallExpr.
-    if (S.Current && S.Current->getFunction()->needsRuntimeArgPop(S.getCtx()))
+    if (S.Current->getFunction()->needsRuntimeArgPop(S.getCtx()))
       popBuiltinArgs(S, PC);
     else
       S.Current->popArgs();
@@ -271,7 +272,8 @@ bool AddSubMulHelper(InterpState &S, CodePtr OpPC, unsigned Bits, const T &LHS,
     SmallString<32> Trunc;
     Value.trunc(Result.bitWidth()).toString(Trunc, 10);
     auto Loc = E->getExprLoc();
-    S.report(Loc, diag::warn_integer_constant_overflow) << Trunc << Type;
+    S.report(Loc, diag::warn_integer_constant_overflow)
+        << Trunc << Type << E->getSourceRange();
     return true;
   } else {
     S.CCEDiag(E, diag::note_constexpr_overflow) << Value << Type;
@@ -478,7 +480,8 @@ bool Neg(InterpState &S, CodePtr OpPC) {
     SmallString<32> Trunc;
     NegatedValue.trunc(Result.bitWidth()).toString(Trunc, 10);
     auto Loc = E->getExprLoc();
-    S.report(Loc, diag::warn_integer_constant_overflow) << Trunc << Type;
+    S.report(Loc, diag::warn_integer_constant_overflow)
+        << Trunc << Type << E->getSourceRange();
     return true;
   }
 
@@ -531,7 +534,8 @@ bool IncDecHelper(InterpState &S, CodePtr OpPC, const Pointer &Ptr) {
     SmallString<32> Trunc;
     APResult.trunc(Result.bitWidth()).toString(Trunc, 10);
     auto Loc = E->getExprLoc();
-    S.report(Loc, diag::warn_integer_constant_overflow) << Trunc << Type;
+    S.report(Loc, diag::warn_integer_constant_overflow)
+        << Trunc << Type << E->getSourceRange();
     return true;
   }
 
@@ -990,6 +994,19 @@ bool InitGlobalTemp(InterpState &S, CodePtr OpPC, uint32_t I,
   *Cached = APV;
 
   S.P.getGlobal(I)->deref<T>() = S.Stk.pop<T>();
+  return true;
+}
+
+/// 1) Converts the value on top of the stack to an APValue
+/// 2) Sets that APValue on \Temp
+/// 3) Initialized global with index \I with that
+inline bool InitGlobalTempComp(InterpState &S, CodePtr OpPC,
+                               const LifetimeExtendedTemporaryDecl *Temp) {
+  assert(Temp);
+  const Pointer &P = S.Stk.peek<Pointer>();
+  APValue *Cached = Temp->getOrCreateValue(true);
+
+  *Cached = P.toRValue(S.getCtx());
   return true;
 }
 

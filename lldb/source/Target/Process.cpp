@@ -629,6 +629,7 @@ void Process::SyncIOHandler(uint32_t iohandler_id,
                             const Timeout<std::micro> &timeout) {
   // don't sync (potentially context switch) in case where there is no process
   // IO
+  std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
   if (!m_process_input_reader)
     return;
 
@@ -1124,11 +1125,9 @@ bool Process::SetProcessExitStatus(
     if (target_sp) {
       ProcessSP process_sp(target_sp->GetProcessSP());
       if (process_sp) {
-        const char *signal_cstr = nullptr;
-        if (signo)
-          signal_cstr = process_sp->GetUnixSignals()->GetSignalAsCString(signo);
-
-        process_sp->SetExitStatus(exit_status, signal_cstr);
+        llvm::StringRef signal_str =
+            process_sp->GetUnixSignals()->GetSignalAsStringRef(signo);
+        process_sp->SetExitStatus(exit_status, signal_str);
       }
     }
     return true;
@@ -2504,7 +2503,11 @@ Status Process::LaunchPrivate(ProcessLaunchInfo &launch_info, StateType &state,
   m_jit_loaders_up.reset();
   m_system_runtime_up.reset();
   m_os_up.reset();
-  m_process_input_reader.reset();
+
+  {
+    std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
+    m_process_input_reader.reset();
+  }
 
   Module *exe_module = GetTarget().GetExecutableModulePointer();
 
@@ -2802,7 +2805,10 @@ Status Process::WillAttachToProcessWithName(const char *process_name,
 
 Status Process::Attach(ProcessAttachInfo &attach_info) {
   m_abi_sp.reset();
-  m_process_input_reader.reset();
+  {
+    std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
+    m_process_input_reader.reset();
+  }
   m_dyld_up.reset();
   m_jit_loaders_up.reset();
   m_system_runtime_up.reset();
@@ -3053,7 +3059,10 @@ void Process::CompleteAttach() {
 
 Status Process::ConnectRemote(llvm::StringRef remote_url) {
   m_abi_sp.reset();
-  m_process_input_reader.reset();
+  {
+    std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
+    m_process_input_reader.reset();
+  }
 
   // Find the process and its architecture.  Make sure it matches the
   // architecture of the current Target, and if not adjust it.
@@ -3341,10 +3350,13 @@ Status Process::DestroyImpl(bool force_kill) {
     m_stdio_communication.Disconnect();
     m_stdin_forward = false;
 
-    if (m_process_input_reader) {
-      m_process_input_reader->SetIsDone(true);
-      m_process_input_reader->Cancel();
-      m_process_input_reader.reset();
+    {
+      std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
+      if (m_process_input_reader) {
+        m_process_input_reader->SetIsDone(true);
+        m_process_input_reader->Cancel();
+        m_process_input_reader.reset();
+      }
     }
 
     // If we exited when we were waiting for a process to stop, then forward
@@ -4522,20 +4534,25 @@ void Process::SetSTDIOFileDescriptor(int fd) {
     m_stdio_communication.StartReadThread();
 
     // Now read thread is set up, set up input reader.
-
-    if (!m_process_input_reader)
-      m_process_input_reader =
-          std::make_shared<IOHandlerProcessSTDIO>(this, fd);
+    {
+      std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
+      if (!m_process_input_reader)
+        m_process_input_reader =
+            std::make_shared<IOHandlerProcessSTDIO>(this, fd);
+    }
   }
 }
 
 bool Process::ProcessIOHandlerIsActive() {
+  std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
   IOHandlerSP io_handler_sp(m_process_input_reader);
   if (io_handler_sp)
     return GetTarget().GetDebugger().IsTopIOHandler(io_handler_sp);
   return false;
 }
+
 bool Process::PushProcessIOHandler() {
+  std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
   IOHandlerSP io_handler_sp(m_process_input_reader);
   if (io_handler_sp) {
     Log *log = GetLog(LLDBLog::Process);
@@ -4555,6 +4572,7 @@ bool Process::PushProcessIOHandler() {
 }
 
 bool Process::PopProcessIOHandler() {
+  std::lock_guard<std::mutex> guard(m_process_input_reader_mutex);
   IOHandlerSP io_handler_sp(m_process_input_reader);
   if (io_handler_sp)
     return GetTarget().GetDebugger().RemoveIOHandler(io_handler_sp);

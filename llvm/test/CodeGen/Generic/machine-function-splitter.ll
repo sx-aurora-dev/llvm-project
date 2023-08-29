@@ -6,20 +6,18 @@
 ; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -split-machine-functions -mfs-psi-cutoff=0 -mfs-count-threshold=2000 | FileCheck %s --dump-input=always -check-prefixes=MFS-OPTS1,MFS-OPTS1-X86
 ; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -split-machine-functions -mfs-psi-cutoff=950000 | FileCheck %s -check-prefixes=MFS-OPTS2,MFS-OPTS2-X86
 ; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -split-machine-functions -mfs-split-ehcode | FileCheck %s -check-prefixes=MFS-EH-SPLIT,MFS-EH-SPLIT-X86
+; RUN: llc < %s -mtriple=x86_64 -split-machine-functions -O0 -mfs-psi-cutoff=0 -mfs-count-threshold=10000 | FileCheck %s -check-prefixes=MFS-O0,MFS-O0-X86
+
+; RUN: llc < %s -mtriple=aarch64-unknown-linux-gnu -enable-split-machine-functions | FileCheck %s -check-prefixes=MFS-DEFAULTS,MFS-DEFAULTS-AARCH64
+; RUN: llc < %s -mtriple=aarch64-unknown-linux-gnu -enable-split-machine-functions -mfs-psi-cutoff=0 -mfs-count-threshold=2000 | FileCheck %s --dump-input=always -check-prefixes=MFS-OPTS1,MFS-OPTS1-AARCH64
+; RUN: llc < %s -mtriple=aarch64-unknown-linux-gnu -enable-split-machine-functions -mfs-psi-cutoff=950000 | FileCheck %s -check-prefixes=MFS-OPTS2,MFS-OPTS2-AARCH64
+; RUN: llc < %s -mtriple=aarch64-unknown-linux-gnu -enable-split-machine-functions -mfs-split-ehcode | FileCheck %s -check-prefixes=MFS-EH-SPLIT,MFS-EH-SPLIT-AARCH64
+; RUN: llc < %s -mtriple=aarch64 -enable-split-machine-functions -aarch64-redzone | FileCheck %s -check-prefixes=MFS-REDZONE-AARCH64
 
 ; COM: Machine function splitting with AFDO profiles
 ; RUN: sed 's/InstrProf/SampleProfile/g' %s > %t.ll
 ; RUN: llc < %t.ll -mtriple=x86_64-unknown-linux-gnu -split-machine-functions | FileCheck %s --check-prefix=FSAFDO-MFS
 ; RUN: llc < %t.ll -mtriple=x86_64-unknown-linux-gnu -split-machine-functions | FileCheck %s --check-prefix=FSAFDO-MFS2
-; RUN: llc < %s -mtriple=x86_64-unknown-linux-gnu -debug-pass=Structure -fs-profile-file=%S/Inputs/fsloader-mfs.afdo -enable-fs-discriminator=true -improved-fs-discriminator=true -split-machine-functions 2>&1 | FileCheck %s --check-prefix=MFS_ON
-; RUN: llc < %s -mtriple=aarch64-unknown-linux-gnu -debug-pass=Structure -fs-profile-file=%S/Inputs/fsloader-mfs.afdo -enable-fs-discriminator=true -improved-fs-discriminator=true -split-machine-functions 2>&1 | FileCheck %s --check-prefix=MFS_OFF
-
-;; Check that MFS is on for X86 targets.
-; MFS_ON: Machine Function Splitter Transformation
-; MFS_ON_NO: warning: -fsplit-machine-functions is not valid for
-;; Check that MFS is not on for non-X86 targets.
-; MFS_OFF: warning: -fsplit-machine-functions is not valid for
-; MFS_OFF_NO: Machine Function Splitter Transformation
 
 define void @foo1(i1 zeroext %0) nounwind !prof !14 !section_prefix !15 {
 ;; Check that cold block is moved to .text.split.
@@ -28,6 +26,8 @@ define void @foo1(i1 zeroext %0) nounwind !prof !14 !section_prefix !15 {
 ; MFS-DEFAULTS-NEXT:          foo1.cold:
 ; MFS-DEFAULTS-X86-NOT:       callq   bar
 ; MFS-DEFAULTS-X86-NEXT:      callq   baz
+; MFS-DEFAULTS-AARCH64-NOT:   bl      bar
+; MFS-DEFAULTS-AARCH64-NEXT:  bl      baz
   br i1 %0, label %2, label %4, !prof !17
 
 2:                                                ; preds = %1
@@ -89,6 +89,9 @@ define void @foo4(i1 zeroext %0, i1 zeroext %1) nounwind !prof !20 {
 ; MFS-OPTS1-X86-NOT:       callq    bar
 ; MFS-OPTS1-X86-NOT:       callq    baz
 ; MFS-OPTS1-X86-NEXT:      callq    bam
+; MFS-OPTS1-AARCH64-NOT:   bl       bar
+; MFS-OPTS1-AARCH64-NOT:   bl       baz
+; MFS-OPTS1-AARCH64-NEXT:  bl       bam
   br i1 %0, label %3, label %7, !prof !18
 
 3:
@@ -123,6 +126,9 @@ define void @foo5(i1 zeroext %0, i1 zeroext %1) nounwind !prof !20 {
 ; MFS-OPTS2-X86-NOT:       callq    bar
 ; MFS-OPTS2-X86-NOT:       callq    baz
 ; MFS-OPTS2-X86-NEXT:      callq    bam
+; MFS-OPTS2-AARCH64-NOT:   bl       bar
+; MFS-OPTS2-AARCH64-NOT:   bl       baz
+; MFS-OPTS2-AARCH64-NEXT:  bl       bam
   br i1 %0, label %3, label %7, !prof !21
 
 3:
@@ -175,6 +181,7 @@ define i32 @foo7(i1 zeroext %0) personality ptr @__gxx_personality_v0 !prof !14 
 ; MFS-DEFAULTS-NEXT:          foo7.cold:
 ; MFS-DEFAULTS-X86:           callq   baz
 ; MFS-DEFAULTS-X86:           callq   _Unwind_Resume@PLT
+; MFS-DEFAULTS-AARCH64:       bl      baz
 entry:
   invoke void @_Z1fv()
           to label %try.cont unwind label %lpad
@@ -209,12 +216,14 @@ define i32 @foo8(i1 zeroext %0) personality ptr @__gxx_personality_v0 !prof !14 
 ; MFS-DEFAULTS:               .section        .text.split.foo8,"ax",@progbits
 ; MFS-DEFAULTS-NEXT:          foo8.cold:
 ; MFS-DEFAULTS-X86:           callq   baz
+; MFS-DEFAULTS-AARCH64:       bl      baz
 
 ;; Check that all ehpads are by default treated as cold with -mfs-split-ehcode.
 ; MFS-EH-SPLIT-LABEL:         foo8
 ; MFS-EH-SPLIT-X86:           callq   baz
-; MFS-EH-SPLIT:               .section        .text.split.foo8,"ax",@progbits
-; MFS-EH-SPLIT-NEXT:          foo8.cold:
+; MFS-EH-SPLIT-AARCH64:       bl      baz
+; MFS-EH-SPLIT-X86:           .section        .text.split.foo8,"ax",@progbits
+; MFS-EH-SPLIT-X86-NEXT:      foo8.cold:
 ; MFS-EH-SPLIT-X86:           callq   _Unwind_Resume@PLT
 ; MFS-EH-SPLIT-X86:           callq   _Unwind_Resume@PLT
 entry:
@@ -273,8 +282,9 @@ define i32 @foo10(i1 zeroext %0) personality ptr @__gxx_personality_v0 !prof !14
 ;; Check that nop is inserted just before the EH pad if it's beginning a section.
 ; MFS-DEFAULTS-LABEL:         foo10
 ; MFS-DEFAULTS-X86-LABEL:     callq   baz
-; MFS-DEFAULTS:               .section        .text.split.foo10,"ax",@progbits
-; MFS-DEFAULTS-NEXT:          foo10.cold:
+; MFS-DEFAULTS-AARCH64:       bl      baz
+; MFS-DEFAULTS-X86:           .section        .text.split.foo10,"ax",@progbits
+; MFS-DEFAULTS-X86-NEXT:      foo10.cold:
 ; MFS-DEFAULTS-X86:           nop
 ; MFS-DEFAULTS-X86:           callq   _Unwind_Resume@PLT
 entry:
@@ -296,8 +306,8 @@ define void @foo11(i1 zeroext %0) personality ptr @__gxx_personality_v0 {
 ;; Check that function having landing pads are split with mfs-split-ehcode
 ;; even in the absence of profile data
 ; MFS-EH-SPLIT-LABEL:         foo11
-; MFS-EH-SPLIT:               .section        .text.split.foo11,"ax",@progbits
-; MFS-EH-SPLIT-NEXT:          foo11.cold:
+; MFS-EH-SPLIT-X86:           .section        .text.split.foo11,"ax",@progbits
+; MFS-EH-SPLIT-X86-NEXT:      foo11.cold:
 ; MFS-EH-SPLIT-X86:           nop
 ; MFS-EH-SPLIT-X86:           callq   _Unwind_Resume@PLT
 entry:
@@ -323,6 +333,9 @@ define i32 @foo12(i1 zeroext %0) personality ptr @__gxx_personality_v0 !prof !14
 ; MFS-EH-SPLIT-X86:           callq   bar
 ; MFS-EH-SPLIT-X86:           callq   baz
 ; MFS-EH-SPLIT-X86:           callq   qux
+; MFS-EH-SPLIT-AARCH64:       bl      bar
+; MFS-EH-SPLIT-AARCH64:       bl      baz
+; MFS-EH-SPLIT-AARCH64:       bl      qux
 entry:
   invoke void @_Z1fv()
           to label %8 unwind label %lpad
@@ -355,11 +368,15 @@ define i32 @foo13(i1 zeroext %0) personality ptr @__gxx_personality_v0 !prof !14
 ;; is not touched.
 ; MFS-EH-SPLIT-LABEL:         foo13
 ; MFS-EH-SPLIT-X86:           callq   bam
+; MFS-EH-SPLIT-AARCH64:       bl      bam
 ; MFS-EH-SPLIT:               .section        .text.split.foo13,"ax",@progbits
 ; MFS-EH-SPLIT-NEXT:          foo13.cold:
 ; MFS-EH-SPLIT-X86:           callq   baz
 ; MFS-EH-SPLIT-X86:           callq   bar
 ; MFS-EH-SPLIT-X86:           callq   qux
+; MFS-EH-SPLIT-AARCH64:       bl      baz
+; MFS-EH-SPLIT-AARCH64:       bl      bar
+; MFS-EH-SPLIT-AARCH64:       bl      qux
 entry:
   invoke void @_Z1fv()
           to label %try.cont unwind label %lpad, !prof !17
@@ -445,6 +462,59 @@ define void @foo15(i1 zeroext %0, i1 zeroext %1) nounwind !prof !27 {
 12:
   %13 = tail call i32 @qux()
   ret void
+}
+
+define void @foo16(i1 zeroext %0) nounwind !prof !14 !section_prefix !15 {
+;; Check that an unconditional branch is only appended to a block
+;; if it would fall through to the wrong block otherwise.
+; MFS-O0-LABEL:               foo16
+; MFS-O0-X86:                 jmp
+; MFS-O0-X86-NOT:             jmp
+; MFS-O0-AARCH64:                 br
+; MFS-O0-AARCH64:                 br
+; MFS-O0-AARCH64-NOT:             br
+; MFS-O0:                     .section        .text.split.foo16
+; MFS-O0-NEXT:                foo16.cold
+  %2 = call i32 @baz()
+  br i1 false, label %3, label %5, !prof !25
+
+3:                                                ; preds = %1
+  %4 = call i32 @bar()
+  unreachable
+
+5:                                                ; preds = %1
+  %6 = tail call i32 @qux()
+  ret void
+}
+
+define i32 @foo17(i1 zeroext %0, i32 %a, i32 %b) nounwind !prof !14 !section_prefix !15 {
+;; Check that cold blocks in functions with red zones aren't split.
+; MFS-DEFAULTS-LABEL:        foo17
+; MFS-DEFAULTS-X86:          foo17.cold:
+; MFS-REDZONE-AARCH64-NOT:   foo17.cold:
+  %a.addr = alloca i32, align 4
+  %b.addr = alloca i32, align 4
+  %x = alloca i32, align 4
+
+  br i1 %0, label %2, label %3, !prof !17
+
+2:                                                ; preds = %1
+  store i32 %a, ptr %a.addr, align 4
+  store i32 %b, ptr %b.addr, align 4
+  br label %4
+
+3:                                                ; preds = %1
+  store i32 %a, ptr %b.addr, align 4
+  store i32 %b, ptr %a.addr, align 4
+  br label %4
+
+4:                                                ; preds = %3, %2
+  %tmp = load i32, ptr %a.addr, align 4
+  %tmp1 = load i32, ptr %b.addr, align 4
+  %add = add nsw i32 %tmp, %tmp1
+  store i32 %add, ptr %x, align 4
+  %tmp2 = load i32, ptr %x, align 4
+  ret i32 %tmp2
 }
 
 declare i32 @bar()

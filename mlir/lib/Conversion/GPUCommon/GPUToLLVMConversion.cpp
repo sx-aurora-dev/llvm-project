@@ -593,7 +593,7 @@ void GpuToLLVMConversionPass::runOnOperation() {
         return converter.isLegal(op->getOperandTypes()) &&
                converter.isLegal(op->getResultTypes()) &&
                (module && module.getTargetsAttr() &&
-                module.getTargetsAttr().size());
+                !module.getTargetsAttr().empty());
       });
 
   mlir::arith::populateArithToLLVMConversionPatterns(converter, patterns);
@@ -981,24 +981,12 @@ Value ConvertLaunchFuncOpToGpuRuntimeCallPattern::generateParamsArray(
     gpu::LaunchFuncOp launchOp, OpAdaptor adaptor, OpBuilder &builder) const {
   auto loc = launchOp.getLoc();
   auto numKernelOperands = launchOp.getNumKernelOperands();
-  SmallVector<Value, 4> arguments;
-  if (kernelBarePtrCallConv) {
-    // Hack the bare pointer value on just for the argument promotion
-    const LLVMTypeConverter *converter = getTypeConverter();
-    LowerToLLVMOptions options = converter->getOptions();
-    LowerToLLVMOptions overrideToMatchKernelOpts = options;
-    overrideToMatchKernelOpts.useBarePtrCallConv = true;
-    LLVMTypeConverter newConverter = *converter;
-    newConverter.dangerousSetOptions(overrideToMatchKernelOpts);
-    arguments = newConverter.promoteOperands(
-        loc, launchOp.getOperands().take_back(numKernelOperands),
-        adaptor.getOperands().take_back(numKernelOperands), builder);
-  } else {
-    arguments = getTypeConverter()->promoteOperands(
-        loc, launchOp.getOperands().take_back(numKernelOperands),
-        adaptor.getOperands().take_back(numKernelOperands), builder);
-  }
-
+  // Note: If `useBarePtrCallConv` is set in the type converter's options,
+  // the value of `kernelBarePtrCallConv` will be ignored.
+  SmallVector<Value, 4> arguments = getTypeConverter()->promoteOperands(
+      loc, launchOp.getOperands().take_back(numKernelOperands),
+      adaptor.getOperands().take_back(numKernelOperands), builder,
+      /*useBarePtrCallConv=*/kernelBarePtrCallConv);
   auto numArguments = arguments.size();
   SmallVector<Type, 4> argumentTypes;
   argumentTypes.reserve(numArguments);
@@ -1104,7 +1092,7 @@ LogicalResult ConvertLaunchFuncOpToGpuRuntimeCallPattern::matchAndRewrite(
   // If the module has Targets then just update the op operands.
   if (ArrayAttr targets = kernelModule.getTargetsAttr()) {
     Value stream = Value();
-    if (adaptor.getAsyncDependencies().size())
+    if (!adaptor.getAsyncDependencies().empty())
       stream = adaptor.getAsyncDependencies().front();
     // If the async keyword is present and there are no dependencies, then a
     // stream must be created to pass to subsequent operations.
@@ -1112,23 +1100,11 @@ LogicalResult ConvertLaunchFuncOpToGpuRuntimeCallPattern::matchAndRewrite(
       stream = streamCreateCallBuilder.create(loc, rewriter, {}).getResult();
 
     // Lower the kernel operands to match kernel parameters.
-    SmallVector<Value, 4> arguments;
-    if (kernelBarePtrCallConv) {
-      // Hack the bare pointer value on just for the argument promotion
-      const LLVMTypeConverter *converter = getTypeConverter();
-      LowerToLLVMOptions options = converter->getOptions();
-      LowerToLLVMOptions overrideToMatchKernelOpts = options;
-      overrideToMatchKernelOpts.useBarePtrCallConv = true;
-      LLVMTypeConverter newConverter = *converter;
-      newConverter.dangerousSetOptions(overrideToMatchKernelOpts);
-      arguments =
-          newConverter.promoteOperands(loc, launchOp.getKernelOperands(),
-                                       adaptor.getKernelOperands(), rewriter);
-    } else {
-      arguments = getTypeConverter()->promoteOperands(
-          loc, launchOp.getKernelOperands(), adaptor.getKernelOperands(),
-          rewriter);
-    }
+    // Note: If `useBarePtrCallConv` is set in the type converter's options,
+    // the value of `kernelBarePtrCallConv` will be ignored.
+    SmallVector<Value, 4> arguments = getTypeConverter()->promoteOperands(
+        loc, launchOp.getKernelOperands(), adaptor.getKernelOperands(),
+        rewriter, /*useBarePtrCallConv=*/kernelBarePtrCallConv);
 
     rewriter.create<gpu::LaunchFuncOp>(
         launchOp.getLoc(), launchOp.getKernelAttr(),

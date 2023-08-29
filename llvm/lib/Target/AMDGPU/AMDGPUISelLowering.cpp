@@ -1002,6 +1002,9 @@ CCAssignFn *AMDGPUCallLowering::CCAssignFnForCall(CallingConv::ID CC,
   case CallingConv::AMDGPU_ES:
   case CallingConv::AMDGPU_LS:
     return CC_AMDGPU;
+  case CallingConv::AMDGPU_CS_Chain:
+  case CallingConv::AMDGPU_CS_ChainPreserve:
+    return CC_AMDGPU_CS_CHAIN;
   case CallingConv::C:
   case CallingConv::Fast:
   case CallingConv::Cold:
@@ -1025,6 +1028,8 @@ CCAssignFn *AMDGPUCallLowering::CCAssignFnForReturn(CallingConv::ID CC,
   case CallingConv::AMDGPU_GS:
   case CallingConv::AMDGPU_PS:
   case CallingConv::AMDGPU_CS:
+  case CallingConv::AMDGPU_CS_Chain:
+  case CallingConv::AMDGPU_CS_ChainPreserve:
   case CallingConv::AMDGPU_HS:
   case CallingConv::AMDGPU_ES:
   case CallingConv::AMDGPU_LS:
@@ -2698,7 +2703,8 @@ SDValue AMDGPUTargetLowering::LowerFLOGUnsafe(SDValue Src, const SDLoc &SL,
                                               SelectionDAG &DAG, bool IsLog10,
                                               SDNodeFlags Flags) const {
   EVT VT = Src.getValueType();
-  unsigned LogOp = VT == MVT::f32 ? AMDGPUISD::LOG : ISD::FLOG2;
+  unsigned LogOp =
+      VT == MVT::f32 ? (unsigned)AMDGPUISD::LOG : (unsigned)ISD::FLOG2;
 
   double Log2BaseInverted =
       IsLog10 ? numbers::ln2 / numbers::ln10 : numbers::ln2;
@@ -2792,8 +2798,9 @@ SDValue AMDGPUTargetLowering::lowerFEXPUnsafe(SDValue X, const SDLoc &SL,
   if (VT != MVT::f32 || !needsDenormHandlingF32(DAG, X, Flags)) {
     // exp2(M_LOG2E_F * f);
     SDValue Mul = DAG.getNode(ISD::FMUL, SL, VT, X, Log2E, Flags);
-    return DAG.getNode(VT == MVT::f32 ? AMDGPUISD::EXP : ISD::FEXP2, SL, VT,
-                       Mul, Flags);
+    return DAG.getNode(VT == MVT::f32 ? (unsigned)AMDGPUISD::EXP
+                                      : (unsigned)ISD::FEXP2,
+                       SL, VT, Mul, Flags);
   }
 
   EVT SetCCVT = getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(), VT);
@@ -4039,8 +4046,7 @@ static SDValue getAddOneOp(const SDNode *V) {
   if (V->getOpcode() != ISD::ADD)
     return SDValue();
 
-  auto *C = dyn_cast<ConstantSDNode>(V->getOperand(1));
-  return C && C->isOne() ? V->getOperand(0) : SDValue();
+  return isOneConstant(V->getOperand(1)) ? V->getOperand(0) : SDValue();
 }
 
 SDValue AMDGPUTargetLowering::performMulCombine(SDNode *N,
@@ -4270,8 +4276,7 @@ SDValue AMDGPUTargetLowering::getFFBX_U32(SelectionDAG &DAG,
 SDValue AMDGPUTargetLowering::performCtlz_CttzCombine(const SDLoc &SL, SDValue Cond,
                                                  SDValue LHS, SDValue RHS,
                                                  DAGCombinerInfo &DCI) const {
-  ConstantSDNode *CmpRhs = dyn_cast<ConstantSDNode>(Cond.getOperand(1));
-  if (!CmpRhs || !CmpRhs->isZero())
+  if (!isNullConstant(Cond.getOperand(1)))
     return SDValue();
 
   SelectionDAG &DAG = DCI.DAG;

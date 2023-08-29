@@ -465,7 +465,7 @@ public:
   typedef basic_string<value_type> string_type;
   typedef basic_string_view<value_type> __string_view;
 
-  enum _LIBCPP_ENUM_VIS format : unsigned char {
+  enum format : unsigned char {
     auto_format,
     native_format,
     generic_format
@@ -1069,8 +1069,7 @@ public:
 #endif // !_LIBCPP_HAS_NO_LOCALIZATION
 
 private:
-  inline _LIBCPP_HIDE_FROM_ABI path&
-  __assign_view(__string_view const& __s) noexcept {
+  inline _LIBCPP_HIDE_FROM_ABI path& __assign_view(__string_view const& __s) {
     __pn_ = string_type(__s);
     return *this;
   }

@@ -1412,11 +1412,10 @@ createLoopOp(Fortran::lower::AbstractConverter &converter,
           tileOperands.push_back(fir::getBase(converter.genExprValue(
               *Fortran::semantics::GetExpr(*expr), stmtCtx)));
         } else {
-          // * was passed as value and will be represented as a -1 constant
-          // integer.
+          // * was passed as value and will be represented as a special
+          // constant.
           mlir::Value tileStar = builder.createIntegerConstant(
-              clauseLocation, builder.getIntegerType(32),
-              /* STAR */ -1);
+              clauseLocation, builder.getIntegerType(32), starCst);
           tileOperands.push_back(tileStar);
         }
       }
@@ -2305,6 +2304,53 @@ genACCInitShutdownOp(Fortran::lower::AbstractConverter &converter,
   createSimpleOp<Op>(firOpBuilder, currentLocation, operands, operandSegments);
 }
 
+void genACCSetOp(Fortran::lower::AbstractConverter &converter,
+                 mlir::Location currentLocation,
+                 const Fortran::parser::AccClauseList &accClauseList) {
+  mlir::Value ifCond, deviceNum, defaultAsync;
+  llvm::SmallVector<mlir::Value> deviceTypeOperands;
+
+  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+  Fortran::lower::StatementContext stmtCtx;
+
+  // Lower clauses values mapped to operands.
+  // Keep track of each group of operands separately as clauses can appear
+  // more than once.
+  for (const Fortran::parser::AccClause &clause : accClauseList.v) {
+    mlir::Location clauseLocation = converter.genLocation(clause.source);
+    if (const auto *ifClause =
+            std::get_if<Fortran::parser::AccClause::If>(&clause.u)) {
+      genIfClause(converter, clauseLocation, ifClause, ifCond, stmtCtx);
+    } else if (const auto *defaultAsyncClause =
+                   std::get_if<Fortran::parser::AccClause::DefaultAsync>(
+                       &clause.u)) {
+      defaultAsync = fir::getBase(converter.genExprValue(
+          *Fortran::semantics::GetExpr(defaultAsyncClause->v), stmtCtx));
+    } else if (const auto *deviceNumClause =
+                   std::get_if<Fortran::parser::AccClause::DeviceNum>(
+                       &clause.u)) {
+      deviceNum = fir::getBase(converter.genExprValue(
+          *Fortran::semantics::GetExpr(deviceNumClause->v), stmtCtx));
+    } else if (const auto *deviceTypeClause =
+                   std::get_if<Fortran::parser::AccClause::DeviceType>(
+                       &clause.u)) {
+      genDeviceTypeClause(converter, clauseLocation, deviceTypeClause,
+                          deviceTypeOperands, stmtCtx);
+    }
+  }
+
+  // Prepare the operand segment size attribute and the operands value range.
+  llvm::SmallVector<mlir::Value> operands;
+  llvm::SmallVector<int32_t, 4> operandSegments;
+  addOperands(operands, operandSegments, deviceTypeOperands);
+  addOperand(operands, operandSegments, defaultAsync);
+  addOperand(operands, operandSegments, deviceNum);
+  addOperand(operands, operandSegments, ifCond);
+
+  createSimpleOp<mlir::acc::SetOp>(firOpBuilder, currentLocation, operands,
+                                   operandSegments);
+}
+
 static void
 genACCUpdateOp(Fortran::lower::AbstractConverter &converter,
                mlir::Location currentLocation,
@@ -2425,7 +2471,7 @@ genACC(Fortran::lower::AbstractConverter &converter,
     genACCInitShutdownOp<mlir::acc::ShutdownOp>(converter, currentLocation,
                                                 accClauseList);
   } else if (standaloneDirective.v == llvm::acc::Directive::ACCD_set) {
-    TODO(currentLocation, "OpenACC set directive not lowered yet!");
+    genACCSetOp(converter, currentLocation, accClauseList);
   } else if (standaloneDirective.v == llvm::acc::Directive::ACCD_update) {
     genACCUpdateOp(converter, currentLocation, semanticsContext, stmtCtx,
                    accClauseList);
@@ -2730,6 +2776,15 @@ genDeclareInFunction(Fortran::lower::AbstractConverter &converter,
       createEntryOperands, copyoutEntryOperands, deviceResidentEntryOperands;
   Fortran::lower::StatementContext stmtCtx;
   fir::FirOpBuilder &builder = converter.getFirOpBuilder();
+
+  mlir::acc::DeclareOp declareOp;
+  auto parentOp = builder.getBlock()->getParentOp();
+  if (mlir::isa<mlir::acc::DeclareOp>(parentOp)) {
+    declareOp = mlir::dyn_cast<mlir::acc::DeclareOp>(
+        *builder.getBlock()->getParentOp());
+    builder.setInsertionPoint(declareOp.getOperation());
+  }
+
   for (const Fortran::parser::AccClause &clause : accClauseList.v) {
     if (const auto *copyClause =
             std::get_if<Fortran::parser::AccClause::Copy>(&clause.u)) {
@@ -2817,13 +2872,24 @@ genDeclareInFunction(Fortran::lower::AbstractConverter &converter,
       TODO(clauseLocation, "clause on declare directive");
     }
   }
-  builder.create<mlir::acc::DeclareEnterOp>(loc, dataClauseOperands);
 
-  // Attach declare exit operation generation to function context.
-  fctCtx.attachCleanup([&builder, loc, dataClauseOperands, createEntryOperands,
+  if (declareOp) {
+    declareOp.getDataClauseOperandsMutable().append(dataClauseOperands);
+    builder.setInsertionPointToEnd(&declareOp.getRegion().back());
+  } else {
+    declareOp = builder.create<mlir::acc::DeclareOp>(loc, dataClauseOperands);
+    builder.createBlock(&declareOp.getRegion(), declareOp.getRegion().end(), {},
+                        {});
+    builder.setInsertionPointToEnd(&declareOp.getRegion().back());
+  }
+  fctCtx.attachCleanup([&builder, declareOp, loc, createEntryOperands,
                         copyEntryOperands, copyoutEntryOperands,
                         deviceResidentEntryOperands]() {
-    builder.create<mlir::acc::DeclareExitOp>(loc, dataClauseOperands);
+    auto parentOp = builder.getBlock()->getParentOp();
+    if (mlir::isa<mlir::acc::DeclareOp>(parentOp)) {
+      builder.create<mlir::acc::TerminatorOp>(loc);
+      builder.setInsertionPointAfter(declareOp);
+    }
     genDataExitOperations<mlir::acc::CreateOp, mlir::acc::DeleteOp>(
         builder, createEntryOperands, /*structured=*/true,
         /*implicit=*/false);
@@ -2907,22 +2973,6 @@ static void genACC(Fortran::lower::AbstractConverter &converter,
     return;
   }
   llvm_unreachable("unsupported declarative directive");
-}
-
-template <typename R, typename T>
-std::optional<R>
-GetConstExpr(Fortran::semantics::SemanticsContext &semanticsContext,
-             const T &x) {
-  using DefaultCharConstantType = Fortran::evaluate::Ascii;
-  if (const auto *expr{Fortran::semantics::GetExpr(semanticsContext, x)}) {
-    const auto foldExpr{Fortran::evaluate::Fold(
-        semanticsContext.foldingContext(), Fortran::common::Clone(*expr))};
-    if constexpr (std::is_same_v<R, std::string>) {
-      return Fortran::evaluate::GetScalarConstantValue<DefaultCharConstantType>(
-          foldExpr);
-    }
-  }
-  return std::nullopt;
 }
 
 static void attachRoutineInfo(mlir::func::FuncOp func,
@@ -3010,7 +3060,8 @@ genACC(Fortran::lower::AbstractConverter &converter,
                      std::get_if<Fortran::parser::ScalarDefaultCharExpr>(
                          &bindClause->v.u)) {
         const std::optional<std::string> bindName =
-            GetConstExpr<std::string>(semanticsContext, *charExpr);
+            Fortran::semantics::GetConstExpr<std::string>(semanticsContext,
+                                                          *charExpr);
         if (!bindName)
           routineOp.emitError("Could not retrieve the bind name");
         routineOp.setBindName(builder.getStringAttr(*bindName));

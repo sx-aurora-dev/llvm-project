@@ -43,6 +43,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -670,7 +671,7 @@ struct KernelInfoState : AbstractState {
 
   /// The parallel regions (identified by the outlined parallel functions) that
   /// can be reached from the associated function.
-  BooleanStateWithPtrSetVector<Function, /* InsertInvalidates */ false>
+  BooleanStateWithPtrSetVector<CallBase, /* InsertInvalidates */ false>
       ReachedKnownParallelRegions;
 
   /// State to track what parallel region we might reach.
@@ -2672,6 +2673,8 @@ struct AAExecutionDomainFunction : public AAExecutionDomain {
       if (!ED.IsReachedFromAlignedBarrierOnly ||
           ED.EncounteredNonLocalSideEffect)
         return;
+      if (!ED.EncounteredAssumes.empty() && !A.isModulePass())
+        return;
 
       // We can remove this barrier, if it is one, or all aligned barriers
       // reaching the kernel end. In the latter case we can transitively work
@@ -4453,11 +4456,15 @@ struct AAKernelInfoFunction : AAKernelInfo {
     Value *ZeroArg =
         Constant::getNullValue(ParallelRegionFnTy->getParamType(0));
 
+    const unsigned int WrapperFunctionArgNo = 6;
+
     // Now that we have most of the CFG skeleton it is time for the if-cascade
     // that checks the function pointer we got from the runtime against the
     // parallel regions we expect, if there are any.
     for (int I = 0, E = ReachedKnownParallelRegions.size(); I < E; ++I) {
-      auto *ParallelRegion = ReachedKnownParallelRegions[I];
+      auto *CB = ReachedKnownParallelRegions[I];
+      auto *ParallelRegion = dyn_cast<Function>(
+          CB->getArgOperand(WrapperFunctionArgNo)->stripPointerCasts());
       BasicBlock *PRExecuteBB = BasicBlock::Create(
           Ctx, "worker_state_machine.parallel_region.execute", Kernel,
           StateMachineEndParallelBB);
@@ -4820,8 +4827,6 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       return;
     }
 
-    const unsigned int NonWrapperFunctionArgNo = 5;
-    const unsigned int WrapperFunctionArgNo = 6;
     RuntimeFunction RF = It->getSecond();
     switch (RF) {
     // All the functions we know are compatible with SPMD mode.
@@ -4900,28 +4905,10 @@ struct AAKernelInfoCallSite : AAKernelInfo {
     case OMPRTL___kmpc_target_deinit:
       KernelDeinitCB = &CB;
       break;
-    case OMPRTL___kmpc_parallel_51: {
-      auto *ParallelRegionOp =
-          CB.getArgOperand(WrapperFunctionArgNo)->stripPointerCasts();
-      if (isa<ConstantPointerNull>(ParallelRegionOp))
-        ParallelRegionOp =
-            CB.getArgOperand(NonWrapperFunctionArgNo)->stripPointerCasts();
-      if (auto *ParallelRegion = dyn_cast<Function>(ParallelRegionOp)) {
-        ReachedKnownParallelRegions.insert(ParallelRegion);
-        /// Check nested parallelism
-        auto *FnAA = A.getAAFor<AAKernelInfo>(
-            *this, IRPosition::function(*ParallelRegion), DepClassTy::OPTIONAL);
-        NestedParallelism |= !FnAA || !FnAA->getState().isValidState() ||
-                             !FnAA->ReachedKnownParallelRegions.empty() ||
-                             !FnAA->ReachedUnknownParallelRegions.empty();
-        break;
-      }
-      // The condition above should usually get the parallel region function
-      // pointer and record it. In the off chance it doesn't we assume the
-      // worst.
-      ReachedUnknownParallelRegions.insert(&CB);
-      break;
-    }
+    case OMPRTL___kmpc_parallel_51:
+      if (!handleParallel51(A, CB))
+        indicatePessimisticFixpoint();
+      return;
     case OMPRTL___kmpc_omp_task:
       // We do not look into tasks right now, just give up.
       SPMDCompatibilityTracker.indicatePessimisticFixpoint();
@@ -4967,14 +4954,21 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       return ChangeStatus::CHANGED;
     }
 
+    KernelInfoState StateBefore = getState();
+    CallBase &CB = cast<CallBase>(getAssociatedValue());
+    if (It->getSecond() == OMPRTL___kmpc_parallel_51) {
+      if (!handleParallel51(A, CB))
+        return indicatePessimisticFixpoint();
+      return StateBefore == getState() ? ChangeStatus::UNCHANGED
+                                       : ChangeStatus::CHANGED;
+    }
+
     // F is a runtime function that allocates or frees memory, check
     // AAHeapToStack and AAHeapToShared.
-    KernelInfoState StateBefore = getState();
     assert((It->getSecond() == OMPRTL___kmpc_alloc_shared ||
             It->getSecond() == OMPRTL___kmpc_free_shared) &&
            "Expected a __kmpc_alloc_shared or __kmpc_free_shared runtime call");
 
-    CallBase &CB = cast<CallBase>(getAssociatedValue());
 
     auto *HeapToStackAA = A.getAAFor<AAHeapToStack>(
         *this, IRPosition::function(*CB.getCaller()), DepClassTy::OPTIONAL);
@@ -5005,6 +4999,32 @@ struct AAKernelInfoCallSite : AAKernelInfo {
 
     return StateBefore == getState() ? ChangeStatus::UNCHANGED
                                      : ChangeStatus::CHANGED;
+  }
+
+  /// Deal with a __kmpc_parallel_51 call (\p CB). Returns true if the call was
+  /// handled, if a problem occurred, false is returned.
+  bool handleParallel51(Attributor &A, CallBase &CB) {
+    const unsigned int NonWrapperFunctionArgNo = 5;
+    const unsigned int WrapperFunctionArgNo = 6;
+    auto ParallelRegionOpArgNo = SPMDCompatibilityTracker.isAssumed()
+                                     ? NonWrapperFunctionArgNo
+                                     : WrapperFunctionArgNo;
+
+    auto *ParallelRegion = dyn_cast<Function>(
+        CB.getArgOperand(ParallelRegionOpArgNo)->stripPointerCasts());
+    if (!ParallelRegion)
+      return false;
+
+    ReachedKnownParallelRegions.insert(&CB);
+    /// Check nested parallelism
+    auto *FnAA = A.getAAFor<AAKernelInfo>(
+        *this, IRPosition::function(*ParallelRegion), DepClassTy::OPTIONAL);
+    NestedParallelism |= !FnAA || !FnAA->getState().isValidState() ||
+                         !FnAA->ReachedKnownParallelRegions.empty() ||
+                         !FnAA->ReachedKnownParallelRegions.isValidState() ||
+                         !FnAA->ReachedUnknownParallelRegions.isValidState() ||
+                         !FnAA->ReachedUnknownParallelRegions.empty();
+    return true;
   }
 };
 
@@ -5418,6 +5438,11 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
       A.getAssumedSimplified(IRPosition::value(*LI), /* AA */ nullptr,
                              UsedAssumedInformation, AA::Interprocedural);
       continue;
+    }
+    if (auto *CI = dyn_cast<CallBase>(&I)) {
+      if (CI->isIndirectCall())
+        A.getOrCreateAAFor<AAIndirectCallInfo>(
+            IRPosition::callsite_function(*CI));
     }
     if (auto *SI = dyn_cast<StoreInst>(&I)) {
       A.getOrCreateAAFor<AAIsDead>(IRPosition::value(*SI));

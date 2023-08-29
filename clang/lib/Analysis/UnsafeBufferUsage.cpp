@@ -739,7 +739,7 @@ public:
   static Matcher matcher() {
     auto ArrayOrPtr = anyOf(hasPointerType(), hasArrayType());
     auto target = expr(
-        ignoringParenImpCasts(declRefExpr(allOf(ArrayOrPtr, 
+        ignoringParenImpCasts(declRefExpr(allOf(ArrayOrPtr,
                               toSupportedVariable())).bind(DeclRefExprTag)));
     return stmt(isInUnspecifiedPointerContext(target));
   }
@@ -895,10 +895,7 @@ public:
   }
 
   const DeclStmt *lookupDecl(const VarDecl *VD) const {
-    auto It = Defs.find(VD);
-    if (It == Defs.end())
-      return nullptr;
-    return It->second;
+    return Defs.lookup(VD);
   }
 };
 } // namespace
@@ -1176,7 +1173,11 @@ groupWarningGadgetsByVar(const WarningGadgetList &AllUnsafeOperations) {
 }
 
 struct FixableGadgetSets {
-  std::map<const VarDecl *, std::set<const FixableGadget *>> byVar;
+  std::map<const VarDecl *, std::set<const FixableGadget *>,
+           // To keep keys sorted by their locations in the map so that the
+           // order is deterministic:
+           CompareNode<VarDecl>>
+      byVar;
 };
 
 static FixableGadgetSets
@@ -1382,7 +1383,7 @@ static std::optional<StringRef> getRangeText(SourceRange SR,
                                              const SourceManager &SM,
                                              const LangOptions &LangOpts) {
   bool Invalid = false;
-  CharSourceRange CSR = CharSourceRange::getCharRange(SR.getBegin(), SR.getEnd());
+  CharSourceRange CSR = CharSourceRange::getCharRange(SR);
   StringRef Text = Lexer::getSourceText(CSR, SM, LangOpts, &Invalid);
 
   if (!Invalid)
@@ -1410,6 +1411,27 @@ getVarDeclIdentifierText(const VarDecl *VD, const SourceManager &SM,
       !Lexer::isAtEndOfMacroExpansion(ParmIdentEndLoc, SM, LangOpts))
     return std::nullopt;
   return getRangeText({ParmIdentBeginLoc, ParmIdentEndLoc}, SM, LangOpts);
+}
+
+// We cannot fix a variable declaration if it has some other specifiers than the
+// type specifier.  Because the source ranges of those specifiers could overlap
+// with the source range that is being replaced using fix-its.  Especially when
+// we often cannot obtain accurate source ranges of cv-qualified type
+// specifiers.
+// FIXME: also deal with type attributes
+static bool hasUnsupportedSpecifiers(const VarDecl *VD,
+                                     const SourceManager &SM) {
+  // AttrRangeOverlapping: true if at least one attribute of `VD` overlaps the
+  // source range of `VD`:
+  bool AttrRangeOverlapping = llvm::any_of(VD->attrs(), [&](Attr *At) -> bool {
+    return !(SM.isBeforeInTranslationUnit(At->getRange().getEnd(),
+                                          VD->getBeginLoc())) &&
+           !(SM.isBeforeInTranslationUnit(VD->getEndLoc(),
+                                          At->getRange().getBegin()));
+  });
+  return VD->isInlineSpecified() || VD->isConstexpr() ||
+         VD->hasConstantInitialization() || !VD->hasLocalStorage() ||
+         AttrRangeOverlapping;
 }
 
 // Returns the text of the pointee type of `T` from a `VarDecl` of a pointer
@@ -1712,7 +1734,7 @@ std::optional<FixItList> UPCPreIncrementGadget::getFixits(const Strategy &S) con
 //   `Init` a pointer to the initializer expression
 //   `Ctx` a reference to the ASTContext
 static FixItList
-populateInitializerFixItWithSpan(const Expr *Init, ASTContext &Ctx,
+FixVarInitializerWithSpan(const Expr *Init, ASTContext &Ctx,
                                  const StringRef UserFillPlaceHolder) {
   const SourceManager &SM = Ctx.getSourceManager();
   const LangOptions &LangOpts = Ctx.getLangOpts();
@@ -1823,59 +1845,70 @@ static std::optional<std::string> createSpanTypeForVarDecl(const VarDecl *VD,
 }
 
 // For a `VarDecl` of the form `T  * var (= Init)?`, this
-// function generates a fix-it for the declaration, which re-declares `var` to
-// be of `span<T>` type and transforms the initializer, if present, to a span
-// constructor---`span<T> var {Init, Extent}`, where `Extent` may need the user
-// to fill in.
+// function generates fix-its that
+//  1) replace `T * var` with `std::span<T> var`; and
+//  2) change `Init` accordingly to a span constructor, if it exists.
 //
 // FIXME: support Multi-level pointers
 //
 // Parameters:
 //   `D` a pointer the variable declaration node
 //   `Ctx` a reference to the ASTContext
+//   `UserFillPlaceHolder` the user-input placeholder text
 // Returns:
-//    the generated fix-it
-static FixItList fixVarDeclWithSpan(const VarDecl *D, ASTContext &Ctx,
-                                    const StringRef UserFillPlaceHolder,
-                                    UnsafeBufferUsageHandler &Handler) {
-  (void)Handler; // Suppress unused variable warning in release builds.
-  const QualType &SpanEltT = D->getType()->getPointeeType();
-  assert(!SpanEltT.isNull() && "Trying to fix a non-pointer type variable!");
+//    the non-empty fix-it list, if fix-its are successfuly generated; empty
+//    list otherwise.
+static FixItList fixLocalVarDeclWithSpan(const VarDecl *D, ASTContext &Ctx,
+					 const StringRef UserFillPlaceHolder,
+					 UnsafeBufferUsageHandler &Handler) {
+  if (hasUnsupportedSpecifiers(D, Ctx.getSourceManager()))
+    return {};
 
   FixItList FixIts{};
-  std::optional<SourceLocation>
-      ReplacementLastLoc; // the inclusive end location of the replacement
-  const SourceManager &SM = Ctx.getSourceManager();
+  std::optional<std::string> SpanTyText = createSpanTypeForVarDecl(D, Ctx);
 
-  if (const Expr *Init = D->getInit()) {
-    FixItList InitFixIts =
-        populateInitializerFixItWithSpan(Init, Ctx, UserFillPlaceHolder);
-
-    if (InitFixIts.empty()) {
-      DEBUG_NOTE_DECL_FAIL(D, " : empty initializer");
-      return {};
-    }
-
-    // The loc right before the initializer:
-    ReplacementLastLoc = Init->getBeginLoc().getLocWithOffset(-1);
-    FixIts.insert(FixIts.end(), std::make_move_iterator(InitFixIts.begin()),
-                  std::make_move_iterator(InitFixIts.end()));
-  } else
-    ReplacementLastLoc = getEndCharLoc(D, SM, Ctx.getLangOpts());
-
-  // Producing fix-it for variable declaration---make `D` to be of span type:
-  SmallString<32> Replacement;
-  raw_svector_ostream OS(Replacement);
-
-  OS << "std::span<" << SpanEltT.getAsString() << "> " << D->getName();
-
-  if (!ReplacementLastLoc) {
-    DEBUG_NOTE_DECL_FAIL(D, " : failed to get end char loc (macro)");
+  if (!SpanTyText) {
+    DEBUG_NOTE_DECL_FAIL(D, " : failed to generate 'std::span' type");
     return {};
   }
 
+  // Will hold the text for `std::span<T> Ident`:
+  std::stringstream SS;
+
+  SS << *SpanTyText;
+  // Append qualifiers to the type of `D`, if any:
+  if (D->getType().hasQualifiers())
+    SS << " " << D->getType().getQualifiers().getAsString();
+
+  // The end of the range of the original source that will be replaced
+  // by `std::span<T> ident`:
+  SourceLocation EndLocForReplacement = D->getEndLoc();
+  std::optional<StringRef> IdentText =
+      getVarDeclIdentifierText(D, Ctx.getSourceManager(), Ctx.getLangOpts());
+
+  if (!IdentText) {
+    DEBUG_NOTE_DECL_FAIL(D, " : failed to locate the identifier");
+    return {};
+  }
+  // Fix the initializer if it exists:
+  if (const Expr *Init = D->getInit()) {
+    FixItList InitFixIts =
+        FixVarInitializerWithSpan(Init, Ctx, UserFillPlaceHolder);
+    if (InitFixIts.empty())
+      return {};
+    FixIts.insert(FixIts.end(), std::make_move_iterator(InitFixIts.begin()),
+                  std::make_move_iterator(InitFixIts.end()));
+    // If the declaration has the form `T *ident = init`, we want to replace
+    // `T *ident = ` with `std::span<T> ident`:
+    EndLocForReplacement = Init->getBeginLoc().getLocWithOffset(-1);
+  }
+  SS << " " << IdentText->str();
+  if (!EndLocForReplacement.isValid()) {
+    DEBUG_NOTE_DECL_FAIL(D, " : failed to locate the end of the declaration");
+    return {};
+  }
   FixIts.push_back(FixItHint::CreateReplacement(
-      SourceRange{D->getBeginLoc(), *ReplacementLastLoc}, OS.str()));
+      SourceRange(D->getBeginLoc(), EndLocForReplacement), SS.str()));
   return FixIts;
 }
 
@@ -2064,6 +2097,10 @@ createOverloadsForFixedParams(unsigned ParmIdx, StringRef NewTyText,
 // `createOverloadsForFixedParams`).
 static FixItList fixParamWithSpan(const ParmVarDecl *PVD, const ASTContext &Ctx,
                                   UnsafeBufferUsageHandler &Handler) {
+  if (hasUnsupportedSpecifiers(PVD, Ctx.getSourceManager())) {
+    DEBUG_NOTE_DECL_FAIL(PVD, " : has unsupport specifier(s)");
+    return {};
+  }
   if (PVD->hasDefaultArg()) {
     // FIXME: generate fix-its for default values:
     DEBUG_NOTE_DECL_FAIL(PVD, " : has default arg");
@@ -2135,8 +2172,7 @@ static FixItList fixVariableWithSpan(const VarDecl *VD,
   (void)DS;
 
   // FIXME: handle cases where DS has multiple declarations
-  return fixVarDeclWithSpan(VD, Ctx, getUserFillPlaceHolder(),
-                            Handler);
+  return fixLocalVarDeclWithSpan(VD, Ctx, getUserFillPlaceHolder(), Handler);
 }
 
 // TODO: we should be consistent to use `std::nullopt` to represent no-fix due
@@ -2208,16 +2244,30 @@ static bool overlapWithMacro(const FixItList &FixIts) {
   });
 }
 
-static bool impossibleToFixForVar(const FixableGadgetSets &FixablesForAllVars,
-                                  const Strategy &S,
-                                  const VarDecl * Var) {
-  for (const auto &F : FixablesForAllVars.byVar.find(Var)->second) {
-    std::optional<FixItList> Fixits = F->getFixits(S);
-    if (!Fixits) {
-      return true;
+// Erases variables in `FixItsForVariable`, if such a variable has an unfixable
+// group mate.  A variable `v` is unfixable iff `FixItsForVariable` does not
+// contain `v`.
+static void eraseVarsForUnfixableGroupMates(
+    std::map<const VarDecl *, FixItList> &FixItsForVariable,
+    const VariableGroupsManager &VarGrpMgr) {
+  // Variables will be removed from `FixItsForVariable`:
+  SmallVector<const VarDecl *, 8> ToErase;
+
+  for (auto [VD, Ignore] : FixItsForVariable) {
+    VarGrpRef Grp = VarGrpMgr.getGroupOfVar(VD);
+    if (llvm::any_of(Grp,
+                     [&FixItsForVariable](const VarDecl *GrpMember) -> bool {
+                       return FixItsForVariable.find(GrpMember) ==
+                              FixItsForVariable.end();
+                     })) {
+      // At least one group member cannot be fixed, so we have to erase the
+      // whole group:
+      for (const VarDecl *Member : Grp)
+        ToErase.push_back(Member);
     }
   }
-  return false;
+  for (auto *VarToErase : ToErase)
+    FixItsForVariable.erase(VarToErase);
 }
 
 static std::map<const VarDecl *, FixItList>
@@ -2225,8 +2275,15 @@ getFixIts(FixableGadgetSets &FixablesForAllVars, const Strategy &S,
 	  ASTContext &Ctx,
           /* The function decl under analysis */ const Decl *D,
           const DeclUseTracker &Tracker, UnsafeBufferUsageHandler &Handler,
-          const DefMapTy &VarGrpMap) {
+          const VariableGroupsManager &VarGrpMgr) {
+  // `FixItsForVariable` will map each variable to a set of fix-its directly
+  // associated to the variable itself.  Fix-its of distinct variables in
+  // `FixItsForVariable` are disjoint.
   std::map<const VarDecl *, FixItList> FixItsForVariable;
+
+  // Populate `FixItsForVariable` with fix-its directly associated with each
+  // variable.  Fix-its directly associated to a variable 'v' are the ones
+  // produced by the `FixableGadget`s whose claimed variable is 'v'.
   for (const auto &[VD, Fixables] : FixablesForAllVars.byVar) {
     FixItsForVariable[VD] =
         fixVariable(VD, S.lookup(VD), D, Tracker, Ctx, Handler);
@@ -2236,89 +2293,66 @@ getFixIts(FixableGadgetSets &FixablesForAllVars, const Strategy &S,
       FixItsForVariable.erase(VD);
       continue;
     }
-    bool ImpossibleToFix = false;
-    llvm::SmallVector<FixItHint, 16> FixItsForVD;
     for (const auto &F : Fixables) {
       std::optional<FixItList> Fixits = F->getFixits(S);
-      if (!Fixits) {
-#ifndef NDEBUG
-        Handler.addDebugNoteForVar(
-            VD, F->getBaseStmt()->getBeginLoc(),
-            ("gadget '" + F->getDebugName() + "' refused to produce a fix")
-                .str());
-#endif
-        ImpossibleToFix = true;
-        break;
-      } else {
-        const FixItList CorrectFixes = Fixits.value();
-        FixItsForVD.insert(FixItsForVD.end(), CorrectFixes.begin(),
-                           CorrectFixes.end());
-      }
-    }
 
-    if (ImpossibleToFix) {
-      FixItsForVariable.erase(VD);
-      continue;
-    }
-
-    const auto VarGroupForVD = VarGrpMap.find(VD);
-    if (VarGroupForVD != VarGrpMap.end()) {
-      for (const VarDecl * V : VarGroupForVD->second) {
-        if (V == VD) {
-          continue;
-        }
-        if (impossibleToFixForVar(FixablesForAllVars, S, V)) {
-          ImpossibleToFix = true;
-          break;
-        }
-      }
-
-      if (ImpossibleToFix) {
-        FixItsForVariable.erase(VD);
-        for (const VarDecl * V : VarGroupForVD->second) {
-          FixItsForVariable.erase(V);
-        }
+      if (Fixits) {
+        FixItsForVariable[VD].insert(FixItsForVariable[VD].end(),
+                                     Fixits->begin(), Fixits->end());
         continue;
       }
-    }
-    FixItsForVariable[VD].insert(FixItsForVariable[VD].end(),
-                                 FixItsForVD.begin(), FixItsForVD.end());
-
-    // Fix-it shall not overlap with macros or/and templates:
-    if (overlapWithMacro(FixItsForVariable[VD]) ||
-        clang::internal::anyConflict(FixItsForVariable[VD],
-                                     Ctx.getSourceManager())) {
+#ifndef NDEBUG
+      Handler.addDebugNoteForVar(
+          VD, F->getBaseStmt()->getBeginLoc(),
+          ("gadget '" + F->getDebugName() + "' refused to produce a fix")
+              .str());
+#endif
       FixItsForVariable.erase(VD);
-      continue;
+      break;
     }
   }
 
-  for (auto VD : FixItsForVariable) {
-    const auto VarGroupForVD = VarGrpMap.find(VD.first);
-    const Strategy::Kind ReplacementTypeForVD = S.lookup(VD.first);
-    if (VarGroupForVD != VarGrpMap.end()) {
-      for (const VarDecl * Var : VarGroupForVD->second) {
-        if (Var == VD.first) {
-          continue;
-        }
+  // `FixItsForVariable` now contains only variables that can be
+  // fixed. A variable can be fixed if its' declaration and all Fixables
+  // associated to it can all be fixed.
 
-        FixItList GroupFix;
-        if (FixItsForVariable.find(Var) == FixItsForVariable.end()) {
-          GroupFix = fixVariable(Var, ReplacementTypeForVD, D, Tracker,
-                                 Var->getASTContext(), Handler);
-        } else {
-          GroupFix = FixItsForVariable[Var];
-        }
+  // To further remove from `FixItsForVariable` variables whose group mates
+  // cannot be fixed...
+  eraseVarsForUnfixableGroupMates(FixItsForVariable, VarGrpMgr);
+  // Now `FixItsForVariable` gets further reduced: a variable is in
+  // `FixItsForVariable` iff it can be fixed and all its group mates can be
+  // fixed.
 
-        for (auto Fix : GroupFix) {
-          FixItsForVariable[VD.first].push_back(Fix);
-        }
-      }
+  // The map that maps each variable `v` to fix-its for the whole group where
+  // `v` is in:
+  std::map<const VarDecl *, FixItList> FinalFixItsForVariable{
+      FixItsForVariable};
+
+  for (auto &[Var, Ignore] : FixItsForVariable) {
+    const auto VarGroupForVD = VarGrpMgr.getGroupOfVar(Var);
+
+    for (const VarDecl *GrpMate : VarGroupForVD) {
+      if (Var == GrpMate)
+        continue;
+      if (FixItsForVariable.count(GrpMate))
+        FinalFixItsForVariable[Var].insert(FinalFixItsForVariable[Var].end(),
+                                           FixItsForVariable[GrpMate].begin(),
+                                           FixItsForVariable[GrpMate].end());
     }
   }
-  return FixItsForVariable;
+  // Fix-its that will be applied in one step shall NOT:
+  // 1. overlap with macros or/and templates; or
+  // 2. conflict with each other.
+  // Otherwise, the fix-its will be dropped.
+  for (auto Iter = FinalFixItsForVariable.begin();
+       Iter != FinalFixItsForVariable.end();)
+    if (overlapWithMacro(Iter->second) ||
+        clang::internal::anyConflict(Iter->second, Ctx.getSourceManager())) {
+      Iter = FinalFixItsForVariable.erase(Iter);
+    } else
+      Iter++;
+  return FinalFixItsForVariable;
 }
-
 
 static Strategy
 getNaiveStrategy(const llvm::SmallVectorImpl<const VarDecl *> &UnsafeVars) {
@@ -2328,6 +2362,24 @@ getNaiveStrategy(const llvm::SmallVectorImpl<const VarDecl *> &UnsafeVars) {
   }
   return S;
 }
+
+//  Manages variable groups:
+class VariableGroupsManagerImpl : public VariableGroupsManager {
+  const std::vector<VarGrpTy> Groups;
+  const std::map<const VarDecl *, unsigned> &VarGrpMap;
+
+public:
+  VariableGroupsManagerImpl(
+      const std::vector<VarGrpTy> &Groups,
+      const std::map<const VarDecl *, unsigned> &VarGrpMap)
+      : Groups(Groups), VarGrpMap(VarGrpMap) {}
+
+  VarGrpRef getGroupOfVar(const VarDecl *Var) const override {
+    auto I = VarGrpMap.find(Var);
+    assert(I != VarGrpMap.end());
+    return Groups[I->second];
+  }
+};
 
 void clang::checkUnsafeBufferUsage(const Decl *D,
                                    UnsafeBufferUsageHandler &Handler,
@@ -2339,6 +2391,7 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
   assert(D && D->getBody());
   // We do not want to visit a Lambda expression defined inside a method independently.
   // Instead, it should be visited along with the outer method.
+  // FIXME: do we want to do the same thing for `BlockDecl`s?
   if (const auto *fd = dyn_cast<CXXMethodDecl>(D)) {
     if (fd->getParent()->isLambda() && fd->getParent()->isLocalClass())
       return;
@@ -2408,7 +2461,6 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
   FixablesForAllVars = groupFixablesByVar(std::move(FixableGadgets));
 
   std::map<const VarDecl *, FixItList> FixItsForVariableGroup;
-  DefMapTy VariableGroupsMap{};
 
   // Filter out non-local vars and vars with unclaimed DeclRefExpr-s.
   for (auto it = FixablesForAllVars.byVar.cbegin();
@@ -2451,7 +2503,7 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
     UnsafeVars.push_back(VD);
 
   // Fixpoint iteration for pointer assignments
-  using DepMapTy = DenseMap<const VarDecl *, std::set<const VarDecl *>>;
+  using DepMapTy = DenseMap<const VarDecl *, llvm::SetVector<const VarDecl *>>;
   DepMapTy DependenciesMap{};
   DepMapTy PtrAssignmentGraph{};
 
@@ -2460,7 +2512,7 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
       std::optional<std::pair<const VarDecl *, const VarDecl *>> ImplPair =
                                   fixable->getStrategyImplications();
       if (ImplPair) {
-        std::pair<const VarDecl *, const VarDecl *> Impl = ImplPair.value();
+        std::pair<const VarDecl *, const VarDecl *> Impl = std::move(*ImplPair);
         PtrAssignmentGraph[Impl.first].insert(Impl.second);
       }
     }
@@ -2505,14 +2557,21 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
     }
   }
 
+  // `Groups` stores the set of Connected Components in the graph.
+  std::vector<VarGrpTy> Groups;
+  // `VarGrpMap` maps variables that need fix to the groups (indexes) that the
+  // variables belong to.  Group indexes refer to the elements in `Groups`.
+  // `VarGrpMap` is complete in that every variable that needs fix is in it.
+  std::map<const VarDecl *, unsigned> VarGrpMap;
+
   // Group Connected Components for Unsafe Vars
   // (Dependencies based on pointer assignments)
   std::set<const VarDecl *> VisitedVars{};
   for (const auto &[Var, ignore] : UnsafeOps.byVar) {
     if (VisitedVars.find(Var) == VisitedVars.end()) {
-      std::vector<const VarDecl *> VarGroup{};
-
+      VarGrpTy &VarGroup = Groups.emplace_back();
       std::queue<const VarDecl*> Queue{};
+
       Queue.push(Var);
       while(!Queue.empty()) {
         const VarDecl* CurrentVar = Queue.front();
@@ -2526,10 +2585,10 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
           }
         }
       }
-      for (const VarDecl * V : VarGroup) {
-        if (UnsafeOps.byVar.find(V) != UnsafeOps.byVar.end()) {
-          VariableGroupsMap[V] = VarGroup;
-        }
+      unsigned GrpIdx = Groups.size() - 1;
+
+      for (const VarDecl *V : VarGroup) {
+        VarGrpMap[V] = GrpIdx;
       }
     }
   }
@@ -2563,12 +2622,11 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
   }
 
   Strategy NaiveStrategy = getNaiveStrategy(UnsafeVars);
+  VariableGroupsManagerImpl VarGrpMgr(Groups, VarGrpMap);
 
   FixItsForVariableGroup =
       getFixIts(FixablesForAllVars, NaiveStrategy, D->getASTContext(), D,
-                Tracker, Handler, VariableGroupsMap);
-
-  // FIXME Detect overlapping FixIts.
+                Tracker, Handler, VarGrpMgr);
 
   for (const auto &G : UnsafeOps.noVar) {
     Handler.handleUnsafeOperation(G->getBaseStmt(), /*IsRelatedToDecl=*/false);
@@ -2576,7 +2634,7 @@ void clang::checkUnsafeBufferUsage(const Decl *D,
 
   for (const auto &[VD, WarningGadgets] : UnsafeOps.byVar) {
     auto FixItsIt = FixItsForVariableGroup.find(VD);
-    Handler.handleUnsafeVariableGroup(VD, VariableGroupsMap,
+    Handler.handleUnsafeVariableGroup(VD, VarGrpMgr,
                                       FixItsIt != FixItsForVariableGroup.end()
                                       ? std::move(FixItsIt->second)
                                       : FixItList{});
