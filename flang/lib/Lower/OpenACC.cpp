@@ -526,6 +526,13 @@ getSymbolFromAccObject(const Fortran::parser::AccObject &accObject) {
     if (const auto *name =
             Fortran::semantics::getDesignatorNameIfDataRef(*designator))
       return *name->symbol;
+    if (const auto *arrayElement =
+            Fortran::parser::Unwrap<Fortran::parser::ArrayElement>(
+                *designator)) {
+      const Fortran::parser::Name &name =
+          Fortran::parser::GetLastName(arrayElement->base);
+      return *name.symbol;
+    }
   } else if (const auto *name =
                  std::get_if<Fortran::parser::Name>(&accObject.u)) {
     return *name->symbol;
@@ -1929,6 +1936,9 @@ static void genACCDataOp(Fortran::lower::AbstractConverter &converter,
   addOperand(operands, operandSegments, waitDevnum);
   addOperands(operands, operandSegments, waitOperands);
   addOperands(operands, operandSegments, dataClauseOperands);
+
+  if (dataClauseOperands.empty() && !hasDefaultNone && !hasDefaultPresent)
+    return;
 
   auto dataOp = createRegionOp<mlir::acc::DataOp, mlir::acc::TerminatorOp>(
       builder, currentLocation, operands, operandSegments);

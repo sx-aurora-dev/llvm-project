@@ -187,8 +187,7 @@ def ConvertAsyncToLLVMPass : Pass<"convert-async-to-llvm", "ModuleOp"> {
 // BufferizationToMemRef
 //===----------------------------------------------------------------------===//
 
-def ConvertBufferizationToMemRef : Pass<"convert-bufferization-to-memref",
-                                        "mlir::ModuleOp"> {
+def ConvertBufferizationToMemRef : Pass<"convert-bufferization-to-memref"> {
   let summary = "Convert operations from the Bufferization dialect to the "
                 "MemRef dialect";
   let description = [{
@@ -196,12 +195,14 @@ def ConvertBufferizationToMemRef : Pass<"convert-bufferization-to-memref",
     This pass converts bufferization operations into memref operations.
 
     In the current state, this pass only transforms a `bufferization.clone`
-    operation into `memref.alloc` and `memref.copy` operations. This conversion
-    is needed, since some clone operations could remain after applying several
-    transformation processes. Currently, only `canonicalize` transforms clone
-    operations or even eliminates them. This can lead to errors if any clone op
-    survived after all conversion passes (starting from the bufferization
-    dialect) are performed.
+    operation into `memref.alloc` and `memref.copy` operations and
+    `bufferization.dealloc` operations (the same way as the
+    `-bufferization-lower-deallocations` pass). The conversion of `clone`
+    operations is needed, since some clone operations could remain after
+    applying several transformation processes. Currently, only `canonicalize`
+    transforms clone operations or even eliminates them. This can lead to errors
+    if any clone op survived after all conversion passes (starting from the
+    bufferization dialect) are performed.
 
     See:
     https://llvm.discourse.group/t/bufferization-error-related-to-memref-clone/4665

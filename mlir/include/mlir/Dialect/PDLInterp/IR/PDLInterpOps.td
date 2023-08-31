@@ -14,7 +14,7 @@
 #define MLIR_DIALECT_PDLINTERP_IR_PDLINTERPOPS
 
 include "mlir/Dialect/PDL/IR/PDLTypes.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -38,7 +38,6 @@ def PDLInterp_Dialect : Dialect {
   let name = "pdl_interp";
   let cppNamespace = "::mlir::pdl_interp";
   let dependentDialects = ["pdl::PDLDialect"];
-  let usePropertiesForAttributes = 1;
   let extraClassDeclaration = [{
     /// Returns the name of the function containing the matcher code. This
     /// function is called by the interpreter when matching an operation.
@@ -678,6 +677,8 @@ def PDLInterp_FuncOp : PDLInterp_Op<"func", [
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    Region *getCallableRegion() { return &getBody(); }
   }];
   let hasCustomAssemblyFormat = 1;
   let skipDefaultBuilders = 1;
