@@ -61,8 +61,6 @@ set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_STANDALONE_BUILD ON CACHE BOOL "")
 set(RUNTIMES_x86_64-unknown-linux-gnu_OPENMP_LIBDIR_SUFFIX "/x86_64-unknown-linux-gnu" CACHE STRING "")
 set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_LIBDIR_SUFFIX "/ve-unknown-linux-gnu" CACHE STRING "")
 
-# VE cannot use libomptarget profiling since libomptarget uses host's profiling.
-set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_ENABLE_LIBOMPTARGET_PROFILING FALSE CACHE BOOL "")
 # Around 2022/8, libomptarget is changed to use target's libLLVM.  However,
 # our compiling mechanism supports compiling only either host's libLLVM or
 # target's libLLVM.  Therefore, it is not possible to compile host's libLLVM
@@ -74,6 +72,13 @@ set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_ENABLE_LIBOMPTARGET FALSE CACHE BOOL ""
 
 # VE requires -lrt flag for shm_open.
 set(RUNTIMES_ve-unknown-linux-gnu_LIBOMP_HAVE_SHM_OPEN_WITH_LRT TRUE CACHE BOOL "")
+
+# Compiler flags for testing
+set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
+set(RUNTIMES_ve-unknown-linux-gnu_LIBCXXABI_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
+set(RUNTIMES_ve-unknown-linux-gnu_LIBCXX_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
+set(RUNTIMES_ve-unknown-linux-gnu_LIBUNWIND_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
+set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_TEST_OPENMP_FLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
 
 # setup toolchain
 set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
