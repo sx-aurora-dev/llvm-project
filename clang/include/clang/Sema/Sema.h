@@ -3005,7 +3005,13 @@ public:
                                       QualType NewT, QualType OldT);
   void CheckMain(FunctionDecl *FD, const DeclSpec &D);
   void CheckMSVCRTEntryPoint(FunctionDecl *FD);
+  void ActOnHLSLTopLevelFunction(FunctionDecl *FD);
   void CheckHLSLEntryPoint(FunctionDecl *FD);
+  void CheckHLSLSemanticAnnotation(FunctionDecl *EntryPoint, const Decl *Param,
+                                   const HLSLAnnotationAttr *AnnotationAttr);
+  void DiagnoseHLSLAttrStageMismatch(
+      const Attr *A, HLSLShaderAttr::ShaderType Stage,
+      std::initializer_list<HLSLShaderAttr::ShaderType> AllowedStages);
   Attr *getImplicitCodeSegOrSectionAttrForFunction(const FunctionDecl *FD,
                                                    bool IsDefinition);
   void CheckFunctionOrTemplateParamDeclarator(Scope *S, Declarator &D);
@@ -13456,7 +13462,9 @@ public:
     PCC_ParenthesizedExpression,
     /// Code completion occurs within a sequence of declaration
     /// specifiers within a function, method, or block.
-    PCC_LocalDeclarationSpecifiers
+    PCC_LocalDeclarationSpecifiers,
+    /// Code completion occurs at top-level in a REPL session
+    PCC_TopLevelOrExpression,
   };
 
   void CodeCompleteModuleImport(SourceLocation ImportLoc, ModuleIdPath Path);

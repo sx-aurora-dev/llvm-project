@@ -528,7 +528,7 @@ void tools::getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     break;
   case llvm::Triple::x86:
   case llvm::Triple::x86_64:
-    x86::getX86TargetFeatures(D, Triple, Args, Features);
+    x86::getX86TargetFeatures(D, Triple, Args, Features, ForAS);
     break;
   case llvm::Triple::hexagon:
     hexagon::getHexagonTargetFeatures(D, Triple, Args, Features);
@@ -584,9 +584,9 @@ llvm::StringRef tools::getLTOParallelism(const ArgList &Args, const Driver &D) {
   return LtoJobsArg->getValue();
 }
 
-// CloudABI and PS4/PS5 use -ffunction-sections and -fdata-sections by default.
+// PS4/PS5 uses -ffunction-sections and -fdata-sections by default.
 bool tools::isUseSeparateSections(const llvm::Triple &Triple) {
-  return Triple.getOS() == llvm::Triple::CloudABI || Triple.isPS();
+  return Triple.isPS();
 }
 
 void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,

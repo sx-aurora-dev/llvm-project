@@ -6345,11 +6345,14 @@ bool ASTContext::isSameTypeConstraint(const TypeConstraint *XTC,
   auto *NCY = YTC->getNamedConcept();
   if (!NCX || !NCY || !isSameEntity(NCX, NCY))
     return false;
-  if (XTC->hasExplicitTemplateArgs() != YTC->hasExplicitTemplateArgs())
+  if (XTC->getConceptReference()->hasExplicitTemplateArgs() !=
+      YTC->getConceptReference()->hasExplicitTemplateArgs())
     return false;
-  if (XTC->hasExplicitTemplateArgs())
-    if (XTC->getTemplateArgsAsWritten()->NumTemplateArgs !=
-        YTC->getTemplateArgsAsWritten()->NumTemplateArgs)
+  if (XTC->getConceptReference()->hasExplicitTemplateArgs())
+    if (XTC->getConceptReference()
+            ->getTemplateArgsAsWritten()
+            ->NumTemplateArgs !=
+        YTC->getConceptReference()->getTemplateArgsAsWritten()->NumTemplateArgs)
       return false;
 
   // Compare slowly by profiling.
@@ -11687,6 +11690,14 @@ static GVALinkage basicGVALinkageForFunction(const ASTContext &Context,
   // replaced, the function definition cannot be discarded.
   if (FD->isMSExternInline())
     return GVA_StrongODR;
+
+  if (Context.getTargetInfo().getCXXABI().isMicrosoft() &&
+      isa<CXXConstructorDecl>(FD) &&
+      cast<CXXConstructorDecl>(FD)->isInheritingConstructor())
+    // Our approach to inheriting constructors is fundamentally different from
+    // that used by the MS ABI, so keep our inheriting constructor thunks
+    // internal rather than trying to pick an unambiguous mangling for them.
+    return GVA_Internal;
 
   return GVA_DiscardableODR;
 }

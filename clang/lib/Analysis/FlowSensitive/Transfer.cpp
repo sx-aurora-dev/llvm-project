@@ -276,8 +276,7 @@ public:
 
     case CK_LValueToRValue: {
       // When an L-value is used as an R-value, it may result in sharing, so we
-      // need to unpack any nested `Top`s. We also need to strip off the
-      // `ReferenceValue` associated with the lvalue.
+      // need to unpack any nested `Top`s.
       auto *SubExprVal = maybeUnpackLValueExpr(*SubExpr, Env);
       if (SubExprVal == nullptr)
         break;
@@ -488,6 +487,7 @@ public:
     // we've got a record type.
     if (S->getType()->isRecordType()) {
       auto &InitialVal = *cast<RecordValue>(Env.createValue(S->getType()));
+      Env.setValue(*S, InitialVal);
       copyRecord(InitialVal.getLoc(), Env.getResultObjectLocation(*S), Env);
     }
 

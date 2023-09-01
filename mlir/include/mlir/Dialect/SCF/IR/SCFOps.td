@@ -26,7 +26,6 @@ def SCF_Dialect : Dialect {
   let name = "scf";
   let cppNamespace = "::mlir::scf";
   let dependentDialects = ["arith::ArithDialect"];
-  let usePropertiesForAttributes = 1;
 }
 
 // Base class for SCF dialect ops.
@@ -977,7 +976,7 @@ def ReduceReturnOp :
 def WhileOp : SCF_Op<"while",
     [DeclareOpInterfaceMethods<RegionBranchOpInterface,
         ["getEntrySuccessorOperands"]>,
-     RecursiveMemoryEffects]> {
+     RecursiveMemoryEffects, SingleBlock]> {
   let summary = "a generic 'while' loop";
   let description = [{
     This operation represents a generic "while"/"do-while" loop that keeps

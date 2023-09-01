@@ -102,7 +102,7 @@ namespace {
 
 // Default filename used for profile generation.
 std::string getDefaultProfileGenName() {
-  return DebugInfoCorrelate ? "default_%p.proflite" : "default_%m.profraw";
+  return DebugInfoCorrelate ? "default_%m.proflite" : "default_%m.profraw";
 }
 
 class EmitAssemblyHelper {
@@ -1353,7 +1353,7 @@ void clang::EmbedObject(llvm::Module *M, const CodeGenOptions &CGOpts,
   for (StringRef OffloadObject : CGOpts.OffloadObjects) {
     llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ObjectOrErr =
         llvm::MemoryBuffer::getFileOrSTDIN(OffloadObject);
-    if (std::error_code EC = ObjectOrErr.getError()) {
+    if (ObjectOrErr.getError()) {
       auto DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
                                           "could not open '%0' for embedding");
       Diags.Report(DiagID) << OffloadObject;

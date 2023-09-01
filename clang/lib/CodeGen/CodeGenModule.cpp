@@ -1203,6 +1203,8 @@ void CodeGenModule::Release() {
     getModule().addModuleFlag(llvm::Module::Error, "MaxTLSAlign",
                               getContext().getTargetInfo().getMaxTLSAlign());
 
+  getTargetCodeGenInfo().emitTargetGlobals(*this);
+
   getTargetCodeGenInfo().emitTargetMetadata(*this, MangledDeclNames);
 
   EmitBackendOptionsMetadata(getCodeGenOpts());
@@ -1969,15 +1971,6 @@ CodeGenModule::getFunctionLinkage(GlobalDecl GD) {
 
   if (const auto *Dtor = dyn_cast<CXXDestructorDecl>(D))
     return getCXXABI().getCXXDestructorLinkage(Linkage, Dtor, GD.getDtorType());
-
-  if (isa<CXXConstructorDecl>(D) &&
-      cast<CXXConstructorDecl>(D)->isInheritingConstructor() &&
-      Context.getTargetInfo().getCXXABI().isMicrosoft()) {
-    // Our approach to inheriting constructors is fundamentally different from
-    // that used by the MS ABI, so keep our inheriting constructor thunks
-    // internal rather than trying to pick an unambiguous mangling for them.
-    return llvm::GlobalValue::InternalLinkage;
-  }
 
   return getLLVMLinkageForDeclarator(D, Linkage);
 }
@@ -4059,7 +4052,7 @@ void CodeGenModule::emitMultiVersionFunctions() {
 
     ResolverFunc->setLinkage(getMultiversionLinkage(*this, GD));
 
-    if (supportsCOMDAT())
+    if (!ResolverFunc->hasLocalLinkage() && supportsCOMDAT())
       ResolverFunc->setComdat(
           getModule().getOrInsertComdat(ResolverFunc->getName()));
 
@@ -7430,7 +7423,7 @@ void CodeGenModule::printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
 
     // Get the UniqueID for the file containing the decl.
     llvm::sys::fs::UniqueID ID;
-    if (auto EC = llvm::sys::fs::getUniqueID(PLoc.getFilename(), ID)) {
+    if (llvm::sys::fs::getUniqueID(PLoc.getFilename(), ID)) {
       PLoc = SM.getPresumedLoc(D->getLocation(), /*UseLineDirectives=*/false);
       assert(PLoc.isValid() && "Source location is expected to be valid.");
       if (auto EC = llvm::sys::fs::getUniqueID(PLoc.getFilename(), ID))

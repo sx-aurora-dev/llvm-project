@@ -2165,9 +2165,10 @@ void AArch64TargetLowering::computeKnownBitsForTargetNode(
     case Intrinsic::aarch64_neon_uaddlv: {
       MVT VT = Op.getOperand(1).getValueType().getSimpleVT();
       unsigned BitWidth = Known.getBitWidth();
-      if (VT == MVT::v8i8) {
-        assert(BitWidth >= 16 && "Unexpected width!");
-        APInt Mask = APInt::getHighBitsSet(BitWidth, BitWidth - 16);
+      if (VT == MVT::v8i8 || VT == MVT::v16i8) {
+        unsigned Bound = (VT == MVT::v8i8) ?  11 : 12;
+        assert(BitWidth >= Bound && "Unexpected width!");
+        APInt Mask = APInt::getHighBitsSet(BitWidth, BitWidth - Bound);
         Known.Zero |= Mask;
       }
       break;
@@ -6625,13 +6626,10 @@ SDValue AArch64TargetLowering::LowerFormalArguments(
   // Insert the SMSTART if this is a locally streaming function and
   // make sure it is Glued to the last CopyFromReg value.
   if (IsLocallyStreaming) {
-    const AArch64RegisterInfo *TRI = Subtarget->getRegisterInfo();
-    Chain = DAG.getNode(
-        AArch64ISD::SMSTART, DL, DAG.getVTList(MVT::Other, MVT::Glue),
-        {DAG.getRoot(),
-          DAG.getTargetConstant((int32_t)AArch64SVCR::SVCRSM, DL, MVT::i32),
-         DAG.getConstant(0, DL, MVT::i64), DAG.getConstant(1, DL, MVT::i64),
-         DAG.getRegisterMask(TRI->getSMStartStopCallPreservedMask()), Glue});
+    Chain =
+        changeStreamingMode(DAG, DL, /*Enable*/ true, DAG.getRoot(), Glue,
+                            DAG.getConstant(0, DL, MVT::i64), /*Entry*/ true);
+
     // Ensure that the SMSTART happens after the CopyWithChain such that its
     // chain result is used.
     for (unsigned I=0; I<InVals.size(); ++I) {
@@ -7883,11 +7881,9 @@ AArch64TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   // Emit SMSTOP before returning from a locally streaming function
   SMEAttrs FuncAttrs(MF.getFunction());
   if (FuncAttrs.hasStreamingBody() && !FuncAttrs.hasStreamingInterface()) {
-    Chain = DAG.getNode(
-        AArch64ISD::SMSTOP, DL, DAG.getVTList(MVT::Other, MVT::Glue), Chain,
-        DAG.getTargetConstant((int32_t)AArch64SVCR::SVCRSM, DL, MVT::i32),
-        DAG.getConstant(1, DL, MVT::i64), DAG.getConstant(0, DL, MVT::i64),
-        DAG.getRegisterMask(TRI->getSMStartStopCallPreservedMask()));
+    Chain = changeStreamingMode(
+        DAG, DL, /*Enable*/ false, Chain, /*Glue*/ SDValue(),
+        DAG.getConstant(1, DL, MVT::i64), /*Entry*/ true);
     Glue = Chain.getValue(1);
   }
 
@@ -24970,7 +24966,15 @@ SDValue AArch64TargetLowering::LowerFixedLengthVectorMLoadToSVE(
   EVT VT = Op.getValueType();
   EVT ContainerVT = getContainerForFixedLengthVector(DAG, VT);
 
-  SDValue Mask = convertFixedMaskToScalableVector(Load->getMask(), DAG);
+  SDValue Mask = Load->getMask();
+  // If this is an extending load and the mask type is not the same as
+  // load's type then we have to extend the mask type.
+  if (VT.getScalarSizeInBits() > Mask.getValueType().getScalarSizeInBits()) {
+    assert(Load->getExtensionType() != ISD::NON_EXTLOAD &&
+           "Incorrect mask type");
+    Mask = DAG.getNode(ISD::ANY_EXTEND, DL, VT, Mask);
+  }
+  Mask = convertFixedMaskToScalableVector(Mask, DAG);
 
   SDValue PassThru;
   bool IsPassThruZeroOrUndef = false;
