@@ -66,7 +66,7 @@ TEST_CONSTEXPR_CXX20 void half_size() {
 TEST_CONSTEXPR_CXX20 bool test() {
 #if _LIBCPP_ABI_VERSION == 1
 
-#  if defined(__x86_64__) || defined(__i386__)
+#  if defined(__x86_64__) || defined(__i386__) || defined(__ve__)
   full_size();
 #  elif defined(__APPLE__) && defined(__aarch64__)
   half_size();
