@@ -2059,6 +2059,7 @@ __kmp_invoke_microtask:
 // -- End  __kmp_invoke_microtask
 
 #endif /* KMP_ARCH_LOONGARCH64 */
+
 #if KMP_ARCH_VE
 
 //------------------------------------------------------------------------
@@ -2264,7 +2265,8 @@ __kmp_unnamed_critical_addr:
 #endif
 #endif /* KMP_ARCH_ARM */
 
-#if KMP_ARCH_PPC64 || KMP_ARCH_AARCH64 || KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64 || KMP_ARCH_VE
+#if KMP_ARCH_PPC64 || KMP_ARCH_AARCH64 || KMP_ARCH_MIPS64 ||                   \
+    KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64 || KMP_ARCH_VE
 #ifndef KMP_PREFIX_UNDERSCORE
 # define KMP_PREFIX_UNDERSCORE(x) x
 #endif

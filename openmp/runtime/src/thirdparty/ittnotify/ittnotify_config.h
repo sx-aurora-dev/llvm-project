@@ -163,7 +163,7 @@
 #endif /* ITT_ARCH_ARM64 */
 
 #ifndef ITT_ARCH_VE
-#  define ITT_ARCH_VE  8
+#define ITT_ARCH_VE 8
 #endif /* ITT_ARCH_VE */
 
 #ifndef ITT_ARCH

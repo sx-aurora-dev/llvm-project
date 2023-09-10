@@ -23,6 +23,9 @@ namespace llvm {
 namespace jitlink {
 namespace aarch32 {
 
+/// Check whether the given target flags are set for this Symbol.
+bool hasTargetFlags(Symbol &Sym, TargetFlagsType Flags);
+
 /// JITLink-internal AArch32 fixup kinds
 enum EdgeKind_aarch32 : Edge::Kind {
 
@@ -149,7 +152,6 @@ template <> struct FixupInfo<Thumb_Jump24> {
   static constexpr HalfWords Opcode{0xf000, 0x8000};
   static constexpr HalfWords OpcodeMask{0xf800, 0x8000};
   static constexpr HalfWords ImmMask{0x07ff, 0x2fff};
-  static constexpr uint16_t LoBitConditional = 0x1000;
 };
 
 template <> struct FixupInfo<Thumb_Call> {

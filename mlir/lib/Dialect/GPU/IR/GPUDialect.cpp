@@ -1955,6 +1955,20 @@ void AllocOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// GPU object attribute
+//===----------------------------------------------------------------------===//
+
+LogicalResult ObjectAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 Attribute target, StringAttr object) {
+  if (!target)
+    return emitError() << "the target attribute cannot be null";
+  if (target.hasPromiseOrImplementsInterface<TargetAttrInterface>())
+    return success();
+  return emitError() << "the target attribute must implement or promise the "
+                        "`gpu::TargetAttrInterface`";
+}
+
+//===----------------------------------------------------------------------===//
 // GPU select object attribute
 //===----------------------------------------------------------------------===//
 
@@ -1965,11 +1979,11 @@ gpu::SelectObjectAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   if (target) {
     if (auto intAttr = mlir::dyn_cast<IntegerAttr>(target)) {
       if (intAttr.getInt() < 0) {
-        return emitError() << "The object index must be positive.";
+        return emitError() << "the object index must be positive";
       }
-    } else if (!(::mlir::isa<TargetAttrInterface>(target))) {
+    } else if (!target.hasPromiseOrImplementsInterface<TargetAttrInterface>()) {
       return emitError()
-             << "The target attribute must be a GPU Target attribute.";
+             << "the target attribute must be a GPU Target attribute";
     }
   }
   return success();
@@ -2006,11 +2020,20 @@ std::pair<llvm::BumpPtrAllocator, SmallVector<const char *>>
 TargetOptions::tokenizeCmdOptions() const {
   std::pair<llvm::BumpPtrAllocator, SmallVector<const char *>> options;
   llvm::StringSaver stringSaver(options.first);
+  StringRef opts = cmdOptions;
+  // For a correct tokenization of the command line options `opts` must be
+  // unquoted, otherwise the tokenization function returns a single string: the
+  // unquoted `cmdOptions` -which is not the desired behavior.
+  // Remove any quotes if they are at the beginning and end of the string:
+  if (!opts.empty() && opts.front() == '"' && opts.back() == '"')
+    opts.consume_front("\""), opts.consume_back("\"");
+  if (!opts.empty() && opts.front() == '\'' && opts.back() == '\'')
+    opts.consume_front("'"), opts.consume_back("'");
 #ifdef _WIN32
-  llvm::cl::TokenizeWindowsCommandLine(cmdOptions, stringSaver, options.second,
+  llvm::cl::TokenizeWindowsCommandLine(opts, stringSaver, options.second,
                                        /*MarkEOLs=*/false);
 #else
-  llvm::cl::TokenizeGNUCommandLine(cmdOptions, stringSaver, options.second,
+  llvm::cl::TokenizeGNUCommandLine(opts, stringSaver, options.second,
                                    /*MarkEOLs=*/false);
 #endif // _WIN32
   return options;

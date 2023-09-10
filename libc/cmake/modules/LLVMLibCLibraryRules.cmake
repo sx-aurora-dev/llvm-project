@@ -19,7 +19,8 @@ function(collect_object_file_deps target result)
     return()
   endif()
 
-  if(${target_type} STREQUAL ${ENTRYPOINT_OBJ_TARGET_TYPE})
+  if(${target_type} STREQUAL ${ENTRYPOINT_OBJ_TARGET_TYPE} OR
+     ${target_type} STREQUAL ${ENTRYPOINT_OBJ_VENDOR_TARGET_TYPE})
     set(entrypoint_target ${target})
     get_target_property(is_alias ${entrypoint_target} "IS_ALIAS")
     if(is_alias)
@@ -85,7 +86,8 @@ function(add_entrypoint_library target_name)
     list(APPEND all_deps ${recursive_deps})
     # Add the entrypoint object target explicitly as collect_object_file_deps
     # only collects object files from non-entrypoint targets.
-    if(${dep_type} STREQUAL ${ENTRYPOINT_OBJ_TARGET_TYPE})
+    if(${dep_type} STREQUAL ${ENTRYPOINT_OBJ_TARGET_TYPE} OR
+       ${dep_type} STREQUAL ${ENTRYPOINT_OBJ_VENDOR_TARGET_TYPE})
       set(entrypoint_target ${dep})
       get_target_property(is_alias ${entrypoint_target} "IS_ALIAS")
       if(is_alias)
@@ -150,7 +152,7 @@ function(create_header_library fq_target_name)
     "ADD_HEADER"
     "" # Optional arguments
     "" # Single value arguments
-    "HDRS;DEPENDS;FLAGS" # Multi-value arguments
+    "HDRS;DEPENDS;FLAGS;COMPILE_OPTIONS" # Multi-value arguments
     ${ARGN}
   )
 
@@ -185,6 +187,9 @@ function(create_header_library fq_target_name)
     PROPERTIES
       INTERFACE_FLAGS "${ADD_HEADER_FLAGS}"
   )
+  if(ADD_HEADER_COMPILE_OPTIONS)
+    target_compile_options(${interface_target_name} INTERFACE ${ADD_HEADER_COMPILE_OPTIONS})
+  endif()
 
   add_custom_target(${fq_target_name})
   add_dependencies(${fq_target_name} ${interface_target_name})

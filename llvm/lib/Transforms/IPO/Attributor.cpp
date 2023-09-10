@@ -1072,7 +1072,9 @@ Attributor::Attributor(SetVector<Function *> &Functions,
     if (Fn->hasAddressTaken(/*PutOffender=*/nullptr,
                             /*IgnoreCallbackUses=*/false,
                             /*IgnoreAssumeLikeCalls=*/true,
-                            /*IgnoreLLVMUsed=*/true))
+                            /*IgnoreLLVMUsed=*/true,
+                            /*IgnoreARCAttachedCall=*/false,
+                            /*IgnoreCastedDirectCall=*/true))
       InfoCache.IndirectlyCallableFunctions.push_back(Fn);
 }
 
@@ -1729,6 +1731,21 @@ bool Attributor::isAssumedDead(const BasicBlock &BB,
   }
 
   return false;
+}
+
+bool Attributor::checkForAllCallees(
+    function_ref<bool(ArrayRef<const Function *>)> Pred,
+    const AbstractAttribute &QueryingAA, const CallBase &CB) {
+  if (const Function *Callee = dyn_cast<Function>(CB.getCalledOperand()))
+    return Pred(Callee);
+
+  const auto *CallEdgesAA = getAAFor<AACallEdges>(
+      QueryingAA, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
+  if (!CallEdgesAA || CallEdgesAA->hasUnknownCallee())
+    return false;
+
+  const auto &Callees = CallEdgesAA->getOptimisticEdges();
+  return Pred(Callees.getArrayRef());
 }
 
 bool Attributor::checkForAllUses(
