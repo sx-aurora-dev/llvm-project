@@ -268,6 +268,19 @@ void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef TuneCPU,
   if (!FS.empty())
     FullFS = (Twine(FullFS) + "," + FS).str();
 
+  // Attach EVEX512 feature when we have AVX512 features and EVEX512 is not set.
+  size_t posNoEVEX512 = FS.rfind("-evex512");
+  // Make sure we won't be cheated by "-avx512fp16".
+  size_t posNoAVX512F = FS.endswith("-avx512f") ? FS.size() - 8
+                                                : FS.rfind("-avx512f,");
+  size_t posEVEX512 = FS.rfind("+evex512");
+  size_t posAVX512F = FS.rfind("+avx512"); // Any AVX512XXX will enable AVX512F.
+
+  if (posAVX512F != StringRef::npos &&
+      (posNoAVX512F == StringRef::npos || posNoAVX512F < posAVX512F))
+    if (posEVEX512 == StringRef::npos && posNoEVEX512 == StringRef::npos)
+      FullFS += ",+evex512";
+
   // Parse features string and set the CPU.
   ParseSubtargetFeatures(CPU, TuneCPU, FullFS);
 
@@ -323,7 +336,9 @@ X86Subtarget::X86Subtarget(const Triple &TT, StringRef CPU, StringRef TuneCPU,
       InstrInfo(initializeSubtargetDependencies(CPU, TuneCPU, FS)),
       TLInfo(TM, *this), FrameLowering(*this, getStackAlignment()) {
   // Determine the PICStyle based on the target selected.
-  if (!isPositionIndependent())
+  if (!isPositionIndependent() || TM.getCodeModel() == CodeModel::Large)
+    // With the large code model, None forces all memory accesses to be indirect
+    // rather than RIP-relative.
     setPICStyle(PICStyles::Style::None);
   else if (is64Bit())
     setPICStyle(PICStyles::Style::RIPRel);

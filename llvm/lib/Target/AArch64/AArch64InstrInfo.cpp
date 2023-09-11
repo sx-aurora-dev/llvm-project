@@ -283,30 +283,40 @@ void AArch64InstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
   };
 
   RS->enterBasicBlockEnd(MBB);
-  Register Reg = RS->FindUnusedReg(&AArch64::GPR64RegClass);
-
-  // If there's a free register, manually insert the indirect branch using it.
-  if (Reg != AArch64::NoRegister) {
-    buildIndirectBranch(Reg, NewDestBB);
+  // If X16 is unused, we can rely on the linker to insert a range extension
+  // thunk if NewDestBB is out of range of a single B instruction.
+  constexpr Register Reg = AArch64::X16;
+  if (!RS->isRegUsed(Reg)) {
+    insertUnconditionalBranch(MBB, &NewDestBB, DL);
     RS->setRegUsed(Reg);
     return;
   }
 
-  // Otherwise, spill and use X16. This briefly moves the stack pointer, making
-  // it incompatible with red zones.
+  // If there's a free register and it's worth inflating the code size,
+  // manually insert the indirect branch.
+  Register Scavenged = RS->FindUnusedReg(&AArch64::GPR64RegClass);
+  if (Scavenged != AArch64::NoRegister &&
+      MBB.getSectionID() == MBBSectionID::ColdSectionID) {
+    buildIndirectBranch(Scavenged, NewDestBB);
+    RS->setRegUsed(Scavenged);
+    return;
+  }
+
+  // Note: Spilling X16 briefly moves the stack pointer, making it incompatible
+  // with red zones.
   AArch64FunctionInfo *AFI = MBB.getParent()->getInfo<AArch64FunctionInfo>();
   if (!AFI || AFI->hasRedZone().value_or(true))
     report_fatal_error(
         "Unable to insert indirect branch inside function that has red zone");
 
-  Reg = AArch64::X16;
+  // Otherwise, spill X16 and defer range extension to the linker.
   BuildMI(MBB, MBB.end(), DL, get(AArch64::STRXpre))
       .addReg(AArch64::SP, RegState::Define)
       .addReg(Reg)
       .addReg(AArch64::SP)
       .addImm(-16);
 
-  buildIndirectBranch(Reg, RestoreBB);
+  BuildMI(MBB, MBB.end(), DL, get(AArch64::B)).addMBB(&RestoreBB);
 
   BuildMI(RestoreBB, RestoreBB.end(), DL, get(AArch64::LDRXpost))
       .addReg(AArch64::SP, RegState::Define)
@@ -8522,6 +8532,58 @@ unsigned llvm::getBLRCallOpcode(const MachineFunction &MF) {
     return AArch64::BLRNoIP;
   else
     return AArch64::BLR;
+}
+
+bool AArch64InstrInfo::isReallyTriviallyReMaterializable(
+    const MachineInstr &MI) const {
+  const MachineFunction &MF = *MI.getMF();
+  const AArch64FunctionInfo &AFI = *MF.getInfo<AArch64FunctionInfo>();
+
+  // If the function contains changes to streaming mode, then there
+  // is a danger that rematerialised instructions end up between
+  // instruction sequences (e.g. call sequences, or prolog/epilogue)
+  // where the streaming-SVE mode is temporarily changed.
+  if (AFI.hasStreamingModeChanges()) {
+    // Avoid rematerializing rematerializable instructions that use/define
+    // scalable values, such as 'pfalse' or 'ptrue', which result in different
+    // results when the runtime vector length is different.
+    const MachineRegisterInfo &MRI = MF.getRegInfo();
+    const MachineFrameInfo &MFI = MF.getFrameInfo();
+    if (any_of(MI.operands(), [&MRI, &MFI](const MachineOperand &MO) {
+          if (MO.isFI() &&
+              MFI.getStackID(MO.getIndex()) == TargetStackID::ScalableVector)
+            return true;
+          if (!MO.isReg())
+            return false;
+
+          if (MO.getReg().isVirtual()) {
+            const TargetRegisterClass *RC = MRI.getRegClass(MO.getReg());
+            return AArch64::ZPRRegClass.hasSubClassEq(RC) ||
+                   AArch64::PPRRegClass.hasSubClassEq(RC);
+          }
+          return AArch64::ZPRRegClass.contains(MO.getReg()) ||
+                 AArch64::PPRRegClass.contains(MO.getReg());
+        }))
+      return false;
+
+    // Avoid rematerializing instructions that return a value that is
+    // different depending on vector length, even when it is not returned
+    // in a scalable vector/predicate register.
+    switch (MI.getOpcode()) {
+    default:
+      break;
+    case AArch64::RDVLI_XI:
+    case AArch64::ADDVL_XXI:
+    case AArch64::ADDPL_XXI:
+    case AArch64::CNTB_XPiI:
+    case AArch64::CNTH_XPiI:
+    case AArch64::CNTW_XPiI:
+    case AArch64::CNTD_XPiI:
+      return false;
+    }
+  }
+
+  return TargetInstrInfo::isReallyTriviallyReMaterializable(MI);
 }
 
 #define GET_INSTRINFO_HELPERS

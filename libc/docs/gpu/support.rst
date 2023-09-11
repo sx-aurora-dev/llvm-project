@@ -106,7 +106,7 @@ strtoull       |check|
 =============  =========  ============
 
 inttypes.h
---------
+----------
 
 =============  =========  ============
 Function Name  Available  RPC Required
@@ -118,24 +118,38 @@ strtoumax      |check|
 =============  =========  ============
 
 stdio.h
---------
+-------
 
 =============  =========  ============
 Function Name  Available  RPC Required
 =============  =========  ============
 puts           |check|    |check|
 fputs          |check|    |check|
+fputc          |check|    |check|
+fwrite         |check|    |check|
+putc           |check|    |check|
+putchar        |check|    |check|
 fclose         |check|    |check|
 fopen          |check|    |check|
 fread          |check|    |check|
 =============  =========  ============
 
-stdio.h
---------
+time.h
+------
 
 =============  =========  ============
 Function Name  Available  RPC Required
 =============  =========  ============
 clock          |check|
 nanosleep      |check|
+=============  =========  ============
+
+assert.h
+--------
+
+=============  =========  ============
+Function Name  Available  RPC Required
+=============  =========  ============
+assert         |check|    |check|
+__assert_fail  |check|    |check|
 =============  =========  ============
