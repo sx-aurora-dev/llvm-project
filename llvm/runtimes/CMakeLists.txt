@@ -518,6 +518,7 @@ if(runtimes)
         llvm-nm
         llvm-objdump
         llvm-profdata
+        llvm-size
         llvm-xray
         not
         obj2yaml

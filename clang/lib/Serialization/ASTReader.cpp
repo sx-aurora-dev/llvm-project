@@ -2501,7 +2501,7 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
       // accept the cached file as legit.
       if (ValidateASTInputFilesContent &&
           StoredContentHash != static_cast<uint64_t>(llvm::hash_code(-1))) {
-        auto MemBuffOrError = FileMgr.getBufferForFile(File);
+        auto MemBuffOrError = FileMgr.getBufferForFile(*File);
         if (!MemBuffOrError) {
           if (!Complain)
             return MTimeChange;
@@ -5689,7 +5689,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
                                        "too many submodules");
 
       if (!ParentModule) {
-        if (const FileEntry *CurFile = CurrentModule->getASTFile()) {
+        if (OptionalFileEntryRef CurFile = CurrentModule->getASTFile()) {
           // Don't emit module relocation error if we have -fno-validate-pch
           if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
                     DisableValidationForModuleKind::Module) &&
