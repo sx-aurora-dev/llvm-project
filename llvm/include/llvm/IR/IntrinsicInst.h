@@ -558,28 +558,18 @@ public:
   static std::optional<unsigned> getVectorLengthParamPos(
       Intrinsic::ID IntrinsicID);
 
-  // the llvm.vp.* intrinsic for this other kind of intrinsic.
-  static Intrinsic::ID getForIntrinsic(Intrinsic::ID IntrinsicID);
-
   /// The llvm.vp.* intrinsics for this instruction Opcode
   static Intrinsic::ID getForOpcode(unsigned OC);
 
   // Whether \p ID is a VP intrinsic ID.
   static bool isVPIntrinsic(Intrinsic::ID);
 
-  static VPIntrinsic::ShortTypeVec
-  EncodeTypeTokens(unsigned VPID, Type *VecRetTy,
-                   Type *VecPtrTy, VectorType &VectorTy);
-
   /// \return The mask parameter or nullptr.
   Value *getMaskParam() const;
-  /// This asserts if the underlying intrinsic has no mask parameter.
   void setMaskParam(Value *);
 
   /// \return The vector length parameter or nullptr.
   Value *getVectorLengthParam() const;
-  /// This asserts if the underlying intrinsic has no vector length
-  /// parameter.
   void setVectorLengthParam(Value *);
 
   /// \return Whether the vector length param can be ignored.
@@ -627,32 +617,14 @@ public:
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
   }
 
-  /// \return The non-VP intrinsic that is functionally equivalent to this VP
-  /// intrinsic.
-  Intrinsic::ID getFunctionalIntrinsicID() const {
-    Intrinsic::ID IID = Intrinsic::not_intrinsic;
-    // Return a constrained intrinsic if this intrinsic does not operate in
-    // the standard fp environment.
-    if (isConstrainedOp()) {
-      IID = GetConstrainedIntrinsicForVP(getIntrinsicID());
-    }
-    if (IID == Intrinsic::not_intrinsic) {
-      IID = GetFunctionalIntrinsicForVP(getIntrinsicID());
-    }
-    return IID;
-  }
-
-  /// \return The llvm.experimental.constrained.* intrinsic that is
-  /// functionally equivalent to this llvm.vp.* intrinsic.
-  static Intrinsic::ID GetConstrainedIntrinsicForVP(Intrinsic::ID VPID);
-
-  /// \return The intrinsic that is
-  /// functionally equivalent to this llvm.vp.* intrinsic.
-  static Intrinsic::ID GetFunctionalIntrinsicForVP(Intrinsic::ID VPID);
-
   // Equivalent non-predicated opcode
   std::optional<unsigned> getFunctionalOpcode() const {
     return getFunctionalOpcodeForVP(getIntrinsicID());
+  }
+
+  // Equivalent non-predicated intrinsic ID
+  std::optional<unsigned> getFunctionalIntrinsicID() const {
+    return getFunctionalIntrinsicIDForVP(getIntrinsicID());
   }
 
   // Equivalent non-predicated constrained ID
@@ -663,8 +635,12 @@ public:
   // Equivalent non-predicated opcode
   static std::optional<unsigned> getFunctionalOpcodeForVP(Intrinsic::ID ID);
 
+  // Equivalent non-predicated intrinsic ID
+  static std::optional<Intrinsic::ID>
+  getFunctionalIntrinsicIDForVP(Intrinsic::ID ID);
+
   // Equivalent non-predicated constrained ID
-  static std::optional<unsigned>
+  static std::optional<Intrinsic::ID>
   getConstrainedIntrinsicIDForVP(Intrinsic::ID ID);
 };
 
@@ -672,9 +648,6 @@ public:
 class VPReductionIntrinsic : public VPIntrinsic {
 public:
   static bool isVPReduction(Intrinsic::ID ID);
-
-  Value *getStartParam() const { return getOperand(getStartParamPos()); }
-  Value *getVectorParam() const { return getOperand(getVectorParamPos()); }
 
   unsigned getStartParamPos() const;
   unsigned getVectorParamPos() const;
@@ -724,6 +697,22 @@ public:
   }
   /// @}
 };
+
+class VPBinOpIntrinsic : public VPIntrinsic {
+public:
+  static bool isVPBinOp(Intrinsic::ID ID);
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  /// @{
+  static bool classof(const IntrinsicInst *I) {
+    return VPBinOpIntrinsic::isVPBinOp(I->getIntrinsicID());
+  }
+  static bool classof(const Value *V) {
+    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+  }
+  /// @}
+};
+
 
 /// This is the common base class for constrained floating point intrinsics.
 class ConstrainedFPIntrinsic : public IntrinsicInst {
