@@ -516,34 +516,6 @@ bool VPIntrinsic::isVPIntrinsic(Intrinsic::ID ID) {
   return false;
 }
 
-Intrinsic::ID VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID) {
-  Intrinsic::ID ConstrainedID = Intrinsic::not_intrinsic;
-  switch (VPID) {
-  default:
-    break;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID) ConstrainedID = Intrinsic::CFPID;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return ConstrainedID;
-}
-
-Intrinsic::ID VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
-  Intrinsic::ID FunctionalID = Intrinsic::not_intrinsic;
-  switch (VPID) {
-  default:
-    break;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRINID) FunctionalID = Intrinsic::INTRINID;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return FunctionalID;
-}
-
 // Equivalent non-predicated opcode
 std::optional<unsigned>
 VPIntrinsic::getFunctionalOpcodeForVP(Intrinsic::ID ID) {
@@ -811,25 +783,6 @@ bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
   }
 
   return HasRound && HasRound.value();
-}
-
-Intrinsic::ID VPIntrinsic::getForIntrinsic(Intrinsic::ID IntrinsicID) {
-  static std::map<unsigned, unsigned> IntrinToVP;
-  if (IntrinToVP.empty()) {
-    unsigned CurrentVPID;
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) CurrentVPID = Intrinsic::VPID;
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, CFPID)                 \
-  if (Intrinsic::CFPID != Intrinsic::not_intrinsic)                            \
-    IntrinToVP[(unsigned)Intrinsic::CFPID] = CurrentVPID;
-#define VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRINID)                                          \
-  IntrinToVP[(unsigned)Intrinsic::INTRINID] = CurrentVPID;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  auto It = IntrinToVP.find((unsigned)IntrinsicID);
-  if (It == IntrinToVP.end())
-    return Intrinsic::not_intrinsic;
-  return (Intrinsic::ID)It->second;
 }
 
 bool VPReductionIntrinsic::isVPReduction(Intrinsic::ID ID) {
