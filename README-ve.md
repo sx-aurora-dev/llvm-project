@@ -28,18 +28,18 @@ To build llvm-ve from source refer to
 To compile C/C++ code for the VE run Clang/Clang++ with the following command
 line:
 
-    $ clang -target ve-linux -O3 ...
+    $ clang -target ve-unknown-linux-gnu -O3 ...
 
 
 ### OpenMP offloading for/from SX-Aurora
 
 To compile with OpenMP offloading from VE to VH (VHCall) use:
 
-    $ clang -target ve-linux -fopenmp -fopenmp-targets=x86_64-pc-linux -O3 ...
+    $ clang -target ve-unknown-linux-gnu -fopenmp -fopenmp-targets=x86_64-pc-linux -O3 ...
 
 To compile with OpenMP offloading from VH to VE (VEO) use:
 
-    $ clang -march=native -fopenmp -fopenmp-targets=ve-linux -O3 ...
+    $ clang -march=native -fopenmp -fopenmp-targets=ve-unknown-linux-gnu -O3 ...
 
 
 ### Outer-loop Vectorization

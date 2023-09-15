@@ -63,7 +63,7 @@ How to use clang/llvm for VE
 
 Use clang like below.  Clang++ is also available.
 
-    $ clang -target ve-linux -O3 -fno-crash-diagnostics ...
+    $ clang -target ve-unknown-linux-gnu -O3 -fno-crash-diagnostics ...
 
  - -fno-crash-diagnostics avoid generating diagnostics which contain
    compiling source codes under /tmp.

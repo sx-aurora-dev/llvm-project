@@ -31,7 +31,7 @@ esac
 
 for i in "$@"; do
     $AS $i -o $i.tmp && $OBJCOPY -O binary --only-section=.text $i.tmp $i.tmp2
-    $LLVMMC -triple ve-linux $i -filetype=obj > $i.tmp && $OBJCOPY -O binary --only-section=.text $i.tmp $i.tmp3
+    $LLVMMC -triple ve-unknown-linux-gnu $i -filetype=obj > $i.tmp && $OBJCOPY -O binary --only-section=.text $i.tmp $i.tmp3
     cmp $i.tmp2 $i.tmp3 || echo error on $i
     rm $i.tmp $i.tmp2 $i.tmp3
 done

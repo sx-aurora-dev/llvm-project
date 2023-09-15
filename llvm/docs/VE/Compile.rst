@@ -62,7 +62,7 @@ Then, cross-compile it with clang/llvm for VE and install it.
 
     $ cd work/ve-csu
     $ export DEST=$HOME/.local
-    $ make TARGET=ve-linux
+    $ make TARGET=ve-unknown-linux-gnu
     $ make DEST=$DEST/lib/clang/9.0.0/lib/linux/ve install
 
 How to cross-compile Compiler-RT for NEC SX-Aurora VE
@@ -82,8 +82,8 @@ Cross-compile compiler-rt with clang/llvm for VE and install it.
       -DCOMPILER_RT_BUILD_PROFILE=OFF \
       -DBUILD_SHARED_LIBS=ON \
       -DCMAKE_C_COMPILER=$DEST/bin/clang \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
-      -DCMAKE_ASM_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_C_COMPILER_TARGET="ve-unknown-linux-gnu" \
+      -DCMAKE_ASM_COMPILER_TARGET="ve-unknown-linux-gnu" \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
@@ -108,13 +108,13 @@ Cross-compile libunwind with clang/llvm for VE and install it.
     $ cd build-libunwind
     $ export DEST=$HOME/.local
     $ cmake3 -G Ninja \
-      -DLIBUNWIND_TARGET_TRIPLE="ve-linux" \
+      -DLIBUNWIND_TARGET_TRIPLE="ve-unknown-linux-gnu" \
       -DCMAKE_C_COMPILER=$DEST/bin/clang \
       -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
-      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_C_COMPILER_TARGET="ve-unknown-linux-gnu" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-unknown-linux-gnu" \
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DLLVM_ENABLE_LIBCXX=ON \
       -DCMAKE_BUILD_TYPE="Release" \
@@ -139,8 +139,8 @@ Cross-compile libcxxabi with clang/llvm for VE and install it.
       -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
-      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_C_COMPILER_TARGET="ve-unknown-linux-gnu" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-unknown-linux-gnu" \
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/9.0.0/ \
@@ -167,13 +167,13 @@ Cross-compile libcxx with clang/llvm for VE and install it.
     $ export DEST=$HOME/.local
     $ cmake3 -G Ninja \
       -DLIBCXX_USE_COMPILER_RT=True \
-      -DLIBCXX_TARGET_TRIPLE="ve-linux" \
+      -DLIBCXX_TARGET_TRIPLE="ve-unknown-linux-gnu" \
       -DCMAKE_C_COMPILER=$DEST/bin/clang \
       -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
-      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_C_COMPILER_TARGET="ve-unknown-linux-gnu" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-unknown-linux-gnu" \
       -DLLVM_CONFIG_PATH=$DEST/bin/llvm-config \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/9.0.0/ \
@@ -197,8 +197,8 @@ Cross-compile OpenMP with clang/llvm for VE and install it.
       -DCMAKE_CXX_COMPILER=$DEST/bin/clang++ \
       -DCMAKE_AR=$DEST/bin/llvm-ar \
       -DCMAKE_RANLIB=$DEST/bin/llvm-ranlib \
-      -DCMAKE_C_COMPILER_TARGET="ve-linux" \
-      -DCMAKE_CXX_COMPILER_TARGET="ve-linux" \
+      -DCMAKE_C_COMPILER_TARGET="ve-unknown-linux-gnu" \
+      -DCMAKE_CXX_COMPILER_TARGET="ve-unknown-linux-gnu" \
       -DCMAKE_BUILD_TYPE="Release" \
       -DCMAKE_INSTALL_PREFIX=$DEST/lib/clang/9.0.0/ \
       -DOPENMP_LIBDIR_SUFFIX=/linux/ve \
