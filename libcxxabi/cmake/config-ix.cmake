@@ -46,9 +46,6 @@ if (CXX_SUPPORTS_NOSTDLIBXX_FLAG OR C_SUPPORTS_NODEFAULTLIBS_FLAG)
     else()
       message(WARNING "Could not find builtins library from libc++abi")
     endif()
-    # CMAKE_REQUIRED_LIBRARIES is not used to link libc++abi.so, so
-    # append builtins to LIBCXXABI_SHARED_LIBRARIES too
-    list(APPEND LIBCXXABI_SHARED_LIBRARIES "${LIBCXXABI_BUILTINS_LIBRARY}")
   else ()
     if (LIBCXXABI_HAS_GCC_S_LIB)
       list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
