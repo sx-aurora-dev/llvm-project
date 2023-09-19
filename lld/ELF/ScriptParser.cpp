@@ -136,9 +136,6 @@ private:
   // True if a script being read is in the --sysroot directory.
   bool isUnderSysroot = false;
 
-  bool seenDataAlign = false;
-  bool seenRelroEnd = false;
-
   // A set to detect an INCLUDE() cycle.
   StringSet<> seen;
 };
@@ -601,7 +598,7 @@ void ScriptParser::readSections() {
 
   // If DATA_SEGMENT_RELRO_END is absent, for sections after DATA_SEGMENT_ALIGN,
   // the relro fields should be cleared.
-  if (!seenRelroEnd)
+  if (!script->seenRelroEnd)
     for (SectionCommand *cmd : v)
       if (auto *osd = dyn_cast<OutputDesc>(cmd))
         osd->osec.relro = false;
@@ -917,7 +914,7 @@ OutputDesc *ScriptParser::readOutputSectionDescription(StringRef outSec) {
       script->createOutputSection(unquote(outSec), getCurrentLocation());
   OutputSection *osec = &cmd->osec;
   // Maybe relro. Will reset to false if DATA_SEGMENT_RELRO_END is absent.
-  osec->relro = seenDataAlign && !seenRelroEnd;
+  osec->relro = script->seenDataAlign && !script->seenRelroEnd;
 
   size_t symbolsReferenced = script->referencedSymbols.size();
 
@@ -1052,6 +1049,7 @@ SymbolAssignment *ScriptParser::readAssignment(StringRef tok) {
 
   size_t oldPos = pos;
   SymbolAssignment *cmd = nullptr;
+  bool savedSeenRelroEnd = script->seenRelroEnd;
   const StringRef op = peek();
   if (op.starts_with("=")) {
     // Support = followed by an expression without whitespace.
@@ -1072,6 +1070,7 @@ SymbolAssignment *ScriptParser::readAssignment(StringRef tok) {
   }
 
   if (cmd) {
+    cmd->dataSegmentRelroEnd = !savedSeenRelroEnd && script->seenRelroEnd;
     cmd->commandString =
         tok.str() + " " +
         llvm::join(tokens.begin() + oldPos, tokens.begin() + pos, " ");
@@ -1085,7 +1084,7 @@ SymbolAssignment *ScriptParser::readSymbolAssignment(StringRef name) {
   StringRef op = next();
   assert(op == "=" || op == "*=" || op == "/=" || op == "+=" || op == "-=" ||
          op == "&=" || op == "^=" || op == "|=" || op == "<<=" || op == ">>=");
-  // Note: GNU ld does not support %= or ^=.
+  // Note: GNU ld does not support %=.
   Expr e = readExpr();
   if (op != "=") {
     std::string loc = getCurrentLocation();
@@ -1440,7 +1439,7 @@ Expr ScriptParser::readPrimary() {
     expect(",");
     readExpr();
     expect(")");
-    seenDataAlign = true;
+    script->seenDataAlign = true;
     return [=] {
       uint64_t align = std::max(uint64_t(1), e().getValue());
       return (script->getDot() + align - 1) & -align;
@@ -1461,9 +1460,8 @@ Expr ScriptParser::readPrimary() {
     expect(",");
     readExpr();
     expect(")");
-    seenRelroEnd = true;
-    Expr e = getPageSize();
-    return [=] { return alignToPowerOf2(script->getDot(), e().getValue()); };
+    script->seenRelroEnd = true;
+    return [=] { return alignToPowerOf2(script->getDot(), config->maxPageSize); };
   }
   if (tok == "DEFINED") {
     StringRef name = unquote(readParenLiteral());

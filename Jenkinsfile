@@ -23,6 +23,9 @@ pipeline {
             returnStdout: true,
             script: "echo ${env.EXECUTOR_NUMBER} | sed -e 's:1:2:'").trim()
     }
+    options {
+        timeout(time: 2, unit: 'HOURS')
+    }
 
     stages {
         stage('Checkout LLVM') {

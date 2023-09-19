@@ -2124,6 +2124,30 @@ TEST(TransferTest, AssignmentOperator) {
       });
 }
 
+TEST(TransferTest, AssignmentOperatorFromBase) {
+  // This is a crash repro. We don't model the copy this case, so no
+  // expectations on the copied field of the base class are checked.
+  std::string Code = R"(
+    struct Base {
+      int base;
+    };
+    struct Derived : public Base {
+      using Base::operator=;
+      int derived;
+    };
+    void target(Base B, Derived D) {
+      D.base = 1;
+      D.derived = 1;
+      D = B;
+      // [[p]]
+    }
+  )";
+  runDataflow(
+      Code,
+      [](const llvm::StringMap<DataflowAnalysisState<NoopLattice>> &Results,
+         ASTContext &ASTCtx) {});
+}
+
 TEST(TransferTest, AssignmentOperatorFromCallResult) {
   std::string Code = R"(
     struct A {};
@@ -5453,6 +5477,41 @@ TEST(TransferTest, ContextSensitiveConstructorDefault) {
 
         auto &FooVal = getFormula(*FooDecl, Env);
         EXPECT_TRUE(Env.flowConditionImplies(FooVal));
+      },
+      {BuiltinOptions{ContextSensitiveOptions{}}});
+}
+
+TEST(TransferTest, ContextSensitiveSelfReferentialClass) {
+  // Test that the `this` pointer seen in the constructor has the same value
+  // as the address of the variable the object is constructed into.
+  std::string Code = R"(
+    class MyClass {
+    public:
+      MyClass() : Self(this) {}
+      MyClass *Self;
+    };
+
+    void target() {
+      MyClass MyObj;
+      MyClass *SelfPtr = MyObj.Self;
+      // [[p]]
+    }
+  )";
+  runDataflow(
+      Code,
+      [](const llvm::StringMap<DataflowAnalysisState<NoopLattice>> &Results,
+         ASTContext &ASTCtx) {
+        ASSERT_THAT(Results.keys(), UnorderedElementsAre("p"));
+
+        const ValueDecl *MyObjDecl = findValueDecl(ASTCtx, "MyObj");
+        ASSERT_THAT(MyObjDecl, NotNull());
+
+        const ValueDecl *SelfDecl = findValueDecl(ASTCtx, "SelfPtr");
+        ASSERT_THAT(SelfDecl, NotNull());
+
+        const Environment &Env = getEnvironmentAtAnnotation(Results, "p");
+        auto &SelfVal = *cast<PointerValue>(Env.getValue(*SelfDecl));
+        EXPECT_EQ(Env.getStorageLocation(*MyObjDecl), &SelfVal.getPointeeLoc());
       },
       {BuiltinOptions{ContextSensitiveOptions{}}});
 }

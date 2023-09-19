@@ -285,7 +285,7 @@ TEST(VETest, VLIndex) {
   auto TM = std::unique_ptr<LLVMTargetMachine>(
     static_cast<LLVMTargetMachine*>(
       T->createTargetMachine(TT, "ve", "", Options, std::nullopt, std::nullopt,
-                             CodeGenOpt::Default)));
+                             CodeGenOptLevel::Default)));
   VESubtarget ST(TM->getTargetTriple(), std::string(TM->getTargetCPU()),
                  std::string(TM->getTargetFeatureString()),
                  *static_cast<const VETargetMachine *>(TM.get()));
