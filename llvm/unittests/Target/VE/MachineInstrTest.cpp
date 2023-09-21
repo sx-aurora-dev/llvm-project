@@ -1,3 +1,11 @@
+//===- MachineInstrTest.cpp -----------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
 #include "VEInstrInfo.h"
 #include "VESubtarget.h"
 #include "VETargetMachine.h"
@@ -14,10 +22,10 @@ TEST(VETest, VLIndex) {
   using namespace VE;
 
   // Return expected VL register index in each MI's operands.  Aurora VE has
-  // multiple instruction formats for each instruction.  So, we defines
-  // instructions hierarchically and tests a part of whole instructions.
+  // multiple instruction formats for each instruction.  So, we define
+  // instructions hierarchically and tests parts of the whole instructions.
   // This function returns -1 to N as expected index, or -2 as default.
-  // We skip a test on an instructions that this functions returns -2.
+  // We skip a test on an instruction that this function returns -2.
   auto VLIndex = [](unsigned Opcode) {
     switch (Opcode) {
     default:
@@ -273,7 +281,7 @@ TEST(VETest, VLIndex) {
   LLVMInitializeVETarget();
   LLVMInitializeVETargetMC();
 
-  auto TT(Triple::normalize("ve-none-none-eabi"));
+  auto TT(Triple::normalize("ve-unknown-linux-gnu"));
   std::string Error;
   const Target *T = TargetRegistry::lookupTarget(TT, Error);
   if (!T) {
@@ -284,7 +292,7 @@ TEST(VETest, VLIndex) {
   TargetOptions Options;
   auto TM = std::unique_ptr<LLVMTargetMachine>(
     static_cast<LLVMTargetMachine*>(
-      T->createTargetMachine(TT, "ve", "", Options, std::nullopt, std::nullopt,
+      T->createTargetMachine(TT, "", "", Options, std::nullopt, std::nullopt,
                              CodeGenOptLevel::Default)));
   VESubtarget ST(TM->getTargetTriple(), std::string(TM->getTargetCPU()),
                  std::string(TM->getTargetFeatureString()),
