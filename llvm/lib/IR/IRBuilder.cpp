@@ -629,64 +629,6 @@ CallInst *IRBuilderBase::CreateMaskedIntrinsic(Intrinsic::ID Id,
   return CreateCall(TheFn, Ops, {}, Name);
 }
 
-/// Create a call to a vector-predicated intrinsic (VP).
-/// \p OC            - The LLVM IR Opcode of the operation
-/// \p VecOpArray    - Intrinsic operand list
-/// \p FMFSource     - Copy source for Fast Math Flags
-/// \p Name          - name of the result variable
-Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
-                                                       Type *ReturnTy,
-                                                       ArrayRef<Value *> Params,
-                                                       Instruction *FMFSource,
-                                                       const Twine &Name) {
-
-  Module *M = BB->getParent()->getParent();
-
-  Intrinsic::ID VPID = VPIntrinsic::getForOpcode(OC);
-  auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, ReturnTy, Params);
-  auto *VPCall = CreateCall(VPFunc, Params, {}, Name);
-
-  // transfer fast math flags
-  if (FMFSource && isa<FPMathOperator>(FMFSource)) {
-    VPCall->copyFastMathFlags(FMFSource);
-  }
-
-  return VPCall;
-}
-
-/// Create a call to a vector-predicated comparison intrinsic (VP).
-/// \p Pred          - comparison predicate
-/// \p FirstOp       - First vector operand
-/// \p SndOp         - Second vector operand
-/// \p Mask          - Mask operand
-/// \p VectorLength  - Vector length operand
-/// \p Name          - name of the result variable
-Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
-    CmpInst::Predicate Pred, Value *FirstParam, Value *SndParam,
-    Value *MaskParam, Value *VectorLengthParam, const Twine &Name) {
-
-  Module *M = BB->getParent()->getParent();
-
-  auto *ReturnTy = MaskParam->getType();
-
-  // Encode comparison predicate as MD
-  uint8_t RawPred = static_cast<uint8_t>(Pred);
-  auto Int8Ty = Type::getInt8Ty(getContext());
-  auto PredParam = ConstantInt::get(Int8Ty, RawPred, false);
-
-  Intrinsic::ID VPID = FirstParam->getType()->isIntOrIntVectorTy()
-                           ? Intrinsic::vp_icmp
-                           : Intrinsic::vp_fcmp;
-
-  auto VPFunc = VPIntrinsic::getDeclarationForParams(
-      M, VPID, ReturnTy,
-      {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
-
-  return CreateCall(
-      VPFunc, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam},
-      {}, Name);
-}
-
 /// Create a call to a Masked Gather intrinsic.
 /// \p Ty       - vector type to gather
 /// \p Ptrs     - vector of pointers for loading
