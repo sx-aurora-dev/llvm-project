@@ -555,7 +555,6 @@ BEGIN_TWO_BYTE_PACK()
     friend class VPLoadSDNode;
     friend class VPStridedLoadSDNode;
     friend class MaskedLoadSDNode;
-    friend class VPLoadSDNode;
     friend class MaskedGatherSDNode;
     friend class VPGatherSDNode;
 
@@ -570,7 +569,6 @@ BEGIN_TWO_BYTE_PACK()
     friend class VPStoreSDNode;
     friend class VPStridedStoreSDNode;
     friend class MaskedStoreSDNode;
-    friend class VPStoreSDNode;
     friend class MaskedScatterSDNode;
     friend class VPScatterSDNode;
 
@@ -733,21 +731,6 @@ public:
     case ISD::VPID: return VLENPOS;
 #include "llvm/IR/VPIntrinsics.def"
     }
-  }
-
-  bool isVPReduction() const {
-    bool IsReduction = false;
-    switch (NodeType) {
-    default:
-      return false;
-
-#define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define HANDLE_VP_REDUCTION(STARTPOS, ...) IsReduction = true;
-#define END_REGISTER_VP_SDNODE(VPISD) break;
-#include "llvm/IR/VPIntrinsics.def"
-    }
-
-    return IsReduction;
   }
 
   /// Test if this node is a vector predication operation.
@@ -1448,7 +1431,6 @@ public:
     case ISD::MGATHER:
     case ISD::MSCATTER:
       return getOperand(3);
-    case ISD::VP_GATHER:
     default:
       return getOperand(1);
     }
