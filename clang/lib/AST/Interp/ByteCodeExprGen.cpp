@@ -571,8 +571,10 @@ bool ByteCodeExprGen<Emitter>::VisitInitListExpr(const InitListExpr *E) {
 
   // Primitive values.
   if (std::optional<PrimType> T = classify(E->getType())) {
-    assert(E->getNumInits() == 1);
     assert(!DiscardResult);
+    if (E->getNumInits() == 0)
+      return this->visitZeroInitializer(E->getType(), E);
+    assert(E->getNumInits() == 1);
     return this->delegate(E->inits()[0]);
   }
 
@@ -1932,15 +1934,13 @@ template <class Emitter>
 const RecordType *ByteCodeExprGen<Emitter>::getRecordTy(QualType Ty) {
   if (const PointerType *PT = dyn_cast<PointerType>(Ty))
     return PT->getPointeeType()->getAs<RecordType>();
-  else
-    return Ty->getAs<RecordType>();
+  return Ty->getAs<RecordType>();
 }
 
 template <class Emitter>
 Record *ByteCodeExprGen<Emitter>::getRecord(QualType Ty) {
-  if (auto *RecordTy = getRecordTy(Ty)) {
+  if (const auto *RecordTy = getRecordTy(Ty))
     return getRecord(RecordTy->getDecl());
-  }
   return nullptr;
 }
 

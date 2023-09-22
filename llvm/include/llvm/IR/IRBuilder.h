@@ -30,7 +30,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
@@ -620,6 +619,22 @@ public:
                                               TBAATag, ScopeTag, NoAliasTag);
   }
 
+  CallInst *CreateMalloc(Type *IntPtrTy, Type *AllocTy, Value *AllocSize,
+                         Value *ArraySize, ArrayRef<OperandBundleDef> OpB,
+                         Function *MallocF = nullptr, const Twine &Name = "");
+
+  /// CreateMalloc - Generate the IR for a call to malloc:
+  /// 1. Compute the malloc call's argument as the specified type's size,
+  ///    possibly multiplied by the array size if the array size is not
+  ///    constant 1.
+  /// 2. Call malloc with that argument.
+  CallInst *CreateMalloc(Type *IntPtrTy, Type *AllocTy, Value *AllocSize,
+                         Value *ArraySize, Function *MallocF = nullptr,
+                         const Twine &Name = "");
+  /// Generate the IR for a call to the builtin free function.
+  CallInst *CreateFree(Value *Source,
+                       ArrayRef<OperandBundleDef> Bundles = std::nullopt);
+
   CallInst *CreateElementUnorderedAtomicMemSet(Value *Ptr, Value *Val,
                                                Value *Size, Align Alignment,
                                                uint32_t ElementSize,
@@ -834,24 +849,6 @@ public:
   CallInst *
   CreateAssumption(Value *Cond,
                    ArrayRef<OperandBundleDef> OpBundles = std::nullopt);
-
-  /// Call an arithmetic VP intrinsic.
-  Instruction *CreateVectorPredicatedInst(unsigned OC, Type *ReturnTy,
-                                          ArrayRef<Value *>,
-                                          Instruction *FMFSource = nullptr,
-                                          const Twine &Name = "");
-
-  /// Call an comparison VP intrinsic.
-  Instruction *CreateVectorPredicatedCmp(CmpInst::Predicate Pred,
-                                Value *FirstOp, Value *SndOp, Value *Mask,
-                                Value *VectorLength,
-                                const Twine &Name = "");
-
-  /// Call an comparison VP intrinsic.
-  Instruction *CreateVectorPredicatedReduce(Module &M, CmpInst::Predicate Pred,
-                                   Value *FirstOp, Value *SndOp, Value *Mask,
-                                   Value *VectorLength,
-                                   const Twine &Name = "");
 
   /// Create a llvm.experimental.noalias.scope.decl intrinsic call.
   Instruction *CreateNoAliasScopeDeclaration(Value *Scope);

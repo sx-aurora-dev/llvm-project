@@ -291,6 +291,84 @@ CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemCpy(
   return CI;
 }
 
+/// isConstantOne - Return true only if val is constant int 1
+static bool isConstantOne(const Value *Val) {
+  assert(Val && "isConstantOne does not work with nullptr Val");
+  const ConstantInt *CVal = dyn_cast<ConstantInt>(Val);
+  return CVal && CVal->isOne();
+}
+
+CallInst *IRBuilderBase::CreateMalloc(Type *IntPtrTy, Type *AllocTy,
+                                      Value *AllocSize, Value *ArraySize,
+                                      ArrayRef<OperandBundleDef> OpB,
+                                      Function *MallocF, const Twine &Name) {
+  // malloc(type) becomes:
+  //       i8* malloc(typeSize)
+  // malloc(type, arraySize) becomes:
+  //       i8* malloc(typeSize*arraySize)
+  if (!ArraySize)
+    ArraySize = ConstantInt::get(IntPtrTy, 1);
+  else if (ArraySize->getType() != IntPtrTy)
+    ArraySize = CreateIntCast(ArraySize, IntPtrTy, false);
+
+  if (!isConstantOne(ArraySize)) {
+    if (isConstantOne(AllocSize)) {
+      AllocSize = ArraySize; // Operand * 1 = Operand
+    } else {
+      // Multiply type size by the array size...
+      AllocSize = CreateMul(ArraySize, AllocSize, "mallocsize");
+    }
+  }
+
+  assert(AllocSize->getType() == IntPtrTy && "malloc arg is wrong size");
+  // Create the call to Malloc.
+  Module *M = BB->getParent()->getParent();
+  Type *BPTy = PointerType::getUnqual(Context);
+  FunctionCallee MallocFunc = MallocF;
+  if (!MallocFunc)
+    // prototype malloc as "void *malloc(size_t)"
+    MallocFunc = M->getOrInsertFunction("malloc", BPTy, IntPtrTy);
+  CallInst *MCall = CreateCall(MallocFunc, AllocSize, OpB, Name);
+
+  MCall->setTailCall();
+  if (Function *F = dyn_cast<Function>(MallocFunc.getCallee())) {
+    MCall->setCallingConv(F->getCallingConv());
+    F->setReturnDoesNotAlias();
+  }
+
+  assert(!MCall->getType()->isVoidTy() && "Malloc has void return type");
+
+  return MCall;
+}
+
+CallInst *IRBuilderBase::CreateMalloc(Type *IntPtrTy, Type *AllocTy,
+                                      Value *AllocSize, Value *ArraySize,
+                                      Function *MallocF, const Twine &Name) {
+
+  return CreateMalloc(IntPtrTy, AllocTy, AllocSize, ArraySize, std::nullopt,
+                      MallocF, Name);
+}
+
+/// CreateFree - Generate the IR for a call to the builtin free function.
+CallInst *IRBuilderBase::CreateFree(Value *Source,
+                                    ArrayRef<OperandBundleDef> Bundles) {
+  assert(Source->getType()->isPointerTy() &&
+         "Can not free something of nonpointer type!");
+
+  Module *M = BB->getParent()->getParent();
+
+  Type *VoidTy = Type::getVoidTy(M->getContext());
+  Type *VoidPtrTy = PointerType::getUnqual(M->getContext());
+  // prototype free as "void free(void*)"
+  FunctionCallee FreeFunc = M->getOrInsertFunction("free", VoidTy, VoidPtrTy);
+  CallInst *Result = CreateCall(FreeFunc, Source, Bundles, "");
+  Result->setTailCall();
+  if (Function *F = dyn_cast<Function>(FreeFunc.getCallee()))
+    Result->setCallingConv(F->getCallingConv());
+
+  return Result;
+}
+
 CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemMove(
     Value *Dst, Align DstAlign, Value *Src, Align SrcAlign, Value *Size,
     uint32_t ElementSize, MDNode *TBAATag, MDNode *TBAAStructTag,
@@ -549,64 +627,6 @@ CallInst *IRBuilderBase::CreateMaskedIntrinsic(Intrinsic::ID Id,
   Module *M = BB->getParent()->getParent();
   Function *TheFn = Intrinsic::getDeclaration(M, Id, OverloadedTypes);
   return CreateCall(TheFn, Ops, {}, Name);
-}
-
-/// Create a call to a vector-predicated intrinsic (VP).
-/// \p OC            - The LLVM IR Opcode of the operation
-/// \p VecOpArray    - Intrinsic operand list
-/// \p FMFSource     - Copy source for Fast Math Flags
-/// \p Name          - name of the result variable
-Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
-                                                       Type *ReturnTy,
-                                                       ArrayRef<Value *> Params,
-                                                       Instruction *FMFSource,
-                                                       const Twine &Name) {
-
-  Module *M = BB->getParent()->getParent();
-
-  Intrinsic::ID VPID = VPIntrinsic::getForOpcode(OC);
-  auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, ReturnTy, Params);
-  auto *VPCall = CreateCall(VPFunc, Params, {}, Name);
-
-  // transfer fast math flags
-  if (FMFSource && isa<FPMathOperator>(FMFSource)) {
-    VPCall->copyFastMathFlags(FMFSource);
-  }
-
-  return VPCall;
-}
-
-/// Create a call to a vector-predicated comparison intrinsic (VP).
-/// \p Pred          - comparison predicate
-/// \p FirstOp       - First vector operand
-/// \p SndOp         - Second vector operand
-/// \p Mask          - Mask operand
-/// \p VectorLength  - Vector length operand
-/// \p Name          - name of the result variable
-Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
-    CmpInst::Predicate Pred, Value *FirstParam, Value *SndParam,
-    Value *MaskParam, Value *VectorLengthParam, const Twine &Name) {
-
-  Module *M = BB->getParent()->getParent();
-
-  auto *ReturnTy = MaskParam->getType();
-
-  // Encode comparison predicate as MD
-  uint8_t RawPred = static_cast<uint8_t>(Pred);
-  auto Int8Ty = Type::getInt8Ty(getContext());
-  auto PredParam = ConstantInt::get(Int8Ty, RawPred, false);
-
-  Intrinsic::ID VPID = FirstParam->getType()->isIntOrIntVectorTy()
-                           ? Intrinsic::vp_icmp
-                           : Intrinsic::vp_fcmp;
-
-  auto VPFunc = VPIntrinsic::getDeclarationForParams(
-      M, VPID, ReturnTy,
-      {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
-
-  return CreateCall(
-      VPFunc, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam},
-      {}, Name);
 }
 
 /// Create a call to a Masked Gather intrinsic.

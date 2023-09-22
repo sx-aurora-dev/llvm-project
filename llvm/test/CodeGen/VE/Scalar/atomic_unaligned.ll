@@ -1820,21 +1820,21 @@ define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-NEXT:    and %s0, 3, %s0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    sla.w.sx %s2, (56)0, %s0
-; CHECK-NEXT:    ldl.sx %s5, (, %s1)
+; CHECK-NEXT:    ldl.sx %s4, (, %s1)
 ; CHECK-NEXT:    xor %s3, -1, %s2
 ; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    sla.w.sx %s4, (63)0, %s0
+; CHECK-NEXT:    sla.w.sx %s5, (63)0, %s0
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s6, 0, %s5
-; CHECK-NEXT:    and %s5, %s6, %s4
-; CHECK-NEXT:    nnd %s5, %s5, %s2
+; CHECK-NEXT:    or %s6, 0, %s4
+; CHECK-NEXT:    and %s4, %s6, %s5
+; CHECK-NEXT:    nnd %s4, %s4, %s2
 ; CHECK-NEXT:    and %s7, %s6, %s3
-; CHECK-NEXT:    or %s5, %s7, %s5
-; CHECK-NEXT:    cas.w %s5, (%s1), %s6
-; CHECK-NEXT:    brne.w %s5, %s6, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    or %s4, %s7, %s4
+; CHECK-NEXT:    cas.w %s4, (%s1), %s6
+; CHECK-NEXT:    brne.w %s4, %s6, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
-; CHECK-NEXT:    and %s1, %s5, (32)0
+; CHECK-NEXT:    and %s1, %s4, (32)0
 ; CHECK-NEXT:    srl %s0, %s1, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
@@ -1857,21 +1857,21 @@ define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-NEXT:    and %s0, 3, %s0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    sla.w.sx %s2, (48)0, %s0
-; CHECK-NEXT:    ldl.sx %s5, (, %s1)
+; CHECK-NEXT:    ldl.sx %s4, (, %s1)
 ; CHECK-NEXT:    xor %s3, -1, %s2
 ; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    sla.w.sx %s4, (63)0, %s0
+; CHECK-NEXT:    sla.w.sx %s5, (63)0, %s0
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s6, 0, %s5
-; CHECK-NEXT:    and %s5, %s6, %s4
-; CHECK-NEXT:    nnd %s5, %s5, %s2
+; CHECK-NEXT:    or %s6, 0, %s4
+; CHECK-NEXT:    and %s4, %s6, %s5
+; CHECK-NEXT:    nnd %s4, %s4, %s2
 ; CHECK-NEXT:    and %s7, %s6, %s3
-; CHECK-NEXT:    or %s5, %s7, %s5
-; CHECK-NEXT:    cas.w %s5, (%s1), %s6
-; CHECK-NEXT:    brne.w %s5, %s6, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    or %s4, %s7, %s4
+; CHECK-NEXT:    cas.w %s4, (%s1), %s6
+; CHECK-NEXT:    brne.w %s4, %s6, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
-; CHECK-NEXT:    and %s1, %s5, (32)0
+; CHECK-NEXT:    and %s1, %s4, (32)0
 ; CHECK-NEXT:    srl %s0, %s1, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
