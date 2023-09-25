@@ -1719,6 +1719,8 @@ void CombinerHelper::applyCombineMulToShl(MachineInstr &MI,
 bool CombinerHelper::matchCombineShlOfExtend(MachineInstr &MI,
                                              RegisterImmPair &MatchData) {
   assert(MI.getOpcode() == TargetOpcode::G_SHL && KB);
+  if (!getTargetLowering().isDesirableToPullExtFromShl(MI))
+    return false;
 
   Register LHS = MI.getOperand(1).getReg();
 
@@ -6168,14 +6170,4 @@ void CombinerHelper::applyCommuteBinOpOperands(MachineInstr &MI) {
   MI.getOperand(1).setReg(RHSReg);
   MI.getOperand(2).setReg(LHSReg);
   Observer.changedInstr(MI);
-}
-
-bool CombinerHelper::tryCombine(MachineInstr &MI) {
-  if (tryCombineCopy(MI))
-    return true;
-  if (tryCombineExtendingLoads(MI))
-    return true;
-  if (tryCombineIndexedLoadStore(MI))
-    return true;
-  return false;
 }
