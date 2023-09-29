@@ -1369,20 +1369,12 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
   // Add C++ include arguments, if needed.
   if (types::isCXX(Inputs[0].getType())) {
     bool HasStdlibxxIsystem = Args.hasArg(options::OPT_stdlibxx_isystem);
-
-    auto AddSysIncludes = [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
-      HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
-                         : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
-    };
-
-    // Only consider the paths of the target tool chain
-    AddSysIncludes(getToolChain());
-
-#if 0
-    // LLVM upstream code path. This does not work for use because it adds the system include paths of the VH and the VE compiling for either (eg the glibc header for x86 are accidentally being used also for VE).
     forAllAssociatedToolChains(
-        C, JA, getToolChain(), AddSysIncludes);
-#endif
+        C, JA, getToolChain(),
+        [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
+          HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
+                             : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
+        });
   }
 
   // Add system include arguments for all targets but IAMCU.
@@ -7042,8 +7034,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // Enable vectorization per default according to the optimization level
   // selected. For optimization levels that want vectorization we use the alias
   // option to simplify the hasFlag logic.
-  // Disable vectorization by default for the case of VE temporary,
-  // until VE supports vector instructions.
   bool EnableVec = shouldEnableVectorizerAtOLevel(Args, false);
   OptSpecifier VectorizeAliasOption =
       EnableVec ? options::OPT_O_Group : options::OPT_fvectorize;

@@ -141,12 +141,7 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   assert((GetCXXStdlibType(Args) == ToolChain::CST_Libcxx) &&
          "Only -lc++ (aka libxx) is supported in this toolchain.");
 
-  // Add compiler-rt rpath.
   tools::addArchSpecificRPath(*this, Args, CmdArgs);
-
-  // Wirte up the standard environment path.
-  CmdArgs.push_back("-rpath");
-  CmdArgs.push_back(Args.MakeArgString(getDriver().SysRoot + "/opt/nec/ve/lib"));
 
   // Add paths for libc++.so and other shared libraries.
   if (std::optional<std::string> Path = getStdlibPath()) {
