@@ -3926,13 +3926,13 @@ VETargetLowering::getSingleConstraintMatchWeight(AsmOperandInfo &info,
 /// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
 /// vector.  If it is invalid, don't add anything to Ops.
 void VETargetLowering::LowerAsmOperandForConstraint(SDValue Op,
-                                                    std::string &Constraint,
+                                                    StringRef Constraint,
                                                     std::vector<SDValue> &Ops,
                                                     SelectionDAG &DAG) const {
   SDValue Result(nullptr, 0);
 
   // Only support length 1 constraints for now.
-  if (Constraint.length() > 1)
+  if (Constraint.size() > 1)
     return;
 
   char ConstraintLetter = Constraint[0];
