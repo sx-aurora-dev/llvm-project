@@ -288,6 +288,7 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
   return EVT::getVectorVT(*DAG.getContext(), ElemVT, TargetWidth);
 }
 
+#if 0
 // Legal result type - but illegal operand type
 // FIXME Use this to ExpandTOVVP vector operation that do not yield a vector
 // result
@@ -363,6 +364,7 @@ void VETargetLowering::LowerOperationWrapper(
   // attach the value output
   Results.push_back(SDValue(NewN, ValIdx));
 }
+#endif
 
 SDNode *
 VETargetLowering::widenInternalVectorOperation(SDNode *N,

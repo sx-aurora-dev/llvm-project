@@ -338,11 +338,6 @@ public:
   std::optional<LegalizeKind> getCustomTypeConversion(LLVMContext &Context,
                                                       EVT VT) const override;
 
-  void LowerOperationWrapper(
-      SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
-      std::function<SDValue(SDValue)> PromotedopCB,
-      std::function<SDValue(SDValue)> WidenedOpCB) const override;
-
   SDNode *widenInternalVectorOperation(SDNode *N, SelectionDAG &DAG) const;
   // legalize the result vector type for operation \p Op
 
