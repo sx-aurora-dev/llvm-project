@@ -287,14 +287,17 @@ ParseResult AllocaOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 /// Checks that the elemental type is present in either the pointer type or
-/// the attribute, but not both.
+/// the attribute, but not in none or both.
 static LogicalResult verifyOpaquePtr(Operation *op, LLVMPointerType ptrType,
                                      std::optional<Type> ptrElementType) {
-  if (ptrType.isOpaque() && !ptrElementType.has_value()) {
+  bool typePresentInPointerType = !ptrType.isOpaque();
+  bool typePresentInAttribute = ptrElementType.has_value();
+
+  if (!typePresentInPointerType && !typePresentInAttribute) {
     return op->emitOpError() << "expected '" << kElemTypeAttrName
                              << "' attribute if opaque pointer type is used";
   }
-  if (!ptrType.isOpaque() && ptrElementType.has_value()) {
+  if (typePresentInPointerType && typePresentInAttribute) {
     return op->emitOpError()
            << "unexpected '" << kElemTypeAttrName
            << "' attribute when non-opaque pointer type is used";
@@ -1053,9 +1056,7 @@ void CallOp::build(OpBuilder &builder, OperationState &state, TypeRange results,
                    FlatSymbolRefAttr callee, ValueRange args) {
   build(builder, state, results,
         TypeAttr::get(getLLVMFuncType(builder.getContext(), results, args)),
-        callee, args,
-        /*fastmathFlags=*/nullptr,
-        /*branch_weights=*/nullptr,
+        callee, args, /*fastmathFlags=*/nullptr, /*branch_weights=*/nullptr,
         /*access_groups=*/nullptr, /*alias_scopes=*/nullptr,
         /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
 }
@@ -1077,18 +1078,15 @@ void CallOp::build(OpBuilder &builder, OperationState &state,
                    ValueRange args) {
   build(builder, state, getCallOpResultTypes(calleeType),
         TypeAttr::get(calleeType), callee, args, /*fastmathFlags=*/nullptr,
-        /*branch_weights=*/nullptr,
-        /*access_groups=*/nullptr, /*alias_scopes=*/nullptr,
-        /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
+        /*branch_weights=*/nullptr, /*access_groups=*/nullptr,
+        /*alias_scopes=*/nullptr, /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
 }
 
 void CallOp::build(OpBuilder &builder, OperationState &state,
                    LLVMFunctionType calleeType, ValueRange args) {
   build(builder, state, getCallOpResultTypes(calleeType),
-        TypeAttr::get(calleeType),
-        /*callee=*/nullptr, args,
-        /*fastmathFlags=*/nullptr,
-        /*branch_weights=*/nullptr,
+        TypeAttr::get(calleeType), /*callee=*/nullptr, args,
+        /*fastmathFlags=*/nullptr, /*branch_weights=*/nullptr,
         /*access_groups=*/nullptr, /*alias_scopes=*/nullptr,
         /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
 }
@@ -1098,10 +1096,24 @@ void CallOp::build(OpBuilder &builder, OperationState &state, LLVMFuncOp func,
   auto calleeType = func.getFunctionType();
   build(builder, state, getCallOpResultTypes(calleeType),
         TypeAttr::get(calleeType), SymbolRefAttr::get(func), args,
-        /*fastmathFlags=*/nullptr,
-        /*branch_weights=*/nullptr,
+        /*fastmathFlags=*/nullptr, /*branch_weights=*/nullptr,
         /*access_groups=*/nullptr, /*alias_scopes=*/nullptr,
         /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
+}
+
+void CallOp::build(OpBuilder &builder, OperationState &state, Value callee,
+                   ValueRange args) {
+  auto calleeType = cast<LLVMFunctionType>(
+      cast<LLVMPointerType>(callee.getType()).getElementType());
+  SmallVector<Value> operands;
+  operands.reserve(1 + args.size());
+  operands.push_back(callee);
+  llvm::append_range(operands, args);
+  return build(builder, state, getCallOpResultTypes(calleeType),
+               TypeAttr::get(calleeType), FlatSymbolRefAttr(), operands,
+               /*fastmathFlags=*/nullptr, /*branch_weights=*/nullptr,
+               /*access_groups=*/nullptr, /*alias_scopes=*/nullptr,
+               /*noalias_scopes=*/nullptr, /*tbaa=*/nullptr);
 }
 
 CallInterfaceCallable CallOp::getCallableForCallee() {
