@@ -209,4 +209,13 @@ Value *VPBuilder::CreateVectorShift(Value *SrcVal, Value *Amount, Twine Name) {
                             Name);
 }
 
+Value &VPBuilder::createSelect(Value &OnTrue, Value &OnFalse, Value &Mask,
+                               Value &Pivot, Twine Name) {
+  auto D = VPIntrinsic::getDeclarationForParams(
+      &getModule(), Intrinsic::vp_select, OnTrue.getType(),
+      {&OnTrue, &OnFalse, &Mask, &Pivot});
+  return *Builder.CreateCall(
+      D, {&OnTrue, &OnFalse, &Mask, &Pivot, &RequestEVL()}, Name);
+}
+
 } // namespace llvm
