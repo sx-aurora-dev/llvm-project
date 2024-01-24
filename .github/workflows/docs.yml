@@ -43,7 +43,7 @@ jobs:
           sudo apt-get install -y cmake ninja-build
       - name: Get subprojects that have doc changes
         id: docs-changed-subprojects
-        uses: tj-actions/changed-files@v39
+        uses: tj-actions/changed-files@v41
         with:
           files_yaml: |
             llvm:
