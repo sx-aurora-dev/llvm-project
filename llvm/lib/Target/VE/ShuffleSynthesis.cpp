@@ -1018,7 +1018,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
           GetVectorNumElements(VecConstant->getType());
       const auto *ElemTy =
           cast<FixedVectorType>(VecConstant->getType())->getElementType();
-      uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
+      uint64_t Stride = (ElemTy->getPrimitiveSizeInBits() + 7) /
                         8; // FIXME should be using datala
       Packing P =
           isPackedVectorType(LegalResVT) ? Packing::Dense : Packing::Normal;
