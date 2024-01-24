@@ -3,7 +3,7 @@
 # similar although simpler functionality. We should figure out how to merge
 # the two files.
 
-set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON")
+set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
 if(NOT "${LLVM_PARALLEL_COMPILE_JOBS}" STREQUAL "")
   list(APPEND COMMON_CMAKE_ARGS "-DLLVM_PARALLEL_COMPILE_JOBS=${LLVM_PARALLEL_COMPILE_JOBS}")
 endif()

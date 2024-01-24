@@ -12,11 +12,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "omptarget.h"
-#include "OmptCallback.h"
-#include "OmptInterface.h"
+#include "OffloadPolicy.h"
+#include "OpenMP/OMPT/Callback.h"
+#include "OpenMP/OMPT/Interface.h"
+#include "PluginManager.h"
 #include "device.h"
 #include "private.h"
 #include "rtl.h"
+
+#include "Shared/Profile.h"
+
+#include "OpenMP/Mapping.h"
+#include "OpenMP/omp.h"
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/bit.h"
@@ -71,7 +78,7 @@ int32_t AsyncInfoTy::runPostProcessing() {
 
   // Clear the vector up until the last known function, since post-processing
   // procedures might add new procedures themselves.
-  const auto PrevBegin = PostProcessingFunctions.begin();
+  const auto *PrevBegin = PostProcessingFunctions.begin();
   PostProcessingFunctions.erase(PrevBegin, PrevBegin + Size);
 
   return OFFLOAD_SUCCESS;
@@ -191,38 +198,50 @@ static int initLibrary(DeviceTy &Device) {
                                *EntryDeviceEnd = TargetTable->EntriesEnd;
            CurrDeviceEntry != EntryDeviceEnd;
            CurrDeviceEntry++, CurrHostEntry++) {
-        if (CurrDeviceEntry->size != 0) {
-          // has data.
-          assert(CurrDeviceEntry->size == CurrHostEntry->size &&
-                 "data size mismatch");
+        if (CurrDeviceEntry->size == 0)
+          continue;
 
-          // Fortran may use multiple weak declarations for the same symbol,
-          // therefore we must allow for multiple weak symbols to be loaded from
-          // the fat binary. Treat these mappings as any other "regular"
-          // mapping. Add entry to map.
-          if (Device.getTgtPtrBegin(HDTTMap, CurrHostEntry->addr,
-                                    CurrHostEntry->size))
-            continue;
+        assert(CurrDeviceEntry->size == CurrHostEntry->size &&
+               "data size mismatch");
 
-          DP("Add mapping from host " DPxMOD " to device " DPxMOD
-             " with size %zu"
-             "\n",
-             DPxPTR(CurrHostEntry->addr), DPxPTR(CurrDeviceEntry->addr),
-             CurrDeviceEntry->size);
-          HDTTMap->emplace(new HostDataToTargetTy(
-              (uintptr_t)CurrHostEntry->addr /*HstPtrBase*/,
-              (uintptr_t)CurrHostEntry->addr /*HstPtrBegin*/,
-              (uintptr_t)CurrHostEntry->addr +
-                  CurrHostEntry->size /*HstPtrEnd*/,
-              (uintptr_t)CurrDeviceEntry->addr /*TgtAllocBegin*/,
-              (uintptr_t)CurrDeviceEntry->addr /*TgtPtrBegin*/,
-              false /*UseHoldRefCount*/, CurrHostEntry->name,
-              true /*IsRefCountINF*/));
+        // Fortran may use multiple weak declarations for the same symbol,
+        // therefore we must allow for multiple weak symbols to be loaded from
+        // the fat binary. Treat these mappings as any other "regular"
+        // mapping. Add entry to map.
+        if (Device.getTgtPtrBegin(HDTTMap, CurrHostEntry->addr,
+                                  CurrHostEntry->size))
+          continue;
 
-          // Notify about the new mapping.
-          if (Device.notifyDataMapped(CurrHostEntry->addr, CurrHostEntry->size))
+        void *CurrDeviceEntryAddr = CurrDeviceEntry->addr;
+
+        // For indirect mapping, follow the indirection and map the actual
+        // target.
+        if (CurrDeviceEntry->flags & OMP_DECLARE_TARGET_INDIRECT) {
+          AsyncInfoTy AsyncInfo(Device);
+          void *DevPtr;
+          Device.retrieveData(&DevPtr, CurrDeviceEntryAddr, sizeof(void *),
+                              AsyncInfo);
+          if (AsyncInfo.synchronize() != OFFLOAD_SUCCESS)
             return OFFLOAD_FAIL;
+          CurrDeviceEntryAddr = DevPtr;
         }
+
+        DP("Add mapping from host " DPxMOD " to device " DPxMOD " with size %zu"
+           ", name \"%s\"\n",
+           DPxPTR(CurrHostEntry->addr), DPxPTR(CurrDeviceEntry->addr),
+           CurrDeviceEntry->size, CurrDeviceEntry->name);
+        HDTTMap->emplace(new HostDataToTargetTy(
+            (uintptr_t)CurrHostEntry->addr /*HstPtrBase*/,
+            (uintptr_t)CurrHostEntry->addr /*HstPtrBegin*/,
+            (uintptr_t)CurrHostEntry->addr + CurrHostEntry->size /*HstPtrEnd*/,
+            (uintptr_t)CurrDeviceEntryAddr /*TgtAllocBegin*/,
+            (uintptr_t)CurrDeviceEntryAddr /*TgtPtrBegin*/,
+            false /*UseHoldRefCount*/, CurrHostEntry->name,
+            true /*IsRefCountINF*/));
+
+        // Notify about the new mapping.
+        if (Device.notifyDataMapped(CurrHostEntry->addr, CurrHostEntry->size))
+          return OFFLOAD_FAIL;
       }
     }
   }
@@ -263,17 +282,13 @@ static int initLibrary(DeviceTy &Device) {
 }
 
 void handleTargetOutcome(bool Success, ident_t *Loc) {
-  switch (PM->TargetOffloadPolicy) {
-  case tgt_disabled:
+  switch (OffloadPolicy::get(*PM).Kind) {
+  case OffloadPolicy::DISABLED:
     if (Success) {
       FATAL_MESSAGE0(1, "expected no offloading while offloading is disabled");
     }
     break;
-  case tgt_default:
-    FATAL_MESSAGE0(1, "default offloading policy must be switched to "
-                      "mandatory or disabled");
-    break;
-  case tgt_mandatory:
+  case OffloadPolicy::MANDATORY:
     if (!Success) {
       if (getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE)
         for (auto &Device : PM->Devices)
@@ -282,11 +297,11 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
         FAILURE_MESSAGE("Consult https://openmp.llvm.org/design/Runtimes.html "
                         "for debugging options.\n");
 
-      if (PM->RTLs.UsedRTLs.empty()) {
+      if (!PM->getNumUsedPlugins()) {
         llvm::SmallVector<llvm::StringRef> Archs;
         llvm::transform(PM->Images, std::back_inserter(Archs),
-                        [](const auto &x) {
-                          return !x.second.Arch ? "empty" : x.second.Arch;
+                        [](const auto &X) {
+                          return !X.second.Arch ? "empty" : X.second.Arch;
                         });
         FAILURE_MESSAGE(
             "No images found compatible with the installed hardware. ");
@@ -311,27 +326,6 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
   }
 }
 
-static void handleDefaultTargetOffload() {
-  std::lock_guard<decltype(PM->TargetOffloadMtx)> LG(PM->TargetOffloadMtx);
-  if (PM->TargetOffloadPolicy == tgt_default) {
-    if (omp_get_num_devices() > 0) {
-      DP("Default TARGET OFFLOAD policy is now mandatory "
-         "(devices were found)\n");
-      PM->TargetOffloadPolicy = tgt_mandatory;
-    } else {
-      DP("Default TARGET OFFLOAD policy is now disabled "
-         "(no devices were found)\n");
-      PM->TargetOffloadPolicy = tgt_disabled;
-    }
-  }
-}
-
-static bool isOffloadDisabled() {
-  if (PM->TargetOffloadPolicy == tgt_default)
-    handleDefaultTargetOffload();
-  return PM->TargetOffloadPolicy == tgt_disabled;
-}
-
 // If offload is enabled, ensure that device DeviceID has been initialized,
 // global ctors have been executed, and global data has been mapped.
 //
@@ -345,7 +339,7 @@ static bool isOffloadDisabled() {
 // If DeviceID == OFFLOAD_DEVICE_DEFAULT, set DeviceID to the default device.
 // This step might be skipped if offload is disabled.
 bool checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
-  if (isOffloadDisabled()) {
+  if (OffloadPolicy::get(*PM).Kind == OffloadPolicy::DISABLED) {
     DP("Offload is disabled\n");
     return true;
   }
@@ -461,7 +455,7 @@ void *targetLockExplicit(void *HostPtr, size_t Size, int DeviceNum,
     return NULL;
   }
 
-  void *rc = NULL;
+  void *RC = NULL;
 
   if (!deviceIsReady(DeviceNum)) {
     DP("%s returns NULL ptr\n", Name);
@@ -480,16 +474,16 @@ void *targetLockExplicit(void *HostPtr, size_t Size, int DeviceNum,
     DevicePtr = PM->Devices[DeviceNum].get();
   }
 
-  int32_t err = 0;
+  int32_t Err = 0;
   if (DevicePtr->RTL->data_lock) {
-    err = DevicePtr->RTL->data_lock(DeviceNum, HostPtr, Size, &rc);
-    if (err) {
+    Err = DevicePtr->RTL->data_lock(DeviceNum, HostPtr, Size, &RC);
+    if (Err) {
       DP("Could not lock ptr %p\n", HostPtr);
       return nullptr;
     }
   }
-  DP("%s returns device ptr " DPxMOD "\n", Name, DPxPTR(rc));
-  return rc;
+  DP("%s returns device ptr " DPxMOD "\n", Name, DPxPTR(RC));
+  return RC;
 }
 
 void targetUnlockExplicit(void *HostPtr, int DeviceNum, const char *Name) {
@@ -1252,7 +1246,7 @@ class PrivateArgumentManagerTy {
 
     FirstPrivateArgInfoTy(int Index, void *HstPtr, uint32_t Size,
                           uint32_t Alignment, uint32_t Padding,
-                          const map_var_info_t HstPtrName = nullptr)
+                          map_var_info_t HstPtrName = nullptr)
         : HstPtrBegin(reinterpret_cast<char *>(HstPtr)),
           HstPtrEnd(HstPtrBegin + Size), Index(Index), Alignment(Alignment),
           Size(Size), Padding(Padding), HstPtrName(HstPtrName) {}
@@ -1286,7 +1280,7 @@ public:
   /// Add a private argument
   int addArg(void *HstPtr, int64_t ArgSize, int64_t ArgOffset,
              bool IsFirstPrivate, void *&TgtPtr, int TgtArgsIndex,
-             const map_var_info_t HstPtrName = nullptr,
+             map_var_info_t HstPtrName = nullptr,
              const bool AllocImmediately = false) {
     // If the argument is not first-private, or its size is greater than a
     // predefined threshold, we will allocate memory and issue the transfer
@@ -1373,7 +1367,7 @@ public:
       assert(FirstPrivateArgSize != 0 &&
              "FirstPrivateArgSize is 0 but FirstPrivateArgInfo is empty");
       FirstPrivateArgBuffer.resize(FirstPrivateArgSize, 0);
-      auto Itr = FirstPrivateArgBuffer.begin();
+      auto *Itr = FirstPrivateArgBuffer.begin();
       // Copy all host data to this buffer
       for (FirstPrivateArgInfoTy &Info : FirstPrivateArgInfo) {
         // First pad the pointer as we (have to) pad it on the device too.
@@ -1713,9 +1707,11 @@ int target(ident_t *Loc, DeviceTy &Device, void *HostPtr,
 /// and informing the record-replayer of whether to store the output
 /// in some file.
 int target_activate_rr(DeviceTy &Device, uint64_t MemorySize, void *VAddr,
-                       bool isRecord, bool SaveOutput) {
-  return Device.RTL->activate_record_replay(Device.DeviceID, MemorySize, VAddr,
-                                            isRecord, SaveOutput);
+                       bool IsRecord, bool SaveOutput,
+                       uint64_t &ReqPtrArgOffset) {
+  return Device.RTL->initialize_record_replay(Device.DeviceID, MemorySize,
+                                              VAddr, IsRecord, SaveOutput,
+                                              ReqPtrArgOffset);
 }
 
 /// Executes a kernel using pre-recorded information for loading to
