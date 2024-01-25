@@ -81,6 +81,7 @@
 #include "llvm/CodeGen/HardwareLoops.h"
 #include "llvm/CodeGen/SafeStack.h"
 #include "llvm/CodeGen/TypePromotion.h"
+#include "llvm/CodeGen/WinEHPrepare.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/PassManager.h"
@@ -1118,6 +1119,11 @@ Expected<std::string> parseMemProfUsePassOptions(StringRef Params) {
 Expected<bool> parseStructuralHashPrinterPassOptions(StringRef Params) {
   return parseSinglePassOption(Params, "detailed",
                                "StructuralHashPrinterPass");
+}
+
+Expected<bool> parseWinEHPrepareOptions(StringRef Params) {
+  return parseSinglePassOption(Params, "demote-catchswitch-only",
+                               "WinEHPreparePass");
 }
 
 } // namespace
