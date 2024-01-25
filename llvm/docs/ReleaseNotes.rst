@@ -92,6 +92,8 @@ Changes to Interprocedural Optimizations
 Changes to the AArch64 Backend
 ------------------------------
 
+* Added support for Cortex-A520, Cortex-A720 and Cortex-X4 CPUs.
+
 Changes to the AMDGPU Backend
 -----------------------------
 
@@ -102,10 +104,10 @@ Changes to the AMDGPU Backend
 
 * Implemented :ref:`llvm.get.rounding <int_get_rounding>`
 
-* Added support for Cortex-A520, Cortex-A720 and Cortex-X4 CPUs.
-
 Changes to the ARM Backend
 --------------------------
+
+* Added support for Cortex-M52 CPUs.
 
 Changes to the AVR Backend
 --------------------------
@@ -200,8 +202,9 @@ Changes to the C API
   The option structure exposes an additional setting (i.e., the target ABI) and
   provides default values for unspecified settings.
 
-* Added ``LLVMGetNNeg`` and ``LLVMSetNNeg`` for setting/getting the new nneg flag
-  on zext instructions
+* Added ``LLVMGetNNeg`` and ``LLVMSetNNeg`` for getting/setting the new nneg flag
+  on zext instructions, and ``LLVMGetIsDisjoint`` and ``LLVMSetIsDisjoint``
+  for getting/setting the new disjoint flag on or instructions.
 
 Changes to the CodeGen infrastructure
 -------------------------------------

@@ -24,11 +24,13 @@
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/CodeGen/CallBrPrepare.h"
 #include "llvm/CodeGen/ExpandReductions.h"
+#include "llvm/CodeGen/InterleavedAccess.h"
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/PreISelIntrinsicLowering.h"
 #include "llvm/CodeGen/ReplaceWithVeclib.h"
 #include "llvm/CodeGen/SafeStack.h"
 #include "llvm/CodeGen/UnreachableBlockElim.h"
+#include "llvm/CodeGen/WasmEHPrepare.h"
 #include "llvm/CodeGen/WinEHPrepare.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
@@ -691,7 +693,7 @@ void CodeGenPassBuilder<Derived>::addPassesToHandleExceptions(
     // funclets. Catchswitch blocks are not lowered in SelectionDAG, so we
     // should remove PHIs there.
     addPass(WinEHPreparePass(/*DemoteCatchSwitchPHIOnly=*/false));
-    addPass(WasmEHPass());
+    addPass(WasmEHPreparePass());
     break;
   case ExceptionHandling::None:
     addPass(LowerInvokePass());
