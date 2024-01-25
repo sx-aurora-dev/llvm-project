@@ -382,6 +382,7 @@ private:
   bool NoUnsignedWrap : 1;
   bool NoSignedWrap : 1;
   bool Exact : 1;
+  bool Disjoint : 1;
   bool NonNeg : 1;
   bool NoNaNs : 1;
   bool NoInfs : 1;
@@ -403,10 +404,11 @@ private:
 public:
   /// Default constructor turns off all optimization flags.
   SDNodeFlags()
-      : NoUnsignedWrap(false), NoSignedWrap(false), Exact(false), NonNeg(false),
-        NoNaNs(false), NoInfs(false), NoSignedZeros(false),
-        AllowReciprocal(false), AllowContract(false), ApproximateFuncs(false),
-        AllowReassociation(false), NoFPExcept(false), Unpredictable(false) {}
+      : NoUnsignedWrap(false), NoSignedWrap(false), Exact(false),
+        Disjoint(false), NonNeg(false), NoNaNs(false), NoInfs(false),
+        NoSignedZeros(false), AllowReciprocal(false), AllowContract(false),
+        ApproximateFuncs(false), AllowReassociation(false), NoFPExcept(false),
+        Unpredictable(false) {}
 
   /// Propagate the fast-math-flags from an IR FPMathOperator.
   void copyFMF(const FPMathOperator &FPMO) {
@@ -423,6 +425,7 @@ public:
   void setNoUnsignedWrap(bool b) { NoUnsignedWrap = b; }
   void setNoSignedWrap(bool b) { NoSignedWrap = b; }
   void setExact(bool b) { Exact = b; }
+  void setDisjoint(bool b) { Disjoint = b; }
   void setNonNeg(bool b) { NonNeg = b; }
   void setNoNaNs(bool b) { NoNaNs = b; }
   void setNoInfs(bool b) { NoInfs = b; }
@@ -438,6 +441,7 @@ public:
   bool hasNoUnsignedWrap() const { return NoUnsignedWrap; }
   bool hasNoSignedWrap() const { return NoSignedWrap; }
   bool hasExact() const { return Exact; }
+  bool hasDisjoint() const { return Disjoint; }
   bool hasNonNeg() const { return NonNeg; }
   bool hasNoNaNs() const { return NoNaNs; }
   bool hasNoInfs() const { return NoInfs; }
@@ -455,6 +459,7 @@ public:
     NoUnsignedWrap &= Flags.NoUnsignedWrap;
     NoSignedWrap &= Flags.NoSignedWrap;
     Exact &= Flags.Exact;
+    Disjoint &= Flags.Disjoint;
     NonNeg &= Flags.NonNeg;
     NoNaNs &= Flags.NoNaNs;
     NoInfs &= Flags.NoInfs;
@@ -961,8 +966,14 @@ public:
   /// Helper method returns the integer value of a ConstantSDNode operand.
   inline uint64_t getConstantOperandVal(unsigned Num) const;
 
+  /// Helper method returns the zero-extended integer value of a ConstantSDNode.
+  inline uint64_t getAsZExtVal() const;
+
   /// Helper method returns the APInt of a ConstantSDNode operand.
   inline const APInt &getConstantOperandAPInt(unsigned Num) const;
+
+  /// Helper method returns the APInt value of a ConstantSDNode.
+  inline const APInt &getAsAPIntVal() const;
 
   const SDValue &getOperand(unsigned Num) const {
     assert(Num < NumOperands && "Invalid child # of SDNode!");
@@ -1677,8 +1688,16 @@ uint64_t SDNode::getConstantOperandVal(unsigned Num) const {
   return cast<ConstantSDNode>(getOperand(Num))->getZExtValue();
 }
 
+uint64_t SDNode::getAsZExtVal() const {
+  return cast<ConstantSDNode>(this)->getZExtValue();
+}
+
 const APInt &SDNode::getConstantOperandAPInt(unsigned Num) const {
   return cast<ConstantSDNode>(getOperand(Num))->getAPIntValue();
+}
+
+const APInt &SDNode::getAsAPIntVal() const {
+  return cast<ConstantSDNode>(this)->getAPIntValue();
 }
 
 class ConstantFPSDNode : public SDNode {
