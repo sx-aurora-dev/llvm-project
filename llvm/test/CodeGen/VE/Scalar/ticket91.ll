@@ -4,30 +4,36 @@
 define void @func(i32* nocapture) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    lea %s1, (, %s11)
-; CHECK-NEXT:    lea %s1, 16(, %s1)
-; CHECK-NEXT:    or %s2, 0, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    lea %s2, (, %s11)
 ; CHECK-NEXT:    lea %s3, 256
 ; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    stl %s2, -16(, %s1)
+; CHECK-NEXT:    stl %s1, (, %s2)
 ; CHECK-NEXT:    or %s5, 1, %s4
-; CHECK-NEXT:    stl %s5, -12(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 2, %s4
-; CHECK-NEXT:    stl %s5, -8(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 3, %s4
-; CHECK-NEXT:    stl %s5, -4(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 4, %s4
-; CHECK-NEXT:    stl %s5, (, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 5, %s4
-; CHECK-NEXT:    stl %s5, 4(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 6, %s4
-; CHECK-NEXT:    stl %s5, 8(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    or %s5, 7, %s4
-; CHECK-NEXT:    stl %s5, 12(, %s1)
+; CHECK-NEXT:    sll %s6, %s5, 2
+; CHECK-NEXT:    stl %s5, (%s6, %s11)
 ; CHECK-NEXT:    lea %s4, 8(, %s4)
-; CHECK-NEXT:    adds.w.sx %s2, 8, %s2
-; CHECK-NEXT:    lea %s1, 32(, %s1)
+; CHECK-NEXT:    adds.w.sx %s1, 8, %s1
+; CHECK-NEXT:    lea %s2, 32(, %s2)
 ; CHECK-NEXT:    brne.l %s4, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    ldl.sx %s1, (, %s11)
