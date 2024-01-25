@@ -1874,6 +1874,9 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
   case ISD::EXPERIMENTAL_VP_STRIDED_STORE:
     Res = PromoteIntOp_VP_STRIDED(N, OpNo);
     break;
+  case ISD::EXPERIMENTAL_VP_SPLICE:
+    Res = PromoteIntOp_VP_SPLICE(N, OpNo);
+    break;
   }
   }
 
@@ -2569,6 +2572,20 @@ SDValue DAGTypeLegalizer::PromoteIntOp_VP_STRIDED(SDNode *N, unsigned OpNo) {
   SmallVector<SDValue, 8> NewOps(N->op_begin(), N->op_end());
   NewOps[OpNo] = SExtPromotedInteger(N->getOperand(OpNo));
 
+  return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
+}
+
+SDValue DAGTypeLegalizer::PromoteIntOp_VP_SPLICE(SDNode *N, unsigned OpNo) {
+  SmallVector<SDValue, 6> NewOps(N->op_begin(), N->op_end());
+
+  if (OpNo == 2) { // Offset operand
+    NewOps[OpNo] = SExtPromotedInteger(N->getOperand(OpNo));
+    return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
+  }
+
+  assert((OpNo == 4 || OpNo == 5) && "Unexpected operand for promotion");
+
+  NewOps[OpNo] = ZExtPromotedInteger(N->getOperand(OpNo));
   return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
 }
 
