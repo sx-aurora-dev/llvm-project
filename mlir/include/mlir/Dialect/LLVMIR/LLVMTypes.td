@@ -137,30 +137,17 @@ def LLVMPointerType : LLVMType<"LLVMPointer", "ptr", [
     ```
   }];
 
-  let parameters = (ins DefaultValuedParameter<"Type", "Type()">:$elementType,
-                        DefaultValuedParameter<"unsigned", "0">:$addressSpace);
+  let parameters = (ins DefaultValuedParameter<"unsigned", "0">:$addressSpace);
   let assemblyFormat = [{
-    (`<` custom<Pointer>($elementType, $addressSpace)^ `>`)?
+    (`<` $addressSpace^ `>`)?
   }];
 
-  let genVerifyDecl = 1;
-
+  let skipDefaultBuilders = 1;
   let builders = [
-    TypeBuilderWithInferredContext<(ins "Type":$elementType,
-                                         CArg<"unsigned", "0">:$addressSpace)>,
     TypeBuilder<(ins CArg<"unsigned", "0">:$addressSpace), [{
-      return $_get($_ctxt, Type(), addressSpace);
+      return $_get($_ctxt, addressSpace);
     }]>
   ];
-
-  let extraClassDeclaration = [{
-    /// Returns `true` if this type is the opaque pointer type, i.e., it has no
-    /// pointed-to type.
-    bool isOpaque() const { return !getElementType(); }
-
-    /// Checks if the given type can have a pointer type pointing to it.
-    static bool isValidElementType(Type type);
-  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -174,6 +161,8 @@ def LLVMFixedVectorType : LLVMType<"LLVMFixedVector", "vec"> {
     unknown length that is known to be divisible by some constant. These
     elements can be processed as one in SIMD context.
   }];
+
+  let typeName = "llvm.fixed_vec";
 
   let parameters = (ins "Type":$elementType, "unsigned":$numElements);
   let assemblyFormat = [{
@@ -204,6 +193,8 @@ def LLVMScalableVectorType : LLVMType<"LLVMScalableVector", "vec"> {
     unknown length that is known to be divisible by some constant. These
     elements can be processed as one in SIMD context.
   }];
+
+  let typeName = "llvm.scalable_vec";
 
   let parameters = (ins "Type":$elementType, "unsigned":$minNumElements);
   let assemblyFormat = [{

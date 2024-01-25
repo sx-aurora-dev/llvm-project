@@ -18,7 +18,15 @@ function(_get_common_compile_options output_var flags)
     set(ADD_SSE4_2_FLAG TRUE)
   endif()
 
-  set(compile_options ${LIBC_COMPILE_OPTIONS_DEFAULT} ${ARGN})
+  list(FIND flags ${PREFER_GENERIC_FLAG} prefer_generic)
+  if(${prefer_generic} LESS 0)
+    list(FIND flags "${PREFER_GENERIC_FLAG}__ONLY" prefer_generic)
+  endif()
+  if(${prefer_generic} GREATER -1)
+    set(ADD_PREFER_GENERIC_FLAG TRUE)
+  endif()
+
+  set(compile_options ${LIBC_COMPILE_OPTIONS_DEFAULT})
   if(LLVM_COMPILER_IS_GCC_COMPATIBLE)
     list(APPEND compile_options "-fpie")
 
@@ -33,8 +41,15 @@ function(_get_common_compile_options output_var flags)
     list(APPEND compile_options "-fno-unwind-tables")
     list(APPEND compile_options "-fno-asynchronous-unwind-tables")
     list(APPEND compile_options "-fno-rtti")
+    if (LIBC_CC_SUPPORTS_PATTERN_INIT)
+      list(APPEND compile_options "-ftrivial-auto-var-init=pattern")
+    endif()
     list(APPEND compile_options "-Wall")
     list(APPEND compile_options "-Wextra")
+    # -DLIBC_WNO_ERROR=ON if you can't build cleanly with -Werror.
+    if(NOT LIBC_WNO_ERROR)
+      list(APPEND compile_options "-Werror")
+    endif()
     list(APPEND compile_options "-Wconversion")
     list(APPEND compile_options "-Wno-sign-conversion")
     list(APPEND compile_options "-Wimplicit-fallthrough")
@@ -58,11 +73,17 @@ function(_get_common_compile_options output_var flags)
     if(ADD_SSE4_2_FLAG)
       list(APPEND compile_options "-msse4.2")
     endif()
+    if(ADD_PREFER_GENERIC_FLAG)
+      list(APPEND compile_options "-D__LIBC_PREFER_GENERIC")
+    endif()
   elseif(MSVC)
     list(APPEND compile_options "/EHs-c-")
     list(APPEND compile_options "/GR-")
     if(ADD_FMA_FLAG)
       list(APPEND compile_options "/arch:AVX2")
+    endif()
+    if(ADD_PREFER_GENERIC_FLAG)
+      list(APPEND compile_options "/D__LIBC_PREFER_GENERIC")
     endif()
   endif()
   if (LIBC_TARGET_ARCHITECTURE_IS_GPU)
@@ -89,6 +110,7 @@ function(get_nvptx_compile_options output_var gpu_arch)
   set(nvptx_options "")
   list(APPEND nvptx_options "-march=${gpu_arch}")
   list(APPEND nvptx_options "-Wno-unknown-cuda-version")
+  list(APPEND nvptx_options "SHELL:-mllvm -nvptx-emit-init-fini-kernel=false")
   if(${gpu_arch} STREQUAL "sm_35")
     list(APPEND nvptx_options "--cuda-feature=+ptx60")
   elseif(${gpu_arch} STREQUAL "sm_37")
@@ -342,11 +364,8 @@ function(create_object_library fq_target_name)
     set(internal_target_name ${fq_target_name})
   endif()
 
-  _get_common_compile_options(
-    compile_options
-    "${ADD_OBJECT_FLAGS}"
-    ${ADD_OBJECT_COMPILE_OPTIONS}
-  )
+  _get_common_compile_options(compile_options "${ADD_OBJECT_FLAGS}")
+  list(APPEND compile_options ${ADD_OBJECT_COMPILE_OPTIONS})
 
   # GPU builds require special handling for the objects because we want to
   # export several different targets at once, e.g. for both Nvidia and AMD.
@@ -625,11 +644,8 @@ function(create_entrypoint_object fq_target_name)
     set(ADD_ENTRYPOINT_OBJ_CXX_STANDARD ${CMAKE_CXX_STANDARD})
   endif()
 
-  _get_common_compile_options(
-    common_compile_options
-    "${ADD_ENTRYPOINT_OBJ_FLAGS}"
-    ${ADD_ENTRYPOINT_OBJ_COMPILE_OPTIONS}
-  )
+  _get_common_compile_options(common_compile_options "${ADD_ENTRYPOINT_OBJ_FLAGS}")
+  list(APPEND common_compile_options ${ADD_ENTRYPOINT_OBJ_COMPILE_OPTIONS})
   get_fq_deps_list(fq_deps_list ${ADD_ENTRYPOINT_OBJ_DEPENDS})
   set(full_deps_list ${fq_deps_list} libc.src.__support.common)
 

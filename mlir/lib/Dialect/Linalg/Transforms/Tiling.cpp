@@ -553,7 +553,7 @@ tileLinalgOpImpl(RewriterBase &b, LinalgOp op, ArrayRef<OpFoldResult> tileSizes,
     if (!options.interchangeVector.empty()) {
       for (AffineExpr result : invPermutationMap.getResults())
         interchangedIvs.push_back(
-            ivs[result.cast<AffineDimExpr>().getPosition()]);
+            ivs[cast<AffineDimExpr>(result).getPosition()]);
     } else {
       interchangedIvs.assign(ivs.begin(), ivs.end());
     }
@@ -722,7 +722,7 @@ FailureOr<linalg::ForallReductionTilingResult> linalg::tileReductionUsingForall(
     // We cannot use a IRMapping here because it can replace
     // different OpOperands with the same value.
     Operation *clonedOp = b.clone(*op.getOperation());
-    b.updateRootInPlace(clonedOp, [&]() {
+    b.modifyOpInPlace(clonedOp, [&]() {
       for (auto [initOperandPtr, tiledInitValue] : llvm::zip_equal(
                cast<DestinationStyleOpInterface>(clonedOp).getDpsInitsMutable(),
                tiledDpsInitOperands)) {

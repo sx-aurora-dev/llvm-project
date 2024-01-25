@@ -83,18 +83,14 @@ static void insertFieldIndirection(MemOp op, PatternRewriter &rewriter,
       op->getLoc(), LLVM::LLVMPointerType::get(op.getContext()), elemType,
       op.getAddr(), firstTypeIndices);
 
-  rewriter.updateRootInPlace(op,
-                             [&]() { op.getAddrMutable().assign(properPtr); });
+  rewriter.modifyOpInPlace(op,
+                           [&]() { op.getAddrMutable().assign(properPtr); });
 }
 
 template <>
 LogicalResult AddFieldGetterToStructDirectUse<LoadOp>::matchAndRewrite(
     LoadOp load, PatternRewriter &rewriter) const {
   PatternRewriter::InsertionGuard guard(rewriter);
-
-  // Load from typed pointers are not supported.
-  if (!load.getAddr().getType().isOpaque())
-    return failure();
 
   Type inconsistentElementType =
       isElementTypeInconsistent(load.getAddr(), load.getType());
@@ -115,8 +111,8 @@ LogicalResult AddFieldGetterToStructDirectUse<LoadOp>::matchAndRewrite(
     rewriter.setInsertionPointAfterValue(load.getResult());
     BitcastOp bitcast = rewriter.create<BitcastOp>(
         load->getLoc(), load.getResult().getType(), load.getResult());
-    rewriter.updateRootInPlace(load,
-                               [&]() { load.getResult().setType(firstType); });
+    rewriter.modifyOpInPlace(load,
+                             [&]() { load.getResult().setType(firstType); });
     rewriter.replaceAllUsesExcept(load.getResult(), bitcast.getResult(),
                                   bitcast);
   }
@@ -128,10 +124,6 @@ template <>
 LogicalResult AddFieldGetterToStructDirectUse<StoreOp>::matchAndRewrite(
     StoreOp store, PatternRewriter &rewriter) const {
   PatternRewriter::InsertionGuard guard(rewriter);
-
-  // Store to typed pointers are not supported.
-  if (!store.getAddr().getType().isOpaque())
-    return failure();
 
   Type inconsistentElementType =
       isElementTypeInconsistent(store.getAddr(), store.getValue().getType());
@@ -149,7 +141,7 @@ LogicalResult AddFieldGetterToStructDirectUse<StoreOp>::matchAndRewrite(
 
   insertFieldIndirection<StoreOp>(store, rewriter, inconsistentElementType);
 
-  rewriter.updateRootInPlace(
+  rewriter.modifyOpInPlace(
       store, [&]() { store.getValueMutable().assign(store.getValue()); });
 
   return success();
@@ -169,12 +161,15 @@ static std::optional<uint64_t> gepToByteOffset(DataLayout &layout, GEPOp gep) {
     IntegerAttr indexInt = llvm::dyn_cast_if_present<IntegerAttr>(index);
     if (!indexInt)
       return std::nullopt;
-    indices.push_back(indexInt.getInt());
+    int32_t gepIndex = indexInt.getInt();
+    if (gepIndex < 0)
+      return std::nullopt;
+    indices.push_back(static_cast<uint32_t>(gepIndex));
   }
 
-  uint64_t offset = indices[0] * layout.getTypeSize(gep.getSourceElementType());
+  uint64_t offset = indices[0] * layout.getTypeSize(gep.getElemType());
 
-  Type currentType = gep.getSourceElementType();
+  Type currentType = gep.getElemType();
   for (uint32_t index : llvm::drop_begin(indices)) {
     bool shouldCancel =
         TypeSwitch<Type, bool>(currentType)
@@ -579,7 +574,7 @@ LogicalResult SplitStores::matchAndRewrite(StoreOp store,
         return failure();
 
       offset = *byteOffset;
-      typeHint = gepOp.getSourceElementType();
+      typeHint = gepOp.getElemType();
       address = gepOp.getBase();
     }
   }
@@ -635,8 +630,8 @@ LogicalResult BitcastStores::matchAndRewrite(StoreOp store,
 
   auto bitcastOp =
       rewriter.create<BitcastOp>(store.getLoc(), typeHint, store.getValue());
-  rewriter.updateRootInPlace(
-      store, [&] { store.getValueMutable().assign(bitcastOp); });
+  rewriter.modifyOpInPlace(store,
+                           [&] { store.getValueMutable().assign(bitcastOp); });
   return success();
 }
 
@@ -661,8 +656,7 @@ LogicalResult SplitGEP::matchAndRewrite(GEPOp gepOp,
 
   // Split of the first GEP using the first two indices.
   auto subGepOp = rewriter.create<GEPOp>(
-      gepOp.getLoc(), gepOp.getType(), gepOp.getSourceElementType(),
-      gepOp.getBase(),
+      gepOp.getLoc(), gepOp.getType(), gepOp.getElemType(), gepOp.getBase(),
       llvm::map_to_vector(llvm::make_range(indices.begin(), splitIter),
                           indexToGEPArg),
       gepOp.getInbounds());

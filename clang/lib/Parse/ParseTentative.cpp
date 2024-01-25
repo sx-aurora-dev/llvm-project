@@ -894,7 +894,8 @@ bool Parser::TrySkipAttributes() {
       // Note that explicitly checking for `[[` and `]]` allows to fail as
       // expected in the case of the Objective-C message send syntax.
       ConsumeBracket();
-    } else if (Tok.isRegularKeywordAttribute()) {
+    } else if (Tok.isRegularKeywordAttribute() &&
+               !doesKeywordAttributeTakeArgs(Tok.getKind())) {
       ConsumeToken();
     } else {
       ConsumeToken();
@@ -1529,6 +1530,9 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
 
     // HLSL address space qualifiers
   case tok::kw_groupshared:
+  case tok::kw_in:
+  case tok::kw_inout:
+  case tok::kw_out:
 
     // GNU
   case tok::kw_restrict:
@@ -1775,6 +1779,9 @@ Parser::isCXXDeclarationSpecifier(ImplicitTypenameContext AllowImplicitTypename,
   case tok::kw___ibm128:
   case tok::kw_void:
   case tok::annot_decltype:
+  case tok::kw__Accum:
+  case tok::kw__Fract:
+  case tok::kw__Sat:
 #define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
 #include "clang/Basic/OpenCLImageTypes.def"
     if (NextToken().is(tok::l_paren))
@@ -1894,6 +1901,9 @@ bool Parser::isCXXDeclarationSpecifierAType() {
   case tok::kw_void:
   case tok::kw___unknown_anytype:
   case tok::kw___auto_type:
+  case tok::kw__Accum:
+  case tok::kw__Fract:
+  case tok::kw__Sat:
 #define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
 #include "clang/Basic/OpenCLImageTypes.def"
     return true;

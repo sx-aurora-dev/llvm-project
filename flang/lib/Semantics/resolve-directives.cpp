@@ -280,6 +280,7 @@ private:
       const parser::Name &, const Symbol &, Symbol::Flag);
   void AllowOnlyArrayAndSubArray(const parser::AccObjectList &objectList);
   void DoNotAllowAssumedSizedArray(const parser::AccObjectList &objectList);
+  void AllowOnlyVariable(const parser::AccObject &object);
   void EnsureAllocatableOrPointer(
       const llvm::acc::Clause clause, const parser::AccObjectList &objectList);
   void AddRoutineInfoToSymbol(
@@ -480,21 +481,28 @@ public:
   bool Pre(const parser::OmpClause::Reduction &x) {
     const parser::OmpReductionOperator &opr{
         std::get<parser::OmpReductionOperator>(x.v.t)};
+    auto createDummyProcSymbol = [&](const parser::Name *name) {
+      // If name resolution failed, create a dummy symbol
+      const auto namePair{
+          currScope().try_emplace(name->source, Attrs{}, ProcEntityDetails{})};
+      auto &newSymbol{*namePair.first->second};
+      name->symbol = &newSymbol;
+    };
     if (const auto *procD{parser::Unwrap<parser::ProcedureDesignator>(opr.u)}) {
       if (const auto *name{parser::Unwrap<parser::Name>(procD->u)}) {
         if (!name->symbol) {
-          const auto namePair{currScope().try_emplace(
-              name->source, Attrs{}, ProcEntityDetails{})};
-          auto &symbol{*namePair.first->second};
-          name->symbol = &symbol;
-          name->symbol->set(Symbol::Flag::OmpReduction);
-          AddToContextObjectWithDSA(*name->symbol, Symbol::Flag::OmpReduction);
+          if (!ResolveName(name)) {
+            createDummyProcSymbol(name);
+          }
         }
       }
       if (const auto *procRef{
               parser::Unwrap<parser::ProcComponentRef>(procD->u)}) {
-        ResolveOmp(*procRef->v.thing.component.symbol,
-            Symbol::Flag::OmpReduction, currScope());
+        if (!procRef->v.thing.component.symbol) {
+          if (!ResolveName(&procRef->v.thing.component)) {
+            createDummyProcSymbol(&procRef->v.thing.component);
+          }
+        }
       }
     }
     const auto &objList{std::get<parser::OmpObjectList>(x.v.t)};
@@ -944,25 +952,45 @@ void AccAttributeVisitor::AddRoutineInfoToSymbol(
     const auto &clauses = std::get<Fortran::parser::AccClauseList>(x.t);
     for (const Fortran::parser::AccClause &clause : clauses.v) {
       if (std::get_if<Fortran::parser::AccClause::Seq>(&clause.u)) {
-        info.set_isSeq();
+        if (info.deviceTypeInfos().empty()) {
+          info.set_isSeq();
+        } else {
+          info.deviceTypeInfos().back().set_isSeq();
+        }
       } else if (const auto *gangClause =
                      std::get_if<Fortran::parser::AccClause::Gang>(&clause.u)) {
-        info.set_isGang();
+        if (info.deviceTypeInfos().empty()) {
+          info.set_isGang();
+        } else {
+          info.deviceTypeInfos().back().set_isGang();
+        }
         if (gangClause->v) {
           const Fortran::parser::AccGangArgList &x = *gangClause->v;
           for (const Fortran::parser::AccGangArg &gangArg : x.v) {
             if (const auto *dim =
                     std::get_if<Fortran::parser::AccGangArg::Dim>(&gangArg.u)) {
               if (const auto v{EvaluateInt64(context_, dim->v)}) {
-                info.set_gangDim(*v);
+                if (info.deviceTypeInfos().empty()) {
+                  info.set_gangDim(*v);
+                } else {
+                  info.deviceTypeInfos().back().set_gangDim(*v);
+                }
               }
             }
           }
         }
       } else if (std::get_if<Fortran::parser::AccClause::Vector>(&clause.u)) {
-        info.set_isVector();
+        if (info.deviceTypeInfos().empty()) {
+          info.set_isVector();
+        } else {
+          info.deviceTypeInfos().back().set_isVector();
+        }
       } else if (std::get_if<Fortran::parser::AccClause::Worker>(&clause.u)) {
-        info.set_isWorker();
+        if (info.deviceTypeInfos().empty()) {
+          info.set_isWorker();
+        } else {
+          info.deviceTypeInfos().back().set_isWorker();
+        }
       } else if (std::get_if<Fortran::parser::AccClause::Nohost>(&clause.u)) {
         info.set_isNohost();
       } else if (const auto *bindClause =
@@ -970,7 +998,12 @@ void AccAttributeVisitor::AddRoutineInfoToSymbol(
         if (const auto *name =
                 std::get_if<Fortran::parser::Name>(&bindClause->v.u)) {
           if (Symbol *sym = ResolveFctName(*name)) {
-            info.set_bindName(sym->name().ToString());
+            if (info.deviceTypeInfos().empty()) {
+              info.set_bindName(sym->name().ToString());
+            } else {
+              info.deviceTypeInfos().back().set_bindName(
+                  sym->name().ToString());
+            }
           } else {
             context_.Say((*name).source,
                 "No function or subroutine declared for '%s'"_err_en_US,
@@ -985,8 +1018,19 @@ void AccAttributeVisitor::AddRoutineInfoToSymbol(
           std::string str{std::get<std::string>(charConst->t)};
           std::stringstream bindName;
           bindName << "\"" << str << "\"";
-          info.set_bindName(bindName.str());
+          if (info.deviceTypeInfos().empty()) {
+            info.set_bindName(bindName.str());
+          } else {
+            info.deviceTypeInfos().back().set_bindName(bindName.str());
+          }
         }
+      } else if (const auto *dType =
+                     std::get_if<Fortran::parser::AccClause::DeviceType>(
+                         &clause.u)) {
+        const parser::AccDeviceTypeExprList &deviceTypeExprList = dType->v;
+        OpenACCRoutineDeviceTypeInfo dtypeInfo;
+        dtypeInfo.set_dType(deviceTypeExprList.v.front().v);
+        info.add_deviceTypeInfo(dtypeInfo);
       }
     }
     symbol.get<SubprogramDetails>().add_openACCRoutineInfo(info);
@@ -1117,6 +1161,26 @@ void AccAttributeVisitor::DoNotAllowAssumedSizedArray(
   }
 }
 
+void AccAttributeVisitor::AllowOnlyVariable(const parser::AccObject &object) {
+  common::visit(
+      common::visitors{
+          [&](const parser::Designator &designator) {
+            const auto &name{GetLastName(designator)};
+            if (name.symbol && !semantics::IsVariableName(*name.symbol) &&
+                !semantics::IsNamedConstant(*name.symbol)) {
+              context_.Say(designator.source,
+                  "Only variables are allowed in data clauses on the %s "
+                  "directive"_err_en_US,
+                  parser::ToUpperCaseLetters(
+                      llvm::acc::getOpenACCDirectiveName(GetContext().directive)
+                          .str()));
+            }
+          },
+          [&](const auto &name) {},
+      },
+      object.u);
+}
+
 bool AccAttributeVisitor::Pre(const parser::OpenACCCacheConstruct &x) {
   const auto &verbatim{std::get<parser::Verbatim>(x.t)};
   PushContext(verbatim.source, llvm::acc::Directive::ACCD_cache);
@@ -1162,13 +1226,23 @@ void AccAttributeVisitor::CheckAssociatedLoopIndex(
   }
 
   const auto getNextDoConstruct =
-      [this](const parser::Block &block) -> const parser::DoConstruct * {
+      [this](const parser::Block &block,
+          std::int64_t &level) -> const parser::DoConstruct * {
     for (const auto &entry : block) {
       if (const auto *doConstruct = GetDoConstructIf(entry)) {
         return doConstruct;
       } else if (parser::Unwrap<parser::CompilerDirective>(entry)) {
         // It is allowed to have a compiler directive associated with the loop.
         continue;
+      } else if (const auto &accLoop{
+                     parser::Unwrap<parser::OpenACCLoopConstruct>(entry)}) {
+        if (level == 0)
+          break;
+        const auto &beginDir{
+            std::get<parser::AccBeginLoopDirective>(accLoop->t)};
+        context_.Say(beginDir.source,
+            "LOOP directive not expected in COLLAPSE loop nest"_err_en_US);
+        level = 0;
       } else {
         break;
       }
@@ -1177,11 +1251,12 @@ void AccAttributeVisitor::CheckAssociatedLoopIndex(
   };
 
   const auto &outer{std::get<std::optional<parser::DoConstruct>>(x.t)};
-  for (const parser::DoConstruct *loop{&*outer}; loop && level > 0; --level) {
+  for (const parser::DoConstruct *loop{&*outer}; loop && level > 0;) {
     // Go through all nested loops to ensure index variable exists.
     GetLoopIndex(*loop);
     const auto &block{std::get<parser::Block>(loop->t)};
-    loop = getNextDoConstruct(block);
+    --level;
+    loop = getNextDoConstruct(block, level);
   }
   CHECK(level == 0);
 }
@@ -1245,7 +1320,7 @@ void AccAttributeVisitor::Post(const parser::Name &name) {
   auto *symbol{name.symbol};
   if (symbol && !dirContext_.empty() && GetContext().withinConstruct) {
     if (!symbol->owner().IsDerivedType() && !symbol->has<ProcEntityDetails>() &&
-        !IsObjectWithDSA(*symbol)) {
+        !symbol->has<SubprogramDetails>() && !IsObjectWithDSA(*symbol)) {
       if (Symbol * found{currScope().FindSymbol(name.source)}) {
         if (symbol != found) {
           name.symbol = found; // adjust the symbol within region
@@ -1281,6 +1356,7 @@ Symbol *AccAttributeVisitor::ResolveAccCommonBlockName(
 void AccAttributeVisitor::ResolveAccObjectList(
     const parser::AccObjectList &accObjectList, Symbol::Flag accFlag) {
   for (const auto &accObject : accObjectList.v) {
+    AllowOnlyVariable(accObject);
     ResolveAccObject(accObject, accFlag);
   }
 }
@@ -1521,6 +1597,8 @@ bool OmpAttributeVisitor::Pre(const parser::OpenMPLoopConstruct &x) {
 
 void OmpAttributeVisitor::ResolveSeqLoopIndexInParallelOrTaskConstruct(
     const parser::Name &iv) {
+  // Find the parallel or task generating construct enclosing the
+  // sequential loop.
   auto targetIt{dirContext_.rbegin()};
   for (;; ++targetIt) {
     if (targetIt == dirContext_.rend()) {
@@ -1531,12 +1609,21 @@ void OmpAttributeVisitor::ResolveSeqLoopIndexInParallelOrTaskConstruct(
       break;
     }
   }
+  // If this symbol is already Private or Firstprivate in the enclosing
+  // OpenMP parallel or task then there is nothing to do here.
+  if (auto *symbol{targetIt->scope.FindSymbol(iv.source)}) {
+    if (symbol->owner() == targetIt->scope) {
+      if (symbol->test(Symbol::Flag::OmpPrivate) ||
+          symbol->test(Symbol::Flag::OmpFirstPrivate)) {
+        return;
+      }
+    }
+  }
+  // Otherwise find the symbol and make it Private for the entire enclosing
+  // parallel or task
   if (auto *symbol{ResolveOmp(iv, Symbol::Flag::OmpPrivate, targetIt->scope)}) {
     targetIt++;
-    // If this object already had a DSA then it is not predetermined
-    if (!IsObjectWithDSA(*symbol)) {
-      symbol->set(Symbol::Flag::OmpPreDetermined);
-    }
+    symbol->set(Symbol::Flag::OmpPreDetermined);
     iv.symbol = symbol; // adjust the symbol within region
     for (auto it{dirContext_.rbegin()}; it != targetIt; ++it) {
       AddToContextObjectWithDSA(*symbol, Symbol::Flag::OmpPrivate, *it);
@@ -1711,6 +1798,9 @@ bool OmpAttributeVisitor::Pre(const parser::OpenMPDeclareTargetConstruct &x) {
       } else if (const auto *linkClause{
                      std::get_if<parser::OmpClause::Link>(&clause.u)}) {
         ResolveOmpObjectList(linkClause->v, Symbol::Flag::OmpDeclareTarget);
+      } else if (const auto *enterClause{
+                     std::get_if<parser::OmpClause::Enter>(&clause.u)}) {
+        ResolveOmpObjectList(enterClause->v, Symbol::Flag::OmpDeclareTarget);
       }
     }
   }
@@ -1863,7 +1953,12 @@ void OmpAttributeVisitor::Post(const parser::Name &name) {
       if (Symbol * found{currScope().FindSymbol(name.source)}) {
         if (symbol != found) {
           name.symbol = found; // adjust the symbol within region
-        } else if (GetContext().defaultDSA == Symbol::Flag::OmpNone) {
+        } else if (GetContext().defaultDSA == Symbol::Flag::OmpNone &&
+            !symbol->test(Symbol::Flag::OmpThreadprivate) &&
+            // Exclude indices of sequential loops that are privatised in
+            // the scope of the parallel region, and not in this scope.
+            // TODO: check whether this should be caught in IsObjectWithDSA
+            !symbol->test(Symbol::Flag::OmpPrivate)) {
           context_.Say(name.source,
               "The DEFAULT(NONE) clause requires that '%s' must be listed in "
               "a data-sharing attribute clause"_err_en_US,

@@ -76,6 +76,7 @@ if [[ ! -d ${ZLIB_BUILD} ]]; then
     git clone https://github.com/madler/zlib ${ZLIB_BUILD}
   else
     ZLIB_SRC=$(readlink -f $ZLIB_SRC)
+    mkdir -p ${ZLIB_BUILD}
     cp -r ${ZLIB_SRC}/* ${ZLIB_BUILD}/
   fi
 fi
@@ -103,6 +104,7 @@ if [[ ! -f ${LLVM_BUILD}/build.ninja ]]; then
     -DCMAKE_CXX_FLAGS_RELEASE="${LIBCXX_FLAGS}" \
     -DLIBCXXABI_ENABLE_ASSERTIONS=OFF \
     -DLIBCXXABI_ENABLE_EXCEPTIONS=OFF \
+    -DLIBCXXABI_USE_LLVM_UNWINDER=OFF \
     -DLIBCXX_ENABLE_ASSERTIONS=OFF \
     -DLIBCXX_ENABLE_EXCEPTIONS=OFF \
     -DLIBCXX_ENABLE_RTTI=OFF \

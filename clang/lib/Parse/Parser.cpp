@@ -70,6 +70,11 @@ Parser::Parser(Preprocessor &pp, Sema &actions, bool skipFunctionBodies)
   PP.addCommentHandler(CommentSemaHandler.get());
 
   PP.setCodeCompletionHandler(*this);
+
+  Actions.ParseTypeFromStringCallback =
+      [this](StringRef TypeStr, StringRef Context, SourceLocation IncludeLoc) {
+        return this->ParseTypeFromString(TypeStr, Context, IncludeLoc);
+      };
 }
 
 DiagnosticBuilder Parser::Diag(SourceLocation Loc, unsigned DiagID) {
@@ -315,6 +320,13 @@ bool Parser::SkipUntil(ArrayRef<tok::TokenKind> Toks, SkipUntilFlags Flags) {
     case tok::annot_pragma_openmp_end:
       // Stop before an OpenMP pragma boundary.
       if (OpenMPDirectiveParsing)
+        return false;
+      ConsumeAnnotationToken();
+      break;
+    case tok::annot_pragma_openacc:
+    case tok::annot_pragma_openacc_end:
+      // Stop before an OpenACC pragma boundary.
+      if (OpenACCDirectiveParsing)
         return false;
       ConsumeAnnotationToken();
       break;
@@ -837,6 +849,9 @@ Parser::ParseExternalDeclaration(ParsedAttributes &Attrs,
   case tok::annot_pragma_fenv_round:
     HandlePragmaFEnvRound();
     return nullptr;
+  case tok::annot_pragma_cx_limited_range:
+    HandlePragmaCXLimitedRange();
+    return nullptr;
   case tok::annot_pragma_float_control:
     HandlePragmaFloatControl();
     return nullptr;
@@ -851,6 +866,8 @@ Parser::ParseExternalDeclaration(ParsedAttributes &Attrs,
     AccessSpecifier AS = AS_none;
     return ParseOpenMPDeclarativeDirectiveWithExtDecl(AS, Attrs);
   }
+  case tok::annot_pragma_openacc:
+    return ParseOpenACCDirectiveDecl();
   case tok::annot_pragma_ms_pointers_to_members:
     HandlePragmaMSPointersToMembers();
     return nullptr;
@@ -2633,7 +2650,7 @@ Decl *Parser::ParseModuleImport(SourceLocation AtLoc,
     auto &SrcMgr = PP.getSourceManager();
     auto FE = SrcMgr.getFileEntryRefForID(SrcMgr.getFileID(AtLoc));
     if (FE && llvm::sys::path::parent_path(FE->getDir().getName())
-                  .endswith(".framework"))
+                  .ends_with(".framework"))
       Diags.Report(AtLoc, diag::warn_atimport_in_framework_header);
   }
 

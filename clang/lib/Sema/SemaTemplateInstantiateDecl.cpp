@@ -663,6 +663,14 @@ static bool isRelevantAttr(Sema &S, const Decl *D, const Attr *A) {
   return true;
 }
 
+static void instantiateDependentHLSLParamModifierAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const HLSLParamModifierAttr *Attr, Decl *New) {
+  ParmVarDecl *P = cast<ParmVarDecl>(New);
+  P->addAttr(Attr->clone(S.getASTContext()));
+  P->setType(S.getASTContext().getLValueReferenceType(P->getType()));
+}
+
 void Sema::InstantiateAttrsForDecl(
     const MultiLevelTemplateArgumentList &TemplateArgs, const Decl *Tmpl,
     Decl *New, LateInstantiatedAttrVec *LateAttrs,
@@ -782,6 +790,12 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
             dyn_cast<AMDGPUWavesPerEUAttr>(TmplAttr)) {
       instantiateDependentAMDGPUWavesPerEUAttr(*this, TemplateArgs,
                                                *AMDGPUFlatWorkGroupSize, New);
+    }
+
+    if (const auto *ParamAttr = dyn_cast<HLSLParamModifierAttr>(TmplAttr)) {
+      instantiateDependentHLSLParamModifierAttr(*this, TemplateArgs, ParamAttr,
+                                                New);
+      continue;
     }
 
     // Existing DLL attribute on the instantiation takes precedence.
@@ -2741,7 +2755,7 @@ Decl *TemplateDeclInstantiator::VisitCXXMethodDecl(
                                    IsExplicitSpecialization,
                                    Method->isThisDeclarationADefinition());
 
-  if (D->isPure())
+  if (D->isPureVirtual())
     SemaRef.CheckPureMethod(Method, SourceRange());
 
   // Propagate access.  For a non-friend declaration, the access is
@@ -3042,16 +3056,21 @@ Decl *TemplateDeclInstantiator::VisitNonTypeTemplateParmDecl(
         D->getPosition(), D->getIdentifier(), T, D->isParameterPack(), DI);
 
   if (AutoTypeLoc AutoLoc = DI->getTypeLoc().getContainedAutoTypeLoc())
-    if (AutoLoc.isConstrained())
+    if (AutoLoc.isConstrained()) {
+      SourceLocation EllipsisLoc;
+      if (IsExpandedParameterPack)
+        EllipsisLoc =
+            DI->getTypeLoc().getAs<PackExpansionTypeLoc>().getEllipsisLoc();
+      else if (auto *Constraint = dyn_cast_if_present<CXXFoldExpr>(
+                   D->getPlaceholderTypeConstraint()))
+        EllipsisLoc = Constraint->getEllipsisLoc();
       // Note: We attach the uninstantiated constriant here, so that it can be
-      // instantiated relative to the top level, like all our other constraints.
-      if (SemaRef.AttachTypeConstraint(
-              AutoLoc, Param, D,
-              IsExpandedParameterPack
-                ? DI->getTypeLoc().getAs<PackExpansionTypeLoc>()
-                    .getEllipsisLoc()
-                : SourceLocation()))
+      // instantiated relative to the top level, like all our other
+      // constraints.
+      if (SemaRef.AttachTypeConstraint(AutoLoc, /*NewConstrainedParm=*/Param,
+                                       /*OrigConstrainedParm=*/D, EllipsisLoc))
         Invalid = true;
+    }
 
   Param->setAccess(AS_public);
   Param->setImplicit(D->isImplicit());
@@ -6207,13 +6226,13 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
       return D;
 
     // Determine whether this record is the "templated" declaration describing
-    // a class template or class template partial specialization.
+    // a class template or class template specialization.
     ClassTemplateDecl *ClassTemplate = Record->getDescribedClassTemplate();
     if (ClassTemplate)
       ClassTemplate = ClassTemplate->getCanonicalDecl();
-    else if (ClassTemplatePartialSpecializationDecl *PartialSpec
-               = dyn_cast<ClassTemplatePartialSpecializationDecl>(Record))
-      ClassTemplate = PartialSpec->getSpecializedTemplate()->getCanonicalDecl();
+    else if (ClassTemplateSpecializationDecl *Spec =
+                 dyn_cast<ClassTemplateSpecializationDecl>(Record))
+      ClassTemplate = Spec->getSpecializedTemplate()->getCanonicalDecl();
 
     // Walk the current context to find either the record or an instantiation of
     // it.

@@ -103,6 +103,16 @@ Value *InstCombinerImpl::EvaluateInDifferentType(Value *V, Type *Ty,
       }
     }
     break;
+  case Instruction::ShuffleVector: {
+    auto *ScalarTy = cast<VectorType>(Ty)->getElementType();
+    auto *VTy = cast<VectorType>(I->getOperand(0)->getType());
+    auto *FixedTy = VectorType::get(ScalarTy, VTy->getElementCount());
+    Value *Op0 = EvaluateInDifferentType(I->getOperand(0), FixedTy, isSigned);
+    Value *Op1 = EvaluateInDifferentType(I->getOperand(1), FixedTy, isSigned);
+    Res = new ShuffleVectorInst(Op0, Op1,
+                                cast<ShuffleVectorInst>(I)->getShuffleMask());
+    break;
+  }
   default:
     // TODO: Can handle more cases here.
     llvm_unreachable("Unreachable!");
@@ -363,6 +373,9 @@ static bool canEvaluateTruncated(Value *V, Type *Ty, InstCombinerImpl &IC,
           I->getOpcode() == Instruction::FPToSI);
     return Ty->getScalarSizeInBits() >= MinBitWidth;
   }
+  case Instruction::ShuffleVector:
+    return canEvaluateTruncated(I->getOperand(0), Ty, IC, CxtI) &&
+           canEvaluateTruncated(I->getOperand(1), Ty, IC, CxtI);
   default:
     // TODO: Can handle more cases here.
     break;
@@ -502,11 +515,13 @@ Instruction *InstCombinerImpl::narrowFunnelShift(TruncInst &Trunc) {
   if (!MaskedValueIsZero(ShVal1, HiBitMask, 0, &Trunc))
     return nullptr;
 
-  // We have an unnecessarily wide rotate!
-  // trunc (or (shl ShVal0, ShAmt), (lshr ShVal1, BitWidth - ShAmt))
-  // Narrow the inputs and convert to funnel shift intrinsic:
-  // llvm.fshl.i8(trunc(ShVal), trunc(ShVal), trunc(ShAmt))
-  Value *NarrowShAmt = Builder.CreateTrunc(ShAmt, DestTy);
+  // Adjust the width of ShAmt for narrowed funnel shift operation:
+  // - Zero-extend if ShAmt is narrower than the destination type.
+  // - Truncate if ShAmt is wider, discarding non-significant high-order bits.
+  // This prepares ShAmt for llvm.fshl.i8(trunc(ShVal), trunc(ShVal),
+  // zext/trunc(ShAmt)).
+  Value *NarrowShAmt = Builder.CreateZExtOrTrunc(ShAmt, DestTy);
+
   Value *X, *Y;
   X = Y = Builder.CreateTrunc(ShVal0, DestTy);
   if (ShVal0 != ShVal1)
@@ -1219,6 +1234,22 @@ Instruction *InstCombinerImpl::visitZExt(ZExtInst &Zext) {
     }
   }
 
+  if (!Zext.hasNonNeg()) {
+    // If this zero extend is only used by a shift, add nneg flag.
+    if (Zext.hasOneUse() &&
+        SrcTy->getScalarSizeInBits() >
+            Log2_64_Ceil(DestTy->getScalarSizeInBits()) &&
+        match(Zext.user_back(), m_Shift(m_Value(), m_Specific(&Zext)))) {
+      Zext.setNonNeg();
+      return &Zext;
+    }
+
+    if (isKnownNonNegative(Src, SQ.getWithInstruction(&Zext))) {
+      Zext.setNonNeg();
+      return &Zext;
+    }
+  }
+
   return nullptr;
 }
 
@@ -1371,7 +1402,7 @@ Instruction *InstCombinerImpl::visitSExt(SExtInst &Sext) {
   unsigned DestBitSize = DestTy->getScalarSizeInBits();
 
   // If the value being extended is zero or positive, use a zext instead.
-  if (isKnownNonNegative(Src, DL, 0, &AC, &Sext, &DT)) {
+  if (isKnownNonNegative(Src, SQ.getWithInstruction(&Sext))) {
     auto CI = CastInst::Create(Instruction::ZExt, Src, DestTy);
     CI->setNonNeg(true);
     return CI;
@@ -2125,9 +2156,12 @@ static bool collectInsertionElements(Value *V, unsigned Shift,
     Type *ElementIntTy = IntegerType::get(C->getContext(), ElementSize);
 
     for (unsigned i = 0; i != NumElts; ++i) {
-      unsigned ShiftI = Shift+i*ElementSize;
-      Constant *Piece = ConstantExpr::getLShr(C, ConstantInt::get(C->getType(),
-                                                                  ShiftI));
+      unsigned ShiftI = Shift + i * ElementSize;
+      Constant *Piece = ConstantFoldBinaryInstruction(
+          Instruction::LShr, C, ConstantInt::get(C->getType(), ShiftI));
+      if (!Piece)
+        return false;
+
       Piece = ConstantExpr::getTrunc(Piece, ElementIntTy);
       if (!collectInsertionElements(Piece, ShiftI, Elements, VecEltTy,
                                     isBigEndian))

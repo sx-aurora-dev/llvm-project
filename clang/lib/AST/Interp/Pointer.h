@@ -98,7 +98,7 @@ public:
   }
 
   /// Converts the pointer to an APValue that is an rvalue.
-  APValue toRValue(const Context &Ctx) const;
+  std::optional<APValue> toRValue(const Context &Ctx) const;
 
   /// Offsets a pointer inside an array.
   [[nodiscard]] Pointer atIndex(unsigned Idx) const {
@@ -279,7 +279,7 @@ public:
     return getFieldDesc()->isUnknownSizeArray();
   }
   /// Checks if the pointer points to an array.
-  bool isArrayElement() const { return Base != Offset; }
+  bool isArrayElement() const { return inArray() && Base != Offset; }
   /// Pointer points directly to a block.
   bool isRoot() const {
     return (Base == 0 || Base == RootPtrMark) && Offset == 0;
@@ -379,6 +379,7 @@ public:
       return *reinterpret_cast<T *>(Pointee->rawData() + Base +
                                     sizeof(InitMapPtr));
 
+    assert(Offset + sizeof(T) <= Pointee->getDescriptor()->getAllocSize());
     return *reinterpret_cast<T *>(Pointee->rawData() + Offset);
   }
 

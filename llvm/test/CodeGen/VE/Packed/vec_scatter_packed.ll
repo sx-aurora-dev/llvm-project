@@ -58,7 +58,7 @@ define fastcc void @vec_scatter_v512f32(<512 x float*> %P, <512 x float> %D, <51
   ret void
 }
 
-declare void @llvm.masked.scatter.v512f32.v512p0f32(<512 x float>,  <512 x float*>  %0, i32 immarg %1, <512 x i1> %2)
-declare void @llvm.masked.scatter.v512f64.v512p0f64(<512 x double>, <512 x double*> %0, i32 immarg %1, <512 x i1> %2)
-declare void @llvm.masked.scatter.v256f64.v256p0f64(<256 x double>, <256 x double*> %0, i32 immarg %1, <256 x i1> %2)
-declare void @llvm.masked.scatter.v128f64.v128p0f64(<128 x double>, <128 x double*> %0, i32 immarg %1, <128 x i1> %2)
+declare void @llvm.masked.scatter.v512f32.v512p0f32(<512 x float>,  <512 x float*>, i32 immarg, <512 x i1>)
+declare void @llvm.masked.scatter.v512f64.v512p0f64(<512 x double>, <512 x double*>, i32 immarg, <512 x i1>)
+declare void @llvm.masked.scatter.v256f64.v256p0f64(<256 x double>, <256 x double*>, i32 immarg, <256 x i1>)
+declare void @llvm.masked.scatter.v128f64.v128p0f64(<128 x double>, <128 x double*>, i32 immarg, <128 x i1>)

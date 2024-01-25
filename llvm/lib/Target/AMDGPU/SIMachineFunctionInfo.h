@@ -502,6 +502,7 @@ private:
   unsigned NumVirtualVGPRSpillLanes = 0;
   unsigned NumPhysicalVGPRSpillLanes = 0;
   SmallVector<Register, 2> SpillVGPRs;
+  SmallVector<Register, 2> SpillPhysVGPRs;
   using WWMSpillsMap = MapVector<Register, int>;
   // To track the registers used in instructions that can potentially modify the
   // inactive lanes. The WWM instructions and the writelane instructions for
@@ -547,7 +548,8 @@ private:
   bool allocateVirtualVGPRForSGPRSpills(MachineFunction &MF, int FI,
                                         unsigned LaneIndex);
   bool allocatePhysicalVGPRForSGPRSpills(MachineFunction &MF, int FI,
-                                         unsigned LaneIndex);
+                                         unsigned LaneIndex,
+                                         bool IsPrologEpilog);
 
 public:
   Register getVGPRForAGPRCopy() const {
@@ -587,6 +589,7 @@ public:
   }
 
   ArrayRef<Register> getSGPRSpillVGPRs() const { return SpillVGPRs; }
+
   const WWMSpillsMap &getWWMSpills() const { return WWMSpills; }
   const ReservedRegSet &getWWMReservedRegs() const { return WWMReservedRegs; }
 
@@ -701,7 +704,12 @@ public:
       I->second.IsDead = true;
   }
 
+  // To bring the Physical VGPRs in the highest range allocated for CSR SGPR
+  // spilling into the lowest available range.
+  void shiftSpillPhysVGPRsToLowestRange(MachineFunction &MF);
+
   bool allocateSGPRSpillToVGPRLane(MachineFunction &MF, int FI,
+                                   bool SpillToPhysVGPRLane = false,
                                    bool IsPrologEpilog = false);
   bool allocateVGPRSpillToAGPR(MachineFunction &MF, int FI, bool isAGPRtoVGPR);
 
@@ -1038,22 +1046,6 @@ public:
   /// \returns Default/requested maximum number of waves per execution unit.
   unsigned getMaxWavesPerEU() const {
     return WavesPerEU.second;
-  }
-
-  /// \returns SGPR used for \p Dim's work group ID.
-  Register getWorkGroupIDSGPR(unsigned Dim) const {
-    switch (Dim) {
-    case 0:
-      assert(hasWorkGroupIDX());
-      return ArgInfo.WorkGroupIDX.getRegister();
-    case 1:
-      assert(hasWorkGroupIDY());
-      return ArgInfo.WorkGroupIDY.getRegister();
-    case 2:
-      assert(hasWorkGroupIDZ());
-      return ArgInfo.WorkGroupIDZ.getRegister();
-    }
-    llvm_unreachable("unexpected dimension");
   }
 
   const AMDGPUGWSResourcePseudoSourceValue *

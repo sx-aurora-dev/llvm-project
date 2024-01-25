@@ -1,5 +1,9 @@
 clang:dataflow:
-  - clang/**/Analysis/**/*
+  - clang/include/clang/Analysis/FlowSensitive/**/*
+  - clang/lib/Analysis/FlowSensitive/**/*
+  - clang/unittests/Analysis/FlowSensitive/**/*
+  - clang/docs/DataFlowAnalysisIntro.md
+  - clang/docs/DataFlowAnalysisIntroImages/**/*
 
 clang:frontend:
   - clang/lib/AST/**/*
@@ -304,6 +308,9 @@ clang-tidy:
   - clang-tools-extra/docs/clang-tidy/**
   - clang-tools-extra/test/clang-tidy/**
 
+clang-tools-extra:
+  - clang-tools-extra/**
+
 tools:llvm-mca:
   - llvm/tools/llvm-mca/**
   - llvm/include/llvm/MCA/**
@@ -587,13 +594,16 @@ mlgo:
   - llvm/include/llvm/Analysis/*Runner.h
   - llvm/unittests/Analysis/ML*
   - llvm/lib/Analysis/FunctionPropertiesAnalysis.cpp
+  - llvm/lib/Analysis/TrainingLogger.cpp
   - llvm/include/llvm/Analysis/FunctionPropertiesAnalysis.h
+  - llvm/include/llvm/Analysis/Utils/TrainingLogger.h
   - llvm/test/Analysis/FunctionPropertiesAnalysis/*
   - llvm/unittests/Analysis/FunctionPropertiesAnalysisTest.cpp
   - llvm/test/Transforms/inline/ML/**
   - llvm/lib/CodeGen/ML*
   - llvm/unittests/CodeGen/ML*
   - llvm/test/CodeGen/MLRegAlloc/**
+  - llvm/utils/mlgo-utils/*
 
 tools:llvm-exegesis:
   - llvm/tools/llvm-exegesis/**

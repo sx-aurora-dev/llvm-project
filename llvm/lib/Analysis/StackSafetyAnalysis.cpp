@@ -272,7 +272,7 @@ ConstantRange StackSafetyLocalAnalysis::offsetFrom(Value *Addr, Value *Base) {
   if (!SE.isSCEVable(Addr->getType()) || !SE.isSCEVable(Base->getType()))
     return UnknownRange;
 
-  auto *PtrTy = IntegerType::getInt8PtrTy(SE.getContext());
+  auto *PtrTy = PointerType::getUnqual(SE.getContext());
   const SCEV *AddrExp = SE.getTruncateOrZeroExtend(SE.getSCEV(Addr), PtrTy);
   const SCEV *BaseExp = SE.getTruncateOrZeroExtend(SE.getSCEV(Base), PtrTy);
   const SCEV *Diff = SE.getMinusSCEV(AddrExp, BaseExp);
@@ -331,7 +331,7 @@ ConstantRange StackSafetyLocalAnalysis::getMemIntrinsicAccessRange(
   const SCEV *Expr =
       SE.getTruncateOrZeroExtend(SE.getSCEV(MI->getLength()), CalculationTy);
   ConstantRange Sizes = SE.getSignedRange(Expr);
-  if (Sizes.getUpper().isNegative() || isUnsafe(Sizes))
+  if (!Sizes.getUpper().isStrictlyPositive() || isUnsafe(Sizes))
     return UnknownRange;
   Sizes = Sizes.sextOrTrunc(PointerSize);
   ConstantRange SizeRange(APInt::getZero(PointerSize), Sizes.getUpper() - 1);
@@ -363,7 +363,7 @@ bool StackSafetyLocalAnalysis::isSafeAccess(const Use &U, AllocaInst *AI,
   const auto *I = cast<Instruction>(U.getUser());
 
   auto ToCharPtr = [&](const SCEV *V) {
-    auto *PtrTy = IntegerType::getInt8PtrTy(SE.getContext());
+    auto *PtrTy = PointerType::getUnqual(SE.getContext());
     return SE.getTruncateOrZeroExtend(V, PtrTy);
   };
 

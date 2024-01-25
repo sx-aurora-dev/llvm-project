@@ -786,6 +786,12 @@ bool Sema::checkMustTailAttr(const Stmt *St, const Attr &MTA) {
     return false;
   }
 
+  const auto *CalleeDecl = CE->getCalleeDecl();
+  if (CalleeDecl && CalleeDecl->hasAttr<CXX11NoReturnAttr>()) {
+    Diag(St->getBeginLoc(), diag::err_musttail_no_return) << &MTA;
+    return false;
+  }
+
   // Caller and callee must match in whether they have a "this" parameter.
   if (CallerType.This.isNull() != CalleeType.This.isNull()) {
     if (const auto *ND = dyn_cast_or_null<NamedDecl>(CE->getCalleeDecl())) {
@@ -1271,6 +1277,9 @@ Sema::ActOnFinishSwitchStmt(SourceLocation SwitchLoc, Stmt *Switch,
 
   bool CaseListIsErroneous = false;
 
+  // FIXME: We'd better diagnose missing or duplicate default labels even
+  // in the dependent case. Because default labels themselves are never
+  // dependent.
   for (SwitchCase *SC = SS->getSwitchCaseList(); SC && !HasDependentValue;
        SC = SC->getNextSwitchCase()) {
 
@@ -1341,6 +1350,7 @@ Sema::ActOnFinishSwitchStmt(SourceLocation SwitchLoc, Stmt *Switch,
       assert(!HasConstantCond ||
              (ConstantCondValue.getBitWidth() == CondWidth &&
               ConstantCondValue.isSigned() == CondIsSigned));
+      Diag(SwitchLoc, diag::warn_switch_default);
     }
     bool ShouldCheckConstantCond = HasConstantCond;
 
@@ -3196,7 +3206,7 @@ static void DiagnoseForRangeConstVariableCopies(Sema &SemaRef,
   // (The function `getTypeSize` returns the size in bits.)
   ASTContext &Ctx = SemaRef.Context;
   if (Ctx.getTypeSize(VariableType) <= 64 * 8 &&
-      (VariableType.isTriviallyCopyableType(Ctx) ||
+      (VariableType.isTriviallyCopyConstructibleType(Ctx) ||
        hasTrivialABIAttr(VariableType)))
     return;
 
@@ -4763,7 +4773,7 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
   QualType ParamType = Context.getPointerType(Context.getTagDeclType(RD));
   auto *Param =
       ImplicitParamDecl::Create(Context, DC, Loc, ParamName, ParamType,
-                                ImplicitParamDecl::CapturedContext);
+                                ImplicitParamKind::CapturedContext);
   DC->addDecl(Param);
 
   CD->setContextParam(0, Param);
@@ -4804,7 +4814,7 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
                                .withRestrict();
       auto *Param =
           ImplicitParamDecl::Create(Context, DC, Loc, ParamName, ParamType,
-                                    ImplicitParamDecl::CapturedContext);
+                                    ImplicitParamKind::CapturedContext);
       DC->addDecl(Param);
       CD->setContextParam(ParamNum, Param);
       ContextIsFound = true;
@@ -4812,7 +4822,7 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
       IdentifierInfo *ParamName = &Context.Idents.get(I->first);
       auto *Param =
           ImplicitParamDecl::Create(Context, DC, Loc, ParamName, I->second,
-                                    ImplicitParamDecl::CapturedContext);
+                                    ImplicitParamKind::CapturedContext);
       DC->addDecl(Param);
       CD->setParam(ParamNum, Param);
     }
@@ -4824,7 +4834,7 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
     QualType ParamType = Context.getPointerType(Context.getTagDeclType(RD));
     auto *Param =
         ImplicitParamDecl::Create(Context, DC, Loc, ParamName, ParamType,
-                                  ImplicitParamDecl::CapturedContext);
+                                  ImplicitParamKind::CapturedContext);
     DC->addDecl(Param);
     CD->setContextParam(ParamNum, Param);
   }

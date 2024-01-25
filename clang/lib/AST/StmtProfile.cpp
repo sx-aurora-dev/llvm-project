@@ -582,6 +582,8 @@ void OMPClauseProfiler::VisitOMPCaptureClause(const OMPCaptureClause *) {}
 
 void OMPClauseProfiler::VisitOMPCompareClause(const OMPCompareClause *) {}
 
+void OMPClauseProfiler::VisitOMPFailClause(const OMPFailClause *) {}
+
 void OMPClauseProfiler::VisitOMPSeqCstClause(const OMPSeqCstClause *) {}
 
 void OMPClauseProfiler::VisitOMPAcqRelClause(const OMPAcqRelClause *) {}
@@ -2096,7 +2098,7 @@ void StmtProfiler::VisitCXXNewExpr(const CXXNewExpr *S) {
   ID.AddInteger(S->getNumPlacementArgs());
   ID.AddBoolean(S->isGlobalNew());
   ID.AddBoolean(S->isParenTypeId());
-  ID.AddInteger(S->getInitializationStyle());
+  ID.AddInteger(llvm::to_underlying(S->getInitializationStyle()));
 }
 
 void
@@ -2412,6 +2414,12 @@ void StmtProfiler::VisitTemplateArgument(const TemplateArgument &Arg) {
   case TemplateArgument::Integral:
     VisitType(Arg.getIntegralType());
     Arg.getAsIntegral().Profile(ID);
+    break;
+
+  case TemplateArgument::StructuralValue:
+    VisitType(Arg.getStructuralValueType());
+    // FIXME: Do we need to recursively decompose this ourselves?
+    Arg.getAsStructuralValue().Profile(ID);
     break;
 
   case TemplateArgument::Expression:

@@ -55,6 +55,7 @@ add_llvm_component_library(LLVMAnalysis
   DependenceAnalysis.cpp
   DependenceGraphBuilder.cpp
   DevelopmentModeInlineAdvisor.cpp
+  DomConditionCache.cpp
   DomPrinter.cpp
   DomTreeUpdater.cpp
   DominanceFrontier.cpp
@@ -142,7 +143,6 @@ add_llvm_component_library(LLVMAnalysis
   ValueLatticeUtils.cpp
   ValueTracking.cpp
   VectorUtils.cpp
-  VFABIDemangling.cpp
   ${GeneratedMLSources}
 
   ADDITIONAL_HEADER_DIRS

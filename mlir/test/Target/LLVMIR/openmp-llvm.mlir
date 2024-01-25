@@ -2530,6 +2530,16 @@ module attributes {omp.flags = #omp.flags<assume_teams_oversubscription = true, 
 
 // -----
 
+// CHECK-NOT: @__omp_rtl_debug_kind = weak_odr hidden constant i32 0
+// CHECK-NOT: @__omp_rtl_assume_teams_oversubscription = weak_odr hidden constant i32 1
+// CHECK-NOT: @__omp_rtl_assume_threads_oversubscription = weak_odr hidden constant i32 0
+// CHECK-NOT: @__omp_rtl_assume_no_thread_state = weak_odr hidden constant i32 1
+// CHECK-NOT: @__omp_rtl_assume_no_nested_parallelism = weak_odr hidden constant i32 0
+module attributes {omp.flags = #omp.flags<assume_teams_oversubscription = true, assume_no_thread_state = true,
+                                          no_gpu_lib=true>} {}
+
+// -----
+
 module attributes {omp.is_target_device = false} {
   // CHECK: define void @filter_nohost
   llvm.func @filter_nohost() -> ()
@@ -2552,6 +2562,28 @@ module attributes {omp.is_target_device = false} {
 
 // -----
 
+module attributes {omp.is_target_device = false} {
+  // CHECK: define void @filter_nohost
+  llvm.func @filter_nohost() -> ()
+      attributes {
+        omp.declare_target =
+          #omp.declaretarget<device_type = (nohost), capture_clause = (enter)>
+      } {
+    llvm.return
+  }
+
+  // CHECK: define void @filter_host
+  llvm.func @filter_host() -> ()
+      attributes {
+        omp.declare_target =
+          #omp.declaretarget<device_type = (host), capture_clause = (enter)>
+      } {
+    llvm.return
+  }
+}
+
+// -----
+
 module attributes {omp.is_target_device = true} {
   // CHECK: define void @filter_nohost
   llvm.func @filter_nohost() -> ()
@@ -2567,6 +2599,28 @@ module attributes {omp.is_target_device = true} {
       attributes {
         omp.declare_target =
           #omp.declaretarget<device_type = (host), capture_clause = (to)>
+      } {
+    llvm.return
+  }
+}
+
+// -----
+
+module attributes {omp.is_target_device = true} {
+  // CHECK: define void @filter_nohost
+  llvm.func @filter_nohost() -> ()
+      attributes {
+        omp.declare_target =
+          #omp.declaretarget<device_type = (nohost), capture_clause = (enter)>
+      } {
+    llvm.return
+  }
+
+  // CHECK-NOT: define void @filter_host
+  llvm.func @filter_host() -> ()
+      attributes {
+        omp.declare_target =
+          #omp.declaretarget<device_type = (host), capture_clause = (enter)>
       } {
     llvm.return
   }

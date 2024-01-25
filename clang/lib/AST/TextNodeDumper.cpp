@@ -862,19 +862,19 @@ void TextNodeDumper::visitInlineCommandComment(
     const comments::InlineCommandComment *C, const comments::FullComment *) {
   OS << " Name=\"" << getCommandName(C->getCommandID()) << "\"";
   switch (C->getRenderKind()) {
-  case comments::InlineCommandComment::RenderNormal:
+  case comments::InlineCommandRenderKind::Normal:
     OS << " RenderNormal";
     break;
-  case comments::InlineCommandComment::RenderBold:
+  case comments::InlineCommandRenderKind::Bold:
     OS << " RenderBold";
     break;
-  case comments::InlineCommandComment::RenderMonospaced:
+  case comments::InlineCommandRenderKind::Monospaced:
     OS << " RenderMonospaced";
     break;
-  case comments::InlineCommandComment::RenderEmphasized:
+  case comments::InlineCommandRenderKind::Emphasized:
     OS << " RenderEmphasized";
     break;
-  case comments::InlineCommandComment::RenderAnchor:
+  case comments::InlineCommandRenderKind::Anchor:
     OS << " RenderAnchor";
     break;
   }
@@ -1092,6 +1092,16 @@ void clang::TextNodeDumper::VisitReturnStmt(const ReturnStmt *Node) {
     dumpBareDeclRef(Cand);
     OS << ")";
   }
+}
+
+void clang::TextNodeDumper::VisitCoawaitExpr(const CoawaitExpr *Node) {
+  if (Node->isImplicit())
+    OS << " implicit";
+}
+
+void clang::TextNodeDumper::VisitCoreturnStmt(const CoreturnStmt *Node) {
+  if (Node->isImplicit())
+    OS << " implicit";
 }
 
 void TextNodeDumper::VisitConstantExpr(const ConstantExpr *Node) {
@@ -1865,7 +1875,7 @@ void TextNodeDumper::VisitFunctionDecl(const FunctionDecl *D) {
   if (D->isModulePrivate())
     OS << " __module_private__";
 
-  if (D->isPure())
+  if (D->isPureVirtual())
     OS << " pure";
   if (D->isDefaulted()) {
     OS << " default";

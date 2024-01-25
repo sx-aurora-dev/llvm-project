@@ -2206,6 +2206,17 @@ public:
   }
 };
 
+enum class CXXNewInitializationStyle {
+  /// New-expression has no initializer as written.
+  None,
+
+  /// New-expression has a C++98 paren-delimited initializer.
+  Parens,
+
+  /// New-expression has a C++11 list-initializer.
+  Braces
+};
+
 /// Represents a new-expression for memory allocation and constructor
 /// calls, e.g: "new CXXNewExpr(foo)".
 class CXXNewExpr final
@@ -2259,25 +2270,12 @@ class CXXNewExpr final
     return isParenTypeId();
   }
 
-public:
-  enum InitializationStyle {
-    /// New-expression has no initializer as written.
-    NoInit,
-
-    /// New-expression has a C++98 paren-delimited initializer.
-    CallInit,
-
-    /// New-expression has a C++11 list-initializer.
-    ListInit
-  };
-
-private:
   /// Build a c++ new expression.
   CXXNewExpr(bool IsGlobalNew, FunctionDecl *OperatorNew,
              FunctionDecl *OperatorDelete, bool ShouldPassAlignment,
              bool UsualArrayDeleteWantsSize, ArrayRef<Expr *> PlacementArgs,
              SourceRange TypeIdParens, std::optional<Expr *> ArraySize,
-             InitializationStyle InitializationStyle, Expr *Initializer,
+             CXXNewInitializationStyle InitializationStyle, Expr *Initializer,
              QualType Ty, TypeSourceInfo *AllocatedTypeInfo, SourceRange Range,
              SourceRange DirectInitRange);
 
@@ -2292,7 +2290,7 @@ public:
          FunctionDecl *OperatorDelete, bool ShouldPassAlignment,
          bool UsualArrayDeleteWantsSize, ArrayRef<Expr *> PlacementArgs,
          SourceRange TypeIdParens, std::optional<Expr *> ArraySize,
-         InitializationStyle InitializationStyle, Expr *Initializer,
+         CXXNewInitializationStyle InitializationStyle, Expr *Initializer,
          QualType Ty, TypeSourceInfo *AllocatedTypeInfo, SourceRange Range,
          SourceRange DirectInitRange);
 
@@ -2387,16 +2385,12 @@ public:
   bool isGlobalNew() const { return CXXNewExprBits.IsGlobalNew; }
 
   /// Whether this new-expression has any initializer at all.
-  bool hasInitializer() const {
-    return CXXNewExprBits.StoredInitializationStyle > 0;
-  }
+  bool hasInitializer() const { return CXXNewExprBits.HasInitializer; }
 
   /// The kind of initializer this new-expression has.
-  InitializationStyle getInitializationStyle() const {
-    if (CXXNewExprBits.StoredInitializationStyle == 0)
-      return NoInit;
-    return static_cast<InitializationStyle>(
-        CXXNewExprBits.StoredInitializationStyle - 1);
+  CXXNewInitializationStyle getInitializationStyle() const {
+    return static_cast<CXXNewInitializationStyle>(
+        CXXNewExprBits.StoredInitializationStyle);
   }
 
   /// The initializer of this new-expression.
