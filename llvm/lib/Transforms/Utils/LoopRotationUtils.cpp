@@ -554,7 +554,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
         DbgIntrinsics.insert(makeHash(DII));
         // Until RemoveDIs supports dbg.declares in DPValue format, we'll need
         // to collect DPValues attached to any other debug intrinsics.
-        for (const DPValue &DPV : DII->getDbgValueRange())
+        for (const DPValue &DPV : DPValue::filter(DII->getDbgValueRange()))
           DbgIntrinsics.insert(makeHash(&DPV));
       } else {
         break;
@@ -564,7 +564,7 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
     // Build DPValue hashes for DPValues attached to the terminator, which isn't
     // considered in the loop above.
     for (const DPValue &DPV :
-         OrigPreheader->getTerminator()->getDbgValueRange())
+         DPValue::filter(OrigPreheader->getTerminator()->getDbgValueRange()))
       DbgIntrinsics.insert(makeHash(&DPV));
 
     // Remember the local noalias scope declarations in the header. After the
@@ -596,7 +596,10 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
     // on the next instruction, here labelled xyzzy, before we hoist %foo.
     // Later, we only only clone DPValues from that position (xyzzy) onwards,
     // which avoids cloning DPValue "blah" multiple times.
-    std::optional<DPValue::self_iterator> NextDbgInst = std::nullopt;
+    // (Stored as a range because it gives us a natural way of testing whether
+    //  there were DPValues on the next instruction before we hoisted things).
+    iterator_range<DPValue::self_iterator> NextDbgInsts =
+      (I != E) ? I->getDbgValueRange() : DPMarker::getEmptyDPValueRange();
 
     while (I != E) {
       Instruction *Inst = &*I++;
@@ -611,18 +614,21 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
           !Inst->mayWriteToMemory() && !Inst->isTerminator() &&
           !isa<DbgInfoIntrinsic>(Inst) && !isa<AllocaInst>(Inst)) {
 
-        if (LoopEntryBranch->getParent()->IsNewDbgInfoFormat) {
+        if (LoopEntryBranch->getParent()->IsNewDbgInfoFormat &&
+            !NextDbgInsts.empty()) {
           auto DbgValueRange =
-              LoopEntryBranch->cloneDebugInfoFrom(Inst, NextDbgInst);
+              LoopEntryBranch->cloneDebugInfoFrom(Inst, NextDbgInsts.begin());
           RemapDPValueRange(M, DbgValueRange, ValueMap,
                             RF_NoModuleLevelChanges | RF_IgnoreMissingLocals);
           // Erase anything we've seen before.
-          for (DPValue &DPV : make_early_inc_range(DbgValueRange))
+          for (DPValue &DPV :
+               make_early_inc_range(DPValue::filter(DbgValueRange)))
             if (DbgIntrinsics.count(makeHash(&DPV)))
               DPV.eraseFromParent();
         }
 
-        NextDbgInst = I->getDbgValueRange().begin();
+        NextDbgInsts = I->getDbgValueRange();
+
         Inst->moveBefore(LoopEntryBranch);
 
         ++NumInstrsHoisted;
@@ -635,13 +641,14 @@ bool LoopRotate::rotateLoop(Loop *L, bool SimplifiedLatch) {
 
       ++NumInstrsDuplicated;
 
-      if (LoopEntryBranch->getParent()->IsNewDbgInfoFormat) {
-        auto Range = C->cloneDebugInfoFrom(Inst, NextDbgInst);
+      if (LoopEntryBranch->getParent()->IsNewDbgInfoFormat &&
+          !NextDbgInsts.empty()) {
+        auto Range = C->cloneDebugInfoFrom(Inst, NextDbgInsts.begin());
         RemapDPValueRange(M, Range, ValueMap,
                           RF_NoModuleLevelChanges | RF_IgnoreMissingLocals);
-        NextDbgInst = std::nullopt;
+        NextDbgInsts = DPMarker::getEmptyDPValueRange();
         // Erase anything we've seen before.
-        for (DPValue &DPV : make_early_inc_range(Range))
+        for (DPValue &DPV : make_early_inc_range(DPValue::filter(Range)))
           if (DbgIntrinsics.count(makeHash(&DPV)))
             DPV.eraseFromParent();
       }
