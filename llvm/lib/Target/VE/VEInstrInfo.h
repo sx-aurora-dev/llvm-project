@@ -93,9 +93,9 @@ public:
   /// } Register Copy
 
   /// Stack Spill & Reload {
-  unsigned isLoadFromStackSlot(const MachineInstr &MI,
+  Register isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;
-  unsigned isStoreToStackSlot(const MachineInstr &MI,
+  Register isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
