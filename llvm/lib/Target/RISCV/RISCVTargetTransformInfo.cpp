@@ -37,6 +37,9 @@ static cl::opt<unsigned> SLPMaxVF(
 InstructionCost
 RISCVTTIImpl::getRISCVInstructionCost(ArrayRef<unsigned> OpCodes, MVT VT,
                                       TTI::TargetCostKind CostKind) {
+  // Check if the type is valid for all CostKind
+  if (!VT.isVector())
+    return InstructionCost::getInvalid();
   size_t NumInstr = OpCodes.size();
   if (CostKind == TTI::TCK_CodeSize)
     return NumInstr;
@@ -162,6 +165,14 @@ InstructionCost RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
     // split up large offsets in GEP into better parts than ConstantHoisting
     // can.
     return TTI::TCC_Free;
+  case Instruction::Store:
+    // If the address is a constant, use the materialization cost.
+    if (Idx == 1)
+      return getIntImmCost(Imm, Ty, CostKind);
+    return TTI::TCC_Free;
+  case Instruction::Load:
+    // If the address is a constant, use the materialization cost.
+    return getIntImmCost(Imm, Ty, CostKind);
   case Instruction::And:
     // zext.h
     if (Imm == UINT64_C(0xffff) && ST->hasStdExtZbb())
@@ -1608,4 +1619,14 @@ bool RISCVTTIImpl::isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
          std::tie(C2.Insns, C2.NumRegs, C2.AddRecCost,
                   C2.NumIVMuls, C2.NumBaseAdds,
                   C2.ScaleCost, C2.ImmCost, C2.SetupCost);
+}
+
+bool RISCVTTIImpl::isLegalMaskedCompressStore(Type *DataTy, Align Alignment) {
+  auto *VTy = dyn_cast<VectorType>(DataTy);
+  if (!VTy || VTy->isScalableTy())
+    return false;
+
+  if (!isLegalMaskedLoadStore(DataTy, Alignment))
+    return false;
+  return true;
 }
