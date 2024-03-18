@@ -121,7 +121,7 @@ pipeline {
                         }
                         dir('vml/build') {
                             sh """
-                                VERSION=`grep 'set.*LLVM_VERSION_MAJOR  *' ${TOP}/llvm-project/llvm/CMakeLists.txt | sed -e 's/.*LLVM_VERSION_MAJOR //' -e 's/[^0-9][^0-9]*//'`
+                                VERSION=`grep 'set.*LLVM_VERSION_MAJOR  *' ${TOP}/llvm-project/cmake/Modules/LLVMVersion.cmake | sed -e 's/.*LLVM_VERSION_MAJOR //' -e 's/[^0-9][^0-9]*//'`
                                 ${CMAKEO} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
                                     -DCLANG_RUNTIME=${TOP}/llvm-dev/install/lib/clang/\${VERSION}/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a \
