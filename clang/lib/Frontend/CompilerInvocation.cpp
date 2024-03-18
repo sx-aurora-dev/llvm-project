@@ -191,6 +191,17 @@ CompilerInvocationBase::shallow_copy_assign(const CompilerInvocationBase &X) {
   return *this;
 }
 
+CompilerInvocation::CompilerInvocation(const CowCompilerInvocation &X)
+    : CompilerInvocationBase(EmptyConstructor{}) {
+  CompilerInvocationBase::deep_copy_assign(X);
+}
+
+CompilerInvocation &
+CompilerInvocation::operator=(const CowCompilerInvocation &X) {
+  CompilerInvocationBase::deep_copy_assign(X);
+  return *this;
+}
+
 namespace {
 template <typename T>
 T &ensureOwned(std::shared_ptr<T> &Storage) {
@@ -2545,6 +2556,8 @@ static const auto &getFrontendActionTable() {
 
       {frontend::GenerateModule, OPT_emit_module},
       {frontend::GenerateModuleInterface, OPT_emit_module_interface},
+      {frontend::GenerateReducedModuleInterface,
+       OPT_emit_reduced_module_interface},
       {frontend::GenerateHeaderUnit, OPT_emit_header_unit},
       {frontend::GeneratePCH, OPT_emit_pch},
       {frontend::GenerateInterfaceStubs, OPT_emit_interface_stubs},
@@ -3280,6 +3293,17 @@ static void ParseAPINotesArgs(APINotesOptions &Opts, ArgList &Args,
     Opts.ModuleSearchPaths.push_back(A->getValue());
 }
 
+static void GeneratePointerAuthArgs(const LangOptions &Opts,
+                                    ArgumentConsumer Consumer) {
+  if (Opts.PointerAuthIntrinsics)
+    GenerateArg(Consumer, OPT_fptrauth_intrinsics);
+}
+
+static void ParsePointerAuthArgs(LangOptions &Opts, ArgList &Args,
+                                 DiagnosticsEngine &Diags) {
+  Opts.PointerAuthIntrinsics = Args.hasArg(OPT_fptrauth_intrinsics);
+}
+
 /// Check if input file kind and language standard are compatible.
 static bool IsInputCompatibleWithStandard(InputKind IK,
                                           const LangStandard &S) {
@@ -4001,6 +4025,7 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
 
       if (TT.getArch() == llvm::Triple::UnknownArch ||
           !(TT.getArch() == llvm::Triple::aarch64 || TT.isPPC() ||
+            TT.getArch() == llvm::Triple::systemz ||
             TT.getArch() == llvm::Triple::nvptx ||
             TT.getArch() == llvm::Triple::nvptx64 ||
             TT.getArch() == llvm::Triple::amdgcn ||
@@ -4270,6 +4295,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::FixIt:
   case frontend::GenerateModule:
   case frontend::GenerateModuleInterface:
+  case frontend::GenerateReducedModuleInterface:
   case frontend::GenerateHeaderUnit:
   case frontend::GeneratePCH:
   case frontend::GenerateInterfaceStubs:
@@ -4599,6 +4625,8 @@ bool CompilerInvocation::CreateFromArgsImpl(
                         Res.getFileSystemOpts().WorkingDir);
   ParseAPINotesArgs(Res.getAPINotesOpts(), Args, Diags);
 
+  ParsePointerAuthArgs(LangOpts, Args, Diags);
+
   ParseLangArgs(LangOpts, Args, DashX, T, Res.getPreprocessorOpts().Includes,
                 Diags);
   if (Res.getFrontendOpts().ProgramAction == frontend::RewriteObjC)
@@ -4829,6 +4857,7 @@ void CompilerInvocationBase::generateCC1CommandLine(
   GenerateTargetArgs(getTargetOpts(), Consumer);
   GenerateHeaderSearchArgs(getHeaderSearchOpts(), Consumer);
   GenerateAPINotesArgs(getAPINotesOpts(), Consumer);
+  GeneratePointerAuthArgs(getLangOpts(), Consumer);
   GenerateLangArgs(getLangOpts(), Consumer, T, getFrontendOpts().DashX);
   GenerateCodeGenArgs(getCodeGenOpts(), Consumer, T,
                       getFrontendOpts().OutputFile, &getLangOpts());

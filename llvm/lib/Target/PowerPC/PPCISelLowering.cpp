@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PPCISelLowering.h"
+#include "MCTargetDesc/PPCMCTargetDesc.h"
 #include "MCTargetDesc/PPCPredicates.h"
 #include "PPC.h"
 #include "PPCCCState.h"
@@ -4817,7 +4818,7 @@ static bool callsShareTOCBase(const Function *Caller,
   // If the callee is preemptable, then the static linker will use a plt-stub
   // which saves the toc to the stack, and needs a nop after the call
   // instruction to convert to a toc-restore.
-  if (!TM.shouldAssumeDSOLocal(*Caller->getParent(), CalleeGV))
+  if (!TM.shouldAssumeDSOLocal(CalleeGV))
     return false;
 
   // Functions with PC Relative enabled may clobber the TOC in the same DSO.
@@ -5419,10 +5420,9 @@ static SDValue transformCallee(const SDValue &Callee, SelectionDAG &DAG,
   // Returns true if the callee is local, and false otherwise.
   auto isLocalCallee = [&]() {
     const GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee);
-    const Module *Mod = DAG.getMachineFunction().getFunction().getParent();
     const GlobalValue *GV = G ? G->getGlobal() : nullptr;
 
-    return DAG.getTarget().shouldAssumeDSOLocal(*Mod, GV) &&
+    return DAG.getTarget().shouldAssumeDSOLocal(GV) &&
            !isa_and_nonnull<GlobalIFunc>(GV);
   };
 
@@ -10761,6 +10761,42 @@ SDValue PPCTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     if (Subtarget.isPPC64())
       return DAG.getRegister(PPC::X13, MVT::i64);
     return DAG.getRegister(PPC::R2, MVT::i32);
+
+  case Intrinsic::ppc_rldimi: {
+    uint64_t SH = Op.getConstantOperandVal(3);
+    unsigned MB = 0, ME = 0;
+    if (!isRunOfOnes64(Op.getConstantOperandVal(4), MB, ME) || ME != 63 - SH)
+      report_fatal_error("invalid rldimi mask!");
+    return SDValue(DAG.getMachineNode(
+                       PPC::RLDIMI, dl, MVT::i64,
+                       {Op.getOperand(1), Op.getOperand(2), Op.getOperand(3),
+                        DAG.getTargetConstant(MB, dl, MVT::i32)}),
+                   0);
+  }
+
+  case Intrinsic::ppc_rlwimi: {
+    unsigned MB = 0, ME = 0;
+    if (!isRunOfOnes(Op.getConstantOperandVal(4), MB, ME))
+      report_fatal_error("invalid rlwimi mask!");
+    return SDValue(DAG.getMachineNode(
+                       PPC::RLWIMI, dl, MVT::i32,
+                       {Op.getOperand(1), Op.getOperand(2), Op.getOperand(3),
+                        DAG.getTargetConstant(MB, dl, MVT::i32),
+                        DAG.getTargetConstant(ME, dl, MVT::i32)}),
+                   0);
+  }
+
+  case Intrinsic::ppc_rlwnm: {
+    unsigned MB = 0, ME = 0;
+    if (!isRunOfOnes(Op.getConstantOperandVal(3), MB, ME))
+      report_fatal_error("invalid rlwnm mask!");
+    return SDValue(
+        DAG.getMachineNode(PPC::RLWNM, dl, MVT::i32,
+                           {Op.getOperand(1), Op.getOperand(2),
+                            DAG.getTargetConstant(MB, dl, MVT::i32),
+                            DAG.getTargetConstant(ME, dl, MVT::i32)}),
+        0);
+  }
 
   case Intrinsic::ppc_mma_disassemble_acc: {
     if (Subtarget.isISAFuture()) {
@@ -18008,7 +18044,7 @@ bool PPCTargetLowering::mayBeEmittedAsTailCall(const CallInst *CI) const {
       return false;
 
   // If the function is local then we have a good chance at tail-calling it
-  return getTargetMachine().shouldAssumeDSOLocal(*Caller->getParent(), Callee);
+  return getTargetMachine().shouldAssumeDSOLocal(Callee);
 }
 
 bool PPCTargetLowering::

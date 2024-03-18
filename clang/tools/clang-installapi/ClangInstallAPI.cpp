@@ -19,6 +19,8 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/InstallAPI/Frontend.h"
+#include "clang/InstallAPI/FrontendRecords.h"
+#include "clang/InstallAPI/MachO.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Option/Option.h"
@@ -29,8 +31,6 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/TargetParser/Host.h"
-#include "llvm/TextAPI/RecordVisitor.h"
-#include "llvm/TextAPI/TextAPIWriter.h"
 #include <memory>
 
 using namespace clang;
@@ -40,7 +40,7 @@ using namespace llvm::opt;
 using namespace llvm::MachO;
 
 static bool runFrontend(StringRef ProgName, bool Verbose,
-                        const InstallAPIContext &Ctx,
+                        InstallAPIContext &Ctx,
                         llvm::vfs::InMemoryFileSystem *FS,
                         const ArrayRef<std::string> InitialArgs) {
 
@@ -64,7 +64,7 @@ static bool runFrontend(StringRef ProgName, bool Verbose,
 
   // Create & run invocation.
   clang::tooling::ToolInvocation Invocation(
-      std::move(Args), std::make_unique<InstallAPIAction>(*Ctx.Slice), Ctx.FM);
+      std::move(Args), std::make_unique<InstallAPIAction>(Ctx), Ctx.FM);
 
   return Invocation.run();
 }
@@ -123,11 +123,13 @@ static bool run(ArrayRef<const char *> Args, const char *ProgName) {
     return EXIT_FAILURE;
 
   // Execute and gather AST results.
-  llvm::MachO::Records FrontendResults;
+  // An invocation is ran for each unique target triple and for each header
+  // access level.
+  Records FrontendResults;
   for (const auto &[Targ, Trip] : Opts.DriverOpts.Targets) {
     for (const HeaderType Type :
          {HeaderType::Public, HeaderType::Private, HeaderType::Project}) {
-      Ctx.Slice = std::make_shared<RecordsSlice>(Trip);
+      Ctx.Slice = std::make_shared<FrontendRecordsSlice>(Trip);
       Ctx.Type = Type;
       if (!runFrontend(ProgName, Opts.DriverOpts.Verbose, Ctx,
                        InMemoryFileSystem.get(), Opts.getClangFrontendArgs()))

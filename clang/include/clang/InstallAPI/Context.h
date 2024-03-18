@@ -12,12 +12,12 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/InstallAPI/HeaderFile.h"
-#include "llvm/TextAPI/InterfaceFile.h"
-#include "llvm/TextAPI/RecordVisitor.h"
-#include "llvm/TextAPI/RecordsSlice.h"
+#include "clang/InstallAPI/MachO.h"
+#include "llvm/ADT/DenseMap.h"
 
 namespace clang {
 namespace installapi {
+class FrontendRecordsSlice;
 
 /// Struct used for generating validating InstallAPI.
 /// The attributes captured represent all necessary information
@@ -25,7 +25,7 @@ namespace installapi {
 struct InstallAPIContext {
 
   /// Library attributes that are typically passed as linker inputs.
-  llvm::MachO::RecordsSlice::BinaryAttrs BA;
+  BinaryAttrs BA;
 
   /// All headers that represent a library.
   HeaderSeq InputHeaders;
@@ -37,7 +37,7 @@ struct InstallAPIContext {
   HeaderType Type = HeaderType::Unknown;
 
   /// Active TargetSlice for symbol record collection.
-  std::shared_ptr<llvm::MachO::RecordsSlice> Slice;
+  std::shared_ptr<FrontendRecordsSlice> Slice;
 
   /// FileManager for all I/O operations.
   FileManager *FM = nullptr;
@@ -49,7 +49,31 @@ struct InstallAPIContext {
   llvm::StringRef OutputLoc{};
 
   /// What encoding to write output as.
-  llvm::MachO::FileType FT = llvm::MachO::FileType::TBD_V5;
+  FileType FT = FileType::TBD_V5;
+
+  /// Populate entries of headers that should be included for TextAPI
+  /// generation.
+  void addKnownHeader(const HeaderFile &H);
+
+  /// Record visited files during frontend actions to determine whether to
+  /// include their declarations for TextAPI generation.
+  ///
+  /// \param FE Header that is being parsed.
+  /// \param PP Preprocesser used for querying how header was imported.
+  /// \return Access level of header if it should be included for TextAPI
+  /// generation.
+  std::optional<HeaderType> findAndRecordFile(const FileEntry *FE,
+                                              const Preprocessor &PP);
+
+private:
+  using HeaderMap = llvm::DenseMap<const FileEntry *, HeaderType>;
+
+  // Collection of parsed header files and their access level. If set to
+  // HeaderType::Unknown, they are not used for TextAPI generation.
+  HeaderMap KnownFiles;
+
+  // Collection of expected header includes and the access level for them.
+  llvm::DenseMap<StringRef, HeaderType> KnownIncludes;
 };
 
 } // namespace installapi
