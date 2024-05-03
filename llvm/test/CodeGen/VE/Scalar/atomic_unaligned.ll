@@ -1431,7 +1431,7 @@ define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-NEXT:    xor %s3, -1, %s2
 ; CHECK-NEXT:    ldl.sx %s2, (, %s1)
 ; CHECK-NEXT:    sla.w.sx %s4, (63)0, %s0
-; CHECK-NEXT:    or %s3, %s3, %s4
+; CHECK-NEXT:    or %s3, %s4, %s3
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
@@ -1466,7 +1466,7 @@ define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-NEXT:    xor %s3, -1, %s2
 ; CHECK-NEXT:    ldl.sx %s2, (, %s1)
 ; CHECK-NEXT:    sla.w.sx %s4, (63)0, %s0
-; CHECK-NEXT:    or %s3, %s3, %s4
+; CHECK-NEXT:    or %s3, %s4, %s3
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
