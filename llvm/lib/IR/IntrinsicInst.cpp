@@ -120,7 +120,8 @@ static ValueAsMetadata *getAsMetadata(Value *V) {
 }
 
 void DbgVariableIntrinsic::replaceVariableLocationOp(Value *OldValue,
-                                                     Value *NewValue) {
+                                                     Value *NewValue,
+                                                     bool AllowEmpty) {
   // If OldValue is used as the address part of a dbg.assign intrinsic replace
   // it with NewValue and return true.
   auto ReplaceDbgAssignAddress = [this, OldValue, NewValue]() -> bool {
@@ -137,6 +138,8 @@ void DbgVariableIntrinsic::replaceVariableLocationOp(Value *OldValue,
   auto Locations = location_ops();
   auto OldIt = find(Locations, OldValue);
   if (OldIt == Locations.end()) {
+    if (AllowEmpty || DbgAssignAddrReplaced)
+      return;
     assert(DbgAssignAddrReplaced &&
            "OldValue must be dbg.assign addr if unused in DIArgList");
     return;
@@ -290,6 +293,12 @@ Value *InstrProfIncrementInst::getStep() const {
   const Module *M = getModule();
   LLVMContext &Context = M->getContext();
   return ConstantInt::get(Type::getInt64Ty(Context), 1);
+}
+
+Value *InstrProfCallsite::getCallee() const {
+  if (isa<InstrProfCallsite>(this))
+    return getArgOperand(4);
+  return nullptr;
 }
 
 std::optional<RoundingMode> ConstrainedFPIntrinsic::getRoundingMode() const {
