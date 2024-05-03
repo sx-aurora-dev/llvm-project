@@ -1858,8 +1858,9 @@ void LinkerDriver::createFiles(opt::InputArgList &args) {
   std::vector<std::tuple<bool, bool, bool>> stack;
 
   // Iterate over argv to process input files and positional arguments.
+  std::optional<MemoryBufferRef> defaultScript;
   InputFile::isInGroup = false;
-  bool hasInput = false;
+  bool hasInput = false, hasScript = false;
   for (auto *arg : args) {
     switch (arg->getOption().getID()) {
     case OPT_library:
@@ -1881,9 +1882,16 @@ void LinkerDriver::createFiles(opt::InputArgList &args) {
       break;
     }
     case OPT_script:
+    case OPT_default_script:
       if (std::optional<std::string> path = searchScript(arg->getValue())) {
-        if (std::optional<MemoryBufferRef> mb = readFile(*path))
-          readLinkerScript(*mb);
+        if (std::optional<MemoryBufferRef> mb = readFile(*path)) {
+          if (arg->getOption().matches(OPT_default_script)) {
+            defaultScript = mb;
+          } else {
+            readLinkerScript(*mb);
+            hasScript = true;
+          }
+        }
         break;
       }
       error(Twine("cannot find linker script ") + arg->getValue());
@@ -1963,6 +1971,8 @@ void LinkerDriver::createFiles(opt::InputArgList &args) {
     }
   }
 
+  if (defaultScript && !hasScript)
+    readLinkerScript(*defaultScript);
   if (files.empty() && !hasInput && errorCount() == 0)
     error("no input files");
 }
