@@ -34,7 +34,7 @@ jobs:
       upload: ${{ inputs.upload && !contains(inputs.release-version, 'rc') }}
     steps:
       - name: Checkout LLVM
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.1.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v4.1.1
 
       - name: Setup Python env
         uses: actions/setup-python@v6
@@ -66,7 +66,7 @@ jobs:
 
       - name: Clone www-releases
         if: env.upload
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.1.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v4.1.1
         with:
           repository: ${{ github.repository_owner }}/www-releases
           ref: main
