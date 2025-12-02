@@ -12,13 +12,13 @@ babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
     # via sphinx
-beautifulsoup4==4.14.2 \
-    --hash=sha256:2a98ab9f944a11acee9cc848508ec28d9228abfd522ef0fad6a02a72e0ded69e \
-    --hash=sha256:5ef6fa3a8cbece8488d66985560f97ed091e22bbc4e9c2338508a9d5de6d4515
+beautifulsoup4==4.14.3 \
+    --hash=sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb \
+    --hash=sha256:6292b1c5186d356bba669ef9f7f051757099565ad9ada5dd630bd9de5fa7fb86
     # via furo
-certifi==2025.10.5 \
-    --hash=sha256:0f212c2744a9bb6de0c56639a6f68afe01ecd92d91f14ae897c4fe7bbeeef0de \
-    --hash=sha256:47c09d31ccf2acf0be3f701ea53595ee7e0b8fa08801c6624be771df09ae7b43
+certifi==2025.11.12 \
+    --hash=sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b \
+    --hash=sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316
     # via requests
 charset-normalizer==3.4.4 \
     --hash=sha256:027f6de494925c0ab2a55eab46ae5129951638a49a34d87f4c3eda90f696b4ad \
@@ -139,9 +139,9 @@ commonmark==0.9.1 \
     --hash=sha256:452f9dc859be7f06631ddcb328b6919c67984aca654e5fefb3914d54691aed60 \
     --hash=sha256:da2f38c92590f83de410ba1a3cbceafbc74fee9def35f9251ba9a971d6d66fd9
     # via recommonmark
-docutils==0.22.2 \
-    --hash=sha256:9fdb771707c8784c8f2728b67cb2c691305933d68137ef95a75db5f4dfbc213d \
-    --hash=sha256:b0e98d679283fc3bb0ead8a5da7f501baa632654e7056e9c5846842213d674d8
+docutils==0.22.3 \
+    --hash=sha256:21486ae730e4ca9f622677b1412b879af1791efcfba517e4c6f60be543fc8cdd \
+    --hash=sha256:bd772e4aca73aff037958d44f2be5229ded4c09927fcf8690c577b66234d6ceb
     # via
     #   -r requirements.txt
     #   myst-parser
@@ -165,9 +165,9 @@ jinja2==3.1.6 \
     # via
     #   myst-parser
     #   sphinx
-markdown==3.9 \
-    --hash=sha256:9f4d91ed810864ea88a6f32c07ba8bee1346c0cc1f6b1f9f6c822f2a9667d280 \
-    --hash=sha256:d2900fe1782bd33bdbbd56859defef70c2e78fc46668f8eb9df3128138f2cb6a
+markdown==3.10 \
+    --hash=sha256:37062d4f2aa4b2b6b32aefb80faa300f82cc790cb949a35b8caede34f2b68c0e \
+    --hash=sha256:b5b99d6951e2e4948d939255596523444c0e677c669700b1d17aa4a8a464cb7c
     # via sphinx-markdown-tables
 markdown-it-py==4.0.0 \
     --hash=sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147 \
@@ -379,9 +379,9 @@ soupsieve==2.8 \
     --hash=sha256:0cc76456a30e20f5d7f2e14a98a4ae2ee4e5abdc7c5ea0aafe795f344bc7984c \
     --hash=sha256:e2dd4a40a628cb5f28f6d4b0db8800b8f581b65bb380b97de22ba5ca8d72572f
     # via beautifulsoup4
-sphinx==8.2.3 \
-    --hash=sha256:398ad29dee7f63a75888314e9424d40f52ce5a6a87ae88e7071e80af296ec348 \
-    --hash=sha256:4405915165f13521d875a8c29c8970800a0141c14cc5416a38feca4ea5d9b9c3
+sphinx==9.0.0 \
+    --hash=sha256:3442bf635d378da2ba4e88aa8496f3a61b2d59ef145aeaf34353ab93fd79f1bf \
+    --hash=sha256:dc75216d69e00f170cb236eee17e66bcd89c4c2b5fe938ca8532fd7fe5abb23f
     # via
     #   -r requirements.txt
     #   furo
