@@ -46,7 +46,7 @@ jobs:
 
     steps:
     - name: Checkout LLVM
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v4.1.1
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4.1.1
 
     - name: Install Dependencies
       run: |
@@ -98,7 +98,7 @@ jobs:
           - ubuntu-22.04
     steps:
     - name: Checkout LLVM
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v4.1.1
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4.1.1
       with:
         ref: ${{ needs.prepare.outputs.ref }}
 
@@ -141,7 +141,7 @@ jobs:
 
     steps:
     - name: Checkout LLVM
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v4.1.1
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4.1.1
       with:
         ref: ${{ needs.prepare.outputs.ref }}
         path: ${{ needs.prepare.outputs.build-dir }}/llvm-project
