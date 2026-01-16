@@ -299,6 +299,8 @@
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
 #include <optional>
 
+#include "rv/registerPasses.h"
+
 using namespace llvm;
 
 static const Regex DefaultAliasRegex(
@@ -438,6 +440,7 @@ PassBuilder::PassBuilder(TargetMachine *TM, PipelineTuningOptions PTO,
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #include "llvm/Passes/MachinePassRegistry.def"
   }
+  rv::addConfiguredRVPasses(*this);
 }
 
 void PassBuilder::registerModuleAnalyses(ModuleAnalysisManager &MAM) {
