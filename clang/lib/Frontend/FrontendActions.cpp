@@ -272,14 +272,7 @@ bool GenerateModuleInterfaceAction::BeginSourceFileAction(
 std::unique_ptr<ASTConsumer>
 GenerateModuleInterfaceAction::CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) {
-  CI.getHeaderSearchOpts().ModulesSkipDiagnosticOptions = true;
-  CI.getHeaderSearchOpts().ModulesSkipHeaderSearchPaths = true;
-  CI.getHeaderSearchOpts().ModulesSkipPragmaDiagnosticMappings = true;
-
-  std::vector<std::unique_ptr<ASTConsumer>> Consumers =
-      CreateMultiplexConsumer(CI, InFile);
-  if (Consumers.empty())
-    return nullptr;
+  std::vector<std::unique_ptr<ASTConsumer>> Consumers;
 
   if (CI.getFrontendOpts().GenReducedBMI &&
       !CI.getFrontendOpts().ModuleOutputPath.empty()) {
@@ -287,6 +280,10 @@ GenerateModuleInterfaceAction::CreateASTConsumer(CompilerInstance &CI,
         CI.getPreprocessor(), CI.getModuleCache(),
         CI.getFrontendOpts().ModuleOutputPath));
   }
+
+  Consumers.push_back(std::make_unique<CXX20ModulesGenerator>(
+      CI.getPreprocessor(), CI.getModuleCache(),
+      CI.getFrontendOpts().OutputFile));
 
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
@@ -1172,8 +1169,8 @@ void PrintDependencyDirectivesSourceMinimizerAction::ExecuteAction() {
   llvm::SmallVector<dependency_directives_scan::Token, 16> Tokens;
   llvm::SmallVector<dependency_directives_scan::Directive, 32> Directives;
   if (scanSourceForDependencyDirectives(
-          FromFile.getBuffer(), Tokens, Directives, &CI.getDiagnostics(),
-          SM.getLocForStartOfFile(SM.getMainFileID()))) {
+          FromFile.getBuffer(), Tokens, Directives, CI.getLangOpts(),
+          &CI.getDiagnostics(), SM.getLocForStartOfFile(SM.getMainFileID()))) {
     assert(CI.getDiagnostics().hasErrorOccurred() &&
            "no errors reported for failure");
 
