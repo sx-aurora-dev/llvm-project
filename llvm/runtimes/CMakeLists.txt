@@ -99,6 +99,7 @@ function(builtin_default_target compiler_rt_path)
                                                 SANITIZER
                            USE_TOOLCHAIN
                            TARGET_TRIPLE ${LLVM_TARGET_TRIPLE}
+                           FOLDER "Compiler-RT"
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -134,6 +135,7 @@ function(builtin_register_target compiler_rt_path name)
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            USE_TOOLCHAIN
+                           FOLDER "Compiler-RT"
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 endfunction()
 
@@ -154,6 +156,10 @@ if(compiler_rt_path)
       add_custom_target(builtins)
       add_custom_target(install-builtins)
       add_custom_target(install-builtins-stripped)
+      set_target_properties(
+        builtins install-builtins install-builtins-stripped
+        PROPERTIES FOLDER "Compiler-RT"
+      )
     endif()
 
     foreach(target ${LLVM_BUILTIN_TARGETS})
@@ -269,6 +275,7 @@ function(runtime_default_target)
                                          ${SUB_INSTALL_TARGETS}
                            USE_TOOLCHAIN
                            TARGET_TRIPLE ${LLVM_TARGET_TRIPLE}
+                           FOLDER "Runtimes"
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -394,6 +401,7 @@ function(runtime_register_target name)
                            EXTRA_TARGETS ${${name}_extra_targets}
                                          ${${name}_test_targets}
                            USE_TOOLCHAIN
+                           FOLDER "Runtimes"
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 
   add_dependencies(runtimes runtimes-${name})
@@ -407,14 +415,17 @@ function(runtime_register_target name)
   foreach(runtime_name ${runtime_names})
     if(NOT TARGET ${runtime_name})
       add_custom_target(${runtime_name})
+      set_target_properties(${runtime_name} PROPERTIES FOLDER "${runtime_name}")
     endif()
     add_dependencies(${runtime_name} ${runtime_name}-${name})
     if(NOT TARGET install-${runtime_name})
       add_custom_target(install-${runtime_name})
+      set_target_properties(install-${runtime_name} PROPERTIES FOLDER "${runtime_name}")
     endif()
     add_dependencies(install-${runtime_name} install-${runtime_name}-${name})
     if(NOT TARGET install-${runtime_name}-stripped)
       add_custom_target(install-${runtime_name}-stripped)
+      set_target_properties(install-${runtime_name} PROPERTIES FOLDER "${runtime_name}")
     endif()
     add_dependencies(install-${runtime_name}-stripped install-${runtime_name}-${name}-stripped)
   endforeach()
@@ -425,7 +436,17 @@ function(runtime_register_target name)
   endforeach()
 endfunction()
 
+# Check if we have any runtimes to build.
 if(runtimes)
+  set(build_runtimes TRUE)
+endif()
+foreach(name ${LLVM_RUNTIME_TARGETS})
+  if(RUNTIMES_${name}_LLVM_ENABLE_RUNTIMES)
+    set(build_runtimes TRUE)
+  endif()
+endforeach()
+
+if(build_runtimes)
   # Create a runtimes target that uses this file as its top-level CMake file.
   # The runtimes target is a configuration of all the runtime libraries
   # together in a single CMake invocation.
@@ -437,8 +458,10 @@ if(runtimes)
       set(LIBOMP_MODULES_INSTALL_PATH "${CMAKE_INSTALL_INCLUDEDIR}/flang")
       # TODO: This is a workaround until flang becomes a first-class project
       # in llvm/CMakeList.txt.  Until then, this line ensures that flang-new is
-      # built before "openmp" is built as a runtime project.
-      list(APPEND extra_deps "flang-new")
+      # built before "openmp" is built as a runtime project.  Besides "flang-new"
+      # to build the compiler, we also need to add "module_files" to make sure
+      # that all .mod files are also properly build.
+      list(APPEND extra_deps "flang-new" "module_files")
     endif()
     foreach(dep opt llvm-link llvm-extract clang clang-offload-packager)
       if(TARGET ${dep})
@@ -511,9 +534,17 @@ if(runtimes)
       add_custom_target(runtimes-configure)
       add_custom_target(install-runtimes)
       add_custom_target(install-runtimes-stripped)
+      set_target_properties(
+        runtimes runtimes-configure install-runtimes install-runtimes-stripped
+        PROPERTIES FOLDER "Runtimes"
+      )
       if(LLVM_INCLUDE_TESTS)
         add_custom_target(check-runtimes)
         add_custom_target(runtimes-test-depends)
+        set_target_properties(
+          check-runtimes runtimes-test-depends
+          PROPERTIES FOLDER "Runtimes"
+        )
         set(test_targets "")
       endif()
       if(LLVM_RUNTIME_DISTRIBUTION_COMPONENTS)
@@ -521,6 +552,10 @@ if(runtimes)
           add_custom_target(${component})
           add_custom_target(install-${component})
           add_custom_target(install-${component}-stripped)
+          set_target_properties(
+            ${component} install-${component} install-${component}-stripped
+            PROPERTIES FOLDER "${component}"
+          )
         endforeach()
       endif()
     endif()
@@ -565,6 +600,13 @@ if(runtimes)
     # We need to add the runtimes as a dependency because compiler-rt can be
     # built as part of runtimes and we need the profile runtime for PGO
     add_dependencies(clang-bootstrap-deps runtimes)
+    # The bootstrap build will attempt to configure the offload runtime
+    # before the openmp project which will error out due to failing to
+    # find libomp.so. We must add omp as a dependency before runtimes
+    # are configured.
+    if("openmp" IN_LIST LLVM_ENABLE_PROJECTS AND "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
+      add_dependencies(clang-bootstrap-deps omp)
+    endif()
   endif()
 
   if(LLVM_INCLUDE_TESTS)

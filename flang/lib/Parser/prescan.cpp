@@ -32,10 +32,11 @@ Prescanner::Prescanner(Messages &messages, CookedSource &cooked,
       backslashFreeFormContinuation_{preprocessor.AnyDefinitions()},
       encoding_{allSources_.encoding()} {}
 
-Prescanner::Prescanner(const Prescanner &that)
+Prescanner::Prescanner(const Prescanner &that, bool isNestedInIncludeDirective)
     : messages_{that.messages_}, cooked_{that.cooked_},
       preprocessor_{that.preprocessor_}, allSources_{that.allSources_},
       features_{that.features_},
+      isNestedInIncludeDirective_{isNestedInIncludeDirective},
       backslashFreeFormContinuation_{that.backslashFreeFormContinuation_},
       inFixedForm_{that.inFixedForm_},
       fixedFormColumnLimit_{that.fixedFormColumnLimit_},
@@ -104,10 +105,13 @@ void Prescanner::Statement() {
     NextLine();
     return;
   case LineClassification::Kind::ConditionalCompilationDirective:
-  case LineClassification::Kind::IncludeDirective:
   case LineClassification::Kind::DefinitionDirective:
   case LineClassification::Kind::PreprocessorDirective:
     preprocessor_.Directive(TokenizePreprocessorDirective(), *this);
+    return;
+  case LineClassification::Kind::IncludeDirective:
+    preprocessor_.Directive(TokenizePreprocessorDirective(), *this);
+    afterIncludeDirective_ = true;
     return;
   case LineClassification::Kind::CompilerDirective: {
     directiveSentinel_ = line.sentinel;
@@ -209,12 +213,11 @@ void Prescanner::Statement() {
     case LineClassification::Kind::IncludeDirective:
     case LineClassification::Kind::DefinitionDirective:
     case LineClassification::Kind::PreprocessorDirective:
-      Say(preprocessed->GetProvenanceRange(),
-          "Preprocessed line resembles a preprocessor directive"_warn_en_US);
-      preprocessed->ToLowerCase()
-          .CheckBadFortranCharacters(messages_, *this)
-          .CheckBadParentheses(messages_)
-          .Emit(cooked_);
+      if (features_.ShouldWarn(common::UsageWarning::Preprocessing)) {
+        Say(preprocessed->GetProvenanceRange(),
+            "Preprocessed line resembles a preprocessor directive"_warn_en_US);
+      }
+      CheckAndEmitLine(preprocessed->ToLowerCase(), newlineProvenance);
       break;
     case LineClassification::Kind::CompilerDirective:
       if (preprocessed->HasRedundantBlanks()) {
@@ -226,10 +229,9 @@ void Prescanner::Statement() {
       NormalizeCompilerDirectiveCommentMarker(*preprocessed);
       preprocessed->ToLowerCase();
       SourceFormChange(preprocessed->ToString());
-      preprocessed->ClipComment(*this, true /* skip first ! */)
-          .CheckBadFortranCharacters(messages_, *this)
-          .CheckBadParentheses(messages_)
-          .Emit(cooked_);
+      CheckAndEmitLine(preprocessed->ToLowerCase().ClipComment(
+                           *this, true /* skip first ! */),
+          newlineProvenance);
       break;
     case LineClassification::Kind::Source:
       if (inFixedForm_) {
@@ -244,14 +246,11 @@ void Prescanner::Statement() {
           preprocessed->RemoveRedundantBlanks();
         }
       }
-      preprocessed->ToLowerCase()
-          .ClipComment(*this)
-          .CheckBadFortranCharacters(messages_, *this)
-          .CheckBadParentheses(messages_)
-          .Emit(cooked_);
+      CheckAndEmitLine(
+          preprocessed->ToLowerCase().ClipComment(*this), newlineProvenance);
       break;
     }
-  } else {
+  } else { // no macro replacement
     if (line.kind == LineClassification::Kind::CompilerDirective) {
       while (CompilerDirectiveContinuation(tokens, line.sentinel)) {
         newlineProvenance = GetCurrentProvenance();
@@ -264,16 +263,29 @@ void Prescanner::Statement() {
         EnforceStupidEndStatementRules(tokens);
       }
     }
-    tokens.CheckBadFortranCharacters(messages_, *this)
-        .CheckBadParentheses(messages_)
-        .Emit(cooked_);
+    CheckAndEmitLine(tokens, newlineProvenance);
   }
+  directiveSentinel_ = nullptr;
+}
+
+void Prescanner::CheckAndEmitLine(
+    TokenSequence &tokens, Provenance newlineProvenance) {
+  tokens.CheckBadFortranCharacters(messages_, *this);
+  // Parenthesis nesting check does not apply while any #include is
+  // active, nor on the lines before and after a top-level #include.
+  // Applications play shenanigans with line continuation before and
+  // after #include'd subprogram argument lists.
+  if (!isNestedInIncludeDirective_ && !omitNewline_ &&
+      !afterIncludeDirective_) {
+    tokens.CheckBadParentheses(messages_);
+  }
+  tokens.Emit(cooked_);
   if (omitNewline_) {
     omitNewline_ = false;
   } else {
     cooked_.Put('\n', newlineProvenance);
+    afterIncludeDirective_ = false;
   }
-  directiveSentinel_ = nullptr;
 }
 
 TokenSequence Prescanner::TokenizePreprocessorDirective() {
@@ -319,10 +331,12 @@ void Prescanner::LabelField(TokenSequence &token) {
     ++column_;
   }
   if (badColumn && !preprocessor_.IsNameDefined(token.CurrentOpenToken())) {
-    Say(GetProvenance(start + *badColumn - 1),
-        *badColumn == 6
-            ? "Statement should not begin with a continuation line"_warn_en_US
-            : "Character in fixed-form label field must be a digit"_warn_en_US);
+    if (features_.ShouldWarn(common::UsageWarning::Scanning)) {
+      Say(GetProvenance(start + *badColumn - 1),
+          *badColumn == 6
+              ? "Statement should not begin with a continuation line"_warn_en_US
+              : "Character in fixed-form label field must be a digit"_warn_en_US);
+    }
     token.clear();
     if (*badColumn < 6) {
       at_ = start;
@@ -799,8 +813,10 @@ void Prescanner::Hollerith(
   while (count-- > 0) {
     if (PadOutCharacterLiteral(tokens)) {
     } else if (*at_ == '\n') {
-      Say(GetProvenanceRange(start, at_),
-          "Possible truncated Hollerith literal"_warn_en_US);
+      if (features_.ShouldWarn(common::UsageWarning::Scanning)) {
+        Say(GetProvenanceRange(start, at_),
+            "Possible truncated Hollerith literal"_warn_en_US);
+      }
       break;
     } else {
       NextChar();
@@ -958,8 +974,10 @@ void Prescanner::FortranInclude(const char *firstQuote) {
     const char *garbage{p};
     for (; *p != '\n' && *p != '!'; ++p) {
     }
-    Say(GetProvenanceRange(garbage, p),
-        "excess characters after path name"_warn_en_US);
+    if (features_.ShouldWarn(common::UsageWarning::Scanning)) {
+      Say(GetProvenanceRange(garbage, p),
+          "excess characters after path name"_warn_en_US);
+    }
   }
   std::string buf;
   llvm::raw_string_ostream error{buf};
@@ -977,7 +995,9 @@ void Prescanner::FortranInclude(const char *firstQuote) {
         provenance, static_cast<std::size_t>(p - nextLine_)};
     ProvenanceRange fileRange{
         allSources_.AddIncludedFile(*included, includeLineRange)};
-    Prescanner{*this}.set_encoding(included->encoding()).Prescan(fileRange);
+    Prescanner{*this, /*isNestedInIncludeDirective=*/false}
+        .set_encoding(included->encoding())
+        .Prescan(fileRange);
   }
 }
 
