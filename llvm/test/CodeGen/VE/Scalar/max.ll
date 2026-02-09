@@ -209,17 +209,15 @@ define i64 @max2u64(i64, i64) {
   ret i64 %4
 }
 
-define signext i32 @maxi32(i32 signext %0, i32 signext %1) {
+define i32 @maxi32(i32, i32) {
 ; CHECK-LABEL: maxi32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    maxs.w.sx %s0, %s0, %s1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
 ;
 ; OPT-LABEL: maxi32:
 ; OPT:       # %bb.0:
 ; OPT-NEXT:    maxs.w.sx %s0, %s0, %s1
-; OPT-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; OPT-NEXT:    b.l.t (, %s10)
   %3 = icmp sgt i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1
@@ -241,19 +239,19 @@ define i32 @max2i32(i32, i32) {
   ret i32 %4
 }
 
-define zeroext i32 @maxu32(i32 zeroext %0, i32 zeroext %1) {
+define i32 @maxu32(i32, i32) {
 ; CHECK-LABEL: maxu32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s1, %s0, %s2
-; CHECK-NEXT:    adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
 ;
 ; OPT-LABEL: maxu32:
 ; OPT:       # %bb.0:
 ; OPT-NEXT:    cmpu.w %s2, %s0, %s1
 ; OPT-NEXT:    cmov.w.gt %s1, %s0, %s2
-; OPT-NEXT:    adds.w.zx %s0, %s1, (0)1
+; OPT-NEXT:    or %s0, 0, %s1
 ; OPT-NEXT:    b.l.t (, %s10)
   %3 = icmp ugt i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1
@@ -279,111 +277,17 @@ define i32 @max2u32(i32, i32) {
   ret i32 %4
 }
 
-define fp128 @maxf128(fp128, fp128) {
-; CHECK-LABEL: maxf128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:    cmov.d.gt %s2, %s0, %s4
-; CHECK-NEXT:    cmov.d.gt %s3, %s1, %s4
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    or %s1, 0, %s3
-; CHECK-NEXT:    b.l.t (, %s10)
-;
-; OPT-LABEL: maxf128:
-; OPT:       # %bb.0:
-; OPT-NEXT:    fcmp.q %s4, %s0, %s2
-; OPT-NEXT:    cmov.d.gt %s2, %s0, %s4
-; OPT-NEXT:    cmov.d.gt %s3, %s1, %s4
-; OPT-NEXT:    or %s0, 0, %s2
-; OPT-NEXT:    or %s1, 0, %s3
-; OPT-NEXT:    b.l.t (, %s10)
-  %3 = fcmp ogt fp128 %0, %1
-  %4 = select i1 %3, fp128 %0, fp128 %1
-  ret fp128 %4
-}
-
-define fp128 @max2f128(fp128, fp128) {
-; CHECK-LABEL: max2f128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:    cmov.d.ge %s2, %s0, %s4
-; CHECK-NEXT:    cmov.d.ge %s3, %s1, %s4
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    or %s1, 0, %s3
-; CHECK-NEXT:    b.l.t (, %s10)
-;
-; OPT-LABEL: max2f128:
-; OPT:       # %bb.0:
-; OPT-NEXT:    fcmp.q %s4, %s0, %s2
-; OPT-NEXT:    cmov.d.ge %s2, %s0, %s4
-; OPT-NEXT:    cmov.d.ge %s3, %s1, %s4
-; OPT-NEXT:    or %s0, 0, %s2
-; OPT-NEXT:    or %s1, 0, %s3
-; OPT-NEXT:    b.l.t (, %s10)
-  %3 = fcmp oge fp128 %0, %1
-  %4 = select i1 %3, fp128 %0, fp128 %1
-  ret fp128 %4
-}
-
-define fp128 @maxuf128(fp128, fp128) {
-; CHECK-LABEL: maxuf128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:    cmov.d.gtnan %s2, %s0, %s4
-; CHECK-NEXT:    cmov.d.gtnan %s3, %s1, %s4
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    or %s1, 0, %s3
-; CHECK-NEXT:    b.l.t (, %s10)
-;
-; OPT-LABEL: maxuf128:
-; OPT:       # %bb.0:
-; OPT-NEXT:    fcmp.q %s4, %s0, %s2
-; OPT-NEXT:    cmov.d.gt %s2, %s0, %s4
-; OPT-NEXT:    cmov.d.gt %s3, %s1, %s4
-; OPT-NEXT:    or %s0, 0, %s2
-; OPT-NEXT:    or %s1, 0, %s3
-; OPT-NEXT:    b.l.t (, %s10)
-  %3 = fcmp ugt fp128 %0, %1
-  %4 = select i1 %3, fp128 %0, fp128 %1
-  ret fp128 %4
-}
-
-define fp128 @max2uf128(fp128, fp128) {
-; CHECK-LABEL: max2uf128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:    cmov.d.genan %s2, %s0, %s4
-; CHECK-NEXT:    cmov.d.genan %s3, %s1, %s4
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    or %s1, 0, %s3
-; CHECK-NEXT:    b.l.t (, %s10)
-;
-; OPT-LABEL: max2uf128:
-; OPT:       # %bb.0:
-; OPT-NEXT:    fcmp.q %s4, %s0, %s2
-; OPT-NEXT:    cmov.d.ge %s2, %s0, %s4
-; OPT-NEXT:    cmov.d.ge %s3, %s1, %s4
-; OPT-NEXT:    or %s0, 0, %s2
-; OPT-NEXT:    or %s1, 0, %s3
-; OPT-NEXT:    b.l.t (, %s10)
-  %3 = fcmp uge fp128 %0, %1
-  %4 = select i1 %3, fp128 %0, fp128 %1
-  ret fp128 %4
-}
-
 define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: maxi1:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    nnd %s2, %s1, %s0
-; CHECK-NEXT:    cmov.w.ne %s1, %s0, %s2
-; CHECK-NEXT:    adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:    or %s0, %s0, %s1
+; CHECK-NEXT:    and %s0, 1, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
 ;
 ; OPT-LABEL: maxi1:
 ; OPT:       # %bb.0:
-; OPT-NEXT:    nnd %s2, %s1, %s0
-; OPT-NEXT:    cmov.w.ne %s1, %s0, %s2
-; OPT-NEXT:    adds.w.zx %s0, %s1, (0)1
+; OPT-NEXT:    or %s0, %s0, %s1
+; OPT-NEXT:    and %s0, 1, %s0
 ; OPT-NEXT:    b.l.t (, %s10)
   %3 = xor i1 %1, true
   %4 = and i1 %3, %0
