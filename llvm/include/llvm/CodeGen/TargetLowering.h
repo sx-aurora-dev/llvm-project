@@ -1272,8 +1272,17 @@ public:
     // to provide custom legalization for it.
     if (Op >= std::size(OpActions[0]))
       return Custom;
+    // For extended types (non-standard MVTs like v192f64), allow targets to
+    // handle them via custom lowering instead of always expanding. This is
+    // required by VE, which uses AVL (Active Vector Length) to process
+    // non-power-of-two vectors natively without generic widening.
+#if 1
+    if (VT.isExtended())
+      return getActionForExtendedType(Op, VT);
+#else
     if (VT.isExtended())
       return Expand;
+#endif
     return OpActions[(unsigned)VT.getSimpleVT().SimpleTy][Op];
   }
 
