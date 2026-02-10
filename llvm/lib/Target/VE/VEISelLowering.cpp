@@ -784,8 +784,7 @@ SDValue VETargetLowering::LowerFormalArguments(
 
   const VERegisterInfo *TRI = Subtarget->getRegisterInfo();
 
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    CCValAssign &VA = ArgLocs[i];
+  for (const CCValAssign &VA : ArgLocs) {
     if (VA.isRegLoc()) {
       // This argument is passed in a register.
       // All integer register arguments are promoted by the caller to i64.

@@ -115,7 +115,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
-      : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
+      : BaseT(TM, F.getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {

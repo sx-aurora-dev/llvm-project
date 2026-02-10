@@ -39,6 +39,9 @@ llvm.mlir.global internal constant @string_const("foobar") : !llvm.array<6 x i8>
 // CHECK: @int_global_undef = internal global i64 undef
 llvm.mlir.global internal @int_global_undef() : i64
 
+// CHECK: @f8E4M3_global_as_i8 = internal global i8 60
+llvm.mlir.global internal @f8E4M3_global_as_i8(1.5 : f8E4M3) : i8
+
 // CHECK: @f8E4M3FN_global_as_i8 = internal global i8 60
 llvm.mlir.global internal @f8E4M3FN_global_as_i8(1.5 : f8E4M3FN) : i8
 
@@ -2441,3 +2444,36 @@ llvm.func @optimize_none() attributes { no_inline, optimize_none } {
 
 // CHECK: #[[ATTRS]]
 // CHECK-SAME: optnone
+
+// -----
+
+// CHECK-LABEL: @convergent
+// CHECK-SAME: #[[ATTRS:[0-9]+]]
+llvm.func @convergent() attributes { convergent } {
+  llvm.return
+}
+
+// CHECK: #[[ATTRS]]
+// CHECK-SAME: convergent
+
+// -----
+
+// CHECK-LABEL: @nounwind
+// CHECK-SAME: #[[ATTRS:[0-9]+]]
+llvm.func @nounwind() attributes { no_unwind } {
+  llvm.return
+}
+
+// CHECK: #[[ATTRS]]
+// CHECK-SAME: nounwind
+
+// -----
+
+// CHECK-LABEL: @willreturn
+// CHECK-SAME: #[[ATTRS:[0-9]+]]
+llvm.func @willreturn() attributes { will_return } {
+  llvm.return
+}
+
+// CHECK: #[[ATTRS]]
+// CHECK-SAME: willreturn
