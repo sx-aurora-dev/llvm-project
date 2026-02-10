@@ -77,6 +77,7 @@ set(LLVM_TEST_DEPENDS
           llvm-cgdata
           llvm-config
           llvm-cov
+          llvm-ctxprof-util
           llvm-cvtres
           llvm-cxxdump
           llvm-cxxfilt

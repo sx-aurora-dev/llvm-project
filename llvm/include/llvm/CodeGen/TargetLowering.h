@@ -1662,7 +1662,8 @@ public:
     MVT NVT = VT;
     do {
       NVT = (MVT::SimpleValueType)(NVT.SimpleTy+1);
-      assert(NVT.isInteger() == VT.isInteger() && NVT != MVT::isVoid &&
+      assert(NVT.isInteger() == VT.isInteger() &&
+             NVT.isFloatingPoint() == VT.isFloatingPoint() &&
              "Didn't find type to promote to!");
     } while (VTBits >= NVT.getScalarSizeInBits() || !isTypeLegal(NVT) ||
              getOperationAction(Op, NVT) == Promote);
@@ -2929,6 +2930,8 @@ public:
     case ISD::FMAXNUM_IEEE:
     case ISD::FMINIMUM:
     case ISD::FMAXIMUM:
+    case ISD::FMINIMUMNUM:
+    case ISD::FMAXIMUMNUM:
     case ISD::AVGFLOORS:
     case ISD::AVGFLOORU:
     case ISD::AVGCEILS:
@@ -3177,8 +3180,11 @@ public:
   ///
   /// \p DI is the deinterleave intrinsic.
   /// \p LI is the accompanying load instruction
-  virtual bool lowerDeinterleaveIntrinsicToLoad(IntrinsicInst *DI,
-                                                LoadInst *LI) const {
+  /// \p DeadInsts is a reference to a vector that keeps track of dead
+  /// instruction during transformations.
+  virtual bool lowerDeinterleaveIntrinsicToLoad(
+      IntrinsicInst *DI, LoadInst *LI,
+      SmallVectorImpl<Instruction *> &DeadInsts) const {
     return false;
   }
 
@@ -3188,8 +3194,11 @@ public:
   ///
   /// \p II is the interleave intrinsic.
   /// \p SI is the accompanying store instruction
-  virtual bool lowerInterleaveIntrinsicToStore(IntrinsicInst *II,
-                                               StoreInst *SI) const {
+  /// \p DeadInsts is a reference to a vector that keeps track of dead
+  /// instruction during transformations.
+  virtual bool lowerInterleaveIntrinsicToStore(
+      IntrinsicInst *II, StoreInst *SI,
+      SmallVectorImpl<Instruction *> &DeadInsts) const {
     return false;
   }
 
@@ -3863,6 +3872,10 @@ public:
   /// Return the entry encoding for a jump table in the current function.  The
   /// returned value is a member of the MachineJumpTableInfo::JTEntryKind enum.
   virtual unsigned getJumpTableEncoding() const;
+
+  virtual MVT getJumpTableRegTy(const DataLayout &DL) const {
+    return getPointerTy(DL);
+  }
 
   virtual const MCExpr *
   LowerCustomJumpTableEntry(const MachineJumpTableInfo * /*MJTI*/,
@@ -5106,8 +5119,10 @@ public:
   //
 
   SDValue BuildSDIV(SDNode *N, SelectionDAG &DAG, bool IsAfterLegalization,
+                    bool IsAfterLegalTypes,
                     SmallVectorImpl<SDNode *> &Created) const;
   SDValue BuildUDIV(SDNode *N, SelectionDAG &DAG, bool IsAfterLegalization,
+                    bool IsAfterLegalTypes,
                     SmallVectorImpl<SDNode *> &Created) const;
   // Build sdiv by power-of-2 with conditional move instructions
   SDValue buildSDIVPow2WithCMov(SDNode *N, const APInt &Divisor,
@@ -5307,6 +5322,9 @@ public:
 
   /// Expand fminimum/fmaximum into multiple comparison with selects.
   SDValue expandFMINIMUM_FMAXIMUM(SDNode *N, SelectionDAG &DAG) const;
+
+  /// Expand fminimumnum/fmaximumnum into multiple comparison with selects.
+  SDValue expandFMINIMUMNUM_FMAXIMUMNUM(SDNode *N, SelectionDAG &DAG) const;
 
   /// Expand FP_TO_[US]INT_SAT into FP_TO_[US]INT and selects or min/max.
   /// \param N Node to expand

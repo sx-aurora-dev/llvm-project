@@ -2767,8 +2767,9 @@ static bool hoistMulAddAssociation(Instruction &I, Loop &L,
     unsigned OpIdx = U->getOperandNo();
     auto *LHS = OpIdx == 0 ? Mul : Ins->getOperand(0);
     auto *RHS = OpIdx == 1 ? Mul : Ins->getOperand(1);
-    auto *NewBO = BinaryOperator::Create(Ins->getOpcode(), LHS, RHS,
-                                         Ins->getName() + ".reass", Ins);
+    auto *NewBO =
+        BinaryOperator::Create(Ins->getOpcode(), LHS, RHS,
+                               Ins->getName() + ".reass", Ins->getIterator());
     NewBO->copyIRFlags(Ins);
     if (VariantOp == Ins)
       VariantOp = NewBO;
@@ -2781,7 +2782,7 @@ static bool hoistMulAddAssociation(Instruction &I, Loop &L,
   return true;
 }
 
-/// Reassociate general associative binary expressions of the form
+/// Reassociate associative binary expressions of the form
 ///
 /// 1. "(LV op C1) op C2" ==> "LV op (C1 op C2)"
 ///
@@ -2796,43 +2797,52 @@ static bool hoistBOAssociation(Instruction &I, Loop &L,
                                ICFLoopSafetyInfo &SafetyInfo,
                                MemorySSAUpdater &MSSAU, AssumptionCache *AC,
                                DominatorTree *DT) {
-  BinaryOperator *BO = dyn_cast<BinaryOperator>(&I);
+  auto *BO = dyn_cast<BinaryOperator>(&I);
   if (!BO || !BO->isAssociative())
     return false;
 
+  // Only fold ADDs for now.
   Instruction::BinaryOps Opcode = BO->getOpcode();
-  BinaryOperator *Op0 = dyn_cast<BinaryOperator>(BO->getOperand(0));
+  if (Opcode != Instruction::Add)
+    return false;
+
+  auto *BO0 = dyn_cast<BinaryOperator>(BO->getOperand(0));
+  if (!BO0 || BO0->getOpcode() != Opcode || !BO0->isAssociative() ||
+      BO0->hasNUsesOrMore(3))
+    return false;
 
   // Transform: "(LV op C1) op C2" ==> "LV op (C1 op C2)"
-  if (Op0 && Op0->getOpcode() == Opcode) {
-    Value *LV = Op0->getOperand(0);
-    Value *C1 = Op0->getOperand(1);
-    Value *C2 = BO->getOperand(1);
+  Value *LV = BO0->getOperand(0);
+  Value *C1 = BO0->getOperand(1);
+  Value *C2 = BO->getOperand(1);
 
-    if (L.isLoopInvariant(LV) || !L.isLoopInvariant(C1) ||
-        !L.isLoopInvariant(C2))
-      return false;
+  if (L.isLoopInvariant(LV) || !L.isLoopInvariant(C1) || !L.isLoopInvariant(C2))
+    return false;
 
-    auto *Preheader = L.getLoopPreheader();
-    assert(Preheader && "Loop is not in simplify form?");
-    IRBuilder<> Builder(Preheader->getTerminator());
-    Value *Inv = Builder.CreateBinOp(Opcode, C1, C2, "invariant.op");
+  auto *Preheader = L.getLoopPreheader();
+  assert(Preheader && "Loop is not in simplify form?");
 
-    auto *NewBO =
-        BinaryOperator::Create(Opcode, LV, Inv, BO->getName() + ".reass", BO);
-    NewBO->copyIRFlags(BO);
-    BO->replaceAllUsesWith(NewBO);
-    eraseInstruction(*BO, SafetyInfo, MSSAU);
+  auto *Inv = BinaryOperator::Create(Opcode, C1, C2, "invariant.op",
+                                     Preheader->getTerminator()->getIterator());
+  auto *NewBO = BinaryOperator::Create(
+      Opcode, LV, Inv, BO->getName() + ".reass", BO->getIterator());
 
-    // Note: (LV op C1) might not be erased if it has more uses than the one we
-    //       just replaced.
-    if (Op0->use_empty())
-      eraseInstruction(*Op0, SafetyInfo, MSSAU);
-
-    return true;
+  // Copy NUW for ADDs if both instructions have it.
+  if (Opcode == Instruction::Add && BO->hasNoUnsignedWrap() &&
+      BO0->hasNoUnsignedWrap()) {
+    Inv->setHasNoUnsignedWrap(true);
+    NewBO->setHasNoUnsignedWrap(true);
   }
 
-  return false;
+  BO->replaceAllUsesWith(NewBO);
+  eraseInstruction(*BO, SafetyInfo, MSSAU);
+
+  // (LV op C1) might not be erased if it has more uses than the one we just
+  // replaced.
+  if (BO0->use_empty())
+    eraseInstruction(*BO0, SafetyInfo, MSSAU);
+
+  return true;
 }
 
 static bool hoistArithmetics(Instruction &I, Loop &L,

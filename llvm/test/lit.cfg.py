@@ -183,6 +183,7 @@ tools.extend(
         "llvm-cgdata",
         "llvm-config",
         "llvm-cov",
+        "llvm-ctxprof-util",
         "llvm-cxxdump",
         "llvm-cvtres",
         "llvm-debuginfod-find",
