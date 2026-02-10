@@ -383,7 +383,8 @@ MachineInstrBuilder VEInstrInfo::emitVectorRegisterCopy(
 void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, const DebugLoc &DL,
                               MCRegister DestReg, MCRegister SrcReg,
-                              bool KillSrc) const {
+                              bool KillSrc, bool RenamableDest,
+                              bool RenamableSrc) const {
   const TargetRegisterInfo *TRI = &getRegisterInfo();
 #if 0
   // FIXME: expandPostRAPseudos expects an instruction to be inserted.
