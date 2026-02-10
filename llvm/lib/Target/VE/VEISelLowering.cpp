@@ -3999,7 +3999,7 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
     //       r16-r23 -> l0-l7
     //       r24-r31 -> i0-i7
     uint64_t intVal = 0;
-    if (name.substr(0, 1).equals("r") &&
+    if (name.substr(0, 1) == "r" &&
         !name.substr(1).getAsInteger(10, intVal) && intVal <= 31) {
       const char regTypes[] = {'g', 'o', 'l', 'i'};
       char regType = regTypes[intVal / 8];

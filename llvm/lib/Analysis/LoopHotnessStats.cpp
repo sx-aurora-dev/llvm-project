@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <llvm/Analysis/LoopHotnessStats.h>
+#include <llvm/ADT/APInt.h>
 #include <llvm/Analysis/LoopInfo.h>
 
 using namespace llvm;
