@@ -784,8 +784,7 @@ SDValue VETargetLowering::LowerFormalArguments(
 
   const VERegisterInfo *TRI = Subtarget->getRegisterInfo();
 
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    CCValAssign &VA = ArgLocs[i];
+  for (const CCValAssign &VA : ArgLocs) {
     if (VA.isRegLoc()) {
       // This argument is passed in a register.
       // All integer register arguments are promoted by the caller to i64.
@@ -2651,8 +2650,7 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   MachineFunction::iterator I = ++MBB->getIterator();
 
   // Memory Reference.
-  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands_begin(),
-                                           MI.memoperands_end());
+  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands());
   Register BufReg = MI.getOperand(1).getReg();
 
   Register DstReg;
@@ -2778,8 +2776,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   MachineRegisterInfo &MRI = MF->getRegInfo();
 
   // Memory Reference.
-  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands_begin(),
-                                           MI.memoperands_end());
+  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands());
   Register BufReg = MI.getOperand(0).getReg();
 
   Register Tmp = MRI.createVirtualRegister(&VE::I64RegClass);
@@ -4000,7 +3997,7 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
     //       r16-r23 -> l0-l7
     //       r24-r31 -> i0-i7
     uint64_t intVal = 0;
-    if (name.substr(0, 1).equals("r") &&
+    if (name.substr(0, 1) == "r" &&
         !name.substr(1).getAsInteger(10, intVal) && intVal <= 31) {
       const char regTypes[] = {'g', 'o', 'l', 'i'};
       char regType = regTypes[intVal / 8];

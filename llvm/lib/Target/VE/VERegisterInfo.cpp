@@ -751,15 +751,15 @@ bool VERegisterInfo::getRegAllocationHints(Register VirtReg,
   }
 
   // FIXME this is the default implementation
-  const std::pair<Register, SmallVector<Register, 4>> &Hints_MRI =
-      MRI.getRegAllocationHints(VirtReg);
+  const auto *Hints_MRI = MRI.getRegAllocationHints(VirtReg);
 
   SmallSet<Register, 32> HintedRegs;
   // Respect any target hint first.
-  bool Skip = (Hints_MRI.first != 0);
+  bool Skip = Hints_MRI && (Hints_MRI->first != 0);
   Register Phys;
   unsigned VRIndex = 0;
-  for (auto Reg : Hints_MRI.second) {
+  for (auto Reg : Hints_MRI ? Hints_MRI->second
+                             : SmallVector<Register, 4>()) {
     if (Skip) {
       Skip = false;
       continue;
