@@ -572,7 +572,7 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
                                 raw_ostream &O) {
   const DataLayout &DL = getDataLayout();
   const MachineOperand &MO = MI->getOperand(OpNum);
-  VEMCExpr::VariantKind TF = (VEMCExpr::VariantKind) MO.getTargetFlags();
+  VEMCExpr::Specifier TF = (VEMCExpr::Specifier) MO.getTargetFlags();
 
 #ifndef NDEBUG
   // Verify the target flags.
@@ -609,8 +609,6 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
 #endif
 
 
-  bool CloseParen = VEMCExpr::printVariantKind(O, TF);
-
   switch (MO.getType()) {
   case MachineOperand::MO_Register:
     O << "%" << StringRef(getRegisterName(MO.getReg())).lower();
@@ -640,8 +638,8 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   default:
     llvm_unreachable("<unknown operand type>");
   }
-  if (CloseParen) O << ")";
-  VEMCExpr::printVariantKindSuffix(O, TF);
+  if (TF != VEMCExpr::VK_None && TF != VEMCExpr::VK_REFLONG)
+    O << '@' << MAI->getSpecifierName(TF);
 }
 
 // PrintAsmOperand - Print out an operand for an inline asm expression.
