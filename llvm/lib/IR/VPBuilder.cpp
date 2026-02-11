@@ -131,14 +131,11 @@ VectorType &VPBuilder::getVectorType(Type &ElementTy) {
 
 Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                         MaybeAlign AlignOpt) {
-  auto &PointerTy = cast<PointerType>(*ElemPointer.getType());
-  auto &VecTy = getVectorType(*PointerTy.getNonOpaquePointerElementType());
-  auto *VecPtrTy = VecTy.getPointerTo(PointerTy.getAddressSpace());
-  auto *VecPtr = Builder.CreatePointerCast(&ElemPointer, VecPtrTy);
-
-  auto *StoreFunc = Intrinsic::getDeclaration(&getModule(), Intrinsic::vp_store,
-                                              {&VecTy, VecPtrTy});
-  ShortValueVec Args{&Val, VecPtr, &RequestPred(), &RequestEVL()};
+  auto *StoreFunc = Intrinsic::getDeclaration(
+      &getModule(), Intrinsic::vp_store,
+      {Val.getType(), ElemPointer.getType()});
+  SmallVector<Value *, 4> Args{&Val, &ElemPointer, &RequestPred(),
+                                &RequestEVL()};
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
   if (AlignOpt.has_value()) {
     unsigned PtrPos =
