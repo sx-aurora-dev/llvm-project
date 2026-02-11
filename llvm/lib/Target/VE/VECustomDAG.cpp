@@ -458,16 +458,9 @@ PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
 }
 
 PosOpt getVPReductionStartParamPos(unsigned VPISD) {
-  PosOpt StartPos;
-  switch (VPISD) {
-  default:
-    break;
-#define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) StartPos = STARTPOS;
-#define END_REGISTER_VP_SDNODE(VPISD) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return StartPos;
+  if (ISD::isVPReduction(VPISD))
+    return 0;
+  return std::nullopt;
 }
 
 PosOpt getReductionStartParamPos(unsigned OPC) {
@@ -484,16 +477,9 @@ PosOpt getReductionStartParamPos(unsigned OPC) {
 }
 
 PosOpt getVPReductionVectorParamPos(unsigned VPISD) {
-  PosOpt VecPos;
-  switch (VPISD) {
-  default:
-    break;
-#define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) VecPos = VECTORPOS;
-#define END_REGISTER_VP_SDNODE(VPISD) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return VecPos;
+  if (ISD::isVPReduction(VPISD))
+    return 1;
+  return std::nullopt;
 }
 
 PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {

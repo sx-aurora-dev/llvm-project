@@ -129,36 +129,14 @@
 #define VP_PROPERTY_MEMOP(POINTERPOS, DATAPOS)
 #endif
 
-// Map this VP reduction intrinsic to its reduction operand positions.
-#ifndef VP_PROPERTY_REDUCTION
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS)
-#endif
-
-// A property to infer VP unary-op SDNode opcodes automatically.
-#ifndef VP_PROPERTY_UNARYOP
-#define VP_PROPERTY_UNARYOP
-#endif
-
 // A property to infer VP binary-op SDNode opcodes automatically.
 #ifndef VP_PROPERTY_BINARYOP
 #define VP_PROPERTY_BINARYOP
 #endif
 
-// A property to infer VP ternary-op SDNode opcodes automatically.
-#ifndef VP_PROPERTY_TERNARYOP
-#define VP_PROPERTY_TERNARYOP
-#endif
-
 // A property to infer VP type casts automatically.
 #ifndef VP_PROPERTY_CASTOP
 #define VP_PROPERTY_CASTOP
-#endif
-
-// This VP Intrinsic is a comparison operation
-// The condition code arg is at CCPOS and accepts floating-point condition
-// codes if ISFP is set, else it accepts integer condition codes.
-#ifndef VP_PROPERTY_CMP
-#define VP_PROPERTY_CMP(CCPOS, ISFP)
 #endif
 
 /// } Property Macros
@@ -269,7 +247,6 @@ END_REGISTER_VP(vp_bitreverse, VP_BITREVERSE)
 // llvm.vp.ctpop(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ctpop, 1, 2, VP_CTPOP, -1)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ctpop)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_FUNCTIONAL_SDOPC(CTPOP)
 END_REGISTER_VP(vp_ctpop, VP_CTPOP)
 
@@ -386,7 +363,6 @@ END_REGISTER_VP(vp_fabs, VP_FABS)
 
 // llvm.vp.sqrt(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_sqrt, 1, 2, VP_SQRT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_sqrt)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(sqrt)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FSQRT)
@@ -445,7 +421,6 @@ END_REGISTER_VP(vp_maximum, VP_FMAXIMUM)
 
 // llvm.vp.ceil(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FCEIL)
@@ -453,7 +428,6 @@ END_REGISTER_VP(vp_ceil, VP_FCEIL)
 
 // llvm.vp.floor(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FFLOOR)
@@ -461,7 +435,6 @@ END_REGISTER_VP(vp_floor, VP_FFLOOR)
 
 // llvm.vp.round(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_round, 1, 2, VP_FROUND, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FROUND)
@@ -481,7 +454,6 @@ END_REGISTER_VP(vp_roundtozero, VP_FROUNDTOZERO)
 
 // llvm.vp.rint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FRINT)
@@ -489,7 +461,6 @@ END_REGISTER_VP(vp_rint, VP_FRINT)
 
 // llvm.vp.nearbyint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FNEARBYINT)
@@ -592,7 +563,6 @@ END_REGISTER_VP_SDNODE(VP_SETCC)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fcmp, 3, 4)
 HELPER_MAP_VPID_TO_VPSD(vp_fcmp, VP_SETCC)
 VP_PROPERTY_FUNCTIONAL_OPC(FCmp)
-VP_PROPERTY_CMP(2, true)
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_fcmp)
 END_REGISTER_VP_INTRINSIC(vp_fcmp)
 
@@ -600,7 +570,6 @@ END_REGISTER_VP_INTRINSIC(vp_fcmp)
 BEGIN_REGISTER_VP_INTRINSIC(vp_icmp, 3, 4)
 HELPER_MAP_VPID_TO_VPSD(vp_icmp, VP_SETCC)
 VP_PROPERTY_FUNCTIONAL_OPC(ICmp)
-VP_PROPERTY_CMP(2, false)
 END_REGISTER_VP_INTRINSIC(vp_icmp)
 
 ///// } Comparisons
@@ -680,7 +649,6 @@ END_REGISTER_VP(vp_gather, VP_GATHER)
   BEGIN_REGISTER_VP(VPID, 2, 3, VPSD, 1)                                       \
   VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRIN)                                     \
   VP_PROPERTY_FUNCTIONAL_SDOPC(SDOPC)                                          \
-  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   END_REGISTER_VP(VPID, VPSD)
 
 // llvm.vp.reduce.add(start,x,mask,vlen)
@@ -750,13 +718,11 @@ HELPER_REGISTER_REDUCTION_VP(vp_reduce_fminimum, VP_REDUCE_FMINIMUM,
 #define HELPER_REGISTER_REDUCTION_SEQ_VP(VPID, VPSD, SEQ_VPSD, SDOPC, SEQ_SDOPC, INTRIN) \
   BEGIN_REGISTER_VP_INTRINSIC(VPID, 2, 3)                                      \
   BEGIN_REGISTER_VP_SDNODE(VPSD, 1, VPID, 2, 3)                                \
-  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   VP_PROPERTY_FUNCTIONAL_SDOPC(SDOPC)                                          \
   END_REGISTER_VP_SDNODE(VPSD)                                                 \
   BEGIN_REGISTER_VP_SDNODE(SEQ_VPSD, 1, VPID, 2, 3)                            \
   HELPER_MAP_VPID_TO_VPSD(VPID, SEQ_VPSD)                                      \
   VP_PROPERTY_FUNCTIONAL_SDOPC(SEQ_SDOPC)                                      \
-  VP_PROPERTY_REDUCTION(0, 1)                                                  \
   END_REGISTER_VP_SDNODE(SEQ_VPSD)                                             \
   VP_PROPERTY_FUNCTIONAL_INTRINSIC(INTRIN)                                     \
   END_REGISTER_VP_INTRINSIC(VPID)
@@ -841,15 +807,11 @@ END_REGISTER_VP(experimental_vp_splat, EXPERIMENTAL_VP_SPLAT)
 #undef END_REGISTER_VP_INTRINSIC
 #undef END_REGISTER_VP_SDNODE
 #undef HELPER_MAP_VPID_TO_VPSD
-#undef VP_PROPERTY_UNARYOP
 #undef VP_PROPERTY_BINARYOP
-#undef VP_PROPERTY_TERNARYOP
 #undef VP_PROPERTY_CASTOP
-#undef VP_PROPERTY_CMP
 #undef VP_PROPERTY_CONSTRAINEDFP
 #undef VP_PROPERTY_FUNCTIONAL_INTRINSIC
 #undef VP_PROPERTY_FUNCTIONAL_OPC
 #undef VP_PROPERTY_FUNCTIONAL_SDOPC
 #undef VP_PROPERTY_NO_FUNCTIONAL
 #undef VP_PROPERTY_MEMOP
-#undef VP_PROPERTY_REDUCTION

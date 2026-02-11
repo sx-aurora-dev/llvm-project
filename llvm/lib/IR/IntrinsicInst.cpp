@@ -31,7 +31,6 @@
 #include "llvm/IR/Statepoint.h"
 #include <optional>
 
-#include <map>
 using namespace llvm;
 
 bool IntrinsicInst::mayLowerToFunctionCall(Intrinsic::ID IID) {
@@ -665,27 +664,6 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
   return false;
 }
 
-std::optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
-  auto Bundle = this->getOperandBundle("cfp-round");
-  if (!Bundle)
-    return std::nullopt;
-  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
-  if (!MD || !isa<MDString>(MD))
-    return std::nullopt;
-  return convertStrToRoundingMode(cast<MDString>(MD)->getString());
-}
-
-std::optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
-  auto Bundle = this->getOperandBundle("cfp-except");
-  if (!Bundle)
-    return std::nullopt;
-  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
-  if (!MD || !isa<MDString>(MD))
-    return std::nullopt;
-
-  return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
-}
-
 Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
                                                Type *ReturnType,
                                                ArrayRef<Value *> Params) {
@@ -758,107 +736,27 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
   return VPFunc;
 }
 
-bool VPIntrinsic::isConstrainedOp() const {
-  return (getRoundingMode() != std::nullopt &&
-          getRoundingMode() != RoundingMode::NearestTiesToEven) ||
-         (getExceptionBehavior() != std::nullopt &&
-          getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
-}
-
-bool VPIntrinsic::isUnaryOp() const { return IsUnaryVPOp(getIntrinsicID()); }
-
-bool VPIntrinsic::IsUnaryVPOp(Intrinsic::ID VPID) {
-  bool IsUnary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_UNARYOP IsUnary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsUnary;
-}
-
-bool VPIntrinsic::isBinaryOp() const { return IsBinaryVPOp(getIntrinsicID()); }
-
-bool VPIntrinsic::IsBinaryVPOp(Intrinsic::ID VPID) {
-  bool IsBinary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_BINARYOP IsBinary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsBinary;
-}
-
-bool VPIntrinsic::isTernaryOp() const {
-  return IsTernaryVPOp(getIntrinsicID());
-}
-
-bool VPIntrinsic::IsTernaryVPOp(Intrinsic::ID VPID) {
-  bool IsTernary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_TERNARYOP IsTernary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsTernary;
-}
-
-bool
-VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
-  std::optional<bool> HasExcept;
-  switch (IntrinsicID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasExcept = (bool) HASEXCEPT;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return HasExcept && HasExcept.value();
-}
-
-bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
-  std::optional<bool> HasRound;
-  switch (IntrinsicID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasRound = (bool) HASROUND;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return HasRound && HasRound.value();
-}
-
 bool VPReductionIntrinsic::isVPReduction(Intrinsic::ID ID) {
   switch (ID) {
+  case Intrinsic::vp_reduce_add:
+  case Intrinsic::vp_reduce_mul:
+  case Intrinsic::vp_reduce_and:
+  case Intrinsic::vp_reduce_or:
+  case Intrinsic::vp_reduce_xor:
+  case Intrinsic::vp_reduce_smax:
+  case Intrinsic::vp_reduce_smin:
+  case Intrinsic::vp_reduce_umax:
+  case Intrinsic::vp_reduce_umin:
+  case Intrinsic::vp_reduce_fmax:
+  case Intrinsic::vp_reduce_fmin:
+  case Intrinsic::vp_reduce_fmaximum:
+  case Intrinsic::vp_reduce_fminimum:
+  case Intrinsic::vp_reduce_fadd:
+  case Intrinsic::vp_reduce_fmul:
+    return true;
   default:
-    break;
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_REDUCTION(STARTPOS, ...) return true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
+    return false;
   }
-  return false;
 }
 
 bool VPCastIntrinsic::isVPCast(Intrinsic::ID ID) {
@@ -876,13 +774,11 @@ bool VPCastIntrinsic::isVPCast(Intrinsic::ID ID) {
 bool VPCmpIntrinsic::isVPCmp(Intrinsic::ID ID) {
   switch (ID) {
   default:
-    break;
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CMP(CCPOS, ...) return true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
+    return false;
+  case Intrinsic::vp_fcmp:
+  case Intrinsic::vp_icmp:
+    return true;
   }
-  return false;
 }
 
 bool VPBinOpIntrinsic::isVPBinOp(Intrinsic::ID ID) {
@@ -916,22 +812,10 @@ static ICmpInst::Predicate getIntPredicateFromMD(const Value *Op) {
 }
 
 CmpInst::Predicate VPCmpIntrinsic::getPredicate() const {
-  bool IsFP = true;
-  std::optional<unsigned> CCArgIdx;
-  switch (getIntrinsicID()) {
-  default:
-    break;
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CMP(CCPOS, ISFP)                                           \
-  CCArgIdx = CCPOS;                                                            \
-  IsFP = ISFP;                                                                 \
-  break;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  assert(CCArgIdx && "Unexpected vector-predicated comparison");
-  return IsFP ? getFPPredicateFromMD(getArgOperand(*CCArgIdx))
-              : getIntPredicateFromMD(getArgOperand(*CCArgIdx));
+  assert(isVPCmp(getIntrinsicID()));
+  return getIntrinsicID() == Intrinsic::vp_fcmp
+             ? getFPPredicateFromMD(getArgOperand(2))
+             : getIntPredicateFromMD(getArgOperand(2));
 }
 
 unsigned VPReductionIntrinsic::getVectorParamPos() const {
@@ -944,27 +828,15 @@ unsigned VPReductionIntrinsic::getStartParamPos() const {
 
 std::optional<unsigned>
 VPReductionIntrinsic::getVectorParamPos(Intrinsic::ID ID) {
-  switch (ID) {
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) return VECTORPOS;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  default:
-    break;
-  }
+  if (isVPReduction(ID))
+    return 1;
   return std::nullopt;
 }
 
 std::optional<unsigned>
 VPReductionIntrinsic::getStartParamPos(Intrinsic::ID ID) {
-  switch (ID) {
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_REDUCTION(STARTPOS, VECTORPOS) return STARTPOS;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  default:
-    break;
-  }
+  if (isVPReduction(ID))
+    return 0;
   return std::nullopt;
 }
 

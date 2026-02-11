@@ -6,7 +6,7 @@
 
 namespace {
 using namespace llvm;
-using ShortTypeVec = VPIntrinsic::ShortTypeVec;
+using ShortTypeVec = SmallVector<Type *, 4>;
 using ShortValueVec = SmallVector<Value *, 4>;
 } // namespace
 

@@ -565,15 +565,6 @@ public:
 /// This is the common base class for vector predication intrinsics.
 class VPIntrinsic : public IntrinsicInst {
 public:
-  using ShortTypeVec = SmallVector<Type *, 4>;
-
-  // whether the intrinsic has a rounding mode parameter (regardless of
-  // setting).
-  static bool HasRoundingMode(Intrinsic::ID VPID);
-  // whether the intrinsic has a exception behavior parameter (regardless of
-  // setting).
-  static bool HasExceptionMode(Intrinsic::ID VPID);
-
   /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters
   /// \p Params. Additionally, the load and gather intrinsics require
   /// \p ReturnType to be specified.
@@ -605,23 +596,6 @@ public:
 
   /// \return Whether the vector length param can be ignored.
   bool canIgnoreVectorLengthParam() const;
-
-  bool isUnaryOp() const;
-  static bool IsUnaryVPOp(Intrinsic::ID);
-  bool isBinaryOp() const;
-  static bool IsBinaryVPOp(Intrinsic::ID);
-  bool isTernaryOp() const;
-  static bool IsTernaryVPOp(Intrinsic::ID);
-
-  // Contrained fp-math
-  // whether this is an fp op with non-standard rounding or exception
-  // behavior.
-  bool isConstrainedOp() const;
-
-  // the specified rounding mode.
-  std::optional<RoundingMode> getRoundingMode() const;
-  // the specified exception behavior.
-  std::optional<fp::ExceptionBehavior> getExceptionBehavior() const;
 
   /// \return The static element count (vector number of elements) the vector
   /// length parameter applies to.
