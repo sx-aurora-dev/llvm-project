@@ -144,6 +144,7 @@ public:
     MSVC2019_5 = 1925,
     MSVC2019_8 = 1928,
     MSVC2022_3 = 1933,
+    MSVC2022_9 = 1939,
   };
 
   enum SYCLMajorVersion {
@@ -696,6 +697,14 @@ public:
 
   bool assumeFunctionsAreConvergent() const {
     return ConvergentFunctions;
+  }
+
+  /// Return true if atomicrmw operations targeting allocations in private
+  /// memory are undefined.
+  bool threadPrivateMemoryAtomicsAreUndefined() const {
+    // Should be false for OpenMP.
+    // TODO: Should this be true for SYCL?
+    return OpenCL || CUDA;
   }
 
   /// Return the OpenCL C or C++ version as a VersionTuple.

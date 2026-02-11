@@ -156,16 +156,14 @@ namespace ttp_defaults {
 namespace ttp_only {
   template <template <class...    > class TT1> struct A      { static constexpr int V = 0; };
   template <template <class       > class TT2> struct A<TT2> { static constexpr int V = 1; };
-  // new-note@-1 {{partial specialization matches}}
   template <template <class, class> class TT3> struct A<TT3> { static constexpr int V = 2; };
-  // new-note@-1 {{partial specialization matches}}
 
   template <class ...          > struct B;
   template <class              > struct C;
   template <class, class       > struct D;
   template <class, class, class> struct E;
 
-  static_assert(A<B>::V == 0); // new-error {{ambiguous partial specializations}}
+  static_assert(A<B>::V == 0);
   static_assert(A<C>::V == 1);
   static_assert(A<D>::V == 2);
   static_assert(A<E>::V == 0);
@@ -364,15 +362,17 @@ namespace classes {
 
 namespace packs {
   namespace t1 {
-    // FIXME: This should be rejected
     template<template<int, int...> class> struct A {};
-    // old-note@-1 {{previous non-type template parameter with type 'int' is here}}
+    // new-error@-1 {{non-type parameter of template template parameter cannot be narrowed from type 'int' to 'char'}}
+    // new-note@-2 {{previous template template parameter is here}}
+    // old-note@-3 {{previous non-type template parameter with type 'int' is here}}
 
     template<char> struct B;
     // old-note@-1 {{template non-type parameter has a different type 'char' in template argument}}
 
     template struct A<B>;
-    // old-error@-1 {{has different template parameters}}
+    // new-note@-1 {{has different template parameters}}
+    // old-error@-2 {{has different template parameters}}
   } // namespace t1
   namespace t2 {
     template<template<char, int...> class> struct A {};
@@ -385,15 +385,17 @@ namespace packs {
     // old-error@-1 {{has different template parameters}}
   } // namespace t2
   namespace t3 {
-    // FIXME: This should be rejected
     template<template<int...> class> struct A {};
-    // old-note@-1 {{previous non-type template parameter with type 'int' is here}}
+    // new-error@-1 {{non-type parameter of template template parameter cannot be narrowed from type 'int' to 'char'}}
+    // new-note@-2 {{previous template template parameter is here}}
+    // old-note@-3 {{previous non-type template parameter with type 'int' is here}}
 
     template<char> struct B;
     // old-note@-1 {{template non-type parameter has a different type 'char' in template argument}}
 
     template struct A<B>;
-    // old-error@-1 {{has different template parameters}}
+    // new-note@-1 {{has different template parameters}}
+    // old-error@-2 {{has different template parameters}}
   } // namespace t3
   namespace t4 {
     template<template<char...> class> struct A {};
@@ -407,16 +409,103 @@ namespace packs {
   } // namespace t4
 } // namespace packs
 
+namespace fun_tmpl_call {
+  namespace match_func {
+    template <template <class> class TT> void f(TT<int>) {};
+    // old-note@-1 {{has different template parameters}}
+    template <class...> struct A {};
+    void test() { f(A<int>()); }
+    // old-error@-1 {{no matching function for call to 'f'}}
+  } // namespace match_func
+  namespace order_func_nonpack {
+    template <template <class> class TT> void f(TT<int>) {}
+    template <template <class...> class TT> void f(TT<int>) = delete;
+
+    template <class> struct A {};
+    void test() { f(A<int>()); }
+  } // namespace order_func_nonpack
+  namespace order_func_pack {
+    template <template <class> class TT> void f(TT<int>) = delete;
+    template <template <class...> class TT> void f(TT<int>) {}
+
+    template <class...> struct A {};
+    void test() { f(A<int>()); }
+  } // namespace order_func_pack
+  namespace match_enum {
+    enum A {};
+    template<template<A> class TT1> void f(TT1<{}>) {}
+    // old-note@-1 {{invalid explicitly-specified argument}}
+    template<int> struct B {};
+    template void f<B>(B<{}>);
+    // old-error@-1 {{does not refer to a function template}}
+  } // namespace match_enum
+  namespace match_method {
+    struct A {
+      template <template <class> class TT> void f(TT<int>) {};
+      // old-note@-1 {{has different template parameters}}
+    };
+    template <class...> struct B {};
+    void test() { A().f(B<int>()); }
+    // old-error@-1 {{no matching member function for call to 'f'}}
+  } // namespace match_method
+  namespace order_method_nonpack {
+    struct A {
+      template <template <class> class TT> void f(TT<int>) {}
+      template <template <class...> class TT> void f(TT<int>) = delete;
+    };
+    template <class> struct B {};
+    void test() { A().f(B<int>()); }
+  } // namespace order_method_nonpack
+  namespace order_method_pack {
+    struct A {
+      template <template <class> class TT> void f(TT<int>) = delete;
+      template <template <class...> class TT> void f(TT<int>) {}
+    };
+    template <class...> struct B {};
+    void test() { A().f(B<int>()); }
+  } // namespace order_method_pack
+  namespace match_conv {
+    struct A {
+      template <template <class> class TT> operator TT<int>() { return {}; }
+      // old-note@-1 {{different template parameters}}
+    };
+    template <class...> struct B {};
+    // old-note@-1 2{{not viable}}
+    void test() { B<int> b = A(); }
+    // old-error@-1 {{no viable conversion from 'A' to 'B<int>'}}
+  } // namespace match_conv
+  namespace order_conv_nonpack {
+    struct A {
+      template <template <class> class TT> operator TT<int>() { return {}; };
+      template <template <class...> class TT> operator TT<int>() = delete;
+    };
+    template <class> struct B {};
+    void test() { B<int> b = A(); }
+  } // namespace order_conv_nonpack
+  namespace order_conv_pack {
+    struct A {
+      template <template <class> class TT> operator TT<int>() = delete;
+      template <template <class...> class TT> operator TT<int>() { return {}; }
+    };
+    template <class...> struct B {};
+    void test() { B<int> b = A(); }
+  } // namespace order_conv_pack
+  namespace regression1 {
+    template <template <class, class...> class TT, class T1, class... T2s>
+    void f(TT<T1, T2s...>) {}
+    template <class> struct A {};
+    void test() { f(A<int>()); }
+  } // namespace regression1
+} // namespace fun_tmpl_packs
+
 namespace partial {
   namespace t1 {
     template<template<class... T1s> class TT1> struct A {};
 
     template<template<class T2> class TT2> struct A<TT2>;
-    // new-note@-1 {{template is declared here}}
 
     template<class... T3s> struct B;
     template struct A<B>;
-    // new-error@-1 {{explicit instantiation of undefined template}}
   } // namespace t1
   namespace t2 {
     template<template<class... T1s> class TT1> struct A;
@@ -542,8 +631,77 @@ namespace regression2 {
   template struct D<Matrix<double, 3>>;
 } // namespace regression2
 
-namespace regression3 {
-  template <template <auto...> class TT> struct A {};
-  template <auto, int> struct B;
-  template struct A<B>;
-} // namespace regression3
+namespace nttp_auto {
+  namespace t1 {
+    template <template <auto... Va> class TT> struct A {};
+    template <int Vi, short Vs> struct B;
+    template struct A<B>;
+  } // namespace t1
+  namespace t2 {
+    // FIXME: Shouldn't accept parameters after a parameter pack.
+    template<template<auto... Va1, auto Va2> class> struct A {};
+    // new-error@-1 {{deduced non-type template argument does not have the same type as the corresponding template parameter ('auto' vs 'int')}}
+    // expected-note@-2 {{previous template template parameter is here}}
+    template<int... Vi> struct B;
+    // new-note@-1 {{template parameter is declared here}}
+    // old-note@-2 {{too few template parameters}}
+    template struct A<B>;
+    // new-note@-1 {{different template parameters}}
+    // old-error@-2 {{different template parameters}}
+  } // namespace t2
+  namespace t3 {
+    // FIXME: Shouldn't accept parameters after a parameter pack.
+    template<template<auto... Va1, auto... Va2> class> struct A {};
+    // new-error@-1 {{deduced non-type template argument does not have the same type as the corresponding template parameter ('auto' vs 'int')}}
+    // new-note@-2 {{previous template template parameter is here}}
+    template<int... Vi> struct B;
+    // new-note@-1 {{template parameter is declared here}}
+    template struct A<B>;
+    // new-note@-1 {{different template parameters}}
+  } // namespace t3
+} // namespace nttp_auto
+
+namespace nttp_partial_order {
+  namespace t1 {
+    template<template<short> class TT1> void f(TT1<0>);
+    template<template<int>   class TT2> void f(TT2<0>) {}
+    template<int> struct B {};
+    template void f<B>(B<0>);
+  } // namespace t1
+  namespace t2 {
+    struct A {} a;
+    template<template<A&>       class TT1> void f(TT1<a>);
+    template<template<const A&> class TT2> void f(TT2<a>) {}
+    template<const A&> struct B {};
+    template void f<B>(B<a>);
+  } // namespace t2
+  namespace t3 {
+    enum A {};
+    template<template<A>   class TT1> void f(TT1<{}>);
+    template<template<int> class TT2> void f(TT2<{}>) {}
+    template<int> struct B {};
+    template void f<B>(B<{}>);
+  } // namespace t3
+  namespace t4 {
+    struct A {} a;
+    template<template<A*>       class TT1> void f(TT1<&a>);
+    template<template<const A*> class TT2> void f(TT2<&a>) {}
+    template<const A*> struct B {};
+    template void f<B>(B<&a>);
+  } // namespace t4
+  namespace t5 {
+    struct A { int m; };
+    template<template<int A::*>       class TT1> void f(TT1<&A::m>);
+    template<template<const int A::*> class TT2> void f(TT2<&A::m>) {}
+    template<const int A::*> struct B {};
+    template void f<B>(B<&A::m>);
+  } // namespace t5
+  namespace t6 {
+    struct A {};
+    using nullptr_t = decltype(nullptr);
+    template<template<nullptr_t> class TT2> void f(TT2<nullptr>);
+    template<template<A*>        class TT1> void f(TT1<nullptr>) {}
+    template<A*> struct B {};
+    template void f<B>(B<nullptr>);
+  } // namespace t6
+} // namespace nttp_partial_order

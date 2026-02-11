@@ -145,8 +145,18 @@ def BCLRIANDIMask : PatLeaf<(imm), [{
 }]>;
 
 def BCLRIANDIMaskLow : SDNodeXForm<imm, [{
-  return CurDAG->getSignedConstant((N->getZExtValue() & 0x7ff) | ~0x7ffull,
-                                   SDLoc(N), N->getValueType(0), /*isTarget=*/true);
+  return CurDAG->getSignedTargetConstant((N->getZExtValue() & 0x7ff) | ~0x7ffull,
+                                         SDLoc(N), N->getValueType(0));
+}]>;
+
+def SimmShiftRightBy2XForm : SDNodeXForm<imm, [{
+  return CurDAG->getSignedTargetConstant(N->getSExtValue() >> 2, SDLoc(N),
+                                         N->getValueType(0));
+}]>;
+
+def SimmShiftRightBy3XForm : SDNodeXForm<imm, [{
+  return CurDAG->getSignedTargetConstant(N->getSExtValue() >> 3, SDLoc(N),
+                                         N->getValueType(0));
 }]>;
 
 def CSImm12MulBy4 : PatLeaf<(imm), [{
@@ -155,7 +165,7 @@ def CSImm12MulBy4 : PatLeaf<(imm), [{
   int64_t C = N->getSExtValue();
   // Skip if C is simm12, an lui, or can be optimized by the PatLeaf AddiPair.
   return !isInt<13>(C) && !isShiftedInt<20, 12>(C) && isShiftedInt<12, 2>(C);
-}]>;
+}], SimmShiftRightBy2XForm>;
 
 def CSImm12MulBy8 : PatLeaf<(imm), [{
   if (!N->hasOneUse())
@@ -164,17 +174,7 @@ def CSImm12MulBy8 : PatLeaf<(imm), [{
   // Skip if C is simm12, an lui or can be optimized by the PatLeaf AddiPair or
   // CSImm12MulBy4.
   return !isInt<14>(C) && !isShiftedInt<20, 12>(C) && isShiftedInt<12, 3>(C);
-}]>;
-
-def SimmShiftRightBy2XForm : SDNodeXForm<imm, [{
-  return CurDAG->getSignedConstant(N->getSExtValue() >> 2, SDLoc(N),
-                                   N->getValueType(0), /*isTarget=*/true);
-}]>;
-
-def SimmShiftRightBy3XForm : SDNodeXForm<imm, [{
-  return CurDAG->getSignedConstant(N->getSExtValue() >> 3, SDLoc(N),
-                                   N->getValueType(0), /*isTarget=*/true);
-}]>;
+}], SimmShiftRightBy3XForm>;
 
 // Pattern to exclude simm12 immediates from matching, namely `non_imm12`.
 // GISel currently doesn't support PatFrag for leaf nodes, so `non_imm12`
@@ -188,8 +188,6 @@ class binop_with_non_imm12<SDPatternOperator binop>
   let PredicateCodeUsesOperands = 1;
   let GISelPredicateCode = [{
     const MachineOperand &ImmOp = *Operands[1];
-    const MachineFunction &MF = *MI.getParent()->getParent();
-    const MachineRegisterInfo &MRI = MF.getRegInfo();
 
     if (ImmOp.isReg() && ImmOp.getReg())
       if (auto Val = getIConstantVRegValWithLookThrough(ImmOp.getReg(), MRI)) {
@@ -215,10 +213,23 @@ def Shifted32OnesMask : IntImmLeaf<XLenVT, [{
 def sh1add_op : ComplexPattern<XLenVT, 1, "selectSHXADDOp<1>", [], [], 6>;
 def sh2add_op : ComplexPattern<XLenVT, 1, "selectSHXADDOp<2>", [], [], 6>;
 def sh3add_op : ComplexPattern<XLenVT, 1, "selectSHXADDOp<3>", [], [], 6>;
+def gi_sh1add_op : GIComplexOperandMatcher<s32, "selectSHXADDOp<1>">,
+                   GIComplexPatternEquiv<sh1add_op>;
+def gi_sh2add_op : GIComplexOperandMatcher<s32, "selectSHXADDOp<2>">,
+                   GIComplexPatternEquiv<sh2add_op>;
+def gi_sh3add_op : GIComplexOperandMatcher<s32, "selectSHXADDOp<3>">,
+                   GIComplexPatternEquiv<sh3add_op>;
+
 
 def sh1add_uw_op : ComplexPattern<XLenVT, 1, "selectSHXADD_UWOp<1>", [], [], 6>;
 def sh2add_uw_op : ComplexPattern<XLenVT, 1, "selectSHXADD_UWOp<2>", [], [], 6>;
 def sh3add_uw_op : ComplexPattern<XLenVT, 1, "selectSHXADD_UWOp<3>", [], [], 6>;
+def gi_sh1add_uw_op : GIComplexOperandMatcher<s32, "selectSHXADD_UWOp<1>">,
+                      GIComplexPatternEquiv<sh1add_uw_op>;
+def gi_sh2add_uw_op : GIComplexOperandMatcher<s32, "selectSHXADD_UWOp<2>">,
+                      GIComplexPatternEquiv<sh2add_uw_op>;
+def gi_sh3add_uw_op : GIComplexOperandMatcher<s32, "selectSHXADD_UWOp<3>">,
+                      GIComplexPatternEquiv<sh3add_uw_op>;
 
 //===----------------------------------------------------------------------===//
 // Instruction class templates
@@ -231,12 +242,6 @@ class RVBUnaryR<bits<7> funct7, bits<3> funct3,
               opcodestr, "$rd, $rs1"> {
   let rs2 = 0;
 }
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class RVBUnary<bits<12> imm12, bits<3> funct3,
-               RISCVOpcode opcode, string opcodestr>
-    : RVInstIUnary<imm12, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
-                   opcodestr, "$rd, $rs1">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class RVBShift_ri<bits<5> imm11_7, bits<3> funct3, RISCVOpcode opcode,
@@ -333,27 +338,27 @@ def XPERM8 : ALU_rr<0b0010100, 0b100, "xperm8">,
 } // Predicates = [HasStdExtZbkx]
 
 let Predicates = [HasStdExtZbb], IsSignExtendingOpW = 1 in {
-def CLZ  : RVBUnary<0b011000000000, 0b001, OPC_OP_IMM, "clz">,
+def CLZ  : Unary_r<0b011000000000, 0b001, "clz">,
            Sched<[WriteCLZ, ReadCLZ]>;
-def CTZ  : RVBUnary<0b011000000001, 0b001, OPC_OP_IMM, "ctz">,
+def CTZ  : Unary_r<0b011000000001, 0b001, "ctz">,
            Sched<[WriteCTZ, ReadCTZ]>;
-def CPOP : RVBUnary<0b011000000010, 0b001, OPC_OP_IMM, "cpop">,
+def CPOP : Unary_r<0b011000000010, 0b001, "cpop">,
            Sched<[WriteCPOP, ReadCPOP]>;
 } // Predicates = [HasStdExtZbb]
 
 let Predicates = [HasStdExtZbb, IsRV64], IsSignExtendingOpW = 1 in {
-def CLZW   : RVBUnary<0b011000000000, 0b001, OPC_OP_IMM_32, "clzw">,
-             Sched<[WriteCLZ32, ReadCLZ32]>;
-def CTZW   : RVBUnary<0b011000000001, 0b001, OPC_OP_IMM_32, "ctzw">,
-             Sched<[WriteCTZ32, ReadCTZ32]>;
-def CPOPW  : RVBUnary<0b011000000010, 0b001, OPC_OP_IMM_32, "cpopw">,
-             Sched<[WriteCPOP32, ReadCPOP32]>;
+def CLZW  : UnaryW_r<0b011000000000, 0b001, "clzw">,
+            Sched<[WriteCLZ32, ReadCLZ32]>;
+def CTZW  : UnaryW_r<0b011000000001, 0b001, "ctzw">,
+            Sched<[WriteCTZ32, ReadCTZ32]>;
+def CPOPW : UnaryW_r<0b011000000010, 0b001, "cpopw">,
+            Sched<[WriteCPOP32, ReadCPOP32]>;
 } // Predicates = [HasStdExtZbb, IsRV64]
 
 let Predicates = [HasStdExtZbb], IsSignExtendingOpW = 1 in {
-def SEXT_B : RVBUnary<0b011000000100, 0b001, OPC_OP_IMM, "sext.b">,
+def SEXT_B : Unary_r<0b011000000100, 0b001, "sext.b">,
              Sched<[WriteIALU, ReadIALU]>;
-def SEXT_H : RVBUnary<0b011000000101, 0b001, OPC_OP_IMM, "sext.h">,
+def SEXT_H : Unary_r<0b011000000101, 0b001, "sext.h">,
              Sched<[WriteIALU, ReadIALU]>;
 } // Predicates = [HasStdExtZbb]
 
@@ -403,28 +408,28 @@ def ZEXT_H_RV64 : RVBUnaryR<0b0000100, 0b100, OPC_OP_32, "zext.h">,
 } // Predicates = [HasStdExtZbb, IsRV64]
 
 let Predicates = [HasStdExtZbbOrZbkb, IsRV32] in {
-def REV8_RV32 : RVBUnary<0b011010011000, 0b101, OPC_OP_IMM, "rev8">,
+def REV8_RV32 : Unary_r<0b011010011000, 0b101, "rev8">,
                 Sched<[WriteREV8, ReadREV8]>;
 } // Predicates = [HasStdExtZbbOrZbkb, IsRV32]
 
 let Predicates = [HasStdExtZbbOrZbkb, IsRV64] in {
-def REV8_RV64 : RVBUnary<0b011010111000, 0b101, OPC_OP_IMM, "rev8">,
+def REV8_RV64 : Unary_r<0b011010111000, 0b101, "rev8">,
                 Sched<[WriteREV8, ReadREV8]>;
 } // Predicates = [HasStdExtZbbOrZbkb, IsRV64]
 
 let Predicates = [HasStdExtZbb] in {
-def ORC_B : RVBUnary<0b001010000111, 0b101, OPC_OP_IMM, "orc.b">,
+def ORC_B : Unary_r<0b001010000111, 0b101, "orc.b">,
             Sched<[WriteORCB, ReadORCB]>;
 } // Predicates = [HasStdExtZbb]
 
 let Predicates = [HasStdExtZbkb] in
-def BREV8 : RVBUnary<0b011010000111, 0b101, OPC_OP_IMM, "brev8">,
+def BREV8 : Unary_r<0b011010000111, 0b101, "brev8">,
             Sched<[WriteBREV8, ReadBREV8]>;
 
 let Predicates = [HasStdExtZbkb, IsRV32] in {
-def ZIP_RV32   : RVBUnary<0b000010001111, 0b001, OPC_OP_IMM, "zip">,
+def ZIP_RV32   : Unary_r<0b000010001111, 0b001, "zip">,
                  Sched<[WriteZIP, ReadZIP]>;
-def UNZIP_RV32 : RVBUnary<0b000010001111, 0b101, OPC_OP_IMM, "unzip">,
+def UNZIP_RV32 : Unary_r<0b000010001111, 0b101, "unzip">,
                  Sched<[WriteZIP, ReadZIP]>;
 } // Predicates = [HasStdExtZbkb, IsRV32]
 
@@ -470,10 +475,16 @@ def : InstAlias<"zext.h $rd, $rs", (PACKW GPR:$rd, GPR:$rs, X0)>;
 // Codegen patterns
 //===----------------------------------------------------------------------===//
 
+def invLogicImm : ComplexPattern<XLenVT, 1, "selectInvLogicImm", [], [], 0>;
+
 let Predicates = [HasStdExtZbbOrZbkb] in {
 def : Pat<(XLenVT (and GPR:$rs1, (not GPR:$rs2))), (ANDN GPR:$rs1, GPR:$rs2)>;
 def : Pat<(XLenVT (or  GPR:$rs1, (not GPR:$rs2))), (ORN  GPR:$rs1, GPR:$rs2)>;
 def : Pat<(XLenVT (xor GPR:$rs1, (not GPR:$rs2))), (XNOR GPR:$rs1, GPR:$rs2)>;
+
+def : Pat<(XLenVT (and GPR:$rs1, invLogicImm:$rs2)), (ANDN GPR:$rs1, invLogicImm:$rs2)>;
+def : Pat<(XLenVT (or  GPR:$rs1, invLogicImm:$rs2)), (ORN  GPR:$rs1, invLogicImm:$rs2)>;
+def : Pat<(XLenVT (xor GPR:$rs1, invLogicImm:$rs2)), (XNOR GPR:$rs1, invLogicImm:$rs2)>;
 } // Predicates = [HasStdExtZbbOrZbkb]
 
 let Predicates = [HasStdExtZbbOrZbkb] in {
@@ -602,7 +613,7 @@ def : Pat<(and (or (shl GPR:$rs2, (XLenVT 8)),
           (PACKH GPR:$rs1, GPR:$rs2)>;
 def : Pat<(or (shl (zexti8 (XLenVT GPR:$rs2)), (XLenVT 24)),
               (shl (zexti8 (XLenVT GPR:$rs1)), (XLenVT 16))),
-          (SLLI (PACKH GPR:$rs1, GPR:$rs2), (XLenVT 16))>;
+          (SLLI (XLenVT (PACKH GPR:$rs1, GPR:$rs2)), (XLenVT 16))>;
 
 def : Pat<(binop_allhusers<or> (shl GPR:$rs2, (XLenVT 8)),
                                (zexti8 (XLenVT GPR:$rs1))),
@@ -618,7 +629,8 @@ def : Pat<(or (or
               (or
                   (shl (zexti8 (XLenVT GPR:$op0rs2)), (XLenVT 8)),
                   (zexti8 (XLenVT GPR:$op0rs1)))),
-          (PACK (PACKH GPR:$op0rs1, GPR:$op0rs2), (PACKH GPR:$op1rs1, GPR:$op1rs2))>;
+          (PACK (XLenVT (PACKH GPR:$op0rs1, GPR:$op0rs2)),
+                (XLenVT (PACKH GPR:$op1rs1, GPR:$op1rs2)))>;
 }
 
 let Predicates = [HasStdExtZbkb, IsRV64] in {
@@ -659,10 +671,10 @@ foreach i = {1,2,3} in {
 }
 
 def : Pat<(add_like (XLenVT GPR:$r), CSImm12MulBy4:$i),
-          (SH2ADD (XLenVT (ADDI (XLenVT X0), (SimmShiftRightBy2XForm CSImm12MulBy4:$i))),
+          (SH2ADD (XLenVT (ADDI (XLenVT X0), CSImm12MulBy4:$i)),
                   GPR:$r)>;
 def : Pat<(add_like (XLenVT GPR:$r), CSImm12MulBy8:$i),
-          (SH3ADD (XLenVT (ADDI (XLenVT X0), (SimmShiftRightBy3XForm CSImm12MulBy8:$i))),
+          (SH3ADD (XLenVT (ADDI (XLenVT X0), CSImm12MulBy8:$i)),
                   GPR:$r)>;
 
 } // Predicates = [HasStdExtZba]

@@ -389,6 +389,7 @@ sphinx==9.1.0 \
     #   recommonmark
     #   sphinx-automodapi
     #   sphinx-basic-ng
+    #   sphinx-reredirects
     #   sphinxcontrib-devhelp
     #   sphinxcontrib-htmlhelp
     #   sphinxcontrib-qthelp
@@ -409,9 +410,13 @@ sphinx-markdown-tables==0.0.17 \
     --hash=sha256:2bd0c30779653e4dd120300cbd9ca412c480738cc2241f6dea477a883f299e04 \
     --hash=sha256:6bc6d3d400eaccfeebd288446bc08dd83083367c58b85d40fe6c12d77ef592f1
     # via -r requirements.txt
-sphinxcontrib-applehelp==2.0.0 \
-    --hash=sha256:2f29ef331735ce958efa4734873f084941970894c6090408b079c61b2e1c06d1 \
-    --hash=sha256:4cd3f0ec4ac5dd9c17ec65e9ab272c9b867ea77425228e68ecf08d6b28ddbdb5
+sphinx-reredirects==0.1.2 \
+    --hash=sha256:3a22161771aadd448bb608a4fe7277252182a337af53c18372b7104531d71489 \
+    --hash=sha256:a0e7213304759b01edc22f032f1715a1c61176fc8f167164e7a52b9feec9ac64
+    # via -r requirements.txt
+sphinxcontrib-applehelp==1.0.8 \
+    --hash=sha256:c40a4f96f3776c4393d933412053962fac2b84f4c99a7982ba42e09576a70619 \
+    --hash=sha256:cb61eb0ec1b61f349e5cc36b2028e9e7ca765be05e49641c97241274753067b4
     # via
     #   -r requirements.txt
     #   sphinx

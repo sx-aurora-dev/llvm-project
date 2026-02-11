@@ -317,7 +317,4 @@ void VE::writePlt(uint8_t *buf, const Symbol & sym,
   relocateNoSym(buf + 6 * 8, R_VE_PC_LO32, -(pltEntryOff + 6 * 8));
 }
 
-TargetInfo *elf::getVETargetInfo(Ctx &ctx) {
-  static VE t(ctx);
-  return &t;
-}
+void elf::setVETargetInfo(Ctx &ctx) { ctx.target.reset(new VE(ctx)); }

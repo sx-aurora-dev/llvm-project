@@ -10,7 +10,6 @@
 #include "Boolean.h"
 #include "FixedPoint.h"
 #include "Floating.h"
-#include "FunctionPointer.h"
 #include "IntegralAP.h"
 #include "MemberPointer.h"
 #include "Pointer.h"
@@ -411,8 +410,16 @@ QualType Descriptor::getElemQualType() const {
   QualType T = getType();
   if (T->isPointerOrReferenceType())
     return T->getPointeeType();
-  if (const auto *AT = T->getAsArrayTypeUnsafe())
+  if (const auto *AT = T->getAsArrayTypeUnsafe()) {
+    // For primitive arrays, we don't save a QualType at all,
+    // just a PrimType. Try to figure out the QualType here.
+    if (isPrimitiveArray()) {
+      while (T->isArrayType())
+        T = T->getAsArrayTypeUnsafe()->getElementType();
+      return T;
+    }
     return AT->getElementType();
+  }
   if (const auto *CT = T->getAs<ComplexType>())
     return CT->getElementType();
   if (const auto *CT = T->getAs<VectorType>())
@@ -421,17 +428,17 @@ QualType Descriptor::getElemQualType() const {
 }
 
 SourceLocation Descriptor::getLocation() const {
-  if (auto *D = Source.dyn_cast<const Decl *>())
+  if (auto *D = dyn_cast<const Decl *>(Source))
     return D->getLocation();
-  if (auto *E = Source.dyn_cast<const Expr *>())
+  if (auto *E = dyn_cast<const Expr *>(Source))
     return E->getExprLoc();
   llvm_unreachable("Invalid descriptor type");
 }
 
 SourceInfo Descriptor::getLoc() const {
-  if (const auto *D = Source.dyn_cast<const Decl *>())
+  if (const auto *D = dyn_cast<const Decl *>(Source))
     return SourceInfo(D);
-  if (const auto *E = Source.dyn_cast<const Expr *>())
+  if (const auto *E = dyn_cast<const Expr *>(Source))
     return SourceInfo(E);
   llvm_unreachable("Invalid descriptor type");
 }
