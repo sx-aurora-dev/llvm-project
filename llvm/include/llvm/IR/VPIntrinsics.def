@@ -129,20 +129,9 @@
 #define VP_PROPERTY_MEMOP(POINTERPOS, DATAPOS)
 #endif
 
-// A property to infer VP unary-op SDNode opcodes automatically.
-#ifndef VP_PROPERTY_UNARYOP
-#define VP_PROPERTY_UNARYOP
-#endif
-
-
 // A property to infer VP binary-op SDNode opcodes automatically.
 #ifndef VP_PROPERTY_BINARYOP
 #define VP_PROPERTY_BINARYOP
-#endif
-
-// A property to infer VP ternary-op SDNode opcodes automatically.
-#ifndef VP_PROPERTY_TERNARYOP
-#define VP_PROPERTY_TERNARYOP
 #endif
 
 // A property to infer VP type casts automatically.
@@ -258,7 +247,6 @@ END_REGISTER_VP(vp_bitreverse, VP_BITREVERSE)
 // llvm.vp.ctpop(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ctpop, 1, 2, VP_CTPOP, -1)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ctpop)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_FUNCTIONAL_SDOPC(CTPOP)
 END_REGISTER_VP(vp_ctpop, VP_CTPOP)
 
@@ -375,7 +363,6 @@ END_REGISTER_VP(vp_fabs, VP_FABS)
 
 // llvm.vp.sqrt(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_sqrt, 1, 2, VP_SQRT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_sqrt)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(sqrt)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FSQRT)
@@ -434,7 +421,6 @@ END_REGISTER_VP(vp_maximum, VP_FMAXIMUM)
 
 // llvm.vp.ceil(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_ceil, 1, 2, VP_FCEIL, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_ceil)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(ceil)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FCEIL)
@@ -442,7 +428,6 @@ END_REGISTER_VP(vp_ceil, VP_FCEIL)
 
 // llvm.vp.floor(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_floor, 1, 2, VP_FFLOOR, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_floor)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(floor)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FFLOOR)
@@ -450,7 +435,6 @@ END_REGISTER_VP(vp_floor, VP_FFLOOR)
 
 // llvm.vp.round(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_round, 1, 2, VP_FROUND, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(0, 1, experimental_constrained_round)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(round)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FROUND)
@@ -470,7 +454,6 @@ END_REGISTER_VP(vp_roundtozero, VP_FROUNDTOZERO)
 
 // llvm.vp.rint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_rint, 1, 2, VP_FRINT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_rint)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(rint)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FRINT)
@@ -478,7 +461,6 @@ END_REGISTER_VP(vp_rint, VP_FRINT)
 
 // llvm.vp.nearbyint(x,mask,vlen)
 BEGIN_REGISTER_VP(vp_nearbyint, 1, 2, VP_FNEARBYINT, -1)
-VP_PROPERTY_UNARYOP
 VP_PROPERTY_CONSTRAINEDFP(1, 1, experimental_constrained_nearbyint)
 VP_PROPERTY_FUNCTIONAL_INTRINSIC(nearbyint)
 VP_PROPERTY_FUNCTIONAL_SDOPC(FNEARBYINT)
@@ -825,9 +807,7 @@ END_REGISTER_VP(experimental_vp_splat, EXPERIMENTAL_VP_SPLAT)
 #undef END_REGISTER_VP_INTRINSIC
 #undef END_REGISTER_VP_SDNODE
 #undef HELPER_MAP_VPID_TO_VPSD
-#undef VP_PROPERTY_UNARYOP
 #undef VP_PROPERTY_BINARYOP
-#undef VP_PROPERTY_TERNARYOP
 #undef VP_PROPERTY_CASTOP
 #undef VP_PROPERTY_CONSTRAINEDFP
 #undef VP_PROPERTY_FUNCTIONAL_INTRINSIC

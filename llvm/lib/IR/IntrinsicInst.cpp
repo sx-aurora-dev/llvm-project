@@ -765,58 +765,7 @@ bool VPIntrinsic::isConstrainedOp() const {
           getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
 }
 
-bool VPIntrinsic::isUnaryOp() const { return IsUnaryVPOp(getIntrinsicID()); }
 
-bool VPIntrinsic::IsUnaryVPOp(Intrinsic::ID VPID) {
-  bool IsUnary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_UNARYOP IsUnary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsUnary;
-}
-
-bool VPIntrinsic::isBinaryOp() const { return IsBinaryVPOp(getIntrinsicID()); }
-
-bool VPIntrinsic::IsBinaryVPOp(Intrinsic::ID VPID) {
-  bool IsBinary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_BINARYOP IsBinary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsBinary;
-}
-
-bool VPIntrinsic::isTernaryOp() const {
-  return IsTernaryVPOp(getIntrinsicID());
-}
-
-bool VPIntrinsic::IsTernaryVPOp(Intrinsic::ID VPID) {
-  bool IsTernary = false;
-  switch (VPID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_TERNARYOP IsTernary = true;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return IsTernary;
-}
 
 bool
 VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {

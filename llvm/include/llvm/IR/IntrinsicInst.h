@@ -606,13 +606,6 @@ public:
   /// \return Whether the vector length param can be ignored.
   bool canIgnoreVectorLengthParam() const;
 
-  bool isUnaryOp() const;
-  static bool IsUnaryVPOp(Intrinsic::ID);
-  bool isBinaryOp() const;
-  static bool IsBinaryVPOp(Intrinsic::ID);
-  bool isTernaryOp() const;
-  static bool IsTernaryVPOp(Intrinsic::ID);
-
   // Contrained fp-math
   // whether this is an fp op with non-standard rounding or exception
   // behavior.
