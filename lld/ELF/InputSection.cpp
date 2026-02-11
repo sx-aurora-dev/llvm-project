@@ -77,7 +77,7 @@ InputSectionBase::InputSectionBase(InputFile *file, uint64_t flags,
 // SHF_INFO_LINK and SHF_GROUP are normally resolved and not copied to the
 // output section. However, for relocatable linking without
 // --force-group-allocation, the SHF_GROUP flag and section groups are retained.
-static uint64_t getFlags(uint64_t flags) {
+static uint64_t getFlags(Ctx &ctx, uint64_t flags) {
   flags &= ~(uint64_t)SHF_INFO_LINK;
   if (ctx.arg.resolveGroups)
     flags &= ~(uint64_t)SHF_GROUP;
@@ -88,7 +88,7 @@ template <class ELFT>
 InputSectionBase::InputSectionBase(ObjFile<ELFT> &file,
                                    const typename ELFT::Shdr &hdr,
                                    StringRef name, Kind sectionKind)
-    : InputSectionBase(&file, getFlags(hdr.sh_flags), hdr.sh_type,
+    : InputSectionBase(&file, getFlags(ctx, hdr.sh_flags), hdr.sh_type,
                        hdr.sh_entsize, hdr.sh_link, hdr.sh_info,
                        hdr.sh_addralign, getSectionContents(file, hdr), name,
                        sectionKind) {
@@ -101,7 +101,7 @@ InputSectionBase::InputSectionBase(ObjFile<ELFT> &file,
 
 size_t InputSectionBase::getSize() const {
   if (auto *s = dyn_cast<SyntheticSection>(this))
-    return s->getSize();
+    return s->getSize(ctx);
   return size - bytesDropped;
 }
 
@@ -709,7 +709,7 @@ static int64_t getTlsTpOffset(const Symbol &s) {
     // https://github.com/veos-sxarr-NEC/gdb-ve/blob/master/bfd/elf64-ve.c#L2512.
     // This TCB_OFFSET is defined as tcbhead_t at
     // https://github.com/veos-sxarr-NEC/glibc-ve/blob/master/sysdeps/ve/nptl/tls.h#L60-L68.
-    return s.getVA(0) + config->wordsize * 6 +
+    return s.getVA(0) + ctx.arg.wordsize * 6 +
            (tls->p_vaddr & (tls->p_align - 1));
 
     // Variant 2.
@@ -901,7 +901,7 @@ uint64_t InputSectionBase::getRelocTargetVA(const InputFile *file, RelType type,
     return symVA - p + getPPC64GlobalEntryToLocalEntryOffset(sym.stOther);
   }
   case R_PPC64_TOCBASE:
-    return getPPC64TocBase() + a;
+    return getPPC64TocBase(ctx) + a;
   case R_RELAX_GOT_PC:
   case R_PPC64_RELAX_GOT_PC:
     return sym.getVA(a) - p;

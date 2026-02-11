@@ -62,6 +62,10 @@ class RuntimeDyldELF : public RuntimeDyldImpl {
                            uint64_t Value, uint32_t Type, int64_t Addend,
                            uint64_t SymOffset);
 
+  void resolveRISCVRelocation(const SectionEntry &Section, uint64_t Offset,
+                              uint64_t Value, uint32_t Type, int64_t Addend,
+                              SID SectionID);
+
   unsigned getMaxStubSize() const override {
     if (Arch == Triple::aarch64 || Arch == Triple::aarch64_be)
       return 20; // movz; movk; movk; movk; br
@@ -150,6 +154,9 @@ private:
 
   // *HI16 relocations will be added for resolving when we find matching
   // *LO16 part. (Mips specific)
+  //
+  // *HI20 relocations will be added for resolving when we find matching
+  // *LO12 part. (RISC-V specific)
   SmallVector<std::pair<RelocationValueRef, RelocationEntry>, 8> PendingRelocs;
 
   // When a module is loaded we save the SectionID of the EH frame section
