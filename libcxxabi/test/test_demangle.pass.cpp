@@ -30024,6 +30024,9 @@ const char* cases[][2] =
     // See https://github.com/itanium-cxx-abi/cxx-abi/issues/165.
     {"_ZN1C1fIiEEvDTtlNS_UlT_TL0__E_EEE", "void C::f<int>(decltype(C::'lambda'(int, auto){}))"},
 
+    // See https://github.com/llvm/llvm-project/issues/108009.
+    {"_ZN3FooIiE6methodIb3BarEEvT0_IT_ES3_IiE", "void Foo<int>::method<bool, Bar>(Bar<bool>, Bar<int>)"},
+
     // C++20 class type non-type template parameters:
     {"_Z1fIXtl1BLPi0ELi1EEEEvv", "void f<B{(int*)0, 1}>()"},
     {"_Z1fIXtl1BLPi32EEEEvv", "void f<B{(int*)32}>()"},
@@ -30037,7 +30040,32 @@ const char* cases[][2] =
     // FIXME: This is not valid pointer-to-member syntax.
     {"_Z1fIXtl1DmcM7DerivedKiadL_ZN11MoreDerived1zEEn8EEEEvv", "void f<D{(int const Derived::*)(&MoreDerived::z)}>()"},
     {"_Z1fIXtl1Edi1nLi42EEEEvv", "void f<E{.n = 42}>()"},
-    {"_ZTAXtl1StlA32_cLc104ELc101ELc108ELc108ELc111ELc32ELc119ELc111ELc114ELc108ELc100EEEE", "template parameter object for S{char [32]{(char)104, (char)101, (char)108, (char)108, (char)111, (char)32, (char)119, (char)111, (char)114, (char)108, (char)100}}"},
+    // Arrays of char are formatted as string literals. Escape sequences are
+    // used for non-printable ASCII characters.
+    // FIXME: We should do the same for arrays of charN_t and wchar_t.
+    {"_ZTAXtl1StlA32_cLc104ELc101ELc108ELc108ELc111ELc32ELc119ELc111ELc114ELc108ELc100EEEE", "template parameter object for S{\"hello world\"}"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc108ELc108ELc111EEEEEvv", "void f<Hello{\"Hello\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc108ELc111EEEEEvv", "void f<Hello{\"Helo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc0ELc108ELc111EEEEEvv", "void f<Hello{\"He\\0lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc1ELc108ELc111EEEEEvv", "void f<Hello{\"He\\1lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc6ELc108ELc111EEEEEvv", "void f<Hello{\"He\\6lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc7ELc108ELc111EEEEEvv", "void f<Hello{\"He\\alo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc8ELc108ELc111EEEEEvv", "void f<Hello{\"He\\blo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc9ELc108ELc111EEEEEvv", "void f<Hello{\"He\\tlo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc10ELc108ELc111EEEEEvv", "void f<Hello{\"He\\nlo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc11ELc108ELc111EEEEEvv", "void f<Hello{\"He\\vlo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc12ELc108ELc111EEEEEvv", "void f<Hello{\"He\\flo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc13ELc108ELc111EEEEEvv", "void f<Hello{\"He\\rlo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc14ELc108ELc111EEEEEvv", "void f<Hello{\"He\\xElo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc15ELc108ELc111EEEEEvv", "void f<Hello{\"He\\xFlo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc16ELc108ELc111EEEEEvv", "void f<Hello{\"He\\x10lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc34ELc108ELc111EEEEEvv", "void f<Hello{\"He\\\"lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc72ELc101ELc92ELc108ELc111EEEEEvv", "void f<Hello{\"He\\\\lo\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc15ELc101ELc108ELc108ELc111EEEEEvv", "void f<Hello{\"\\xF\"\"ello\"}>()"},
+    {"_Z1fIXtl5HellotlA6_cLc240ELc159ELc152ELc138ELc33EEEEEvv", "void f<Hello{\"😊!\"}>()"},
+    // Even non-null-terminated strings get this treatment, even though this
+    // isn't valid C++ syntax to initialize an array of char.
+    {"_Z1fIXtl5HellotlA5_cLc72ELc101ELc108ELc108ELc111EEEEEvv", "void f<Hello{\"Hello\"}>()"},
 
     // FIXME: This is wrong; the S2_ backref should expand to OT_ and then to
     // "double&&". But we can't cope with a substitution that represents a
