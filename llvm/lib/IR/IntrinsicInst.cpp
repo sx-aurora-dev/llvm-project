@@ -31,7 +31,6 @@
 #include "llvm/IR/Statepoint.h"
 #include <optional>
 
-#include <map>
 using namespace llvm;
 
 bool IntrinsicInst::mayLowerToFunctionCall(Intrinsic::ID IID) {
@@ -665,27 +664,6 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
   return false;
 }
 
-std::optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
-  auto Bundle = this->getOperandBundle("cfp-round");
-  if (!Bundle)
-    return std::nullopt;
-  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
-  if (!MD || !isa<MDString>(MD))
-    return std::nullopt;
-  return convertStrToRoundingMode(cast<MDString>(MD)->getString());
-}
-
-std::optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
-  auto Bundle = this->getOperandBundle("cfp-except");
-  if (!Bundle)
-    return std::nullopt;
-  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
-  if (!MD || !isa<MDString>(MD))
-    return std::nullopt;
-
-  return convertStrToExceptionBehavior(cast<MDString>(MD)->getString());
-}
-
 Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
                                                Type *ReturnType,
                                                ArrayRef<Value *> Params) {
@@ -756,46 +734,6 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
   }
   assert(VPFunc && "Could not declare VP intrinsic");
   return VPFunc;
-}
-
-bool VPIntrinsic::isConstrainedOp() const {
-  return (getRoundingMode() != std::nullopt &&
-          getRoundingMode() != RoundingMode::NearestTiesToEven) ||
-         (getExceptionBehavior() != std::nullopt &&
-          getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
-}
-
-
-
-bool
-VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
-  std::optional<bool> HasExcept;
-  switch (IntrinsicID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasExcept = (bool) HASEXCEPT;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return HasExcept && HasExcept.value();
-}
-
-bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
-  std::optional<bool> HasRound;
-  switch (IntrinsicID) {
-  default:
-    return false;
-
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define VP_PROPERTY_CONSTRAINEDFP(HASROUND, HASEXCEPT, ...) HasRound = (bool) HASROUND;
-#define END_REGISTER_VP_INTRINSIC(VPID) break;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-
-  return HasRound && HasRound.value();
 }
 
 bool VPReductionIntrinsic::isVPReduction(Intrinsic::ID ID) {

@@ -8624,9 +8624,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
 
   switch (Opcode) {
   default: {
-    // Transfer FMF and exception flags.
     SDNodeFlags SDFlags;
-    SDFlags.setNoFPExcept(!VPIntrin.isConstrainedOp());
     if (auto *FPMO = dyn_cast<FPMathOperator>(&VPIntrin))
       SDFlags.copyFMF(*FPMO);
     SDValue Result = DAG.getNode(Opcode, DL, VTs, OpValues, SDFlags);
