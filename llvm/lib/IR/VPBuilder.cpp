@@ -88,7 +88,7 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   Type *VecRetTy = ScaRetTy->isVoidTy() ? ScaRetTy : &getVectorType(*ScaRetTy);
   auto &M = *Builder.GetInsertBlock()->getParent()->getParent();
   auto VPDecl =
-      VPIntrinsic::getDeclarationForParams(&M, VPID, VecRetTy, VecParams);
+      VPIntrinsic::getOrInsertDeclarationForParams(&M, VPID, VecRetTy, VecParams);
 
   // Prepare constraint fp params
   // FIXME: \p Inst could also be just another VP intrinsic.
@@ -149,7 +149,7 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
 Value &VPBuilder::CreateContiguousLoad(Type *ReturnTy,
                                        Value &ElemPointer,
                                        MaybeAlign AlignOpt) {
-  auto *LoadFunc = VPIntrinsic::getDeclarationForParams(
+  auto *LoadFunc = VPIntrinsic::getOrInsertDeclarationForParams(
       &getModule(), Intrinsic::vp_load, ReturnTy, {&ElemPointer});
   ShortValueVec Args{&ElemPointer, &RequestPred(), &RequestEVL()};
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
@@ -182,7 +182,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
 }
 
 Value &VPBuilder::CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignOpt) {
-  auto *GatherFunc = VPIntrinsic::getDeclarationForParams(
+  auto *GatherFunc = VPIntrinsic::getOrInsertDeclarationForParams(
       &getModule(), Intrinsic::vp_gather, RetTy, {&PointerVec});
 
   ShortValueVec Args{&PointerVec, &RequestPred(), &RequestEVL()};
@@ -200,7 +200,7 @@ Value &VPBuilder::CreateGather(Type *RetTy, Value &PointerVec, MaybeAlign AlignO
 }
 
 Value *VPBuilder::CreateVectorShift(Value *SrcVal, Value *Amount, Twine Name) {
-  auto D = VPIntrinsic::getDeclarationForParams(
+  auto D = VPIntrinsic::getOrInsertDeclarationForParams(
       &getModule(), Intrinsic::vp_vshift, SrcVal->getType(), {SrcVal, Amount});
   return Builder.CreateCall(D, {SrcVal, Amount, &RequestPred(), &RequestEVL()},
                             Name);

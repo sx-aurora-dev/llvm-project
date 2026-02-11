@@ -14,6 +14,7 @@
 #include "VETargetMachine.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/KnownBits.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "ve-isel"

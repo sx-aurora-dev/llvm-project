@@ -3646,7 +3646,7 @@ SDValue VETargetLowering::combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   // Check all use of this SETCC.
   for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
        ++UI) {
-    SDNode *User = *UI;
+    SDNode *User = UI->getUser();
 
     // Make sure that we're not going to promote SETCC for SELECT or BRCOND
     // or BR_CC.
@@ -4014,9 +4014,9 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
 }
 
 // Override to enable LOAD_STACK_GUARD lowering on Linux.
-bool VETargetLowering::useLoadStackGuardNode() const {
+bool VETargetLowering::useLoadStackGuardNode(const Module &M) const {
   if (!Subtarget->isTargetLinux())
-    return TargetLowering::useLoadStackGuardNode();
+    return TargetLowering::useLoadStackGuardNode(M);
   return true;
 }
 

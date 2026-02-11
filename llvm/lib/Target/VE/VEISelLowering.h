@@ -591,7 +591,7 @@ public:
   /// } Inline Assembly
 
   /// Override to support customized stack guard loading.
-  bool useLoadStackGuardNode() const override;
+  bool useLoadStackGuardNode(const Module &M) const override;
   void insertSSPDeclarations(Module &M) const override;
 
   SDValue getPICJumpTableRelocBase(SDValue Table,
