@@ -22,7 +22,7 @@ using namespace lld::elf;
 namespace {
 class VE final : public TargetInfo {
 public:
-  VE();
+  VE(Ctx &);
   RelType getDynRel(RelType type) const override;
   RelExpr getRelExpr(RelType type, const Symbol &s,
                      const uint8_t *loc) const override;
@@ -39,7 +39,7 @@ public:
 };
 } // namespace
 
-VE::VE() {
+VE::VE(Ctx &ctx) : TargetInfo(ctx) {
   copyRel = R_VE_COPY;
   gotRel = R_VE_GLOB_DAT;
   pltRel = R_VE_JUMP_SLOT;
@@ -317,7 +317,7 @@ void VE::writePlt(uint8_t *buf, const Symbol & sym,
   relocateNoSym(buf + 6 * 8, R_VE_PC_LO32, -(pltEntryOff + 6 * 8));
 }
 
-TargetInfo *elf::getVETargetInfo() {
-  static VE target;
-  return &target;
+TargetInfo *elf::getVETargetInfo(Ctx &ctx) {
+  static VE t(ctx);
+  return &t;
 }
