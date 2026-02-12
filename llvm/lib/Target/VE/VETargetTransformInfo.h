@@ -369,6 +369,24 @@ public:
     return false;
   }
 
+  // Load & Store {
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment,
+                         unsigned /*AddressSpace*/) {
+    return isVectorLaneType(*getLaneType(DataType));
+  }
+  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment,
+                          unsigned /*AddressSpace*/) {
+    return isVectorLaneType(*getLaneType(DataType));
+  }
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
+    return isVectorLaneType(*getLaneType(DataType));
+  };
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
+    return isVectorLaneType(*getLaneType(DataType));
+  }
+  // } Load & Store
+
+
   bool shouldExpandReduction(const IntrinsicInst *II) const {
     if (!enableVPU())
       return true;

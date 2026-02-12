@@ -13,10 +13,6 @@
 // dd8b266ef.
 // UNSUPPORTED: using-built-library-before-llvm-20
 
-// Android's long double on x86[-64] is (64/128)-bits instead of Linux's usual
-// 80-bit format, and this demangling test is failing on it.
-// XFAIL: LIBCXX-ANDROID-FIXME && target={{i686|x86_64}}-{{.+}}-android{{.*}}
-
 // XFAIL: win32-broken-printf-a-precision
 
 #include "support/timer.h"

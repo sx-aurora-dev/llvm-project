@@ -1377,8 +1377,7 @@ static Instruction *rematerializeChain(ArrayRef<Instruction *> ChainToBase,
   Instruction *LastClonedValue = nullptr;
   Instruction *LastValue = nullptr;
   // Walk backwards to visit top-most instructions first.
-  for (Instruction *Instr :
-       make_range(ChainToBase.rbegin(), ChainToBase.rend())) {
+  for (Instruction *Instr : reverse(ChainToBase)) {
     // Only GEP's and casts are supported as we need to be careful to not
     // introduce any new uses of pointers not in the liveset.
     // Note that it's fine to introduce new uses of pointers which were
@@ -3296,12 +3295,12 @@ static void computeLiveInValues(DominatorTree &DT, Function &F,
       assert(!Data.LiveSet[&BB].count(Kill) && "live set contains kill");
 #endif
 
-    Data.LiveOut[&BB] = SetVector<Value *>();
-    computeLiveOutSeed(&BB, Data.LiveOut[&BB], GC);
-    Data.LiveIn[&BB] = Data.LiveSet[&BB];
-    Data.LiveIn[&BB].set_union(Data.LiveOut[&BB]);
-    Data.LiveIn[&BB].set_subtract(Data.KillSet[&BB]);
-    if (!Data.LiveIn[&BB].empty())
+    auto &Out = Data.LiveOut[&BB] = SetVector<Value *>();
+    computeLiveOutSeed(&BB, Out, GC);
+    auto &In = Data.LiveIn[&BB] = Data.LiveSet[&BB];
+    In.set_union(Out);
+    In.set_subtract(Data.KillSet[&BB]);
+    if (!In.empty())
       Worklist.insert_range(predecessors(&BB));
   }
 

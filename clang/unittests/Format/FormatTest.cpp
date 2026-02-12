@@ -12640,6 +12640,12 @@ TEST_F(FormatTest, UnderstandsAttributes) {
                AfterType);
 
   FormatStyle CustomAttrs = getLLVMStyle();
+  CustomAttrs.AttributeMacros.push_back("my_attr_name");
+  verifyFormat("void MyGoodOldFunction(\n"
+               "    void *const long_enough = nullptr,\n"
+               "    void *my_attr_name even_longeeeeeeeeeeeeeeeeer = nullptr);",
+               CustomAttrs);
+
   CustomAttrs.AttributeMacros.push_back("__unused");
   CustomAttrs.AttributeMacros.push_back("__attr1");
   CustomAttrs.AttributeMacros.push_back("__attr2");
@@ -15134,6 +15140,13 @@ TEST_F(FormatTest, PullInlineOnlyFunctionDefinitionsIntoSingleLine) {
                MergeInlineOnly);
   verifyFormat("int f() {\n"
                "}",
+               MergeInlineOnly);
+
+  MergeInlineOnly.BreakBeforeBraces = FormatStyle::BS_Whitesmiths;
+  verifyFormat("class Foo\n"
+               "  {\n"
+               "  void f() { foo(); }\n"
+               "  };",
                MergeInlineOnly);
 
   // Also verify behavior when BraceWrapping.AfterFunction = true
@@ -22470,8 +22483,7 @@ TEST_F(FormatTest, UnderstandsPragmas) {
                "#pragma comment(linker,      \\\n"
                "                 \"argument\" \\\n"
                "                 \"argument\"",
-               getStyleWithColumns(
-                   getChromiumStyle(FormatStyle::LanguageKind::LK_Cpp), 32));
+               getStyleWithColumns(getChromiumStyle(FormatStyle::LK_Cpp), 32));
 }
 
 TEST_F(FormatTest, UnderstandsPragmaOmpTarget) {
@@ -24255,6 +24267,37 @@ TEST_F(FormatTest, EmptyLinesInLambdas) {
                "};");
 }
 
+TEST_F(FormatTest, LambdaBracesInGNU) {
+  auto Style = getGNUStyle();
+  EXPECT_EQ(Style.LambdaBodyIndentation, FormatStyle::LBI_Signature);
+
+  constexpr StringRef Code("auto x = [&] ()\n"
+                           "  {\n"
+                           "    for (int i = 0; i < y; ++i)\n"
+                           "      return 97;\n"
+                           "  };");
+  verifyFormat(Code, Style);
+
+  Style.LambdaBodyIndentation = FormatStyle::LBI_OuterScope;
+  verifyFormat(Code, Style);
+  verifyFormat("for_each_thread ([] (thread_info *thread)\n"
+               "  {\n"
+               "    /* Lambda body.  */\n"
+               "  });",
+               "for_each_thread([](thread_info *thread) {\n"
+               "  /* Lambda body.  */\n"
+               "});",
+               Style);
+  verifyFormat("iterate_over_lwps (scope_ptid, [=] (struct lwp_info *info)\n"
+               "  {\n"
+               "    /* Lambda body.  */\n"
+               "  });",
+               "iterate_over_lwps(scope_ptid, [=](struct lwp_info *info) {\n"
+               "  /* Lambda body.  */\n"
+               "});",
+               Style);
+}
+
 TEST_F(FormatTest, FormatsBlocks) {
   FormatStyle ShortBlocks = getLLVMStyle();
   ShortBlocks.AllowShortBlocksOnASingleLine = FormatStyle::SBS_Always;
@@ -25380,8 +25423,10 @@ TEST_F(FormatTest, AlternativeOperators) {
   verifyFormat("%:define ABC abc"); // #define ABC abc
   verifyFormat("%:%:");             // ##
 
+  verifyFormat("return not ::f();");
+  verifyFormat("return not *foo;");
+
   verifyFormat("a = v(not;);\n"
-               "b = v(not+);\n"
                "c = v(not x);\n"
                "d = v(not 1);\n"
                "e = v(not 123.f);");
@@ -25389,7 +25434,6 @@ TEST_F(FormatTest, AlternativeOperators) {
   verifyNoChange("#define ASSEMBLER_INSTRUCTION_LIST(V)  \\\n"
                  "  V(and)                               \\\n"
                  "  V(not)                               \\\n"
-                 "  V(not!)                              \\\n"
                  "  V(other)",
                  getLLVMStyleWithColumns(40));
 }
@@ -25954,14 +25998,14 @@ TEST_F(FormatTest, GoogleDefaultStyle) {
                Style);
 }
 TEST_F(FormatTest, ChromiumDefaultStyle) {
-  FormatStyle Style = getChromiumStyle(FormatStyle::LanguageKind::LK_Cpp);
+  FormatStyle Style = getChromiumStyle(FormatStyle::LK_Cpp);
   verifyFormat("extern \"C\" {\n"
                "int foo();\n"
                "}",
                Style);
 }
 TEST_F(FormatTest, MicrosoftDefaultStyle) {
-  FormatStyle Style = getMicrosoftStyle(FormatStyle::LanguageKind::LK_Cpp);
+  FormatStyle Style = getMicrosoftStyle(FormatStyle::LK_Cpp);
   verifyFormat("extern \"C\"\n"
                "{\n"
                "    int foo();\n"
@@ -27894,6 +27938,38 @@ TEST_F(FormatTest, RemoveSemicolon) {
 
   Style.TypenameMacros.push_back("STRUCT");
   verifyFormat("STRUCT(T, B) { int i; };", Style);
+}
+
+TEST_F(FormatTest, EnumTrailingComma) {
+  constexpr StringRef Code("enum : int { /**/ };\n"
+                           "enum {\n"
+                           "  a,\n"
+                           "  b,\n"
+                           "  c, //\n"
+                           "};\n"
+                           "enum Color { red, green, blue /**/ };");
+  verifyFormat(Code);
+
+  auto Style = getLLVMStyle();
+  Style.EnumTrailingComma = FormatStyle::ETC_Insert;
+  verifyFormat("enum : int { /**/ };\n"
+               "enum {\n"
+               "  a,\n"
+               "  b,\n"
+               "  c, //\n"
+               "};\n"
+               "enum Color { red, green, blue, /**/ };",
+               Code, Style);
+
+  Style.EnumTrailingComma = FormatStyle::ETC_Remove;
+  verifyFormat("enum : int { /**/ };\n"
+               "enum {\n"
+               "  a,\n"
+               "  b,\n"
+               "  c //\n"
+               "};\n"
+               "enum Color { red, green, blue /**/ };",
+               Code, Style);
 }
 
 TEST_F(FormatTest, BreakAfterAttributes) {
