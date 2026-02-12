@@ -34,7 +34,6 @@
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
@@ -563,7 +562,7 @@ checkHoistValue(Value *V, Instruction *InsertPoint, DominatorTree &DT,
       if (AllOpsHoisted) {
         CHR_DEBUG(dbgs() << "checkHoistValue " << *I << "\n");
         if (HoistStops)
-          HoistStops->insert(OpsHoistStops.begin(), OpsHoistStops.end());
+          HoistStops->insert_range(OpsHoistStops);
         Visited[I] = true;
         return true;
       }
@@ -1177,8 +1176,7 @@ SmallVector<CHRScope *, 8> CHR::splitScope(
           // point. Union the bases.
           PrevSplitFromOuter = false;
           PrevConditionValues = *OuterConditionValues;
-          PrevConditionValues.insert(ConditionValues.begin(),
-                                     ConditionValues.end());
+          PrevConditionValues.insert_range(ConditionValues);
           PrevInsertPoint = OuterInsertPoint;
         }
       } else {
@@ -1210,7 +1208,7 @@ SmallVector<CHRScope *, 8> CHR::splitScope(
         });
       } else {
         // Not splitting. Union the bases. Keep the hoist point.
-        PrevConditionValues.insert(ConditionValues.begin(), ConditionValues.end());
+        PrevConditionValues.insert_range(ConditionValues);
       }
     }
   }
@@ -1469,7 +1467,7 @@ static void hoistValue(Value *V, Instruction *HoistPoint, Region *R,
     for (Value *Op : I->operands()) {
       hoistValue(Op, HoistPoint, R, HoistStopMap, HoistedSet, TrivialPHIs, DT);
     }
-    I->moveBefore(HoistPoint);
+    I->moveBefore(HoistPoint->getIterator());
     HoistedSet.insert(I);
     CHR_DEBUG(dbgs() << "hoistValue " << *I << "\n");
   }
@@ -1863,6 +1861,7 @@ void CHR::fixupBranchesAndSelects(CHRScope *Scope,
       ++NumCHRedBranches;
     }
   }
+  assert(NumCHRedBranches > 0);
   Stats.NumBranchesDelta += NumCHRedBranches - 1;
   Stats.WeightedNumBranchesDelta += (NumCHRedBranches - 1) * ProfileCount;
   ORE.emit([&]() {

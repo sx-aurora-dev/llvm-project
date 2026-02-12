@@ -767,7 +767,7 @@ std::optional<unsigned> peekForNarrow(SDValue Op) {
     return std::nullopt;
   if (Op->use_size() != 1)
     return std::nullopt;
-  auto OnlyN = *Op->use_begin();
+  SDNode *OnlyN = Op->use_begin()->getUser();
   if (OnlyN->getOpcode() != VEISD::VEC_NARROW)
     return std::nullopt;
   return cast<ConstantSDNode>(OnlyN->getOperand(1))->getZExtValue();

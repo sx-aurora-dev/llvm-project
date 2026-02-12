@@ -123,16 +123,16 @@ define fastcc <512 x i32> @vec_fptoui_v512f32_v512i32(<512 x float> %x) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.d.s %v2, %v0
-; CHECK-NEXT:    vcvt.l.d.rz %v2, %v2
-; CHECK-NEXT:    vcvt.d.l %v2, %v0
-; CHECK-NEXT:    vcvt.s.d %v2, %v2
+; CHECK-NEXT:    vcvt.d.s %v1, %v0
+; CHECK-NEXT:    vcvt.l.d.rz %v1, %v1
+; CHECK-NEXT:    vcvt.d.l %v1, %v0
+; CHECK-NEXT:    vcvt.s.d %v1, %v1
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vcvt.d.s %v3, %v0
 ; CHECK-NEXT:    vcvt.l.d.rz %v3, %v3
 ; CHECK-NEXT:    vcvt.d.l %v3, %v0
 ; CHECK-NEXT:    vcvt.s.d %v3, %v3
-; CHECK-NEXT:    vshf %v0, %v3, %v2, 13
+; CHECK-NEXT:    vshf %v0, %v3, %v1, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fptoui <512 x float> %x to <512 x i32>
   ret <512 x i32> %r

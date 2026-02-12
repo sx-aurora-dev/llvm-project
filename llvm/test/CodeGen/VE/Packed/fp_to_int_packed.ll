@@ -7,9 +7,9 @@ define fastcc <512 x i32> @d2ui(<512 x double> %a) {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.l.d.rz %v2, %v0
+; CHECK-NEXT:    vcvt.l.d.rz %v0, %v0
 ; CHECK-NEXT:    vcvt.l.d.rz %v3, %v1
-; CHECK-NEXT:    vshf %v0, %v3, %v2, 13
+; CHECK-NEXT:    vshf %v0, %v3, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %conv = fptoui <512 x double> %a to <512 x i32>

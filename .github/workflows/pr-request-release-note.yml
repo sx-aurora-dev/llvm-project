@@ -14,12 +14,12 @@ jobs:
       github.repository_owner == 'llvm' &&
       startsWith(github.ref, 'refs/heads/release')
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # We need to pull the script from the main branch, so that we ensure
       # we get the latest version of this script.
       - name: Checkout Scripts
-        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.1.1
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           sparse-checkout: |
             llvm/utils/git/requirements.txt

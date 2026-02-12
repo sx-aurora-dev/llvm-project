@@ -12,7 +12,7 @@ on:
 jobs:
   validate-tag:
     name: Validate Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.repository == 'llvm/llvm-project'
     outputs:
       release-version: ${{ steps.validate-tag.outputs.release-version }}
@@ -26,7 +26,7 @@ jobs:
 
   release-create:
     name: Create a New Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # For creating the release.
     needs: validate-tag
@@ -38,7 +38,7 @@ jobs:
           sudo apt-get install python3-github
 
       - name: Checkout LLVM
-        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.1.1
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Create Release
         env:
@@ -89,20 +89,10 @@ jobs:
     needs:
       - validate-tag
       - release-create
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on:
-          - ubuntu-22.04
-          - windows-2022
-          - macos-13
-          - macos-14
-
-    uses: ./.github/workflows/release-binaries.yml
+    uses: ./.github/workflows/release-binaries-all.yml
     with:
       release-version: ${{ needs.validate-tag.outputs.release-version }}
       upload: true
-      runs-on: ${{ matrix.runs-on }}
     # Called workflows don't have access to secrets by default, so we need to explicitly pass secrets that we use.
     secrets:
       RELEASE_TASKS_USER_TOKEN: ${{ secrets.RELEASE_TASKS_USER_TOKEN }}

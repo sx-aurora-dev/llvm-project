@@ -265,7 +265,8 @@ public:
   bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
                       bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
-                      LLVMContext &Context) const override;
+                      LLVMContext &Context,
+                      const Type *RetTy) const override;
   SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
                       const SmallVectorImpl<SDValue> &OutVals, const SDLoc &dl,
@@ -590,7 +591,7 @@ public:
   /// } Inline Assembly
 
   /// Override to support customized stack guard loading.
-  bool useLoadStackGuardNode() const override;
+  bool useLoadStackGuardNode(const Module &M) const override;
   void insertSSPDeclarations(Module &M) const override;
 
   SDValue getPICJumpTableRelocBase(SDValue Table,

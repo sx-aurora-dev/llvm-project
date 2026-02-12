@@ -34,11 +34,11 @@ define fastcc i1 @test_reduce_and(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-O2-LABEL: test_reduce_and:
 ; CHECK-O2:       # %bb.0:
 ; CHECK-O2-NEXT:    and %s1, %s1, (32)0
-; CHECK-O2-NEXT:    andm %vm6, %vm2, %vm4
-; CHECK-O2-NEXT:    andm %vm7, %vm3, %vm5
+; CHECK-O2-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-O2-NEXT:    andm %vm3, %vm3, %vm5
 ; CHECK-O2-NEXT:    lvl %s1
-; CHECK-O2-NEXT:    pcvm %s2, %vm6
-; CHECK-O2-NEXT:    pcvm %s3, %vm7
+; CHECK-O2-NEXT:    pcvm %s2, %vm1
+; CHECK-O2-NEXT:    pcvm %s3, %vm3
 ; CHECK-O2-NEXT:    adds.l %s2, %s3, %s2
 ; CHECK-O2-NEXT:    cmpu.w %s1, %s2, %s1
 ; CHECK-O2-NEXT:    ldz %s1, %s1
@@ -79,11 +79,11 @@ define fastcc i1 @test_reduce_or(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-O2-LABEL: test_reduce_or:
 ; CHECK-O2:       # %bb.0:
 ; CHECK-O2-NEXT:    and %s1, %s1, (32)0
-; CHECK-O2-NEXT:    andm %vm6, %vm2, %vm4
-; CHECK-O2-NEXT:    andm %vm7, %vm3, %vm5
+; CHECK-O2-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-O2-NEXT:    andm %vm3, %vm3, %vm5
 ; CHECK-O2-NEXT:    lvl %s1
-; CHECK-O2-NEXT:    pcvm %s2, %vm6
-; CHECK-O2-NEXT:    pcvm %s1, %vm7
+; CHECK-O2-NEXT:    pcvm %s2, %vm1
+; CHECK-O2-NEXT:    pcvm %s1, %vm3
 ; CHECK-O2-NEXT:    adds.l %s1, %s1, %s2
 ; CHECK-O2-NEXT:    cmpu.w %s1, 0, %s1
 ; CHECK-O2-NEXT:    srl %s1, %s1, 31
@@ -116,11 +116,11 @@ define fastcc i1 @test_reduce_xor(i1 %s, <512 x i1> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-O2-LABEL: test_reduce_xor:
 ; CHECK-O2:       # %bb.0:
 ; CHECK-O2-NEXT:    and %s1, %s1, (32)0
-; CHECK-O2-NEXT:    andm %vm6, %vm2, %vm4
-; CHECK-O2-NEXT:    andm %vm7, %vm3, %vm5
+; CHECK-O2-NEXT:    andm %vm1, %vm2, %vm4
+; CHECK-O2-NEXT:    andm %vm3, %vm3, %vm5
 ; CHECK-O2-NEXT:    lvl %s1
-; CHECK-O2-NEXT:    pcvm %s2, %vm6
-; CHECK-O2-NEXT:    pcvm %s1, %vm7
+; CHECK-O2-NEXT:    pcvm %s2, %vm1
+; CHECK-O2-NEXT:    pcvm %s1, %vm3
 ; CHECK-O2-NEXT:    adds.l %s1, %s1, %s2
 ; CHECK-O2-NEXT:    and %s1, 1, %s1
 ; CHECK-O2-NEXT:    xor %s0, %s0, %s1
