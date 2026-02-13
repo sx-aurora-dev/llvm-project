@@ -209,8 +209,8 @@ bool VEDAGToDAGISel::selectADDRzii(SDValue Addr, SDValue &Base, SDValue &Index,
     if (isInt<32>(CN->getSExtValue())) {
       Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
       Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-      Offset =
-          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      Offset = CurDAG->getTargetConstant((uint32_t)CN->getZExtValue(),
+                                         SDLoc(Addr), MVT::i32);
       return true;
     }
   }
@@ -239,8 +239,8 @@ bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
   if (auto *CN = dyn_cast<ConstantSDNode>(Addr)) {
     if (isInt<32>(CN->getSExtValue())) {
       Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-      Offset =
-          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      Offset = CurDAG->getTargetConstant((uint32_t)CN->getZExtValue(),
+                                         SDLoc(Addr), MVT::i32);
       return true;
     }
   }
@@ -297,8 +297,8 @@ bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
       } else {
         Base = Addr.getOperand(0);
       }
-      Offset =
-          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      Offset = CurDAG->getTargetConstant((uint32_t)CN->getZExtValue(),
+                                         SDLoc(Addr), MVT::i32);
       return true;
     }
   }

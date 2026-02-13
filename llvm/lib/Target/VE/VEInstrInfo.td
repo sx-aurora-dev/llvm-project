@@ -63,7 +63,8 @@ def HI32 : SDNodeXForm<imm, [{
 
 def LO7FP : SDNodeXForm<fpimm, [{
   uint64_t Val = getFpImmVal(N);
-  return CurDAG->getTargetConstant(SignExtend32(Val, 7), SDLoc(N), MVT::i32);
+  return CurDAG->getSignedTargetConstant(SignExtend64(Val, 7),
+                                         SDLoc(N), MVT::i32);
 }]>;
 def MIMMFP : SDNodeXForm<fpimm, [{
   return CurDAG->getTargetConstant(val2MImm(getFpImmVal(N)),
