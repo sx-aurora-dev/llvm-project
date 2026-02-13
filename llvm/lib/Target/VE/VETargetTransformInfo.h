@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 /// \file
-/// This file a TargetTransformInfo::Concept conforming object specific to the
+/// This file a TargetTransformInfoImplBase conforming object specific to the
 /// VE target machine. It uses the target's detailed information to
 /// provide more precise answers to certain TTI queries, while letting the
 /// target independent and default TTI implementations handle the rest.
@@ -118,7 +118,7 @@ public:
       : BaseT(TM, F.getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
-  unsigned getNumberOfRegisters(unsigned ClassID) const {
+  unsigned getNumberOfRegisters(unsigned ClassID) const override {
     bool VectorRegs = (ClassID == 1);
     if (!makeVectorOpsExpensive() && enableVPU() && VectorRegs) {
       return 64;
@@ -127,7 +127,8 @@ public:
     return 0;
   }
 
-  TypeSize getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
+  TypeSize
+  getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const override {
     switch (K) {
     case TargetTransformInfo::RGK_Scalar:
       return TypeSize::getFixed(64);
@@ -143,7 +144,7 @@ public:
     llvm_unreachable("Unsupported register kind");
   }
 
-  unsigned getMinVectorRegisterBitWidth() const {
+  unsigned getMinVectorRegisterBitWidth() const override {
     return !makeVectorOpsExpensive() && enableVPU()
                ? StandardVectorWidth * 64
                : 0;
@@ -185,22 +186,24 @@ public:
   }
 
   // Load & Store {
-  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
+  bool isLegalMaskedLoad(Type *DataType, Align Alignment,
+                         unsigned /*AddressSpace*/) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));
   }
-  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
+  bool isLegalMaskedStore(Type *DataType, Align Alignment,
+                          unsigned /*AddressSpace*/) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));
   }
-  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
+  bool isLegalMaskedGather(Type *DataType, Align Alignment) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));
   };
-  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
+  bool isLegalMaskedScatter(Type *DataType, Align Alignment) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));
@@ -216,9 +219,9 @@ public:
     return 1;
   }
 
-  bool prefersVectorizedAddressing() { return true; }
+  bool prefersVectorizedAddressing() const { return true; }
 
-  bool supportsEfficientVectorElementLoadStore() { return false; }
+  bool supportsEfficientVectorElementLoadStore() const { return false; }
 
   // Following implementation conflicts with dd2dbf7.
   // Also following code seems incorrect.  Therefore, removing them.
@@ -264,7 +267,7 @@ public:
     return 1;
   }
 
-  bool haveFastSqrt(Type *Ty) {
+  bool haveFastSqrt(Type *Ty) const {
     // float, double or a vector thereof
     return Ty->isFPOrFPVectorTy() && !makeVectorOpsExpensive() &&
            (isVectorLaneType(*Ty) || isVectorRegisterType(*Ty));
@@ -359,7 +362,7 @@ public:
                                TargetTransformInfo::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE);
 
-  bool shouldBuildRelLookupTables() const {
+  bool shouldBuildRelLookupTables() const override {
     // NEC nld doesn't support relative lookup tables.  It shows following
     // errors.  So, we disable it at the moment.
     //   /opt/nec/ve/bin/nld: src/CMakeFiles/cxxabi_shared.dir/cxa_demangle.cpp
@@ -369,7 +372,7 @@ public:
     return false;
   }
 
-  bool shouldExpandReduction(const IntrinsicInst *II) const {
+  bool shouldExpandReduction(const IntrinsicInst *II) const override {
     if (!enableVPU())
       return true;
 

@@ -306,7 +306,6 @@ bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
 }
 
 void VEDAGToDAGISel::Select(SDNode *N) {
-  SDLoc dl(N);
   if (N->isMachineOpcode()) {
     N->setNodeId(-1);
     return; // Already selected.
