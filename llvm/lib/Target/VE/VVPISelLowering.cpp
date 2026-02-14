@@ -1347,7 +1347,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   // Generate a mask and an AVL.
   // auto TargetMasks = CDAG.getTargetMask(WidenInfo, SDValue(), SDValue());
   VETargetMasks MaskingArgs;
-  unsigned NumElems = OpVecTy.getVectorNumElements();
+  unsigned NumElems = WidenInfo.ActiveVectorLength;
   MaskingArgs.AVL = CDAG.getConstant(NumElems, MVT::i32);
   MaskingArgs.Mask = CDAG.getUniformConstMask(OpVecTy, true);
 
@@ -1391,6 +1391,14 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
   case VEISD::VVP_SELECT: {
     SDValue CondMask = getSelectMask(Op);
+    // Wrap SETCC mask input with VEC_NARROW to propagate AVL information.
+    // The SETCC will be lowered to VVP_SETCC in a later phase (vector
+    // legalization), and peekForNarrow will pick up the correct AVL from
+    // VEC_NARROW instead of using the full register width (256).
+    if (CondMask->getOpcode() == ISD::SETCC &&
+        CondMask.getValueType().isVector()) {
+      CondMask = CDAG.getNarrow(CondMask.getValueType(), CondMask, NumElems);
+    }
     SDValue OnTrue = getSelectOnTrueVal(Op);
     SDValue OnFalse = getSelectOnFalseVal(Op);
     return expandSELECT(CondMask, OnTrue, OnFalse, ResVecTy, CDAG,

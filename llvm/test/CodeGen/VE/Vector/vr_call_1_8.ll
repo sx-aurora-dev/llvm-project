@@ -198,13 +198,11 @@ define fastcc <8 x float> @vfadds8(<8 x float> %0, <8 x float> %1) {
 define fastcc <7 x i17> @vi17adds7(<7 x i17> %0, <7 x i17> %1) {
 ; CHECK-LABEL: vi17adds7:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s0, 7, (0)1
 ; CHECK-NEXT:    lea %s1, 131071
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
-; CHECK-NEXT:    or %s0, 7, (0)1
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = add nsw nuw <7 x i17> %1, %0

@@ -145,17 +145,20 @@ define fastcc <256 x i16> @srem_vv_v256i16(<256 x i16> %x, <256 x i16> %y) {
 define fastcc <128 x i16> @srem_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK-LABEL: srem_vv_v128i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lea %s1, 65535
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
-; CHECK-NEXT:    or %s2, 16, (0)1
-; CHECK-NEXT:    pvsll.lo %v1, %v1, %s2
-; CHECK-NEXT:    pvsra.lo %v1, %v1, %s2
+; CHECK-NEXT:    lea %s2, 256
+; CHECK-NEXT:    or %s3, 16, (0)1
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    pvsll.lo %v1, %v1, %s3
+; CHECK-NEXT:    pvsra.lo %v1, %v1, %s3
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
-; CHECK-NEXT:    pvsll.lo %v0, %v0, %s2
-; CHECK-NEXT:    pvsra.lo %v0, %v0, %s2
-; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    pvsll.lo %v0, %v0, %s3
+; CHECK-NEXT:    pvsra.lo %v0, %v0, %s3
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vdivs.w.sx %v2, %v0, %v1
 ; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v2

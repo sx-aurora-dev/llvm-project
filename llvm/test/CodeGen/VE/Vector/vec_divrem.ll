@@ -19,11 +19,8 @@ define <4 x i8> @udiv_by_minus_one(<4 x i8> %x) {
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1, %s0
-; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v1
 ; CHECK-NEXT:    vfmk.w.eq %vm1, %v0
-; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, 1
 ; CHECK-NEXT:    vbrd %v1, 0
 ; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm1
@@ -51,11 +48,8 @@ define <4 x i8> @urem_by_minus_one(<4 x i8> %x) {
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1, %s0
-; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.w %v1, %v0, %v1
 ; CHECK-NEXT:    vfmk.w.eq %vm1, %v1
-; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1, 0
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
@@ -70,17 +64,13 @@ define <4 x i8> @urem_by_minus_one(<4 x i8> %x) {
 define fastcc <4 x i8> @udiv_by_minus_one_reg(<4 x i8> %x) {
 ; CHECK-LABEL: udiv_by_minus_one_reg:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s0, 4, (0)1
 ; CHECK-NEXT:    lea %s1, 255
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
-; CHECK-NEXT:    or %s2, 4, (0)1
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vbrd %v1, %s1
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.w %v0, %v0, %v1
 ; CHECK-NEXT:    vfmk.w.eq %vm1, %v0
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vbrd %v1, 1
 ; CHECK-NEXT:    vbrd %v0, 0
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
@@ -92,17 +82,13 @@ define fastcc <4 x i8> @udiv_by_minus_one_reg(<4 x i8> %x) {
 define fastcc <4 x i8> @urem_by_minus_one_reg(<4 x i8> %x) {
 ; CHECK-LABEL: urem_by_minus_one_reg:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s0, 4, (0)1
 ; CHECK-NEXT:    lea %s1, 255
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
-; CHECK-NEXT:    or %s2, 4, (0)1
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vbrd %v1, %s1
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.w %v1, %v0, %v1
 ; CHECK-NEXT:    vfmk.w.eq %vm1, %v1
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vbrd %v1, 0
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
