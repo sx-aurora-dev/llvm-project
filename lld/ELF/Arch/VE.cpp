@@ -10,7 +10,6 @@
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
-#include "lld/Common/ErrorHandler.h"
 #include "llvm/Support/Endian.h"
 
 using namespace llvm;
@@ -129,8 +128,8 @@ RelExpr VE::getRelExpr(RelType type, const Symbol &s,
   case R_VE_CALL_LO32:
     return R_ABS;
   default:
-    error(getErrorLocation(loc) + "unknown relocation (" + Twine(type) +
-          ") against symbol " + toString(s));
+    Err(ctx) << getErrorLoc(ctx, loc) << "unknown relocation (" << type
+             << ") against symbol " << &s;
     return R_NONE;
   }
 }
@@ -147,7 +146,7 @@ void VE::relocate(uint8_t *loc, const Relocation &rel,
     break;
   case R_VE_SREL32:
     // Range check for SREL32 which is used by relative branch.
-    checkInt(loc, val, 32, rel);
+    checkInt(ctx, loc, val, 32, rel);
     write32le(loc, val);
     break;
   case R_VE_HI32:
@@ -191,16 +190,15 @@ void VE::relocate(uint8_t *loc, const Relocation &rel,
     write32le(loc, val);
     break;
   default:
-    error(getErrorLocation(loc) + "unknown relocation (" + Twine(rel.type) +
-          ")");
+    Err(ctx) << getErrorLoc(ctx, loc) << "unknown relocation (" << rel.type
+             << ")";
   }
 }
 
 int64_t VE::getImplicitAddend(const uint8_t *buf, RelType type) const {
   switch (type) {
   default:
-    internalLinkerError(getErrorLocation(buf),
-                        "cannot read addend for relocation " + toString(type));
+    InternalErr(ctx, buf) << "cannot read addend for relocation " << type;
     return 0;
   case R_VE_NONE:
     // This relocations are defined as not having an implicit addend.
@@ -251,20 +249,20 @@ RelExpr VE::adjustTlsExpr(RelType type, RelExpr expr) const {
 void VE::writeGotPltHeader(uint8_t *buf) const {
   // _GLOBAL_OFFSET_TABLE_[0] = _DYNAMIC.
   // The glibc stores __dso_handle (reserved) in _GLOBAL_OFFSET_TABLE[1].
-  write64le(buf, mainPart->dynamic->getVA());
+  write64le(buf, ctx.mainPart->dynamic->getVA());
 }
 
 void VE::writeGotHeader(uint8_t *buf) const {
   // _GLOBAL_OFFSET_TABLE_[0] = _DYNAMIC
   // glibc stores _dl_runtime_resolve in _GLOBAL_OFFSET_TABLE_[1],
   // link_map in _GLOBAL_OFFSET_TABLE_[2].
-  write64le(buf, mainPart->dynamic->getVA());
+  write64le(buf, ctx.mainPart->dynamic->getVA());
 }
 
 void VE::writeGotPlt(uint8_t *buf, const Symbol &s) const {
   // Entries in .got.plt initially points back to the corresponding
   // PLT entries with a fixed offset to skip the first instruction.
-  write64le(buf, s.getPltVA() + 5 * 8);
+  write64le(buf, s.getPltVA(ctx) + 5 * 8);
 }
 
 void VE::writePltHeader(uint8_t *buf) const {
@@ -281,11 +279,11 @@ void VE::writePltHeader(uint8_t *buf) const {
   };
   memcpy(buf, pltData, sizeof(pltData));
 
-  uint64_t got = in.gotPlt->getVA();
+  uint64_t got = ctx.in.gotPlt->getVA();
   // Set address of _GLOBAL_OFFSET_TABLE[0]
   relocateNoSym(buf + 0 * 8, R_VE_LO32, got);
   relocateNoSym(buf + 2 * 8, R_VE_HI32, got);
-  // uint64_t plt = in.plt->getVA();
+  // uint64_t plt = ctx.in.plt->getVA();
 }
 
 void VE::writePlt(uint8_t *buf, const Symbol & sym,
@@ -302,9 +300,9 @@ void VE::writePlt(uint8_t *buf, const Symbol & sym,
   };
   memcpy(buf, pltData, sizeof(pltData));
 
-  uint64_t pltEntryOff = pltEntryAddr - in.plt->getVA();
+  uint64_t pltEntryOff = pltEntryAddr - ctx.in.plt->getVA();
   uint64_t pltEntryIdx = (pltEntryOff - pltHeaderSize) / pltEntrySize;
-  uint64_t gotPltBase = in.gotPlt->getVA();
+  uint64_t gotPltBase = ctx.in.gotPlt->getVA();
   uint64_t gotPlt = gotPltBase + gotPltHeaderEntriesNum * gotEntrySize;
   uint64_t va = gotPlt + pltEntryIdx * gotEntrySize;
 
