@@ -6630,9 +6630,23 @@ SDValue DAGTypeLegalizer::WidenVecRes_SETCC(SDNode *N) {
     return Res;
   }
 
-  // If the inputs also widen, handle them directly. Otherwise widen by hand.
+  // If the inputs need integer promotion, get promoted values first and
+  // update the input type info.  For example, on VE <4 x i8> is promoted to
+  // <4 x i32> while the SETCC result <4 x i1> is widened to <256 x i1>.
+  // After promotion, widen the promoted inputs by hand since the widened
+  // versions are not yet available in the map.
   SDValue InOp2 = N->getOperand(1);
-  if (getTypeAction(InVT) == TargetLowering::TypeWidenVector) {
+  if (getTypeAction(InVT) == TargetLowering::TypePromoteInteger) {
+    InOp1 = GetPromotedInteger(InOp1);
+    InOp2 = GetPromotedInteger(InOp2);
+    InVT = InOp1.getValueType();
+    WidenInVT =
+        EVT::getVectorVT(*DAG.getContext(), InVT.getVectorElementType(),
+                          WidenEC);
+    InOp1 = ModifyToType(InOp1, WidenInVT);
+    InOp2 = ModifyToType(InOp2, WidenInVT);
+  } else if (getTypeAction(InVT) == TargetLowering::TypeWidenVector) {
+    // If the inputs also widen, handle them directly. Otherwise widen by hand.
     InOp1 = GetWidenedVector(InOp1);
     InOp2 = GetWidenedVector(InOp2);
   } else {
