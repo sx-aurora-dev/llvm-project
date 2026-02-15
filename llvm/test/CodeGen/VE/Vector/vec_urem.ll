@@ -143,16 +143,12 @@ define fastcc <256 x i16> @urem_vv_v256i16(<256 x i16> %x, <256 x i16> %y) {
 define fastcc <128 x i16> @urem_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK-LABEL: urem_vv_v128i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lea %s1, 65535
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
-; CHECK-NEXT:    lea %s2, 128
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    pvand.lo %v1, %s1, %v1
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
-; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    vdivu.w %v2, %v0, %v1
 ; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v2

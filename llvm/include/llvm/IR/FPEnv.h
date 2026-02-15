@@ -17,6 +17,7 @@
 
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/IR/FMF.h"
+#include "llvm/Support/Compiler.h"
 #include <optional>
 
 namespace llvm {
@@ -49,19 +50,21 @@ enum ExceptionBehavior : uint8_t {
 /// Returns a valid RoundingMode enumerator when given a string
 /// that is valid as input in constrained intrinsic rounding mode
 /// metadata.
-std::optional<RoundingMode> convertStrToRoundingMode(StringRef);
+LLVM_ABI std::optional<RoundingMode> convertStrToRoundingMode(StringRef);
 
 /// For any RoundingMode enumerator, returns a string valid as input in
 /// constrained intrinsic rounding mode metadata.
-std::optional<StringRef> convertRoundingModeToStr(RoundingMode);
+LLVM_ABI std::optional<StringRef> convertRoundingModeToStr(RoundingMode);
 
 /// Returns a valid ExceptionBehavior enumerator when given a string
 /// valid as input in constrained intrinsic exception behavior metadata.
-std::optional<fp::ExceptionBehavior> convertStrToExceptionBehavior(StringRef);
+LLVM_ABI std::optional<fp::ExceptionBehavior>
+    convertStrToExceptionBehavior(StringRef);
 
 /// For any ExceptionBehavior enumerator, returns a string valid as
 /// input in constrained intrinsic exception behavior metadata.
-std::optional<StringRef> convertExceptionBehaviorToStr(fp::ExceptionBehavior);
+LLVM_ABI std::optional<StringRef>
+    convertExceptionBehaviorToStr(fp::ExceptionBehavior);
 
 /// Return the IR Value representation of any ExceptionBehavior.
 Value *GetConstrainedFPExcept(LLVMContext &, fp::ExceptionBehavior);
@@ -79,7 +82,7 @@ inline bool isDefaultFPEnvironment(fp::ExceptionBehavior EB, RoundingMode RM) {
 /// strictfp function. If the instruction is already a constrained intrinsic or
 /// does not have a constrained intrinsic counterpart, the function returns
 /// zero.
-Intrinsic::ID getConstrainedIntrinsicID(const Instruction &Instr);
+LLVM_ABI Intrinsic::ID getConstrainedIntrinsicID(const Instruction &Instr);
 
 /// Returns true if the rounding mode RM may be QRM at compile time or
 /// at run time.

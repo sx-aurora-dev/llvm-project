@@ -604,7 +604,7 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
     }
     SDValue MaskV = CDAG.getConstMask(getAVL(), VMVMask);
     SDValue VL = CDAG.getConstant(getAVL(), MVT::i32);
-    SDValue ShiftV = CDAG.getConstant(ShiftAmount, MVT::i32);
+    SDValue ShiftV = CDAG.getConstant((uint32_t)ShiftAmount, MVT::i32);
 
     SDValue ResV =
         CDAG.getVMV(PartialV.getValueType(), SrcVector, ShiftV, MaskV, VL);
