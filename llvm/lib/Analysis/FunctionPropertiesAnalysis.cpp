@@ -204,16 +204,12 @@ void FunctionPropertiesInfo::updateForBB(const BasicBlock &BB,
     // We instantiate the IR2Vec embedder each time, as having an unique
     // pointer to the embedder as member of the class would make it
     // non-copyable. Instantiating the embedder in itself is not costly.
-    auto EmbOrErr = ir2vec::Embedder::create(IR2VecKind::Symbolic,
+    auto Embedder = ir2vec::Embedder::create(IR2VecKind::Symbolic,
                                              *BB.getParent(), *IR2VecVocab);
-    if (Error Err = EmbOrErr.takeError()) {
-      handleAllErrors(std::move(Err), [&](const ErrorInfoBase &EI) {
-        BB.getContext().emitError("Error creating IR2Vec embeddings: " +
-                                  EI.message());
-      });
+    if (!Embedder) {
+      BB.getContext().emitError("Error creating IR2Vec embeddings");
       return;
     }
-    auto Embedder = std::move(*EmbOrErr);
     const auto &BBEmbedding = Embedder->getBBVector(BB);
     // Subtract BBEmbedding from Function embedding if the direction is -1,
     // and add it if the direction is +1.
@@ -246,20 +242,20 @@ FunctionPropertiesInfo FunctionPropertiesInfo::getFunctionPropertiesInfo(
   // We use the cached result of the IR2VecVocabAnalysis run by
   // InlineAdvisorAnalysis. If the IR2VecVocabAnalysis is not run, we don't
   // use IR2Vec embeddings.
-  auto VocabResult = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F)
-                         .getCachedResult<IR2VecVocabAnalysis>(*F.getParent());
+  auto Vocabulary = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F)
+                        .getCachedResult<IR2VecVocabAnalysis>(*F.getParent());
   return getFunctionPropertiesInfo(F, FAM.getResult<DominatorTreeAnalysis>(F),
-                                   FAM.getResult<LoopAnalysis>(F), VocabResult);
+                                   FAM.getResult<LoopAnalysis>(F), Vocabulary);
 }
 
 FunctionPropertiesInfo FunctionPropertiesInfo::getFunctionPropertiesInfo(
     const Function &F, const DominatorTree &DT, const LoopInfo &LI,
-    const IR2VecVocabResult *VocabResult) {
+    const ir2vec::Vocabulary *Vocabulary) {
 
   FunctionPropertiesInfo FPI;
-  if (VocabResult && VocabResult->isValid()) {
-    FPI.IR2VecVocab = VocabResult->getVocabulary();
-    FPI.FunctionEmbedding = ir2vec::Embedding(VocabResult->getDimension(), 0.0);
+  if (Vocabulary && Vocabulary->isValid()) {
+    FPI.IR2VecVocab = Vocabulary;
+    FPI.FunctionEmbedding = ir2vec::Embedding(Vocabulary->getDimension(), 0.0);
   }
   for (const auto &BB : F)
     if (DT.isReachableFromEntry(&BB))
@@ -592,9 +588,9 @@ bool FunctionPropertiesUpdater::isUpdateValid(Function &F,
     return false;
   DominatorTree DT(F);
   LoopInfo LI(DT);
-  auto VocabResult = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F)
-                         .getCachedResult<IR2VecVocabAnalysis>(*F.getParent());
+  auto Vocabulary = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F)
+                        .getCachedResult<IR2VecVocabAnalysis>(*F.getParent());
   auto Fresh =
-      FunctionPropertiesInfo::getFunctionPropertiesInfo(F, DT, LI, VocabResult);
+      FunctionPropertiesInfo::getFunctionPropertiesInfo(F, DT, LI, Vocabulary);
   return FPI == Fresh;
 }

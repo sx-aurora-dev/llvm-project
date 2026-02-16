@@ -31,6 +31,7 @@ class MCAsmInfo;
 class MCAssembler;
 class MCContext;
 class MCExpr;
+class MCFragment;
 class MCObjectStreamer;
 class MCSymbol;
 class MCSection;
@@ -38,100 +39,15 @@ class MCSubtargetInfo;
 class raw_ostream;
 class Triple;
 
-// Represents a contiguous piece of code or data within a section. Its size is
-// determined by MCAssembler::layout. All subclasses (except
-// MCRelaxableFragment, which stores a MCInst) must have trivial destructors.
-//
-// Declaration order: MCFragment, MCSection, then MCFragment's derived classes.
-// This allows MCSection's inline functions to access MCFragment members and
-// allows MCFragment's derived classes to access MCSection.
-class MCFragment {
-  friend class MCAssembler;
-  friend class MCObjectStreamer;
-  friend class MCSection;
-
-public:
-  enum FragmentType : uint8_t {
-    FT_Align,
-    FT_Data,
-    FT_Fill,
-    FT_Nops,
-    FT_Relaxable,
-    FT_Org,
-    FT_Dwarf,
-    FT_DwarfFrame,
-    FT_LEB,
-    FT_BoundaryAlign,
-    FT_SymbolId,
-    FT_CVInlineLines,
-    FT_CVDefRange,
-    FT_PseudoProbe,
-  };
-
-private:
-  // The next fragment within the section.
-  MCFragment *Next = nullptr;
-
-  /// The data for the section this fragment is in.
-  MCSection *Parent = nullptr;
-
-  /// The offset of this fragment in its section.
-  uint64_t Offset = 0;
-
-  /// The layout order of this fragment.
-  unsigned LayoutOrder = 0;
-
-  FragmentType Kind;
-
-protected:
-  /// Used by subclasses for better packing.
-  ///
-  /// MCEncodedFragment
-  bool HasInstructions : 1;
-  bool AlignToBundleEnd : 1;
-  /// MCDataFragment
-  bool LinkerRelaxable : 1;
-  /// MCRelaxableFragment: x86-specific
-  bool AllowAutoPadding : 1;
-
-  LLVM_ABI MCFragment(FragmentType Kind, bool HasInstructions);
-
-public:
-  MCFragment() = delete;
-  MCFragment(const MCFragment &) = delete;
-  MCFragment &operator=(const MCFragment &) = delete;
-
-  /// Destroys the current fragment.
-  ///
-  /// This must be used instead of delete as MCFragment is non-virtual.
-  /// This method will dispatch to the appropriate subclass.
-  LLVM_ABI void destroy();
-
-  MCFragment *getNext() const { return Next; }
-
-  FragmentType getKind() const { return Kind; }
-
-  MCSection *getParent() const { return Parent; }
-  void setParent(MCSection *Value) { Parent = Value; }
-
-  LLVM_ABI const MCSymbol *getAtom() const;
-
-  unsigned getLayoutOrder() const { return LayoutOrder; }
-  void setLayoutOrder(unsigned Value) { LayoutOrder = Value; }
-
-  /// Does this fragment have instructions emitted into it? By default
-  /// this is false, but specific fragment types may set it to true.
-  bool hasInstructions() const { return HasInstructions; }
-
-  LLVM_ABI void dump() const;
-};
-
 /// Instances of this class represent a uniqued identifier for a section in the
 /// current translation unit.  The MCContext class uniques and creates these.
 class LLVM_ABI MCSection {
 public:
   friend MCAssembler;
   friend MCObjectStreamer;
+  friend class MCFragment;
+  friend class MCEncodedFragment;
+  friend class MCRelaxableFragment;
   static constexpr unsigned NonUniqueID = ~0U;
 
   enum SectionVariant {
@@ -159,10 +75,7 @@ public:
     MCFragment &operator*() const { return *F; }
     bool operator==(const iterator &O) const { return F == O.F; }
     bool operator!=(const iterator &O) const { return F != O.F; }
-    iterator &operator++() {
-      F = F->Next;
-      return *this;
-    }
+    iterator &operator++();
   };
 
   struct FragList {
@@ -209,6 +122,11 @@ private:
   // subsections.
   SmallVector<std::pair<unsigned, FragList>, 1> Subsections;
 
+  // Content and fixup storage for fragments
+  SmallVector<char, 0> ContentStorage;
+  SmallVector<MCFixup, 0> FixupStorage;
+  SmallVector<MCOperand, 0> MCOperandStorage;
+
 protected:
   // TODO Make Name private when possible.
   StringRef Name;
@@ -216,7 +134,8 @@ protected:
 
   MCSection(SectionVariant V, StringRef Name, bool IsText, bool IsVirtual,
             MCSymbol *Begin);
-  ~MCSection();
+  // Protected non-virtual dtor prevents destroy through a base class pointer.
+  ~MCSection() {}
 
 public:
   MCSection(const MCSection &) = delete;
@@ -294,11 +213,95 @@ public:
   virtual StringRef getVirtualSectionKind() const;
 };
 
+// Represents a contiguous piece of code or data within a section. Its size is
+// determined by MCAssembler::layout. All subclasses must have trivial
+// destructors.
+class MCFragment {
+  friend class MCAssembler;
+  friend class MCObjectStreamer;
+  friend class MCSection;
+
+public:
+  enum FragmentType : uint8_t {
+    FT_Data,
+    FT_Relaxable,
+    FT_Align,
+    FT_Fill,
+    FT_LEB,
+    FT_Nops,
+    FT_Org,
+    FT_Dwarf,
+    FT_DwarfFrame,
+    FT_BoundaryAlign,
+    FT_SymbolId,
+    FT_CVInlineLines,
+    FT_CVDefRange,
+    FT_PseudoProbe,
+  };
+
+private:
+  // The next fragment within the section.
+  MCFragment *Next = nullptr;
+
+  /// The data for the section this fragment is in.
+  MCSection *Parent = nullptr;
+
+  /// The offset of this fragment in its section.
+  uint64_t Offset = 0;
+
+  /// The layout order of this fragment.
+  unsigned LayoutOrder = 0;
+
+  FragmentType Kind;
+
+protected:
+  /// Used by subclasses for better packing.
+  ///
+  /// MCEncodedFragment
+  bool HasInstructions : 1;
+  bool AlignToBundleEnd : 1;
+  /// MCDataFragment
+  bool LinkerRelaxable : 1;
+  /// MCRelaxableFragment: x86-specific
+  bool AllowAutoPadding : 1;
+
+  LLVM_ABI MCFragment(FragmentType Kind, bool HasInstructions);
+
+public:
+  MCFragment() = delete;
+  MCFragment(const MCFragment &) = delete;
+  MCFragment &operator=(const MCFragment &) = delete;
+
+  MCFragment *getNext() const { return Next; }
+
+  FragmentType getKind() const { return Kind; }
+
+  MCSection *getParent() const { return Parent; }
+  void setParent(MCSection *Value) { Parent = Value; }
+
+  LLVM_ABI const MCSymbol *getAtom() const;
+
+  unsigned getLayoutOrder() const { return LayoutOrder; }
+  void setLayoutOrder(unsigned Value) { LayoutOrder = Value; }
+
+  /// Does this fragment have instructions emitted into it? By default
+  /// this is false, but specific fragment types may set it to true.
+  bool hasInstructions() const { return HasInstructions; }
+
+  bool isLinkerRelaxable() const { return LinkerRelaxable; }
+  void setLinkerRelaxable() { LinkerRelaxable = true; }
+
+  LLVM_ABI void dump() const;
+};
+
 /// Interface implemented by fragments that contain encoded instructions and/or
 /// data.
-///
 class MCEncodedFragment : public MCFragment {
   uint8_t BundlePadding = 0;
+  uint32_t ContentStart = 0;
+  uint32_t ContentEnd = 0;
+  uint32_t FixupStart = 0;
+  uint32_t FixupEnd = 0;
 
 protected:
   MCEncodedFragment(MCFragment::FragmentType FType, bool HasInstructions)
@@ -318,7 +321,10 @@ public:
     case MCFragment::FT_Data:
     case MCFragment::FT_Dwarf:
     case MCFragment::FT_DwarfFrame:
+    case MCFragment::FT_LEB:
     case MCFragment::FT_PseudoProbe:
+    case MCFragment::FT_CVInlineLines:
+    case MCFragment::FT_CVDefRange:
       return true;
     }
   }
@@ -348,75 +354,114 @@ public:
     HasInstructions = true;
     this->STI = &STI;
   }
-};
 
-/// Interface implemented by fragments that contain encoded instructions and/or
-/// data and also have fixups registered.
-///
-template <unsigned ContentsSize, unsigned FixupsSize>
-class MCEncodedFragmentWithFixups : public MCEncodedFragment {
-  SmallVector<char, ContentsSize> Contents;
+  bool getAllowAutoPadding() const { return AllowAutoPadding; }
+  void setAllowAutoPadding(bool V) { AllowAutoPadding = V; }
 
-  /// The list of fixups in this fragment.
-  SmallVector<MCFixup, FixupsSize> Fixups;
-
-protected:
-  MCEncodedFragmentWithFixups(MCFragment::FragmentType FType,
-                              bool HasInstructions)
-      : MCEncodedFragment(FType, HasInstructions) {}
-
-public:
-  SmallVectorImpl<char> &getContents() { return Contents; }
-  const SmallVectorImpl<char> &getContents() const { return Contents; }
-
-  void appendContents(ArrayRef<char> C) { Contents.append(C.begin(), C.end()); }
-  void appendContents(size_t Num, char Elt) { Contents.append(Num, Elt); }
-  void setContents(ArrayRef<char> C) { Contents.assign(C.begin(), C.end()); }
-
-  void addFixup(MCFixup Fixup) { Fixups.push_back(Fixup); }
-  SmallVectorImpl<MCFixup> &getFixups() { return Fixups; }
-  const SmallVectorImpl<MCFixup> &getFixups() const { return Fixups; }
-
-  static bool classof(const MCFragment *F) {
-    MCFragment::FragmentType Kind = F->getKind();
-    return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data ||
-           Kind == MCFragment::FT_CVDefRange || Kind == MCFragment::FT_Dwarf ||
-           Kind == MCFragment::FT_DwarfFrame;
+  // Content-related functions manage parent's storage using ContentStart and
+  // ContentSize.
+  void clearContents() { ContentEnd = ContentStart; }
+  // Get a SmallVector reference. The caller should call doneAppending to update
+  // `ContentEnd`.
+  SmallVectorImpl<char> &getContentsForAppending() {
+    SmallVectorImpl<char> &S = getParent()->ContentStorage;
+    if (LLVM_UNLIKELY(ContentEnd != S.size())) {
+      // Move the elements to the end. Reserve space to avoid invalidating
+      // S.begin()+I for `append`.
+      auto Size = ContentEnd - ContentStart;
+      auto I = std::exchange(ContentStart, S.size());
+      S.reserve(S.size() + Size);
+      S.append(S.begin() + I, S.begin() + I + Size);
+    }
+    return S;
   }
+  void doneAppending() { ContentEnd = getParent()->ContentStorage.size(); }
+  void appendContents(ArrayRef<char> Contents) {
+    getContentsForAppending().append(Contents.begin(), Contents.end());
+    doneAppending();
+  }
+  void appendContents(size_t Num, char Elt) {
+    getContentsForAppending().append(Num, Elt);
+    doneAppending();
+  }
+  LLVM_ABI void setContents(ArrayRef<char> Contents);
+  MutableArrayRef<char> getContents() {
+    return MutableArrayRef(getParent()->ContentStorage)
+        .slice(ContentStart, ContentEnd - ContentStart);
+  }
+  ArrayRef<char> getContents() const {
+    return ArrayRef(getParent()->ContentStorage)
+        .slice(ContentStart, ContentEnd - ContentStart);
+  }
+
+  // Fixup-related functions manage parent's storage using FixupStart and
+  // FixupSize.
+  void clearFixups() { FixupEnd = FixupStart; }
+  LLVM_ABI void addFixup(MCFixup Fixup);
+  LLVM_ABI void appendFixups(ArrayRef<MCFixup> Fixups);
+  LLVM_ABI void setFixups(ArrayRef<MCFixup> Fixups);
+  MutableArrayRef<MCFixup> getFixups() {
+    return MutableArrayRef(getParent()->FixupStorage)
+        .slice(FixupStart, FixupEnd - FixupStart);
+  }
+  ArrayRef<MCFixup> getFixups() const {
+    return ArrayRef(getParent()->FixupStorage)
+        .slice(FixupStart, FixupEnd - FixupStart);
+  }
+
+  size_t getSize() const { return ContentEnd - ContentStart; }
 };
 
 /// Fragment for data and encoded instructions.
 ///
-class MCDataFragment : public MCEncodedFragmentWithFixups<32, 4> {
+class MCDataFragment : public MCEncodedFragment {
 public:
-  MCDataFragment() : MCEncodedFragmentWithFixups<32, 4>(FT_Data, false) {}
+  MCDataFragment() : MCEncodedFragment(FT_Data, false) {}
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Data;
   }
-
-  bool isLinkerRelaxable() const { return LinkerRelaxable; }
-  void setLinkerRelaxable() { LinkerRelaxable = true; }
 };
 
 /// A relaxable fragment holds on to its MCInst, since it may need to be
 /// relaxed during the assembler layout and relaxation stage.
 ///
-class MCRelaxableFragment : public MCEncodedFragmentWithFixups<8, 1> {
-  /// The instruction this is a fragment for.
-  MCInst Inst;
+class MCRelaxableFragment : public MCEncodedFragment {
+  uint32_t Opcode = 0;
+  uint32_t Flags = 0;
+  uint32_t OperandStart = 0;
+  uint32_t OperandSize = 0;
 
 public:
-  MCRelaxableFragment(const MCInst &Inst, const MCSubtargetInfo &STI)
-      : MCEncodedFragmentWithFixups(FT_Relaxable, true), Inst(Inst) {
+  MCRelaxableFragment(const MCSubtargetInfo &STI)
+      : MCEncodedFragment(FT_Relaxable, true) {
     this->STI = &STI;
   }
 
-  const MCInst &getInst() const { return Inst; }
-  void setInst(const MCInst &Value) { Inst = Value; }
-
-  bool getAllowAutoPadding() const { return AllowAutoPadding; }
-  void setAllowAutoPadding(bool V) { AllowAutoPadding = V; }
+  unsigned getOpcode() const { return Opcode; }
+  ArrayRef<MCOperand> getOperands() const {
+    return MutableArrayRef(getParent()->MCOperandStorage)
+        .slice(OperandStart, OperandSize);
+  }
+  MCInst getInst() const {
+    MCInst Inst;
+    Inst.setOpcode(Opcode);
+    Inst.setFlags(Flags);
+    Inst.setOperands(ArrayRef(getParent()->MCOperandStorage)
+                         .slice(OperandStart, OperandSize));
+    return Inst;
+  }
+  void setInst(const MCInst &Inst) {
+    Opcode = Inst.getOpcode();
+    Flags = Inst.getFlags();
+    auto &S = getParent()->MCOperandStorage;
+    if (Inst.getNumOperands() > OperandSize) {
+      OperandStart = S.size();
+      S.resize_for_overwrite(S.size() + Inst.getNumOperands());
+    }
+    OperandSize = Inst.getNumOperands();
+    llvm::copy(Inst, S.begin() + OperandStart);
+  }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Relaxable;
@@ -424,39 +469,36 @@ public:
 };
 
 class MCAlignFragment : public MCFragment {
-  /// The alignment to ensure, in bytes.
-  Align Alignment;
-
   /// Flag to indicate that (optimal) NOPs should be emitted instead
   /// of using the provided value. The exact interpretation of this flag is
   /// target dependent.
   bool EmitNops : 1;
 
-  /// Value to use for filling padding bytes.
-  int64_t Value;
+  /// The alignment to ensure, in bytes.
+  Align Alignment;
 
   /// The size of the integer (in bytes) of \p Value.
-  unsigned ValueSize;
+  uint8_t FillLen;
 
   /// The maximum number of bytes to emit; if the alignment
   /// cannot be satisfied in this width then this fragment is ignored.
   unsigned MaxBytesToEmit;
 
+  /// Value to use for filling padding bytes.
+  int64_t Fill;
+
   /// When emitting Nops some subtargets have specific nop encodings.
   const MCSubtargetInfo *STI = nullptr;
 
 public:
-  MCAlignFragment(Align Alignment, int64_t Value, unsigned ValueSize,
+  MCAlignFragment(Align Alignment, int64_t Fill, uint8_t FillLen,
                   unsigned MaxBytesToEmit)
-      : MCFragment(FT_Align, false), Alignment(Alignment), EmitNops(false),
-        Value(Value), ValueSize(ValueSize), MaxBytesToEmit(MaxBytesToEmit) {}
+      : MCFragment(FT_Align, false), EmitNops(false), Alignment(Alignment),
+        FillLen(FillLen), MaxBytesToEmit(MaxBytesToEmit), Fill(Fill) {}
 
   Align getAlignment() const { return Alignment; }
-
-  int64_t getValue() const { return Value; }
-
-  unsigned getValueSize() const { return ValueSize; }
-
+  int64_t getFill() const { return Fill; }
+  uint8_t getFillLen() const { return FillLen; }
   unsigned getMaxBytesToEmit() const { return MaxBytesToEmit; }
 
   bool hasEmitNops() const { return EmitNops; }
@@ -557,7 +599,7 @@ public:
   }
 };
 
-class MCLEBFragment final : public MCEncodedFragmentWithFixups<8, 0> {
+class MCLEBFragment final : public MCEncodedFragment {
   /// True if this is a sleb128, false if uleb128.
   bool IsSigned;
 
@@ -566,24 +608,19 @@ class MCLEBFragment final : public MCEncodedFragmentWithFixups<8, 0> {
 
 public:
   MCLEBFragment(const MCExpr &Value, bool IsSigned)
-      : MCEncodedFragmentWithFixups<8, 0>(FT_LEB, false), IsSigned(IsSigned),
-        Value(&Value) {
-    getContents().push_back(0);
-  }
+      : MCEncodedFragment(FT_LEB, false), IsSigned(IsSigned), Value(&Value) {}
 
   const MCExpr &getValue() const { return *Value; }
   void setValue(const MCExpr *Expr) { Value = Expr; }
 
   bool isSigned() const { return IsSigned; }
 
-  /// @}
-
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_LEB;
   }
 };
 
-class MCDwarfLineAddrFragment : public MCEncodedFragmentWithFixups<8, 1> {
+class MCDwarfLineAddrFragment : public MCEncodedFragment {
   /// The value of the difference between the two line numbers
   /// between two .loc dwarf directives.
   int64_t LineDelta;
@@ -594,8 +631,8 @@ class MCDwarfLineAddrFragment : public MCEncodedFragmentWithFixups<8, 1> {
 
 public:
   MCDwarfLineAddrFragment(int64_t LineDelta, const MCExpr &AddrDelta)
-      : MCEncodedFragmentWithFixups<8, 1>(FT_Dwarf, false),
-        LineDelta(LineDelta), AddrDelta(&AddrDelta) {}
+      : MCEncodedFragment(FT_Dwarf, false), LineDelta(LineDelta),
+        AddrDelta(&AddrDelta) {}
 
   int64_t getLineDelta() const { return LineDelta; }
 
@@ -606,15 +643,14 @@ public:
   }
 };
 
-class MCDwarfCallFrameFragment : public MCEncodedFragmentWithFixups<8, 1> {
+class MCDwarfCallFrameFragment : public MCEncodedFragment {
   /// The expression for the difference of the two symbols that
   /// make up the address delta between two .cfi_* dwarf directives.
   const MCExpr *AddrDelta;
 
 public:
   MCDwarfCallFrameFragment(const MCExpr &AddrDelta)
-      : MCEncodedFragmentWithFixups<8, 1>(FT_DwarfFrame, false),
-        AddrDelta(&AddrDelta) {}
+      : MCEncodedFragment(FT_DwarfFrame, false), AddrDelta(&AddrDelta) {}
 
   const MCExpr &getAddrDelta() const { return *AddrDelta; }
   void setAddrDelta(const MCExpr *E) { AddrDelta = E; }
@@ -642,13 +678,12 @@ public:
 
 /// Fragment representing the binary annotations produced by the
 /// .cv_inline_linetable directive.
-class MCCVInlineLineTableFragment : public MCFragment {
+class MCCVInlineLineTableFragment : public MCEncodedFragment {
   unsigned SiteFuncId;
   unsigned StartFileId;
   unsigned StartLineNum;
   const MCSymbol *FnStartSym;
   const MCSymbol *FnEndSym;
-  SmallString<8> Contents;
 
   /// CodeViewContext has the real knowledge about this format, so let it access
   /// our members.
@@ -658,15 +693,12 @@ public:
   MCCVInlineLineTableFragment(unsigned SiteFuncId, unsigned StartFileId,
                               unsigned StartLineNum, const MCSymbol *FnStartSym,
                               const MCSymbol *FnEndSym)
-      : MCFragment(FT_CVInlineLines, false), SiteFuncId(SiteFuncId),
+      : MCEncodedFragment(FT_CVInlineLines, false), SiteFuncId(SiteFuncId),
         StartFileId(StartFileId), StartLineNum(StartLineNum),
         FnStartSym(FnStartSym), FnEndSym(FnEndSym) {}
 
   const MCSymbol *getFnStartSym() const { return FnStartSym; }
   const MCSymbol *getFnEndSym() const { return FnEndSym; }
-
-  SmallString<8> &getContents() { return Contents; }
-  const SmallString<8> &getContents() const { return Contents; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_CVInlineLines;
@@ -674,9 +706,9 @@ public:
 };
 
 /// Fragment representing the .cv_def_range directive.
-class MCCVDefRangeFragment : public MCEncodedFragmentWithFixups<32, 4> {
-  SmallVector<std::pair<const MCSymbol *, const MCSymbol *>, 2> Ranges;
-  SmallString<32> FixedSizePortion;
+class MCCVDefRangeFragment : public MCEncodedFragment {
+  ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges;
+  StringRef FixedSizePortion;
 
   /// CodeViewContext has the real knowledge about this format, so let it access
   /// our members.
@@ -686,14 +718,15 @@ public:
   MCCVDefRangeFragment(
       ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges,
       StringRef FixedSizePortion)
-      : MCEncodedFragmentWithFixups<32, 4>(FT_CVDefRange, false),
-        Ranges(Ranges), FixedSizePortion(FixedSizePortion) {}
+      : MCEncodedFragment(FT_CVDefRange, false),
+        Ranges(Ranges.begin(), Ranges.end()),
+        FixedSizePortion(FixedSizePortion) {}
 
   ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> getRanges() const {
     return Ranges;
   }
 
-  StringRef getFixedSizePortion() const { return FixedSizePortion.str(); }
+  StringRef getFixedSizePortion() const { return FixedSizePortion; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_CVDefRange;
@@ -739,15 +772,14 @@ public:
   }
 };
 
-class MCPseudoProbeAddrFragment : public MCEncodedFragmentWithFixups<8, 1> {
+class MCPseudoProbeAddrFragment : public MCEncodedFragment {
   /// The expression for the difference of the two symbols that
   /// make up the address delta between two .pseudoprobe directives.
   const MCExpr *AddrDelta;
 
 public:
   MCPseudoProbeAddrFragment(const MCExpr *AddrDelta)
-      : MCEncodedFragmentWithFixups<8, 1>(FT_PseudoProbe, false),
-        AddrDelta(AddrDelta) {}
+      : MCEncodedFragment(FT_PseudoProbe, false), AddrDelta(AddrDelta) {}
 
   const MCExpr &getAddrDelta() const { return *AddrDelta; }
 
@@ -755,6 +787,11 @@ public:
     return F->getKind() == MCFragment::FT_PseudoProbe;
   }
 };
+
+inline MCSection::iterator &MCSection::iterator::operator++() {
+  F = F->Next;
+  return *this;
+}
 
 } // end namespace llvm
 
