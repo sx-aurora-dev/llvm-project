@@ -565,44 +565,7 @@ FPCONV_CASES(VCVTSL)
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
                                 raw_ostream &O) {
-  const DataLayout &DL = getDataLayout();
   const MachineOperand &MO = MI->getOperand(OpNum);
-  VEMCExpr::Specifier TF = (VEMCExpr::Specifier) MO.getTargetFlags();
-
-#ifndef NDEBUG
-  // Verify the target flags.
-  if (MO.isGlobal() || MO.isSymbol() || MO.isCPI()) {
-#if 0
-    if (MI->getOpcode() == SP::CALL)
-      assert(TF == VEMCExpr::VK_VE_None &&
-             "Cannot handle target flags on call address");
-    else if (MI->getOpcode() == VE::LEASL)
-      assert((TF == VEMCExpr::VK_VE_HI
-              || TF == VEMCExpr::VK_VE_H44
-              || TF == VEMCExpr::VK_VE_HH
-              || TF == VEMCExpr::VK_VE_TLS_GD_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LDM_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LDO_HIX22
-              || TF == VEMCExpr::VK_VE_TLS_IE_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LE_HIX22) &&
-             "Invalid target flags for address operand on sethi");
-    else if (MI->getOpcode() == SP::XORri || MI->getOpcode() == SP::XORXri)
-      assert((TF == VEMCExpr::VK_VE_TLS_LDO_LOX10
-              || TF == VEMCExpr::VK_VE_TLS_LE_LOX10) &&
-             "Cannot handle target flags on xor for TLS");
-    else
-      assert((TF == VEMCExpr::VK_VE_LO
-              || TF == VEMCExpr::VK_VE_M44
-              || TF == VEMCExpr::VK_VE_L44
-              || TF == VEMCExpr::VK_VE_HM
-              || TF == VEMCExpr::VK_VE_TLS_GD_LO10
-              || TF == VEMCExpr::VK_VE_TLS_LDM_LO10
-              || TF == VEMCExpr::VK_VE_TLS_IE_LO10 ) &&
-             "Invalid target flags for small address operand");
-#endif
-  }
-#endif
-
 
   switch (MO.getType()) {
   case MachineOperand::MO_Register:
@@ -611,30 +574,9 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   case MachineOperand::MO_Immediate:
     O << (int)MO.getImm();
     break;
-  case MachineOperand::MO_MachineBasicBlock:
-    MO.getMBB()->getSymbol()->print(O, MAI);
-    return;
-  case MachineOperand::MO_GlobalAddress:
-    getSymbol(MO.getGlobal())->print(O, MAI);
-    break;
-  case MachineOperand::MO_BlockAddress:
-    O <<  GetBlockAddressSymbol(MO.getBlockAddress())->getName();
-    break;
-  case MachineOperand::MO_ExternalSymbol:
-    O << MO.getSymbolName();
-    break;
-  case MachineOperand::MO_ConstantPoolIndex:
-    O << DL.getPrivateGlobalPrefix() << "CPI" << getFunctionNumber() << "_"
-      << MO.getIndex();
-    break;
-  case MachineOperand::MO_Metadata:
-    MO.getMetadata()->printAsOperand(O, MMI->getModule());
-    break;
   default:
     llvm_unreachable("<unknown operand type>");
   }
-  if (TF != VEMCExpr::VK_None && TF != VEMCExpr::VK_REFLONG)
-    O << '@' << MAI->getSpecifierName(TF);
 }
 
 // PrintAsmOperand - Print out an operand for an inline asm expression.
