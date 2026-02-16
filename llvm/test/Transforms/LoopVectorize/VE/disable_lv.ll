@@ -1,9 +1,9 @@
 ; RUN: opt < %s -passes=loop-vectorize -ve-expensive-vector=1 -mtriple=ve-linux -S | FileCheck %s -check-prefix=SCALAR
-; RUN: opt < %s -passes=loop-vectorize -ve-expensive-vector=0 -mtriple=ve-linux -S | FileCheck %s -check-prefix=SCALAR
+; RUN: opt < %s -passes=loop-vectorize -ve-expensive-vector=0 -mtriple=ve-linux -S | FileCheck %s -check-prefix=VECTOR
 ; RUN: opt < %s -passes=loop-vectorize -mtriple=x86_64-pc_linux -mcpu=core-avx2 -S | FileCheck %s -check-prefix=VECTOR
 
-; VE does not support LoopVectorize auto-vectorization (uses VVP path instead).
-; Verify that LV does not trigger for VE regardless of -ve-expensive-vector setting.
+; With -ve-expensive-vector=1, VE disables LoopVectorize (getRegisterBitWidth returns 0).
+; With -ve-expensive-vector=0, VE enables vector registers and LV can vectorize.
 
 ; SCALAR-NOT: x i32>
 ; VECTOR: vector.body

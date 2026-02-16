@@ -120,11 +120,14 @@ public:
 
   unsigned getNumberOfRegisters(unsigned ClassID) const override {
     bool VectorRegs = (ClassID == 1);
-    if (!makeVectorOpsExpensive() && enableVPU() && VectorRegs) {
-      return 64;
+    if (VectorRegs) {
+      if (!makeVectorOpsExpensive() && enableVPU())
+        return 64;
+      return 0;
     }
 
-    return 0;
+    // VE has 64 scalar registers (SX0-SX63).
+    return 64;
   }
 
   TypeSize
