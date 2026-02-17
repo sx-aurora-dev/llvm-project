@@ -40,8 +40,8 @@ static cl::opt<bool> ShowSpillMessageVec(
 // Pin the vtable to this file.
 void VEInstrInfo::anchor() {}
 
-VEInstrInfo::VEInstrInfo(VESubtarget &ST)
-    : VEGenInstrInfo(VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
+VEInstrInfo::VEInstrInfo(const VESubtarget &ST)
+    : VEGenInstrInfo(ST, VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
       Subtarget(ST) {}
 
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }

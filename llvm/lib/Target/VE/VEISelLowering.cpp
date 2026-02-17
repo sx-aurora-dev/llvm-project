@@ -1363,11 +1363,11 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   return nullptr;
 }
 
-EVT VETargetLowering::getSetCCResultType(const DataLayout &,
-                                         LLVMContext &Context, EVT VT) const {
-  if (!VT.isVector())
-    return MVT::i32;
-  return EVT::getVectorVT(Context, MVT::i1, VT.getVectorElementCount());
+EVT VETargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
+                                         EVT VT) const {
+  if (VT.isVector())
+    return VT.changeVectorElementType(MVT::i1);
+  return MVT::i32;
 }
 
 /// isMaskedValueZeroForTargetNode - Return true if 'Op & Mask' is known to

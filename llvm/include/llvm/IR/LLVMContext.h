@@ -97,8 +97,10 @@ public:
     OB_ptrauth = 7,                // "ptrauth"
     OB_kcfi = 8,                   // "kcfi"
     OB_convergencectrl = 9,        // "convergencectrl"
-    OB_cfp_round = 10,             // "cfp-round"
-    OB_cfp_except = 11,            // "cfp-except"
+    OB_align = 10,                 // "align"
+    OB_cfp_round = 11,             // "cfp-round"
+    OB_cfp_except = 12,            // "cfp-except"
+    OB_LastBundleID = OB_cfp_except // Marker for last bundle ID
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.
