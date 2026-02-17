@@ -11,6 +11,10 @@ a:
 .byte _GLOBAL_OFFSET_TABLE_ - .
 .2byte _GLOBAL_OFFSET_TABLE_
 .2byte _GLOBAL_OFFSET_TABLE_ - .
+## 4-byte pc-relative data emits R_VE_SREL32 as-is.
+## 8-byte pc-relative data is downgraded to R_VE_SREL32 because R_VE_PC64
+## does not exist (similar to COFF IMAGE_REL_AMD64_REL32).
+.4byte _GLOBAL_OFFSET_TABLE_ - .
 .8byte _GLOBAL_OFFSET_TABLE_ - .
 
 # CHECK:      data-reloc-error.s:10:7: error: 1-byte data relocation is not supported
@@ -21,6 +25,4 @@ a:
 # CHECK-NEXT: .2byte _GLOBAL_OFFSET_TABLE_
 # CHECK:      data-reloc-error.s:13:30: error: 2-byte pc-relative data relocation is not supported
 # CHECK-NEXT: .2byte _GLOBAL_OFFSET_TABLE_ - .
-# CHECK:      data-reloc-error.s:14:30: error: 8-byte pc-relative data relocation is not supported
-# CHECK-NEXT: .8byte _GLOBAL_OFFSET_TABLE_ - .
 
