@@ -441,8 +441,9 @@ public:
   uint64_t getPointerAlignV(LangAS AddrSpace) const override {
     return getPointerWidthV(AddrSpace);
   }
-  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts) override {
-    TargetInfo::adjust(Diags, Opts);
+  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
+              const TargetInfo *Aux) override {
+    TargetInfo::adjust(Diags, Opts, Aux);
     IsOpenCL = Opts.OpenCL;
   }
 
@@ -839,8 +840,9 @@ public:
     return llvm::IntegerType::MAX_INT_BITS;
   }
 
-  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts) override {
-    TargetInfo::adjust(Diags, Opts);
+  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
+              const TargetInfo *Aux) override {
+    TargetInfo::adjust(Diags, Opts, Aux);
     IsOpenCL = Opts.OpenCL;
   }
 
@@ -996,6 +998,10 @@ public:
     DefineStd(Builder, "unix", Opts);
     if (Opts.CPlusPlus)
       Builder.defineMacro("_GNU_SOURCE");
+  }
+
+  BuiltinVaListKind getBuiltinVaListKind() const override {
+    return TargetInfo::CharPtrBuiltinVaList;
   }
 };
 

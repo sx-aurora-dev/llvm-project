@@ -75,7 +75,6 @@ add_llvm_component_library(LLVMCore
   VPBuilder.cpp
   Value.cpp
   ValueSymbolTable.cpp
-  VectorBuilder.cpp
   VectorTypeUtils.cpp
   Verifier.cpp
   VFABIDemangler.cpp

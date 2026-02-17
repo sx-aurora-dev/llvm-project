@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/VEMCExpr.h"
 #include "VEISelLowering.h"
 #include "VEInstrBuilder.h"
 #include "VEMachineFunctionInfo.h"

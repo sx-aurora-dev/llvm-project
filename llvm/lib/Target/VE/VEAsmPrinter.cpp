@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/VEInstPrinter.h"
-#include "MCTargetDesc/VEMCExpr.h"
+#include "MCTargetDesc/VEMCAsmInfo.h"
 #include "MCTargetDesc/VETargetStreamer.h"
 #include "TargetInfo/VETargetInfo.h"
 #include "VE.h"
@@ -28,6 +28,7 @@
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -71,18 +72,17 @@ public:
 };
 } // end of anonymous namespace
 
-static MCOperand createVEMCOperand(VEMCExpr::Specifier Kind, MCSymbol *Sym,
+static MCOperand createVEMCOperand(VE::Specifier Kind, MCSymbol *Sym,
                                    MCContext &OutContext) {
   const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Sym, OutContext);
-  const VEMCExpr *expr = VEMCExpr::create(Kind, MCSym, OutContext);
-  return MCOperand::createExpr(expr);
+  return MCOperand::createExpr(
+      MCSpecifierExpr::create(MCSym, Kind, OutContext));
 }
 
-static MCOperand createGOTRelExprOp(VEMCExpr::Specifier Kind,
-                                    MCSymbol *GOTLabel, MCContext &OutContext) {
+static MCOperand createGOTRelExprOp(VE::Specifier Kind, MCSymbol *GOTLabel,
+                                    MCContext &OutContext) {
   const MCSymbolRefExpr *GOT = MCSymbolRefExpr::create(GOTLabel, OutContext);
-  const VEMCExpr *expr = VEMCExpr::create(Kind, GOT, OutContext);
-  return MCOperand::createExpr(expr);
+  return MCOperand::createExpr(MCSpecifierExpr::create(GOT, Kind, OutContext));
 }
 
 static void emitSIC(MCStreamer &OutStreamer, MCOperand &RD,
@@ -170,9 +170,8 @@ static void emitANDrm(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
 }
 
 static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
-                     VEMCExpr::Specifier HiKind, VEMCExpr::Specifier LoKind,
-                     MCOperand &RD, MCContext &OutContext,
-                     const MCSubtargetInfo &STI) {
+                     VE::Specifier HiKind, VE::Specifier LoKind, MCOperand &RD,
+                     MCContext &OutContext, const MCSubtargetInfo &STI) {
 
   MCOperand hi = createVEMCOperand(HiKind, GOTSym, OutContext);
   MCOperand lo = createVEMCOperand(LoKind, GOTSym, OutContext);
@@ -198,8 +197,8 @@ void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
     case CodeModel::Small:
     case CodeModel::Medium:
     case CodeModel::Large:
-      emitHiLo(*OutStreamer, GOTLabel, VEMCExpr::VK_HI32, VEMCExpr::VK_LO32,
-               MCRegOP, OutContext, STI);
+      emitHiLo(*OutStreamer, GOTLabel, VE::S_HI32, VE::S_LO32, MCRegOP,
+               OutContext, STI);
       break;
     }
     return;
@@ -213,14 +212,12 @@ void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   // sic %plt
   // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%plt, %got)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm =
-      createGOTRelExprOp(VEMCExpr::VK_PC_LO32, GOTLabel, OutContext);
+  MCOperand loImm = createGOTRelExprOp(VE::S_PC_LO32, GOTLabel, OutContext);
   emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand M032 = MCOperand::createImm(M0(32));
   emitANDrm(*OutStreamer, MCRegOP, M032, MCRegOP, STI);
   emitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm =
-      createGOTRelExprOp(VEMCExpr::VK_PC_HI32, GOTLabel, OutContext);
+  MCOperand hiImm = createGOTRelExprOp(VE::S_PC_HI32, GOTLabel, OutContext);
   emitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
 }
 
@@ -261,14 +258,12 @@ void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   // sic %plt                            ; FIXME: is it safe to use %plt here?
   // lea.sl %dst, func@plt_hi(%plt, %dst)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm =
-      createGOTRelExprOp(VEMCExpr::VK_PLT_LO32, AddrSym, OutContext);
+  MCOperand loImm = createGOTRelExprOp(VE::S_PLT_LO32, AddrSym, OutContext);
   emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand M032 = MCOperand::createImm(M0(32));
   emitANDrm(*OutStreamer, MCRegOP, M032, MCRegOP, STI);
   emitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm =
-      createGOTRelExprOp(VEMCExpr::VK_PLT_HI32, AddrSym, OutContext);
+  MCOperand hiImm = createGOTRelExprOp(VE::S_PLT_HI32, AddrSym, OutContext);
   emitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
 }
 
@@ -309,22 +304,20 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   // lea.sl %s12, __tls_get_addr@plt_hi(%s12, %lr)
   // bsic %lr, (, %s12)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm =
-      createGOTRelExprOp(VEMCExpr::VK_TLS_GD_LO32, AddrSym, OutContext);
+  MCOperand loImm = createGOTRelExprOp(VE::S_TLS_GD_LO32, AddrSym, OutContext);
   emitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
   MCOperand M032 = MCOperand::createImm(M0(32));
   emitANDrm(*OutStreamer, RegS0, M032, RegS0, STI);
   emitSIC(*OutStreamer, RegLR, STI);
-  MCOperand hiImm =
-      createGOTRelExprOp(VEMCExpr::VK_TLS_GD_HI32, AddrSym, OutContext);
+  MCOperand hiImm = createGOTRelExprOp(VE::S_TLS_GD_HI32, AddrSym, OutContext);
   emitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
   MCOperand ci8 = MCOperand::createImm(8);
   MCOperand loImm2 =
-      createGOTRelExprOp(VEMCExpr::VK_PLT_LO32, GetTLSLabel, OutContext);
+      createGOTRelExprOp(VE::S_PLT_LO32, GetTLSLabel, OutContext);
   emitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
   emitANDrm(*OutStreamer, RegS12, M032, RegS12, STI);
   MCOperand hiImm2 =
-      createGOTRelExprOp(VEMCExpr::VK_PLT_HI32, GetTLSLabel, OutContext);
+      createGOTRelExprOp(VE::S_PLT_HI32, GetTLSLabel, OutContext);
   emitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
@@ -572,44 +565,7 @@ FPCONV_CASES(VCVTSL)
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
                                 raw_ostream &O) {
-  const DataLayout &DL = getDataLayout();
   const MachineOperand &MO = MI->getOperand(OpNum);
-  VEMCExpr::Specifier TF = (VEMCExpr::Specifier) MO.getTargetFlags();
-
-#ifndef NDEBUG
-  // Verify the target flags.
-  if (MO.isGlobal() || MO.isSymbol() || MO.isCPI()) {
-#if 0
-    if (MI->getOpcode() == SP::CALL)
-      assert(TF == VEMCExpr::VK_VE_None &&
-             "Cannot handle target flags on call address");
-    else if (MI->getOpcode() == VE::LEASL)
-      assert((TF == VEMCExpr::VK_VE_HI
-              || TF == VEMCExpr::VK_VE_H44
-              || TF == VEMCExpr::VK_VE_HH
-              || TF == VEMCExpr::VK_VE_TLS_GD_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LDM_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LDO_HIX22
-              || TF == VEMCExpr::VK_VE_TLS_IE_HI22
-              || TF == VEMCExpr::VK_VE_TLS_LE_HIX22) &&
-             "Invalid target flags for address operand on sethi");
-    else if (MI->getOpcode() == SP::XORri || MI->getOpcode() == SP::XORXri)
-      assert((TF == VEMCExpr::VK_VE_TLS_LDO_LOX10
-              || TF == VEMCExpr::VK_VE_TLS_LE_LOX10) &&
-             "Cannot handle target flags on xor for TLS");
-    else
-      assert((TF == VEMCExpr::VK_VE_LO
-              || TF == VEMCExpr::VK_VE_M44
-              || TF == VEMCExpr::VK_VE_L44
-              || TF == VEMCExpr::VK_VE_HM
-              || TF == VEMCExpr::VK_VE_TLS_GD_LO10
-              || TF == VEMCExpr::VK_VE_TLS_LDM_LO10
-              || TF == VEMCExpr::VK_VE_TLS_IE_LO10 ) &&
-             "Invalid target flags for small address operand");
-#endif
-  }
-#endif
-
 
   switch (MO.getType()) {
   case MachineOperand::MO_Register:
@@ -618,30 +574,9 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   case MachineOperand::MO_Immediate:
     O << (int)MO.getImm();
     break;
-  case MachineOperand::MO_MachineBasicBlock:
-    MO.getMBB()->getSymbol()->print(O, MAI);
-    return;
-  case MachineOperand::MO_GlobalAddress:
-    getSymbol(MO.getGlobal())->print(O, MAI);
-    break;
-  case MachineOperand::MO_BlockAddress:
-    O <<  GetBlockAddressSymbol(MO.getBlockAddress())->getName();
-    break;
-  case MachineOperand::MO_ExternalSymbol:
-    O << MO.getSymbolName();
-    break;
-  case MachineOperand::MO_ConstantPoolIndex:
-    O << DL.getPrivateGlobalPrefix() << "CPI" << getFunctionNumber() << "_"
-      << MO.getIndex();
-    break;
-  case MachineOperand::MO_Metadata:
-    MO.getMetadata()->printAsOperand(O, MMI->getModule());
-    break;
   default:
     llvm_unreachable("<unknown operand type>");
   }
-  if (TF != VEMCExpr::VK_None && TF != VEMCExpr::VK_REFLONG)
-    O << '@' << MAI->getSpecifierName(TF);
 }
 
 // PrintAsmOperand - Print out an operand for an inline asm expression.
@@ -702,6 +637,6 @@ INITIALIZE_PASS(VEAsmPrinter, "ve-asm-printer", "VE Assembly Printer", false,
                 false)
 
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEAsmPrinter() {
+extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEAsmPrinter() {
   RegisterAsmPrinter<VEAsmPrinter> X(getTheVETarget());
 }
