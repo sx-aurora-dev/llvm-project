@@ -657,6 +657,8 @@ public:
   bool isCtlzFast() const override { return true; }
   // VE has NND instruction.
   bool hasAndNot(SDValue Y) const override;
+  // VE uses generic registers as conditional registers.
+  bool hasMultipleConditionRegisters(EVT VT) const override { return true; }
 
   /// } Target Optimization
 };

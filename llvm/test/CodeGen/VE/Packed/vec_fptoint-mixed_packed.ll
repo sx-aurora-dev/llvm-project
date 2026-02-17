@@ -70,7 +70,7 @@ define fastcc <512 x i64> @vec_fptosi_v512f64_v512i64(<512 x double> %x) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.l.d.rz %v1, %v1
 ; CHECK-NEXT:    vcvt.l.d.rz %v0, %v0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fptosi <512 x double> %x to <512 x i64>
   ret <512 x i64> %r
@@ -96,9 +96,6 @@ define fastcc <512 x i64> @vec_fptoui_v512f64_v512i64(<512 x double> %x) {
 ; CHECK-NEXT:    vfcmp.d %v1, %v0, %v4
 ; CHECK-NEXT:    vfmk.l.lt %vm1, %v1
 ; CHECK-NEXT:    vcvt.l.d.rz %v3, %v0, %vm1
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v3

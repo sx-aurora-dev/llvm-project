@@ -187,11 +187,8 @@ define fastcc <334 x i64> @vreg_arg_v334i64_r1(<256 x i64> %p0, <334 x i64> %p1)
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v3
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v2
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <334 x i64> %p1
 }

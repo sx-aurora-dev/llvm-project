@@ -9,7 +9,7 @@ define fastcc <512 x double> @vec_fpext_v512_float_to_double(<512 x float> %a) {
 ; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
 ; CHECK-NEXT:    vcvt.d.s %v1, %v1
 ; CHECK-NEXT:    vcvt.d.s %v0, %v0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fpext <512 x float> %a to <512 x double>
   ret <512 x double> %r
@@ -30,7 +30,7 @@ define fastcc <512 x double> @vec_vpfpext_v512_float_to_double(<512 x float> %a,
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.s %v1, %v1, %vm3
 ; CHECK-NEXT:    vcvt.d.s %v0, %v0, %vm2
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <512 x double> @llvm.vp.fpext.v512f32.v512f64(<512 x float> %a, <512 x i1> %m, i32 %avl)
   ret <512 x double> %r

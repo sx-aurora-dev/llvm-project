@@ -63,7 +63,7 @@ define fastcc <512 x double> @vec_load_v512f64(<512 x double>* %P) {
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vld %v1, 16, %s1
 ; CHECK-NEXT:    vld %v0, 16, %s0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = load <512 x double>, <512 x double>* %P, align 4
   ret <512 x double> %ret
@@ -81,7 +81,7 @@ define fastcc <512 x double> @vec_mload_v512f64(<512 x double>* %P, <512 x i1> %
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vld %v1, 16, %s1
 ; CHECK-NEXT:    vld %v0, 16, %s0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = call <512 x double> @llvm.masked.load.v512f64.p0v512f64(<512 x double>* %P, i32 16, <512 x i1> %M, <512 x double> undef)
   ret <512 x double> %ret
@@ -100,7 +100,7 @@ define fastcc <512 x double> @vec_vpload_v512f64(<512 x double>* %P, <512 x i1> 
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v1, 16, %s2
 ; CHECK-NEXT:    vld %v0, 16, %s0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = call <512 x double> @llvm.vp.load.v512f64.p0v512f64(<512 x double>* %P, <512 x i1> %M, i32 %avl)
   ret <512 x double> %ret
