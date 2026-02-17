@@ -71,9 +71,10 @@ unsigned VEELFObjectWriter::getRelocType(const MCFixup &Fixup,
     case FK_Data_4:
       return ELF::R_VE_SREL32;
     case FK_Data_8:
-      reportError(Fixup.getLoc(),
-                  "8-byte pc-relative data relocation is not supported");
-      return ELF::R_VE_NONE;
+      // R_VE_PC64 does not exist. Downgrade to R_VE_SREL32, similar to
+      // COFF IMAGE_REL_AMD64_REL32 for .quad cross-section differences.
+      // The profiling runtime sign-extends from 32 bits on VE.
+      return ELF::R_VE_SREL32;
     case VE::fixup_ve_reflong:
     case VE::fixup_ve_srel32:
       return ELF::R_VE_SREL32;
