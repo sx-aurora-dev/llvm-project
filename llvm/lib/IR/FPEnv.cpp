@@ -148,5 +148,3 @@ Value *GetConstrainedFPRounding(LLVMContext &Context,
 
   return MetadataAsValue::get(Context, RoundingMDS);
 }
-
-} // namespace llvm
