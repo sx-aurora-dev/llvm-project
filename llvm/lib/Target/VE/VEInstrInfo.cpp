@@ -510,13 +510,13 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - V64\n";
     } if (RC == &VE::VPRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VP\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM512\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VM512\n";
     }
   }
 
@@ -601,13 +601,13 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - V64\n";
     } else if (RC == &VE::VPRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VP\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM512\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VM512\n";
     }
   }
 
