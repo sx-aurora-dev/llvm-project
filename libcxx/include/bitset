@@ -867,7 +867,19 @@ bitset<_Size>::to_string(char __zero, char __one) const {
 
 template <size_t _Size>
 inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 size_t bitset<_Size>::count() const _NOEXCEPT {
-  return static_cast<size_t>(std::count(__base::__make_iter(0), __base::__make_iter(_Size), true));
+// C23 requires __BITINT_MAXWIDTH__ to be defined, so clang defines it
+// unconditionally, even on targets where _BitInt is not supported.
+// VE does not support _BitInt (hasBitIntType() returns false), so exclude it.
+#  if defined(_LIBCPP_COMPILER_CLANG_BASED) && !defined(_LIBCPP_CXX03_LANG) && defined(__BITINT_MAXWIDTH__) && !defined(__ve__)
+  if constexpr (_Size == 0) {
+    return 0;
+  } else if constexpr (_Size <= __base::__bits_per_word) {
+    return __builtin_popcountg(static_cast<unsigned _BitInt(_Size)>(__base::__first_));
+  } else
+#  endif
+  {
+    return static_cast<size_t>(std::count(__base::__make_iter(0), __base::__make_iter(_Size), true));
+  }
 }
 
 template <size_t _Size>

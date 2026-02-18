@@ -54,7 +54,7 @@ class VEInstrInfo : public VEGenInstrInfo {
   virtual void anchor();
 
 public:
-  explicit VEInstrInfo(VESubtarget &ST);
+  explicit VEInstrInfo(const VESubtarget &ST);
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should

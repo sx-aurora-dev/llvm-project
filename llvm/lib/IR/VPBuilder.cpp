@@ -131,7 +131,7 @@ VectorType &VPBuilder::getVectorType(Type &ElementTy) {
 
 Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                         MaybeAlign AlignOpt) {
-  auto *StoreFunc = Intrinsic::getDeclaration(
+  auto *StoreFunc = Intrinsic::getOrInsertDeclaration(
       &getModule(), Intrinsic::vp_store,
       {Val.getType(), ElemPointer.getType()});
   SmallVector<Value *, 4> Args{&Val, &ElemPointer, &RequestPred(),
@@ -165,7 +165,7 @@ Value &VPBuilder::CreateContiguousLoad(Type *ReturnTy,
 Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
                                 MaybeAlign AlignOpt) {
   auto *ScatterFunc =
-      Intrinsic::getDeclaration(&getModule(), Intrinsic::vp_scatter, 
+      Intrinsic::getOrInsertDeclaration(&getModule(), Intrinsic::vp_scatter, 
                                 {Val.getType(), PointerVec.getType()});
   ShortValueVec Args{&Val, &PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &ScatterCall = *Builder.CreateCall(ScatterFunc, Args);

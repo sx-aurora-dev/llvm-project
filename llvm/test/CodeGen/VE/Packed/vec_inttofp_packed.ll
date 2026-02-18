@@ -79,7 +79,7 @@ define fastcc <512 x double> @vec_sitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.l %v1, %v1
 ; CHECK-NEXT:    vcvt.d.l %v0, %v0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = sitofp <512 x i64> %x to <512 x double>
   ret <512 x double> %r
@@ -110,7 +110,7 @@ define fastcc <512 x double> @vec_uitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-NEXT:    vfadd.d %v1, %v7, %v5
 ; CHECK-NEXT:    vfsub.d %v0, %v2, %v4
 ; CHECK-NEXT:    vfadd.d %v0, %v6, %v0
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = uitofp <512 x i64> %x to <512 x double>
   ret <512 x double> %r

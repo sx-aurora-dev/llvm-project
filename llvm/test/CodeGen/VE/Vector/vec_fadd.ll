@@ -139,7 +139,7 @@ define fastcc <512 x double> @vec_add_v512f64(<512 x double> %a, <512 x double> 
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.d %v1, %v1, %v3
 ; CHECK-NEXT:    vfadd.d %v0, %v0, %v2
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fadd <512 x double> %a, %b
   ret <512 x double> %r
@@ -155,8 +155,8 @@ define fastcc <1024 x double> @vec_add_v1024f64(<1024 x double> %a, <1024 x doub
 ; CHECK-NEXT:    vfadd.d %v0, %v0, %v4
 ; CHECK-NEXT:    vfadd.d %v3, %v3, %v7
 ; CHECK-NEXT:    vfadd.d %v2, %v2, %v6
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
-; CHECK-NEXT:    # kill: def $v2 killed $v2 def $vp1 killed $v3
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
+; CHECK-NEXT:    # kill: def $v2 killed $v2 def $vp1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fadd <1024 x double> %a, %b
   ret <1024 x double> %r

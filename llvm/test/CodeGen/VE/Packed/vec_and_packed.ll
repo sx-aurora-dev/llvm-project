@@ -139,7 +139,7 @@ define fastcc <512 x i64> @vec_and_v512f64(<512 x i64> %a, <512 x i64> %b) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vand %v1, %v1, %v3
 ; CHECK-NEXT:    vand %v0, %v0, %v2
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = and <512 x i64> %a, %b
   ret <512 x i64> %r
@@ -155,8 +155,8 @@ define fastcc <1024 x i64> @vec_and_v1024f64(<1024 x i64> %a, <1024 x i64> %b) {
 ; CHECK-NEXT:    vand %v0, %v0, %v4
 ; CHECK-NEXT:    vand %v3, %v3, %v7
 ; CHECK-NEXT:    vand %v2, %v2, %v6
-; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
-; CHECK-NEXT:    # kill: def $v2 killed $v2 def $vp1 killed $v3
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0
+; CHECK-NEXT:    # kill: def $v2 killed $v2 def $vp1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = and <1024 x i64> %a, %b
   ret <1024 x i64> %r

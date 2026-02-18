@@ -157,7 +157,7 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
     if (Offset == 0xffff)
       continue;
     Reg = TRI.getDwarfRegNum(SR, false);
-    if (Reg < 0)
+    if (Reg < 0 || Offset + Size > RegSize)
       continue;
 
     // Used to build the intersection between the bits we already
@@ -195,6 +195,15 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
 void DwarfExpression::addStackValue() {
   if (DwarfVersion >= 4)
     emitOp(dwarf::DW_OP_stack_value);
+}
+
+void DwarfExpression::addBooleanConstant(int64_t Value) {
+  assert(isImplicitLocation() || isUnknownLocation());
+  LocationKind = Implicit;
+  if (Value == 0)
+    emitOp(dwarf::DW_OP_lit0);
+  else
+    emitOp(dwarf::DW_OP_lit1);
 }
 
 void DwarfExpression::addSignedConstant(int64_t Value) {
@@ -612,12 +621,15 @@ bool DwarfExpression::addExpression(
     case dwarf::DW_OP_dup:
     case dwarf::DW_OP_push_object_address:
     case dwarf::DW_OP_over:
+    case dwarf::DW_OP_rot:
     case dwarf::DW_OP_eq:
     case dwarf::DW_OP_ne:
     case dwarf::DW_OP_gt:
     case dwarf::DW_OP_ge:
     case dwarf::DW_OP_lt:
     case dwarf::DW_OP_le:
+    case dwarf::DW_OP_neg:
+    case dwarf::DW_OP_abs:
       emitOp(OpNum);
       break;
     case dwarf::DW_OP_deref:

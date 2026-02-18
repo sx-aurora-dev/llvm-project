@@ -382,6 +382,7 @@ private:
   SDValue PromoteIntRes_VECTOR_FIND_LAST_ACTIVE(SDNode *N);
   SDValue PromoteIntRes_GET_ACTIVE_LANE_MASK(SDNode *N);
   SDValue PromoteIntRes_PARTIAL_REDUCE_MLA(SDNode *N);
+  SDValue PromoteIntRes_LOOP_DEPENDENCE_MASK(SDNode *N);
 
   // Integer Operand Promotion.
   bool PromoteIntegerOperand(SDNode *N, unsigned OpNo);
@@ -437,6 +438,7 @@ private:
   SDValue PromoteIntOp_VECTOR_FIND_LAST_ACTIVE(SDNode *N, unsigned OpNo);
   SDValue PromoteIntOp_GET_ACTIVE_LANE_MASK(SDNode *N);
   SDValue PromoteIntOp_PARTIAL_REDUCE_MLA(SDNode *N);
+  SDValue PromoteIntOp_LOOP_DEPENDENCE_MASK(SDNode *N, unsigned OpNo);
 
   void SExtOrZExtPromotedOperands(SDValue &LHS, SDValue &RHS);
   void PromoteSetCCOperands(SDValue &LHS,SDValue &RHS, ISD::CondCode Code);
@@ -682,6 +684,7 @@ private:
       SDNode *N, RTLIB::Libcall LC, std::optional<unsigned> CallRetResNo = {});
 
   // clang-format off
+  void ExpandFloatRes_AssertNoFPClass(SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FABS      (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FACOS     (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandFloatRes_FASIN     (SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -868,6 +871,7 @@ private:
   // Vector Result Scalarization: <1 x ty> -> ty.
   void ScalarizeVectorResult(SDNode *N, unsigned ResNo);
   SDValue ScalarizeVecRes_MERGE_VALUES(SDNode *N, unsigned ResNo);
+  SDValue ScalarizeVecRes_LOOP_DEPENDENCE_MASK(SDNode *N);
   SDValue ScalarizeVecRes_BinOp(SDNode *N);
   SDValue ScalarizeVecRes_CMP(SDNode *N);
   SDValue ScalarizeVecRes_TernaryOp(SDNode *N);
@@ -909,6 +913,7 @@ private:
   SDValue ScalarizeVecOp_EXTRACT_VECTOR_ELT(SDNode *N);
   SDValue ScalarizeVecOp_VSELECT(SDNode *N);
   SDValue ScalarizeVecOp_VSETCC(SDNode *N);
+  SDValue ScalarizeVecOp_VSTRICT_FSETCC(SDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_STORE(StoreSDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_FP_ROUND(SDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_STRICT_FP_ROUND(SDNode *N, unsigned OpNo);
@@ -964,6 +969,7 @@ private:
   void SplitVecRes_FIX(SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void SplitVecRes_BITCAST(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_LOOP_DEPENDENCE_MASK(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_BUILD_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_SPLAT_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_CONCAT_VECTORS(SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -974,6 +980,7 @@ private:
   void SplitVecRes_INSERT_VECTOR_ELT(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_LOAD(LoadSDNode *LD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_VP_LOAD(VPLoadSDNode *LD, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_VP_LOAD_FF(VPLoadFFSDNode *LD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_VP_STRIDED_LOAD(VPStridedLoadSDNode *SLD, SDValue &Lo,
                                    SDValue &Hi);
   void SplitVecRes_MLOAD(MaskedLoadSDNode *MLD, SDValue &Lo, SDValue &Hi);
@@ -1070,6 +1077,7 @@ private:
   SDValue WidenVecRes_ADDRSPACECAST(SDNode *N);
   SDValue WidenVecRes_AssertZext(SDNode* N);
   SDValue WidenVecRes_BITCAST(SDNode* N);
+  SDValue WidenVecRes_LOOP_DEPENDENCE_MASK(SDNode *N);
   SDValue WidenVecRes_BUILD_VECTOR(SDNode* N);
   SDValue WidenVecRes_CONCAT_VECTORS(SDNode* N);
   SDValue WidenVecRes_EXTEND_VECTOR_INREG(SDNode* N);
@@ -1078,6 +1086,7 @@ private:
   SDValue WidenVecRes_INSERT_VECTOR_ELT(SDNode* N);
   SDValue WidenVecRes_LOAD(SDNode* N);
   SDValue WidenVecRes_VP_LOAD(VPLoadSDNode *N);
+  SDValue WidenVecRes_VP_LOAD_FF(VPLoadFFSDNode *N);
   SDValue WidenVecRes_VP_STRIDED_LOAD(VPStridedLoadSDNode *N);
   SDValue WidenVecRes_VECTOR_COMPRESS(SDNode *N);
   SDValue WidenVecRes_MLOAD(MaskedLoadSDNode* N);
