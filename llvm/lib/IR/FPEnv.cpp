@@ -131,8 +131,8 @@ Intrinsic::ID llvm::getConstrainedIntrinsicID(const Instruction &Instr) {
   return IID;
 }
 
-Value *GetConstrainedFPExcept(LLVMContext &Context,
-                              fp::ExceptionBehavior UseExcept) {
+Value *llvm::GetConstrainedFPExcept(LLVMContext &Context,
+                                    fp::ExceptionBehavior UseExcept) {
   std::optional<StringRef> ExceptStr = convertExceptionBehaviorToStr(UseExcept);
   assert(ExceptStr.has_value() && "Garbage strict exception behavior!");
   auto *ExceptMDS = MDString::get(Context, ExceptStr.value());
@@ -140,8 +140,8 @@ Value *GetConstrainedFPExcept(LLVMContext &Context,
   return MetadataAsValue::get(Context, ExceptMDS);
 }
 
-Value *GetConstrainedFPRounding(LLVMContext &Context,
-                                RoundingMode UseRounding) {
+Value *llvm::GetConstrainedFPRounding(LLVMContext &Context,
+                                      RoundingMode UseRounding) {
   std::optional<StringRef> RoundingStr = convertRoundingModeToStr(UseRounding);
   assert(RoundingStr.has_value() && "Garbage strict rounding mode!");
   auto *RoundingMDS = MDString::get(Context, RoundingStr.value());
