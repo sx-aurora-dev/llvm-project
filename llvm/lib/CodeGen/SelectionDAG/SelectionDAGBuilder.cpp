@@ -1135,14 +1135,15 @@ RegsForValue::getRegsAndSizes() const {
 }
 
 void SelectionDAGBuilder::init(GCFunctionInfo *gfi, BatchAAResults *aa,
-                               AssumptionCache *ac,
-                               const TargetLibraryInfo *li) {
+                               AssumptionCache *ac, const TargetLibraryInfo *li,
+                               const TargetTransformInfo &TTI) {
   BatchAA = aa;
   AC = ac;
   GFI = gfi;
   LibInfo = li;
   Context = DAG.getContext();
   LPadToCallSiteMap.clear();
+  this->TTI = &TTI;
   SL->init(DAG.getTargetLoweringInfo(), TM, DAG.getDataLayout());
   AssignmentTrackingEnabled = isAssignmentTrackingEnabled(
       *DAG.getMachineFunction().getFunction().getParent());
@@ -2627,10 +2628,6 @@ bool SelectionDAGBuilder::shouldKeepJumpConditionsTogether(
     if (!LhsDeps.contains(RhsI))
       RhsDeps.try_emplace(RhsI, false);
 
-  const auto &TLI = DAG.getTargetLoweringInfo();
-  const auto &TTI =
-      TLI.getTargetMachine().getTargetTransformInfo(*I.getFunction());
-
   InstructionCost CostOfIncluding = 0;
   // See if this instruction will need to computed independently of whether RHS
   // is.
@@ -2670,8 +2667,8 @@ bool SelectionDAGBuilder::shouldKeepJumpConditionsTogether(
     // RHS condition. Use latency because we are essentially trying to calculate
     // the cost of the dependency chain.
     // Possible TODO: We could try to estimate ILP and make this more precise.
-    CostOfIncluding +=
-        TTI.getInstructionCost(InsPair.first, TargetTransformInfo::TCK_Latency);
+    CostOfIncluding += TTI->getInstructionCost(
+        InsPair.first, TargetTransformInfo::TCK_Latency);
 
     if (CostOfIncluding > CostThresh)
       return false;
@@ -4014,7 +4011,10 @@ void SelectionDAGBuilder::visitFPExt(const User &I) {
   SDValue N = getValue(I.getOperand(0));
   EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
                                                         I.getType());
-  setValue(&I, DAG.getNode(ISD::FP_EXTEND, getCurSDLoc(), DestVT, N));
+  SDNodeFlags Flags;
+  if (auto *TruncInst = dyn_cast<FPMathOperator>(&I))
+    Flags.copyFMF(*TruncInst);
+  setValue(&I, DAG.getNode(ISD::FP_EXTEND, getCurSDLoc(), DestVT, N, Flags));
 }
 
 void SelectionDAGBuilder::visitFPToUI(const User &I) {
@@ -4950,10 +4950,9 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
       LocationSize::beforeOrAfterPointer(), Alignment, I.getAAMetadata());
 
   const auto &TLI = DAG.getTargetLoweringInfo();
-  const auto &TTI =
-      TLI.getTargetMachine().getTargetTransformInfo(*I.getFunction());
+
   SDValue StoreNode =
-      !IsCompressing && TTI.hasConditionalLoadStoreForType(
+      !IsCompressing && TTI->hasConditionalLoadStoreForType(
                             I.getArgOperand(0)->getType(), /*IsStore=*/true)
           ? TLI.visitMaskedStore(DAG, sdl, getMemoryRoot(), MMO, Ptr, Src0,
                                  Mask)
@@ -5108,14 +5107,14 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
       LocationSize::beforeOrAfterPointer(), Alignment, AAInfo, Ranges);
 
   const auto &TLI = DAG.getTargetLoweringInfo();
-  const auto &TTI =
-      TLI.getTargetMachine().getTargetTransformInfo(*I.getFunction());
+
   // The Load/Res may point to different values and both of them are output
   // variables.
   SDValue Load;
   SDValue Res;
-  if (!IsExpanding && TTI.hasConditionalLoadStoreForType(Src0Operand->getType(),
-                                                         /*IsStore=*/false))
+  if (!IsExpanding &&
+      TTI->hasConditionalLoadStoreForType(Src0Operand->getType(),
+                                          /*IsStore=*/false))
     Res = TLI.visitMaskedLoad(DAG, sdl, InChain, MMO, Load, Ptr, Src0, Mask);
   else
     Res = Load =
@@ -9505,7 +9504,9 @@ bool SelectionDAGBuilder::visitStrNLenCall(const CallInst &I) {
 bool SelectionDAGBuilder::visitUnaryFloatCall(const CallInst &I,
                                               unsigned Opcode) {
   // We already checked this call's prototype; verify it doesn't modify errno.
-  if (!I.onlyReadsMemory())
+  // Do not perform optimizations for call sites that require strict
+  // floating-point semantics.
+  if (!I.onlyReadsMemory() || I.isStrictFP())
     return false;
 
   SDNodeFlags Flags;
@@ -9525,7 +9526,9 @@ bool SelectionDAGBuilder::visitUnaryFloatCall(const CallInst &I,
 bool SelectionDAGBuilder::visitBinaryFloatCall(const CallInst &I,
                                                unsigned Opcode) {
   // We already checked this call's prototype; verify it doesn't modify errno.
-  if (!I.onlyReadsMemory())
+  // Do not perform optimizations for call sites that require strict
+  // floating-point semantics.
+  if (!I.onlyReadsMemory() || I.isStrictFP())
     return false;
 
   SDNodeFlags Flags;
@@ -9558,11 +9561,10 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
 
     // Check for well-known libc/libm calls.  If the function is internal, it
     // can't be a library call.  Don't do the check if marked as nobuiltin for
-    // some reason or the call site requires strict floating point semantics.
+    // some reason.
     LibFunc Func;
-    if (!I.isNoBuiltin() && !I.isStrictFP() && !F->hasLocalLinkage() &&
-        F->hasName() && LibInfo->getLibFunc(*F, Func) &&
-        LibInfo->hasOptimizedCodeGen(Func)) {
+    if (!I.isNoBuiltin() && !F->hasLocalLinkage() && F->hasName() &&
+        LibInfo->getLibFunc(*F, Func) && LibInfo->hasOptimizedCodeGen(Func)) {
       switch (Func) {
       default: break;
       case LibFunc_bcmp:
@@ -10780,8 +10782,22 @@ SDValue SelectionDAGBuilder::lowerNoFPClassToAssertNoFPClass(
   if (Classes == fcNone)
     return Op;
 
-  return DAG.getNode(ISD::AssertNoFPClass, SDLoc(Op), Op.getValueType(), Op,
-                     DAG.getTargetConstant(Classes, SDLoc(), MVT::i32));
+  SDLoc SL = getCurSDLoc();
+  SDValue TestConst = DAG.getTargetConstant(Classes, SDLoc(), MVT::i32);
+
+  if (Op.getOpcode() != ISD::MERGE_VALUES) {
+    return DAG.getNode(ISD::AssertNoFPClass, SL, Op.getValueType(), Op,
+                       TestConst);
+  }
+
+  SmallVector<SDValue, 8> Ops(Op.getNumOperands());
+  for (unsigned I = 0, E = Ops.size(); I != E; ++I) {
+    SDValue MergeOp = Op.getOperand(I);
+    Ops[I] = DAG.getNode(ISD::AssertNoFPClass, SL, MergeOp.getValueType(),
+                         MergeOp, TestConst);
+  }
+
+  return DAG.getMergeValues(Ops, SL);
 }
 
 /// Populate a CallLowerinInfo (into \p CLI) based on the properties of

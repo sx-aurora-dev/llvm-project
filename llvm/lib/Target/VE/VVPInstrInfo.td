@@ -220,6 +220,8 @@ def vvp_sub    : SDNode<"VEISD::VVP_SUB",  SDTIntBinOpVVP>;
 def vvp_mul    : SDNode<"VEISD::VVP_MUL",  SDTIntBinOpVVP>;
 def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV", SDTIntBinOpVVP>;
 def vvp_udiv   : SDNode<"VEISD::VVP_UDIV", SDTIntBinOpVVP>;
+def vvp_srem   : SDNode<"VEISD::VVP_SREM", SDTIntBinOpVVP>;
+def vvp_urem   : SDNode<"VEISD::VVP_UREM", SDTIntBinOpVVP>;
 
 def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntBinOpVVP>;
 def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntBinOpVVP>;
@@ -257,6 +259,7 @@ def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 def vvp_fptrunc      : SDNode<"VEISD::VVP_FPTRUNC", SDTFPRoundOpVVP>;
 
 def vvp_frcp       : SDNode<"VEISD::VVP_FRCP", SDTFPUnaryOpVVP>;
+def vvp_frsqrt     : SDNode<"VEISD::VVP_FRSQRT", SDTFPUnaryOpVVP>;
 def vvp_ffloor     : SDNode<"VEISD::VVP_FFLOOR", SDTFPUnaryOpVVP>;
 // zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
@@ -277,6 +280,7 @@ def vvp_reduce_fmax          : SDNode<"VEISD::VVP_REDUCE_FMAX", SDTReduceVVP>;
 
 // int reductions
 def vvp_reduce_add          : SDNode<"VEISD::VVP_REDUCE_ADD", SDTReduceVVP>;
+def vvp_reduce_mul          : SDNode<"VEISD::VVP_REDUCE_MUL", SDTReduceVVP>;
 def vvp_reduce_and          : SDNode<"VEISD::VVP_REDUCE_AND", SDTReduceVVP>;
 def vvp_reduce_or           : SDNode<"VEISD::VVP_REDUCE_OR",  SDTReduceVVP>;
 def vvp_reduce_xor          : SDNode<"VEISD::VVP_REDUCE_XOR", SDTReduceVVP>;

@@ -15,6 +15,7 @@
 #include "MaskView.h"
 #include "VE.h"
 #include "VEISelLowering.h"
+#include "VESelectionDAGInfo.h"
 #include "VVPCombine.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"

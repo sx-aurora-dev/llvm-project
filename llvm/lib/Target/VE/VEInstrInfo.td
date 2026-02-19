@@ -574,6 +574,14 @@ def ts1am     : SDNode<"VEISD::TS1AM", SDT_TS1AM,
                        [SDNPHasChain, SDNPMayStore, SDNPMayLoad,
                         SDNPMemOperand]>;
 
+// FLUSHW flushes register windows to stack.
+def flushw : SDNode<"VEISD::FLUSHW", SDTNone, [SDNPHasChain]>;
+
+// Wrapper node for TargetConstantPool, TargetJumpTable, TargetExternalSymbol,
+// TargetGlobalAddress, TargetGlobalTLSAddress, MCSymbol, TargetBlockAddress.
+def SDT_VEWrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
+def VEWrapper     : SDNode<"VEISD::Wrapper", SDT_VEWrapper>;
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//
