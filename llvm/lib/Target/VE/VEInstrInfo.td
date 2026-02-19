@@ -582,6 +582,18 @@ def flushw : SDNode<"VEISD::FLUSHW", SDTNone, [SDNPHasChain]>;
 def SDT_VEWrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
 def VEWrapper     : SDNode<"VEISD::Wrapper", SDT_VEWrapper>;
 
+// SIMD vector gather/scatter/lvl nodes.
+// Originally defined in SIMDInstrPatterns.td (commented out).
+def vec_scatter : SDNode<"VEISD::VEC_SCATTER",
+                         SDTypeProfile<0, 2, [SDTCisVec<0>, SDTCisVec<1>]>,
+                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def vec_gather  : SDNode<"VEISD::VEC_GATHER",
+                         SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>,
+                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def vec_lvl     : SDNode<"VEISD::VEC_LVL",
+                         SDTypeProfile<0, 1, []>,
+                         [SDNPHasChain]>;
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//

@@ -248,8 +248,7 @@ public:
       TTI::TargetCostKind CostKind,
       TTI::OperandValueInfo OpInfo = {TTI::OK_AnyValue, TTI::OP_None},
       const Instruction *I = nullptr) const {
-    return getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
-                                 CostKind);
+    return getVectorMemOpCost(Src);
   }
 
   InstructionCost
@@ -258,17 +257,23 @@ public:
                          Align Alignment,
                          TTI::TargetCostKind CostKind,
                          const Instruction *I = nullptr) const {
-    return getMaskedMemoryOpCost(Opcode, DataTy, Align(), 0, CostKind);
+    return getVectorMemOpCost(DataTy);
   }
 
   InstructionCost
-  getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
-                        unsigned AddressSpace,
+  getMaskedMemoryOpCost(const MemIntrinsicCostAttributes &MICA,
                         TTI::TargetCostKind CostKind) const {
+    return getVectorMemOpCost(MICA.getDataType());
+  }
+
+private:
+  InstructionCost getVectorMemOpCost(Type *Src) const {
     if (isa<FixedVectorType>(Src) && (!isVectorRegisterType(*Src)))
       return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;
   }
+
+public:
 
   bool haveFastSqrt(Type *Ty) const {
     // float, double or a vector thereof

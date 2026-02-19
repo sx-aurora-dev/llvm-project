@@ -287,16 +287,34 @@ bool supportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   }
 }
 
-#define IF_IN_VEISD_RANGE(STARTOC, ENDOC)                                      \
-  if ((VEISD::STARTOC <= OC) && (OC <= VEISD::ENDOC))
-
+// Previously this used range checks (VEC_FIRST..VEC_LAST, VM_FIRST..VM_LAST)
+// which relied on contiguous enum values in the hand-written VEISD enum.
+// After TableGen-erating SDNode descriptions, enum values are no longer
+// guaranteed to be contiguous, so we enumerate individual opcodes instead.
+// VEC_FIRST was VEC_UNPACK_LO and VEC_LAST was VEC_NARROW.
+// VM_FIRST was VM_POPCOUNT and VM_LAST was VM_INSERT.
 bool isVVPOrVEC(unsigned OC) {
-  IF_IN_VEISD_RANGE(VEC_FIRST, VEC_LAST) { return true; }
-  IF_IN_VEISD_RANGE(VM_FIRST, VM_LAST) { return true; }
-
-  return isVVP(OC);
+  switch (OC) {
+  case VEISD::VEC_UNPACK_LO:
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_PACK:
+  case VEISD::VEC_SWAP:
+  case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_GATHER:
+  case VEISD::VEC_SCATTER:
+  case VEISD::VEC_LVL:
+  case VEISD::VEC_TOMASK:
+  case VEISD::VEC_SEQ:
+  case VEISD::VEC_VMV:
+  case VEISD::VEC_NARROW:
+  case VEISD::VM_POPCOUNT:
+  case VEISD::VM_EXTRACT:
+  case VEISD::VM_INSERT:
+    return true;
+  default:
+    return isVVP(OC);
+  }
 }
-#undef IF_IN_VEISD_RANGE
 
 bool isVVP(unsigned Opcode) {
   switch (Opcode) {

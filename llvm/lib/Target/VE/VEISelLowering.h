@@ -16,6 +16,7 @@
 
 #include "VE.h"
 #include "VELoweringInfo.h"
+#include "VESelectionDAGInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include <optional>
 #include <set>
