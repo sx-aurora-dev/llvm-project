@@ -2038,7 +2038,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
           AbsOffset / SXRegSize; // actual part when chunked into 64bit elements
       assert(ActualPart < getMaskBits(MaskVT) / SXRegSize &&
              "Mask bits out of range!");
-      AdjIndexV = CDAG.getConstant(ActualPart, MVT::i32);
+      AdjIndexV = CDAG.getConstant(ActualPart, MVT::i64);
 
       // Missing shift amount to isolate the wanted bit
       ShiftAmount = AbsOffset - (ActualPart * SXRegSize);

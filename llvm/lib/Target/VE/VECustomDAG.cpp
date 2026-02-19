@@ -1064,7 +1064,7 @@ SDValue VECustomDAG::getConstMask(unsigned NumElems,
     if (!ConstReg)
       continue;
 
-    MaskV = getMaskInsert(MaskV, getConstant(RegPartIdx, MVT::i32),
+    MaskV = getMaskInsert(MaskV, getConstant(RegPartIdx, MVT::i64),
                           getConstant(ConstReg, MVT::i64));
   }
   return MaskV;
