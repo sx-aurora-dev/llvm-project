@@ -190,13 +190,15 @@ public:
 
   // Load & Store {
   bool isLegalMaskedLoad(Type *DataType, Align Alignment,
-                         unsigned /*AddressSpace*/) const override {
+                         unsigned /*AddressSpace*/,
+                         TargetTransformInfo::MaskKind /*MaskKind*/) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));
   }
   bool isLegalMaskedStore(Type *DataType, Align Alignment,
-                          unsigned /*AddressSpace*/) const override {
+                          unsigned /*AddressSpace*/,
+                          TargetTransformInfo::MaskKind /*MaskKind*/) const override {
     if (!enableVPU())
       return false;
     return isVectorLaneType(*getLaneType(DataType));

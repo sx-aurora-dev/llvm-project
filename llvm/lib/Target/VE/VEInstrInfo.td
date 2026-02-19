@@ -402,17 +402,17 @@ def MEMzii : Operand<iPTR> {
 // Special ASX format for i64 immediate like tglobaladdress.
 def MEMrri64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, ptr_rc, i64imm);
+  let MIOperandInfo = (ops ve_ptr_rc, ve_ptr_rc, i64imm);
   let ParserMatchClass = VEMEMrriAsmOperand;
 }
 def MEMrii64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, i32imm, i64imm);
+  let MIOperandInfo = (ops ve_ptr_rc, i32imm, i64imm);
   let ParserMatchClass = VEMEMriiAsmOperand;
 }
 def MEMzri64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i64imm);
+  let MIOperandInfo = (ops i32imm /* = 0 */, ve_ptr_rc, i64imm);
   let ParserMatchClass = VEMEMzriAsmOperand;
 }
 def MEMzii64 : Operand<iPTR> {

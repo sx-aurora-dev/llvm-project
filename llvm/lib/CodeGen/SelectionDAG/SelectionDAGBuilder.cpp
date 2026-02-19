@@ -45,6 +45,7 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/CodeGen/SwiftErrorValueTracking.h"
@@ -679,11 +680,14 @@ static SDValue widenVectorToPartType(SelectionDAG &DAG, SDValue Val,
   if (ValueEVT == MVT::bf16 && PartEVT == MVT::f16) {
     assert(DAG.getTargetLoweringInfo().isTypeLegal(PartVT) &&
            "Cannot widen to illegal type");
-    Val = DAG.getNode(ISD::BITCAST, DL,
-                      ValueVT.changeVectorElementType(MVT::f16), Val);
+    Val = DAG.getNode(
+        ISD::BITCAST, DL,
+        ValueVT.changeVectorElementType(*DAG.getContext(), MVT::f16), Val);
   }
-  // Widening a scalable vector to another scalable vector is done by inserting
-  // the vector into a larger undef one.
+  // Widening a fixed-length vector to another fixed-length vector.
+  // NOTE: Original comment said "Widening a scalable vector to another scalable
+  // vector is done by inserting the vector into a larger undef one." but this
+  // block actually handles fixed-length vectors. Kept for future review.
   else if (PartVT.isFixedLengthVector() &&
       (PartNumElts.getFixedValue() > ValueNumElts.getFixedValue())) {
     // Promote first?
@@ -3221,8 +3225,7 @@ void SelectionDAGBuilder::visitSPDescriptorParent(StackProtectorDescriptor &SPD,
       Guard, GuardVal, ISD::SETNE);
 
   // If the guard/stackslot do not equal, branch to failure MBB.
-  SDValue BrCond = DAG.getNode(ISD::BRCOND, dl,
-                               MVT::Other, GuardVal.getOperand(0),
+  SDValue BrCond = DAG.getNode(ISD::BRCOND, dl, MVT::Other, getControlRoot(),
                                Cmp, DAG.getBasicBlock(SPD.getFailureMBB()));
   // Otherwise branch to success MBB.
   SDValue Br = DAG.getNode(ISD::BR, dl,
@@ -3542,16 +3545,46 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
                           DAG.getBasicBlock(Return)));
 }
 
+/// The intrinsics currently supported by callbr are implicit control flow
+/// intrinsics such as amdgcn.kill.
+/// - they should be called (no "dontcall-" attributes)
+/// - they do not touch memory on the target (= !TLI.getTgtMemIntrinsic())
+/// - they do not need custom argument handling (no
+/// TLI.CollectTargetIntrinsicOperands())
+void SelectionDAGBuilder::visitCallBrIntrinsic(const CallBrInst &I) {
+  TargetLowering::IntrinsicInfo Info;
+  assert(!DAG.getTargetLoweringInfo().getTgtMemIntrinsic(
+             Info, I, DAG.getMachineFunction(), I.getIntrinsicID()) &&
+         "Intrinsic touches memory");
+
+  auto [HasChain, OnlyLoad] = getTargetIntrinsicCallProperties(I);
+
+  SmallVector<SDValue, 8> Ops =
+      getTargetIntrinsicOperands(I, HasChain, OnlyLoad);
+  SDVTList VTs = getTargetIntrinsicVTList(I, HasChain);
+
+  // Create the node.
+  SDValue Result =
+      getTargetNonMemIntrinsicNode(*I.getType(), HasChain, Ops, VTs);
+  Result = handleTargetIntrinsicRet(I, HasChain, OnlyLoad, Result);
+
+  setValue(&I, Result);
+}
+
 void SelectionDAGBuilder::visitCallBr(const CallBrInst &I) {
   MachineBasicBlock *CallBrMBB = FuncInfo.MBB;
 
-  // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
-  // have to do anything here to lower funclet bundles.
-  failForInvalidBundles(I, "callbrs",
-                        {LLVMContext::OB_deopt, LLVMContext::OB_funclet});
-
-  assert(I.isInlineAsm() && "Only know how to handle inlineasm callbr");
-  visitInlineAsm(I);
+  if (I.isInlineAsm()) {
+    // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
+    // have to do anything here to lower funclet bundles.
+    failForInvalidBundles(I, "callbrs",
+                          {LLVMContext::OB_deopt, LLVMContext::OB_funclet});
+    visitInlineAsm(I);
+  } else {
+    assert(!I.hasOperandBundles() &&
+           "Can't have operand bundles for intrinsics");
+    visitCallBrIntrinsic(I);
+  }
   CopyToExportRegsIfNeeded(&I);
 
   // Retrieve successors.
@@ -3561,18 +3594,25 @@ void SelectionDAGBuilder::visitCallBr(const CallBrInst &I) {
 
   // Update successor info.
   addSuccessorWithProb(CallBrMBB, Return, BranchProbability::getOne());
-  for (BasicBlock *Dest : I.getIndirectDests()) {
-    MachineBasicBlock *Target = FuncInfo.getMBB(Dest);
-    Target->setIsInlineAsmBrIndirectTarget();
-    // If we introduce a type of asm goto statement that is permitted to use an
-    // indirect call instruction to jump to its labels, then we should add a
-    // call to Target->setMachineBlockAddressTaken() here, to mark the target
-    // block as requiring a BTI.
+  // TODO: For most of the cases where there is an intrinsic callbr, we're
+  // having exactly one indirect target, which will be unreachable. As soon as
+  // this changes, we might need to enhance
+  // Target->setIsInlineAsmBrIndirectTarget or add something similar for
+  // intrinsic indirect branches.
+  if (I.isInlineAsm()) {
+    for (BasicBlock *Dest : I.getIndirectDests()) {
+      MachineBasicBlock *Target = FuncInfo.getMBB(Dest);
+      Target->setIsInlineAsmBrIndirectTarget();
+      // If we introduce a type of asm goto statement that is permitted to use
+      // an indirect call instruction to jump to its labels, then we should add
+      // a call to Target->setMachineBlockAddressTaken() here, to mark the
+      // target block as requiring a BTI.
 
-    Target->setLabelMustBeEmitted();
-    // Don't add duplicate machine successors.
-    if (Dests.insert(Dest).second)
-      addSuccessorWithProb(CallBrMBB, Target, BranchProbability::getZero());
+      Target->setLabelMustBeEmitted();
+      // Don't add duplicate machine successors.
+      if (Dests.insert(Dest).second)
+        addSuccessorWithProb(CallBrMBB, Target, BranchProbability::getZero());
+    }
   }
   CallBrMBB->normalizeSuccProbs();
 
@@ -3996,8 +4036,8 @@ void SelectionDAGBuilder::visitFPTrunc(const User &I) {
   SDValue N = getValue(I.getOperand(0));
   SDLoc dl = getCurSDLoc();
   SDNodeFlags Flags;
-  if (auto *TruncInst = dyn_cast<FPMathOperator>(&I))
-    Flags.copyFMF(*TruncInst);
+  if (auto *FPOp = dyn_cast<FPMathOperator>(&I))
+    Flags.copyFMF(*FPOp);
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   EVT DestVT = TLI.getValueType(DAG.getDataLayout(), I.getType());
   setValue(&I, DAG.getNode(ISD::FP_ROUND, dl, DestVT, N,
@@ -4012,8 +4052,8 @@ void SelectionDAGBuilder::visitFPExt(const User &I) {
   EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
                                                         I.getType());
   SDNodeFlags Flags;
-  if (auto *TruncInst = dyn_cast<FPMathOperator>(&I))
-    Flags.copyFMF(*TruncInst);
+  if (auto *FPOp = dyn_cast<FPMathOperator>(&I))
+    Flags.copyFMF(*FPOp);
   setValue(&I, DAG.getNode(ISD::FP_EXTEND, getCurSDLoc(), DestVT, N, Flags));
 }
 
@@ -4621,17 +4661,9 @@ void SelectionDAGBuilder::visitAlloca(const AllocaInst &I) {
   if (AllocSize.getValueType() != IntPtr)
     AllocSize = DAG.getZExtOrTrunc(AllocSize, dl, IntPtr);
 
-  if (TySize.isScalable())
-    AllocSize = DAG.getNode(ISD::MUL, dl, IntPtr, AllocSize,
-                            DAG.getVScale(dl, IntPtr,
-                                          APInt(IntPtr.getScalarSizeInBits(),
-                                                TySize.getKnownMinValue())));
-  else {
-    SDValue TySizeValue =
-        DAG.getConstant(TySize.getFixedValue(), dl, MVT::getIntegerVT(64));
-    AllocSize = DAG.getNode(ISD::MUL, dl, IntPtr, AllocSize,
-                            DAG.getZExtOrTrunc(TySizeValue, dl, IntPtr));
-  }
+  AllocSize = DAG.getNode(
+      ISD::MUL, dl, IntPtr, AllocSize,
+      DAG.getZExtOrTrunc(DAG.getTypeSize(dl, MVT::i64, TySize), dl, IntPtr));
 
   // Handle alignment.  If the requested alignment is less than or equal to
   // the stack alignment, ignore it.  If the size is greater than or equal to
@@ -5064,7 +5096,7 @@ void SelectionDAGBuilder::visitMaskedScatter(const CallInst &I) {
   EVT IdxVT = Index.getValueType();
   EVT EltTy = IdxVT.getVectorElementType();
   if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
-    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    EVT NewIdxVT = IdxVT.changeVectorElementType(*DAG.getContext(), EltTy);
     Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
   }
 
@@ -5101,6 +5133,8 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
   auto MMOFlags = MachineMemOperand::MOLoad;
   if (I.hasMetadata(LLVMContext::MD_nontemporal))
     MMOFlags |= MachineMemOperand::MONonTemporal;
+  if (I.hasMetadata(LLVMContext::MD_invariant_load))
+    MMOFlags |= MachineMemOperand::MOInvariant;
 
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
       MachinePointerInfo(PtrOperand), MMOFlags,
@@ -5161,7 +5195,7 @@ void SelectionDAGBuilder::visitMaskedGather(const CallInst &I) {
   EVT IdxVT = Index.getValueType();
   EVT EltTy = IdxVT.getVectorElementType();
   if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
-    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    EVT NewIdxVT = IdxVT.changeVectorElementType(*DAG.getContext(), EltTy);
     Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
   }
 
@@ -5410,6 +5444,14 @@ SmallVector<SDValue, 8> SelectionDAGBuilder::getTargetIntrinsicOperands(
       Ops.push_back(
           DAG.getTargetConstantFP(*cast<ConstantFP>(Arg), SDLoc(), VT));
     }
+  }
+
+  if (std::optional<OperandBundleUse> Bundle =
+          I.getOperandBundle(LLVMContext::OB_deactivation_symbol)) {
+    auto *Sym = Bundle->Inputs[0].get();
+    SDValue SDSym = getValue(Sym);
+    SDSym = DAG.getDeactivationSymbol(cast<GlobalValue>(Sym));
+    Ops.push_back(SDSym);
   }
 
   if (std::optional<OperandBundleUse> Bundle =
@@ -6297,14 +6339,18 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
 
   if (!Op) {
     // Create a DBG_VALUE for each decomposed value in ArgRegs to cover Reg
-    auto splitMultiRegDbgValue = [&](ArrayRef<std::pair<Register, TypeSize>>
-                                         SplitRegs) {
+    auto splitMultiRegDbgValue =
+        [&](ArrayRef<std::pair<Register, TypeSize>> SplitRegs) -> bool {
       unsigned Offset = 0;
-      for (const auto &RegAndSize : SplitRegs) {
+      for (const auto &[Reg, RegSizeInBits] : SplitRegs) {
+        // FIXME: Scalable sizes are not supported in fragment expressions.
+        if (RegSizeInBits.isScalable())
+          return false;
+
         // If the expression is already a fragment, the current register
         // offset+size might extend beyond the fragment. In this case, only
         // the register bits that are inside the fragment are relevant.
-        int RegFragmentSizeInBits = RegAndSize.second;
+        int RegFragmentSizeInBits = RegSizeInBits.getFixedValue();
         if (auto ExprFragmentInfo = Expr->getFragmentInfo()) {
           uint64_t ExprFragmentSizeInBits = ExprFragmentInfo->SizeInBits;
           // The register is entirely outside the expression fragment,
@@ -6320,7 +6366,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
 
         auto FragmentExpr = DIExpression::createFragmentExpression(
             Expr, Offset, RegFragmentSizeInBits);
-        Offset += RegAndSize.second;
+        Offset += RegSizeInBits.getFixedValue();
         // If a valid fragment expression cannot be created, the variable's
         // correct value cannot be determined and so it is set as poison.
         if (!FragmentExpr) {
@@ -6329,11 +6375,12 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
           DAG.AddDbgValue(SDV, false);
           continue;
         }
-        MachineInstr *NewMI =
-            MakeVRegDbgValue(RegAndSize.first, *FragmentExpr,
-                             Kind != FuncArgumentDbgValueKind::Value);
+        MachineInstr *NewMI = MakeVRegDbgValue(
+            Reg, *FragmentExpr, Kind != FuncArgumentDbgValueKind::Value);
         FuncInfo.ArgDbgValues.push_back(NewMI);
       }
+
+      return true;
     };
 
     // Check if ValueMap has reg number.
@@ -6343,18 +6390,15 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
       const auto &TLI = DAG.getTargetLoweringInfo();
       RegsForValue RFV(V->getContext(), TLI, DAG.getDataLayout(), VMI->second,
                        V->getType(), std::nullopt);
-      if (RFV.occupiesMultipleRegs()) {
-        splitMultiRegDbgValue(RFV.getRegsAndSizes());
-        return true;
-      }
+      if (RFV.occupiesMultipleRegs())
+        return splitMultiRegDbgValue(RFV.getRegsAndSizes());
 
       Op = MachineOperand::CreateReg(VMI->second, false);
       IsIndirect = Kind != FuncArgumentDbgValueKind::Value;
     } else if (ArgRegsAndSizes.size() > 1) {
       // This was split due to the calling convention, and no virtual register
       // mapping exists for the value.
-      splitMultiRegDbgValue(ArgRegsAndSizes);
-      return true;
+      return splitMultiRegDbgValue(ArgRegsAndSizes);
     }
   }
 
@@ -6537,7 +6581,7 @@ void SelectionDAGBuilder::visitVectorHistogram(const CallInst &I,
   EVT IdxVT = Index.getValueType();
   EVT EltTy = IdxVT.getVectorElementType();
   if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
-    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    EVT NewIdxVT = IdxVT.changeVectorElementType(*DAG.getContext(), EltTy);
     Index = DAG.getNode(ISD::SIGN_EXTEND, sdl, NewIdxVT, Index);
   }
 
@@ -7317,6 +7361,12 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     }
     return;
   }
+  case Intrinsic::clmul: {
+    SDValue X = getValue(I.getArgOperand(0));
+    SDValue Y = getValue(I.getArgOperand(1));
+    setValue(&I, DAG.getNode(ISD::CLMUL, sdl, X.getValueType(), X, Y));
+    return;
+  }
   case Intrinsic::sadd_sat: {
     SDValue Op1 = getValue(I.getArgOperand(0));
     SDValue Op2 = getValue(I.getArgOperand(1));
@@ -7341,16 +7391,26 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     setValue(&I, DAG.getNode(ISD::USUBSAT, sdl, Op1.getValueType(), Op1, Op2));
     return;
   }
-  case Intrinsic::sshl_sat: {
-    SDValue Op1 = getValue(I.getArgOperand(0));
-    SDValue Op2 = getValue(I.getArgOperand(1));
-    setValue(&I, DAG.getNode(ISD::SSHLSAT, sdl, Op1.getValueType(), Op1, Op2));
-    return;
-  }
+  case Intrinsic::sshl_sat:
   case Intrinsic::ushl_sat: {
     SDValue Op1 = getValue(I.getArgOperand(0));
     SDValue Op2 = getValue(I.getArgOperand(1));
-    setValue(&I, DAG.getNode(ISD::USHLSAT, sdl, Op1.getValueType(), Op1, Op2));
+
+    EVT ShiftTy = DAG.getTargetLoweringInfo().getShiftAmountTy(
+        Op1.getValueType(), DAG.getDataLayout());
+
+    // Coerce the shift amount to the right type if we can. This exposes the
+    // truncate or zext to optimization early.
+    if (!I.getType()->isVectorTy() && Op2.getValueType() != ShiftTy) {
+      assert(ShiftTy.getSizeInBits() >=
+                 Log2_32_Ceil(Op1.getValueSizeInBits()) &&
+             "Unexpected shift type");
+      Op2 = DAG.getZExtOrTrunc(Op2, getCurSDLoc(), ShiftTy);
+    }
+
+    unsigned Opc =
+        Intrinsic == Intrinsic::sshl_sat ? ISD::SSHLSAT : ISD::USHLSAT;
+    setValue(&I, DAG.getNode(Opc, sdl, Op1.getValueType(), Op1, Op2));
     return;
   }
   case Intrinsic::smul_fix:
@@ -7419,10 +7479,13 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     setValue(&I, DAG.getNode(ISD::UCMP, sdl, DestVT, Op1, Op2));
     break;
   }
+  case Intrinsic::stackaddress:
   case Intrinsic::stacksave: {
+    unsigned SDOpcode = Intrinsic == Intrinsic::stackaddress ? ISD::STACKADDRESS
+                                                             : ISD::STACKSAVE;
     SDValue Op = getRoot();
     EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
-    Res = DAG.getNode(ISD::STACKSAVE, sdl, DAG.getVTList(VT, MVT::Other), Op);
+    Res = DAG.getNode(SDOpcode, sdl, DAG.getVTList(VT, MVT::Other), Op);
     setValue(&I, Res);
     DAG.setRoot(Res.getValue(1));
     return;
@@ -7652,10 +7715,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     SDValue Op2 = getValue(I.getArgOperand(1));
 
     EVT ResultVT = Op1.getValueType();
-    EVT OverflowVT = MVT::i1;
-    if (ResultVT.isVector())
-      OverflowVT = EVT::getVectorVT(
-          *Context, OverflowVT, ResultVT.getVectorElementCount());
+    EVT OverflowVT = ResultVT.changeElementType(*Context, MVT::i1);
 
     SDVTList VTs = DAG.getVTList(ResultVT, OverflowVT);
     setValue(&I, DAG.getNode(Op, sdl, VTs, Op1, Op2));
@@ -8353,7 +8413,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   case Intrinsic::vector_reverse:
     visitVectorReverse(I);
     return;
-  case Intrinsic::vector_splice:
+  case Intrinsic::vector_splice_left:
+  case Intrinsic::vector_splice_right:
     visitVectorSplice(I);
     return;
   case Intrinsic::callbr_landingpad:
@@ -8425,13 +8486,15 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     setValue(&I,
              DAG.getNode(ISD::LOOP_DEPENDENCE_WAR_MASK, sdl,
                          EVT::getEVT(I.getType()), getValue(I.getOperand(0)),
-                         getValue(I.getOperand(1)), getValue(I.getOperand(2))));
+                         getValue(I.getOperand(1)), getValue(I.getOperand(2)),
+                         DAG.getConstant(0, sdl, MVT::i64)));
     return;
   case Intrinsic::loop_dependence_raw_mask:
     setValue(&I,
              DAG.getNode(ISD::LOOP_DEPENDENCE_RAW_MASK, sdl,
                          EVT::getEVT(I.getType()), getValue(I.getOperand(0)),
-                         getValue(I.getOperand(1)), getValue(I.getOperand(2))));
+                         getValue(I.getOperand(1)), getValue(I.getOperand(2)),
+                         DAG.getConstant(0, sdl, MVT::i64)));
     return;
   }
 }
@@ -8675,7 +8738,7 @@ void SelectionDAGBuilder::visitVPGather(
   EVT IdxVT = Index.getValueType();
   EVT EltTy = IdxVT.getVectorElementType();
   if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
-    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    EVT NewIdxVT = IdxVT.changeVectorElementType(*DAG.getContext(), EltTy);
     Index = DAG.getNode(ISD::SIGN_EXTEND, DL, NewIdxVT, Index);
   }
   LD = DAG.getGatherVP(
@@ -8741,7 +8804,7 @@ void SelectionDAGBuilder::visitVPScatter(
   EVT IdxVT = Index.getValueType();
   EVT EltTy = IdxVT.getVectorElementType();
   if (TLI.shouldExtendGSIndex(IdxVT, EltTy)) {
-    EVT NewIdxVT = IdxVT.changeVectorElementType(EltTy);
+    EVT NewIdxVT = IdxVT.changeVectorElementType(*DAG.getContext(), EltTy);
     Index = DAG.getNode(ISD::SIGN_EXTEND, DL, NewIdxVT, Index);
   }
   ST = DAG.getScatterVP(DAG.getVTList(MVT::Other), VT, DL,
@@ -9163,6 +9226,11 @@ void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
     ConvControlToken = getValue(Token);
   }
 
+  GlobalValue *DeactivationSymbol = nullptr;
+  if (auto Bundle = CB.getOperandBundle(LLVMContext::OB_deactivation_symbol)) {
+    DeactivationSymbol = cast<GlobalValue>(Bundle->Inputs[0].get());
+  }
+
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(getCurSDLoc())
       .setChain(getRoot())
@@ -9172,7 +9240,8 @@ void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
       .setIsPreallocated(
           CB.countOperandBundlesOfType(LLVMContext::OB_preallocated) != 0)
       .setCFIType(CFIType)
-      .setConvergenceControlToken(ConvControlToken);
+      .setConvergenceControlToken(ConvControlToken)
+      .setDeactivationSymbol(DeactivationSymbol);
 
   // Set the pointer authentication info if we have it.
   if (PAI) {
@@ -9417,11 +9486,9 @@ bool SelectionDAGBuilder::visitStrCpyCall(const CallInst &I, bool isStpcpy) {
   const Value *Arg0 = I.getArgOperand(0), *Arg1 = I.getArgOperand(1);
 
   const SelectionDAGTargetInfo &TSI = DAG.getSelectionDAGInfo();
-  std::pair<SDValue, SDValue> Res =
-    TSI.EmitTargetCodeForStrcpy(DAG, getCurSDLoc(), getRoot(),
-                                getValue(Arg0), getValue(Arg1),
-                                MachinePointerInfo(Arg0),
-                                MachinePointerInfo(Arg1), isStpcpy);
+  std::pair<SDValue, SDValue> Res = TSI.EmitTargetCodeForStrcpy(
+      DAG, getCurSDLoc(), getRoot(), getValue(Arg0), getValue(Arg1),
+      MachinePointerInfo(Arg0), MachinePointerInfo(Arg1), isStpcpy, &I);
   if (Res.first.getNode()) {
     setValue(&I, Res.first);
     DAG.setRoot(Res.second);
@@ -9562,6 +9629,8 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
     // Check for well-known libc/libm calls.  If the function is internal, it
     // can't be a library call.  Don't do the check if marked as nobuiltin for
     // some reason.
+    // This code should not handle libcalls that are already canonicalized to
+    // intrinsics by the middle-end.
     LibFunc Func;
     if (!I.isNoBuiltin() && !F->hasLocalLinkage() && F->hasName() &&
         LibInfo->getLibFunc(*F, Func) && LibInfo->hasOptimizedCodeGen(Func)) {
@@ -9587,31 +9656,8 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
       case LibFunc_fabs:
       case LibFunc_fabsf:
       case LibFunc_fabsl:
+        // TODO: Remove this, already canonicalized by the middle-end.
         if (visitUnaryFloatCall(I, ISD::FABS))
-          return;
-        break;
-      case LibFunc_fmin:
-      case LibFunc_fminf:
-      case LibFunc_fminl:
-        if (visitBinaryFloatCall(I, ISD::FMINNUM))
-          return;
-        break;
-      case LibFunc_fmax:
-      case LibFunc_fmaxf:
-      case LibFunc_fmaxl:
-        if (visitBinaryFloatCall(I, ISD::FMAXNUM))
-          return;
-        break;
-      case LibFunc_fminimum_num:
-      case LibFunc_fminimum_numf:
-      case LibFunc_fminimum_numl:
-        if (visitBinaryFloatCall(I, ISD::FMINIMUMNUM))
-          return;
-        break;
-      case LibFunc_fmaximum_num:
-      case LibFunc_fmaximum_numf:
-      case LibFunc_fmaximum_numl:
-        if (visitBinaryFloatCall(I, ISD::FMAXIMUMNUM))
           return;
         break;
       case LibFunc_sin:
@@ -9681,42 +9727,6 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
       case LibFunc_sqrtf_finite:
       case LibFunc_sqrtl_finite:
         if (visitUnaryFloatCall(I, ISD::FSQRT))
-          return;
-        break;
-      case LibFunc_floor:
-      case LibFunc_floorf:
-      case LibFunc_floorl:
-        if (visitUnaryFloatCall(I, ISD::FFLOOR))
-          return;
-        break;
-      case LibFunc_nearbyint:
-      case LibFunc_nearbyintf:
-      case LibFunc_nearbyintl:
-        if (visitUnaryFloatCall(I, ISD::FNEARBYINT))
-          return;
-        break;
-      case LibFunc_ceil:
-      case LibFunc_ceilf:
-      case LibFunc_ceill:
-        if (visitUnaryFloatCall(I, ISD::FCEIL))
-          return;
-        break;
-      case LibFunc_rint:
-      case LibFunc_rintf:
-      case LibFunc_rintl:
-        if (visitUnaryFloatCall(I, ISD::FRINT))
-          return;
-        break;
-      case LibFunc_round:
-      case LibFunc_roundf:
-      case LibFunc_roundl:
-        if (visitUnaryFloatCall(I, ISD::FROUND))
-          return;
-        break;
-      case LibFunc_trunc:
-      case LibFunc_truncf:
-      case LibFunc_truncl:
-        if (visitUnaryFloatCall(I, ISD::FTRUNC))
           return;
         break;
       case LibFunc_log2:
@@ -9792,7 +9802,7 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
       {LLVMContext::OB_deopt, LLVMContext::OB_funclet,
        LLVMContext::OB_cfguardtarget, LLVMContext::OB_preallocated,
        LLVMContext::OB_clang_arc_attachedcall, LLVMContext::OB_kcfi,
-       LLVMContext::OB_convergencectrl});
+       LLVMContext::OB_convergencectrl, LLVMContext::OB_deactivation_symbol});
 
   SDValue Callee = getValue(I.getCalledOperand());
 
@@ -11851,7 +11861,6 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
     SmallVector<Type *, 4> Types;
     ComputeValueTypes(DAG.getDataLayout(), Arg.getType(), Types);
     bool isArgValueUsed = !Arg.use_empty();
-    unsigned PartBase = 0;
     Type *FinalType = Arg.getType();
     if (Arg.hasAttribute(Attribute::ByVal))
       FinalType = Arg.getParamByValType();
@@ -11970,7 +11979,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
         // return values.
         ISD::InputArg MyFlags(
             Flags, RegisterVT, VT, ArgTy, isArgValueUsed, ArgNo,
-            PartBase + i * RegisterVT.getStoreSize().getKnownMinValue());
+            i * RegisterVT.getStoreSize().getKnownMinValue());
         if (NumRegs > 1 && i == 0)
           MyFlags.Flags.setSplit();
         // if it isn't first piece, alignment must be 1
@@ -11983,7 +11992,6 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
       }
       if (NeedsRegBlock && Value == NumValues - 1)
         Ins[Ins.size() - 1].Flags.setInConsecutiveRegsLast();
-      PartBase += VT.getStoreSize().getKnownMinValue();
     }
   }
 
@@ -12894,20 +12902,23 @@ void SelectionDAGBuilder::visitVectorSplice(const CallInst &I) {
   SDLoc DL = getCurSDLoc();
   SDValue V1 = getValue(I.getOperand(0));
   SDValue V2 = getValue(I.getOperand(1));
-  int64_t Imm = cast<ConstantInt>(I.getOperand(2))->getSExtValue();
+  uint64_t Imm = cast<ConstantInt>(I.getOperand(2))->getZExtValue();
+  const bool IsLeft = I.getIntrinsicID() == Intrinsic::vector_splice_left;
 
   // VECTOR_SHUFFLE doesn't support a scalable mask so use a dedicated node.
   if (VT.isScalableVector()) {
     setValue(
-        &I, DAG.getNode(ISD::VECTOR_SPLICE, DL, VT, V1, V2,
-                        DAG.getSignedConstant(
-                            Imm, DL, TLI.getVectorIdxTy(DAG.getDataLayout()))));
+        &I,
+        DAG.getNode(
+            IsLeft ? ISD::VECTOR_SPLICE_LEFT : ISD::VECTOR_SPLICE_RIGHT, DL, VT,
+            V1, V2,
+            DAG.getConstant(Imm, DL, TLI.getVectorIdxTy(DAG.getDataLayout()))));
     return;
   }
 
   unsigned NumElts = VT.getVectorNumElements();
 
-  uint64_t Idx = (NumElts + Imm) % NumElts;
+  uint64_t Idx = IsLeft ? Imm : NumElts - Imm;
 
   // Use VECTOR_SHUFFLE to maintain original behaviour for fixed-length vectors.
   SmallVector<int, 8> Mask;

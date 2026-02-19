@@ -98,8 +98,9 @@ public:
     OB_kcfi = 8,                   // "kcfi"
     OB_convergencectrl = 9,        // "convergencectrl"
     OB_align = 10,                 // "align"
-    OB_cfp_round = 11,             // "cfp-round"
-    OB_cfp_except = 12,            // "cfp-except"
+    OB_deactivation_symbol = 11,   // "deactivation-symbol"
+    OB_cfp_round = 12,             // "cfp-round"
+    OB_cfp_except = 13,            // "cfp-except"
     OB_LastBundleID = OB_cfp_except // Marker for last bundle ID
   };
 
@@ -377,6 +378,9 @@ inline LLVMContext **unwrap(LLVMContextRef* Tys) {
 inline LLVMContextRef *wrap(const LLVMContext **Tys) {
   return reinterpret_cast<LLVMContextRef*>(const_cast<LLVMContext**>(Tys));
 }
+
+/// Get the deprecated global context for use by the C API.
+LLVM_ABI LLVMContextRef getGlobalContextForCAPI();
 
 } // end namespace llvm
 

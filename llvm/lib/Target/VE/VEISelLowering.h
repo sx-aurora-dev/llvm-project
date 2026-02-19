@@ -570,6 +570,7 @@ public:
   // VE uses generic registers as conditional registers.
   bool hasMultipleConditionRegisters(EVT VT) const override { return true; }
 
+
   /// } Target Optimization
 };
 } // namespace llvm
