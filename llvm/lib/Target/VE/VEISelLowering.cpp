@@ -4026,7 +4026,7 @@ getPromoteElementConversion(LLVMContext &Context, EVT ElemVT,
   MVT PromotedElemVT;
   if (ElemVT.isFloatingPoint()) {
     PromotedElemVT = MVT::f32;
-    LTA = LegalizeTypeAction::TypePromoteFloat;
+    LTA = LegalizeTypeAction::TypeSoftPromoteHalf;
   } else {
     assert(ElemVT.isInteger());
     PromotedElemVT = MVT::i32;
@@ -4149,7 +4149,7 @@ unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
     default:
       return DefaultImpl();
 
-    case LegalizeTypeAction::TypePromoteFloat:
+    case LegalizeTypeAction::TypeSoftPromoteHalf:
     case LegalizeTypeAction::TypePromoteInteger:
       // Promote elements across call boundaries.
       IntermediateVT = NextVT;
