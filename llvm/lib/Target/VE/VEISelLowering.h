@@ -502,7 +502,8 @@ public:
 
   /// Override to support customized stack guard loading.
   bool useLoadStackGuardNode(const Module &M) const override;
-  void insertSSPDeclarations(Module &M) const override;
+  void insertSSPDeclarations(Module &M,
+                             const LibcallLoweringInfo &Libcalls) const override;
 
   SDValue getPICJumpTableRelocBase(SDValue Table,
                                    SelectionDAG &DAG) const override;

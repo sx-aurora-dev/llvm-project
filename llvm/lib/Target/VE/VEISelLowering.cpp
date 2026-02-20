@@ -3944,9 +3944,10 @@ bool VETargetLowering::useLoadStackGuardNode(const Module &M) const {
 }
 
 // Override to disable global variable loading on Linux.
-void VETargetLowering::insertSSPDeclarations(Module &M) const {
+void VETargetLowering::insertSSPDeclarations(
+    Module &M, const LibcallLoweringInfo &Libcalls) const {
   if (!Subtarget->isTargetLinux())
-    return TargetLowering::insertSSPDeclarations(M);
+    return TargetLowering::insertSSPDeclarations(M, Libcalls);
 }
 
 void VETargetLowering::finalizeLowering(MachineFunction &MF) const {
