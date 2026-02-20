@@ -343,9 +343,11 @@ public:
   static lldb::RegisterTypeBuilderSP GetRegisterTypeBuilder(Target &target);
 
   // ScriptInterpreter
-  static bool RegisterPlugin(llvm::StringRef name, llvm::StringRef description,
-                             lldb::ScriptLanguage script_lang,
-                             ScriptInterpreterCreateInstance create_callback);
+  static bool
+  RegisterPlugin(llvm::StringRef name, llvm::StringRef description,
+                 lldb::ScriptLanguage script_lang,
+                 ScriptInterpreterCreateInstance create_callback,
+                 ScriptInterpreterGetPath get_path_callback = nullptr);
 
   static bool UnregisterPlugin(ScriptInterpreterCreateInstance create_callback);
 
@@ -355,6 +357,9 @@ public:
   static lldb::ScriptInterpreterSP
   GetScriptInterpreterForLanguage(lldb::ScriptLanguage script_lang,
                                   Debugger &debugger);
+
+  static FileSpec
+  GetScriptInterpreterLibraryPath(lldb::ScriptLanguage script_lang);
 
   // SyntheticFrameProvider
   static bool
@@ -619,6 +624,15 @@ public:
   static LanguageSet GetREPLSupportedLanguagesAtIndex(uint32_t idx);
 
   static LanguageSet GetREPLAllTypeSystemSupportedLanguages();
+
+  // Higlhighter
+  static bool RegisterPlugin(llvm::StringRef name, llvm::StringRef description,
+                             HighlighterCreateInstance create_callback);
+
+  static bool UnregisterPlugin(HighlighterCreateInstance create_callback);
+
+  static HighlighterCreateInstance
+  GetHighlighterCreateCallbackAtIndex(uint32_t idx);
 
   // Some plug-ins might register a DebuggerInitializeCallback callback when
   // registering the plug-in. After a new Debugger instance is created, this
