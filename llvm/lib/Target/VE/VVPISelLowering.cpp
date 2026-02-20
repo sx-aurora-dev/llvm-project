@@ -1895,7 +1895,10 @@ SDValue VETargetLowering::lowerVVP_LOAD_STORE(SDValue Op, SelectionDAG &DAG,
 
   MemSDNode &MemN = *cast<MemSDNode>(Op.getNode());
   EVT OldDataVT = MemN.getMemoryVT();
-  EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
+  // For loads with extending (anyext/sext/zext), use the result type for
+  // legalization since MemoryVT may need both promotion and widening.
+  EVT DataVTForLegal = IsLoad ? Op.getNode()->getValueType(0) : OldDataVT;
+  EVT LegalDataVT = LegalizeVectorType(DataVTForLegal, Op, DAG, Mode);
 
   // Eagerly split over-packed vectors.
   if (isOverPackedType(OldDataVT))
