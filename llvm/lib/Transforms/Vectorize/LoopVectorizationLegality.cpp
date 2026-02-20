@@ -885,7 +885,7 @@ bool LoopVectorizationLegality::canVectorizeInstr(Instruction &I) {
                                              PSE.getSE())) {
       Requirements->addExactFPMathInst(RedDes.getExactFPMathInst());
       AllowedExit.insert(RedDes.getLoopExitInstr());
-      Reductions[Phi] = RedDes;
+      Reductions[Phi] = std::move(RedDes);
       assert((!RedDes.hasUsesOutsideReductionChain() ||
               RecurrenceDescriptor::isMinMaxRecurrenceKind(
                   RedDes.getRecurrenceKind())) &&
@@ -1747,7 +1747,7 @@ bool LoopVectorizationLegality::isVectorizableEarlyExitLoop() {
 
   // Sort exiting blocks by dominance order to establish a clear chain.
   llvm::sort(UncountableExitingBlocks, [this](BasicBlock *A, BasicBlock *B) {
-    return DT->properlyDominates(A, B);
+    return DT->getNode(A)->getDFSNumIn() < DT->getNode(B)->getDFSNumIn();
   });
 
   // Verify that exits form a strict dominance chain: each block must

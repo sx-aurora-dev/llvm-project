@@ -1037,6 +1037,10 @@ def convergencectrl_loop   : SDNode<"ISD::CONVERGENCECTRL_LOOP",
 def convergencectrl_glue   : SDNode<"ISD::CONVERGENCECTRL_GLUE",
                                     SDTypeProfile<0, 1, [SDTCisVT<0, untyped>]>>;
 
+def sponentry : SDNode<
+  "ISD::SPONENTRY", SDTypeProfile <1, 0, [SDTCisPtrTy<0>]>
+>;
+
 //===----------------------------------------------------------------------===//
 // Selection DAG Condition Codes
 
@@ -1319,6 +1323,14 @@ def zext_nneg : PatFrag<(ops node:$src), (zext node:$src), [{
 def sext_like : PatFrags<(ops node:$src),
                          [(zext_nneg node:$src),
                           (sext node:$src)]>;
+
+def ffloor_nnan : PatFrag<(ops node:$src), (ffloor node:$src), [{
+  return N->getFlags().hasNoNaNs();
+}]> {
+  let GISelPredicateCode = [{
+    return MI.getFlag(MachineInstr::FmNoNans);
+  }];
+}
 
 // null_frag - The null pattern operator is used in multiclass instantiations
 // which accept an SDPatternOperator for use in matching patterns for internal
