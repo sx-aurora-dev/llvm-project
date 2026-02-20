@@ -3191,6 +3191,8 @@ bool Compiler<Emitter>::VisitCXXReinterpretCastExpr(
     if (PointeeToT && PointeeFromT) {
       if (isIntegralType(*PointeeFromT) && isIntegralType(*PointeeToT))
         Fatal = false;
+      else if (E->getCastKind() == CK_LValueBitCast)
+        Fatal = false;
     } else {
       Fatal = SubExpr->getType().getTypePtr() != E->getType().getTypePtr();
     }
@@ -5156,6 +5158,10 @@ bool Compiler<Emitter>::VisitBuiltinCallExpr(const CallExpr *E,
       return false;
 
   } break;
+  case Builtin::BI__assume:
+  case Builtin::BI__builtin_assume:
+    // Argument is not evaluated.
+    break;
   default:
     if (!Context::isUnevaluatedBuiltin(BuiltinID)) {
       // Put arguments on the stack.
