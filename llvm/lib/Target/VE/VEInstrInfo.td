@@ -402,17 +402,17 @@ def MEMzii : Operand<iPTR> {
 // Special ASX format for i64 immediate like tglobaladdress.
 def MEMrri64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, ptr_rc, i64imm);
+  let MIOperandInfo = (ops ve_ptr_rc, ve_ptr_rc, i64imm);
   let ParserMatchClass = VEMEMrriAsmOperand;
 }
 def MEMrii64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, i32imm, i64imm);
+  let MIOperandInfo = (ops ve_ptr_rc, i32imm, i64imm);
   let ParserMatchClass = VEMEMriiAsmOperand;
 }
 def MEMzri64 : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i64imm);
+  let MIOperandInfo = (ops i32imm /* = 0 */, ve_ptr_rc, i64imm);
   let ParserMatchClass = VEMEMzriAsmOperand;
 }
 def MEMzii64 : Operand<iPTR> {
@@ -573,6 +573,26 @@ def SDT_TS1AM : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>, SDTCisPtrTy<1>,
 def ts1am     : SDNode<"VEISD::TS1AM", SDT_TS1AM,
                        [SDNPHasChain, SDNPMayStore, SDNPMayLoad,
                         SDNPMemOperand]>;
+
+// FLUSHW flushes register windows to stack.
+def flushw : SDNode<"VEISD::FLUSHW", SDTNone, [SDNPHasChain]>;
+
+// Wrapper node for TargetConstantPool, TargetJumpTable, TargetExternalSymbol,
+// TargetGlobalAddress, TargetGlobalTLSAddress, MCSymbol, TargetBlockAddress.
+def SDT_VEWrapper : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisPtrTy<0>]>;
+def VEWrapper     : SDNode<"VEISD::Wrapper", SDT_VEWrapper>;
+
+// SIMD vector gather/scatter/lvl nodes.
+// Originally defined in SIMDInstrPatterns.td (commented out).
+def vec_scatter : SDNode<"VEISD::VEC_SCATTER",
+                         SDTypeProfile<0, 2, [SDTCisVec<0>, SDTCisVec<1>]>,
+                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def vec_gather  : SDNode<"VEISD::VEC_GATHER",
+                         SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>,
+                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def vec_lvl     : SDNode<"VEISD::VEC_LVL",
+                         SDTypeProfile<0, 1, []>,
+                         [SDNPHasChain]>;
 
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions

@@ -98,6 +98,10 @@ std::string MessageExpectedText::ToString() const {
   return common::visit(
       common::visitors{
           [](CharBlock cb) {
+            if (!cb.empty() && cb.back() == ' ') {
+              // Omit any trailing blank in the expected token string.
+              cb = CharBlock{cb.begin(), cb.size() - 1};
+            }
             return MessageFormattedText("expected '%s'"_err_en_US, cb)
                 .MoveString();
           },
@@ -165,9 +169,7 @@ bool Message::SortBefore(const Message &that) const {
       location_, that.location_);
 }
 
-bool Message::IsFatal() const {
-  return severity() == Severity::Error || severity() == Severity::Todo;
-}
+bool Message::IsFatal() const { return IsFatalSeverity(severity()); }
 
 Severity Message::severity() const {
   return common::visit(
@@ -258,6 +260,7 @@ std::optional<ProvenanceRange> Message::GetProvenanceRange(
 static std::string Prefix(Severity severity) {
   switch (severity) {
   case Severity::Error:
+  case Severity::ErrorUnlessDeadCode:
     return "error: ";
   case Severity::Warning:
     return "warning: ";
@@ -276,18 +279,13 @@ static std::string Prefix(Severity severity) {
 }
 
 static llvm::raw_ostream::Colors PrefixColor(Severity severity) {
-  switch (severity) {
-  case Severity::Error:
-  case Severity::Todo:
+  if (IsFatalSeverity(severity)) {
     return llvm::raw_ostream::RED;
-  case Severity::Warning:
-  case Severity::Portability:
+  } else if (IsWarningSeverity(severity)) {
     return llvm::raw_ostream::MAGENTA;
-  default:
-    // TODO: Set the color.
-    break;
+  } else {
+    return llvm::raw_ostream::SAVEDCOLOR;
   }
-  return llvm::raw_ostream::SAVEDCOLOR;
 }
 
 static std::string HintLanguageControlFlag(
@@ -477,15 +475,31 @@ void Messages::Emit(llvm::raw_ostream &o, const AllCookedSources &allCooked,
   }
   std::stable_sort(sorted.begin(), sorted.end(),
       [](const Message *x, const Message *y) { return x->SortBefore(*y); });
-  const Message *lastMsg{nullptr};
+  std::vector<const Message *> msgsWithLastLocation;
   std::size_t errorsEmitted{0};
   for (const Message *msg : sorted) {
-    if (lastMsg && *msg == *lastMsg) {
-      // Don't emit two identical messages for the same location
+    bool shouldSkipMsg{false};
+    // Don't emit two identical messages for the same location.
+    // At the same location, messages are sorted by the order they were
+    // added to the Messages buffer, which is a decent proxy for the
+    // causality of the messages.
+    if (!msgsWithLastLocation.empty()) {
+      if (msgsWithLastLocation[0]->AtSameLocation(*msg)) {
+        for (const Message *msgAtThisLocation : msgsWithLastLocation) {
+          if (*msg == *msgAtThisLocation) {
+            shouldSkipMsg = true; // continue loop over sorted messages
+            break;
+          }
+        }
+      } else {
+        msgsWithLastLocation.clear();
+      }
+    }
+    if (shouldSkipMsg) {
       continue;
     }
+    msgsWithLastLocation.push_back(msg);
     msg->Emit(o, allCooked, echoSourceLines, hintFlagPtr);
-    lastMsg = msg;
     if (warningsAreErrors || msg->IsFatal()) {
       ++errorsEmitted;
     }

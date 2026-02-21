@@ -15,6 +15,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TrieHashIndexGenerator.h"
 #include "llvm/CAS/MappedFileRegionArena.h"
+#include "llvm/CAS/OnDiskCASLogger.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/Threading.h"
@@ -136,7 +137,13 @@ public:
   /// Return None on success, or the existing offset on failure.
   bool compare_exchange_strong(size_t I, SubtrieSlotValue &Expected,
                                SubtrieSlotValue New) {
-    return Slots[I].compare_exchange_strong(Expected.Offset, New.Offset);
+    SubtrieSlotValue SaveExpected(Expected);
+    bool Result = Slots[I].compare_exchange_strong(Expected.Offset, New.Offset);
+    if (Logger)
+      Logger->logSubtrieHandleCmpXchg(Region->data(), getOffset().Offset, I,
+                                      SaveExpected.Offset, New.Offset,
+                                      Expected.Offset);
+    return Result;
   }
 
   /// Sink \p V from \p I in this subtrie down to \p NewI in a new subtrie with
@@ -171,24 +178,31 @@ public:
   uint32_t getNumBits() const { return H->NumBits; }
 
   static Expected<SubtrieHandle> create(MappedFileRegionArena &Alloc,
-                                        uint32_t StartBit, uint32_t NumBits);
+                                        uint32_t StartBit, uint32_t NumBits,
+                                        OnDiskCASLogger *Logger);
 
   static SubtrieHandle getFromFileOffset(MappedFileRegion &Region,
-                                         FileOffset Offset) {
-    return SubtrieHandle(Region, SubtrieSlotValue::getSubtrieOffset(Offset));
+                                         FileOffset Offset,
+                                         OnDiskCASLogger *Logger) {
+    return SubtrieHandle(Region, SubtrieSlotValue::getSubtrieOffset(Offset),
+                         Logger);
   }
 
   SubtrieHandle() = default;
-  SubtrieHandle(MappedFileRegion &Region, Header &H)
-      : Region(&Region), H(&H), Slots(getSlots(H)) {}
-  SubtrieHandle(MappedFileRegion &Region, SubtrieSlotValue Offset)
-      : SubtrieHandle(Region, *reinterpret_cast<Header *>(
-                                  Region.data() + Offset.asSubtrie())) {}
+  SubtrieHandle(MappedFileRegion &Region, Header &H, OnDiskCASLogger *Logger)
+      : Region(&Region), H(&H), Slots(getSlots(H)), Logger(Logger) {}
+  SubtrieHandle(MappedFileRegion &Region, SubtrieSlotValue Offset,
+                OnDiskCASLogger *Logger)
+      : SubtrieHandle(
+            Region,
+            *reinterpret_cast<Header *>(Region.data() + Offset.asSubtrie()),
+            Logger) {}
 
 private:
   MappedFileRegion *Region = nullptr;
   Header *H = nullptr;
   MutableArrayRef<SlotT> Slots;
+  OnDiskCASLogger *Logger = nullptr;
 
   static MutableArrayRef<SlotT> getSlots(Header &H) {
     return MutableArrayRef(reinterpret_cast<SlotT *>(&H + 1),
@@ -291,7 +305,8 @@ public:
   static Expected<TrieRawHashMapHandle>
   create(MappedFileRegionArena &Alloc, StringRef Name,
          std::optional<uint64_t> NumRootBits, uint64_t NumSubtrieBits,
-         uint64_t NumHashBits, uint64_t RecordDataSize);
+         uint64_t NumHashBits, uint64_t RecordDataSize,
+         std::shared_ptr<OnDiskCASLogger> Logger);
 
   void
   print(raw_ostream &OS,
@@ -301,16 +316,24 @@ public:
       function_ref<Error(FileOffset, OnDiskTrieRawHashMap::ConstValueProxy)>
           RecordVerifier) const;
   TrieRawHashMapHandle() = default;
-  TrieRawHashMapHandle(MappedFileRegion &Region, Header &H)
-      : Region(&Region), H(&H) {}
-  TrieRawHashMapHandle(MappedFileRegion &Region, intptr_t HeaderOffset)
+  TrieRawHashMapHandle(MappedFileRegion &Region, Header &H,
+                       std::shared_ptr<OnDiskCASLogger> Logger = nullptr)
+      : Region(&Region), H(&H), Logger(std::move(Logger)) {}
+  TrieRawHashMapHandle(MappedFileRegion &Region, intptr_t HeaderOffset,
+                       std::shared_ptr<OnDiskCASLogger> Logger = nullptr)
       : TrieRawHashMapHandle(
-            Region, *reinterpret_cast<Header *>(Region.data() + HeaderOffset)) {
+            Region, *reinterpret_cast<Header *>(Region.data() + HeaderOffset),
+            std::move(Logger)) {}
+
+  OnDiskCASLogger *getLogger() const { return Logger.get(); }
+  void setLogger(std::shared_ptr<OnDiskCASLogger> Logger) {
+    this->Logger = std::move(Logger);
   }
 
 private:
   MappedFileRegion *Region = nullptr;
   Header *H = nullptr;
+  std::shared_ptr<OnDiskCASLogger> Logger;
 };
 
 } // end anonymous namespace
@@ -322,7 +345,8 @@ struct OnDiskTrieRawHashMap::ImplType {
 
 Expected<SubtrieHandle> SubtrieHandle::create(MappedFileRegionArena &Alloc,
                                               uint32_t StartBit,
-                                              uint32_t NumBits) {
+                                              uint32_t NumBits,
+                                              OnDiskCASLogger *Logger) {
   assert(StartBit <= TrieRawHashMapHandle::MaxNumHashBits);
   assert(NumBits <= UINT8_MAX);
   assert(NumBits <= TrieRawHashMapHandle::MaxNumRootBits);
@@ -333,15 +357,20 @@ Expected<SubtrieHandle> SubtrieHandle::create(MappedFileRegionArena &Alloc,
   auto *H =
       new (*Mem) SubtrieHandle::Header{(uint16_t)StartBit, (uint8_t)NumBits,
                                        /*ZeroPad1B=*/0, /*ZeroPad4B=*/0};
-  SubtrieHandle S(Alloc.getRegion(), *H);
+  SubtrieHandle S(Alloc.getRegion(), *H, Logger);
   for (auto I = S.Slots.begin(), E = S.Slots.end(); I != E; ++I)
     new (I) SlotT(0);
+
+  if (Logger)
+    Logger->logSubtrieHandleCreate(Alloc.data(), S.getOffset().Offset, StartBit,
+                                   NumBits);
   return S;
 }
 
 SubtrieHandle TrieRawHashMapHandle::getRoot() const {
   if (int64_t Root = H->RootTrieOffset)
-    return SubtrieHandle(getRegion(), SubtrieSlotValue::getSubtrieOffset(Root));
+    return SubtrieHandle(getRegion(), SubtrieSlotValue::getSubtrieOffset(Root),
+                         Logger.get());
   return SubtrieHandle();
 }
 
@@ -352,24 +381,29 @@ TrieRawHashMapHandle::getOrCreateRoot(MappedFileRegionArena &Alloc) {
     return Root;
 
   int64_t Race = 0;
-  auto LazyRoot = SubtrieHandle::create(Alloc, 0, H->NumSubtrieBits);
+  auto LazyRoot =
+      SubtrieHandle::create(Alloc, 0, H->NumSubtrieBits, Logger.get());
   if (LLVM_UNLIKELY(!LazyRoot))
     return LazyRoot.takeError();
+
   if (H->RootTrieOffset.compare_exchange_strong(
-          Race, LazyRoot->getOffset().asSubtrie()))
+          Race, LazyRoot->getOffset().asSubtrie()),
+      Logger.get())
     return *LazyRoot;
 
   // There was a race. Return the other root.
   //
   // TODO: Avoid leaking the lazy root by storing it in an allocator.
-  return SubtrieHandle(getRegion(), SubtrieSlotValue::getSubtrieOffset(Race));
+  return SubtrieHandle(getRegion(), SubtrieSlotValue::getSubtrieOffset(Race),
+                       Logger.get());
 }
 
 Expected<TrieRawHashMapHandle>
 TrieRawHashMapHandle::create(MappedFileRegionArena &Alloc, StringRef Name,
                              std::optional<uint64_t> NumRootBits,
                              uint64_t NumSubtrieBits, uint64_t NumHashBits,
-                             uint64_t RecordDataSize) {
+                             uint64_t RecordDataSize,
+                             std::shared_ptr<OnDiskCASLogger> Logger) {
   // Allocate.
   auto Offset = Alloc.allocateOffset(sizeof(Header) + Name.size() + 1);
   if (LLVM_UNLIKELY(!Offset))
@@ -394,8 +428,8 @@ TrieRawHashMapHandle::create(MappedFileRegionArena &Alloc, StringRef Name,
   NameStorage[Name.size()] = 0;
 
   // Construct a root trie, if requested.
-  TrieRawHashMapHandle Trie(Alloc.getRegion(), *H);
-  auto Sub = SubtrieHandle::create(Alloc, 0, *NumRootBits);
+  TrieRawHashMapHandle Trie(Alloc.getRegion(), *H, Logger);
+  auto Sub = SubtrieHandle::create(Alloc, 0, *NumRootBits, Logger.get());
   if (LLVM_UNLIKELY(!Sub))
     return Sub.takeError();
   if (NumRootBits)
@@ -424,10 +458,15 @@ TrieRawHashMapHandle::createRecord(MappedFileRegionArena &Alloc,
 
   RecordData Record = getRecord(SubtrieSlotValue::getDataOffset(*Offset));
   llvm::copy(Hash, const_cast<uint8_t *>(Record.Proxy.Hash.begin()));
+
+  if (Logger)
+    Logger->logHashMappedTrieHandleCreateRecord(
+        Alloc.data(), Record.Offset.getRawOffset(), Hash);
+
   return Record;
 }
 
-Expected<OnDiskTrieRawHashMap::const_pointer>
+Expected<OnDiskTrieRawHashMap::ConstOnDiskPtr>
 OnDiskTrieRawHashMap::recoverFromFileOffset(FileOffset Offset) const {
   // Check alignment.
   if (!isAligned(MappedFileRegionArena::getAlign(), Offset.get()))
@@ -448,17 +487,17 @@ OnDiskTrieRawHashMap::recoverFromFileOffset(FileOffset Offset) const {
   // Looks okay...
   TrieRawHashMapHandle::RecordData D =
       Impl->Trie.getRecord(SubtrieSlotValue::getDataOffset(Offset));
-  return const_pointer(D.Proxy, D.getFileOffset());
+  return ConstOnDiskPtr(D.Proxy, D.getFileOffset());
 }
 
-OnDiskTrieRawHashMap::const_pointer
+OnDiskTrieRawHashMap::ConstOnDiskPtr
 OnDiskTrieRawHashMap::find(ArrayRef<uint8_t> Hash) const {
   TrieRawHashMapHandle Trie = Impl->Trie;
   assert(Hash.size() == Trie.getNumHashBytes() && "Invalid hash");
 
   SubtrieHandle S = Trie.getRoot();
   if (!S)
-    return const_pointer();
+    return ConstOnDiskPtr();
 
   TrieHashIndexGenerator IndexGen = Trie.getIndexGen(S, Hash);
   size_t Index = IndexGen.next();
@@ -466,17 +505,17 @@ OnDiskTrieRawHashMap::find(ArrayRef<uint8_t> Hash) const {
     // Try to set the content.
     SubtrieSlotValue V = S.load(Index);
     if (!V)
-      return const_pointer();
+      return ConstOnDiskPtr();
 
     // Check for an exact match.
     if (V.isData()) {
       TrieRawHashMapHandle::RecordData D = Trie.getRecord(V);
-      return D.Proxy.Hash == Hash ? const_pointer(D.Proxy, D.getFileOffset())
-                                  : const_pointer();
+      return D.Proxy.Hash == Hash ? ConstOnDiskPtr(D.Proxy, D.getFileOffset())
+                                  : ConstOnDiskPtr();
     }
 
     Index = IndexGen.next();
-    S = SubtrieHandle(Trie.getRegion(), V);
+    S = SubtrieHandle(Trie.getRegion(), V, Trie.getLogger());
   }
 }
 
@@ -490,7 +529,7 @@ void SubtrieHandle::reinitialize(uint32_t StartBit, uint32_t NumBits) {
   H->NumBits = NumBits;
 }
 
-Expected<OnDiskTrieRawHashMap::pointer>
+Expected<OnDiskTrieRawHashMap::OnDiskPtr>
 OnDiskTrieRawHashMap::insertLazy(ArrayRef<uint8_t> Hash,
                                  LazyInsertOnConstructCB OnConstruct,
                                  LazyInsertOnLeakCB OnLeak) {
@@ -523,13 +562,14 @@ OnDiskTrieRawHashMap::insertLazy(ArrayRef<uint8_t> Hash,
       }
 
       if (S->compare_exchange_strong(Index, Existing, NewRecord->Offset))
-        return pointer(NewRecord->Proxy, NewRecord->Offset.asDataFileOffset());
+        return OnDiskPtr(NewRecord->Proxy,
+                         NewRecord->Offset.asDataFileOffset());
 
       // Race means that Existing is no longer empty; fall through...
     }
 
     if (Existing.isSubtrie()) {
-      S = SubtrieHandle(Trie.getRegion(), Existing);
+      S = SubtrieHandle(Trie.getRegion(), Existing, Trie.getLogger());
       Index = IndexGen.next();
       continue;
     }
@@ -540,8 +580,8 @@ OnDiskTrieRawHashMap::insertLazy(ArrayRef<uint8_t> Hash,
       if (NewRecord && OnLeak)
         OnLeak(NewRecord->Offset.asDataFileOffset(), NewRecord->Proxy,
                ExistingRecord.Offset.asDataFileOffset(), ExistingRecord.Proxy);
-      return pointer(ExistingRecord.Proxy,
-                     ExistingRecord.Offset.asDataFileOffset());
+      return OnDiskPtr(ExistingRecord.Proxy,
+                       ExistingRecord.Offset.asDataFileOffset());
     }
 
     // Sink the existing content as long as the indexes match.
@@ -578,7 +618,7 @@ Expected<SubtrieHandle> SubtrieHandle::sink(size_t I, SubtrieSlotValue V,
   } else {
     // Allocate a new, empty subtrie.
     auto Err = SubtrieHandle::create(Alloc, getStartBit() + getNumBits(),
-                                     NumSubtrieBits)
+                                     NumSubtrieBits, Logger)
                    .moveInto(NewS);
     if (LLVM_UNLIKELY(Err))
       return std::move(Err);
@@ -596,7 +636,7 @@ Expected<SubtrieHandle> SubtrieHandle::sink(size_t I, SubtrieSlotValue V,
   UnusedSubtrie = *NewS;
 
   // Return the subtrie added by the concurrent sink() call.
-  return SubtrieHandle(Alloc.getRegion(), V);
+  return SubtrieHandle(Alloc.getRegion(), V, Logger);
 }
 
 void OnDiskTrieRawHashMap::print(
@@ -701,6 +741,7 @@ OnDiskTrieRawHashMap::create(const Twine &PathTwine, const Twine &TrieNameTwine,
                              size_t NumHashBits, uint64_t DataSize,
                              uint64_t MaxFileSize,
                              std::optional<uint64_t> NewFileInitialSize,
+                             std::shared_ptr<OnDiskCASLogger> Logger,
                              std::optional<size_t> NewTableNumRootBits,
                              std::optional<size_t> NewTableNumSubtrieBits) {
   SmallString<128> PathStorage;
@@ -741,9 +782,9 @@ OnDiskTrieRawHashMap::create(const Twine &PathTwine, const Twine &TrieNameTwine,
 
   // Constructor for if the file doesn't exist.
   auto NewDBConstructor = [&](DatabaseFile &DB) -> Error {
-    auto Trie =
-        TrieRawHashMapHandle::create(DB.getAlloc(), TrieName, NumRootBits,
-                                     NumSubtrieBits, NumHashBits, DataSize);
+    auto Trie = TrieRawHashMapHandle::create(DB.getAlloc(), TrieName,
+                                             NumRootBits, NumSubtrieBits,
+                                             NumHashBits, DataSize, Logger);
     if (LLVM_UNLIKELY(!Trie))
       return Trie.takeError();
 
@@ -752,7 +793,7 @@ OnDiskTrieRawHashMap::create(const Twine &PathTwine, const Twine &TrieNameTwine,
 
   // Get or create the file.
   Expected<DatabaseFile> File =
-      DatabaseFile::create(Path, MaxFileSize, NewDBConstructor);
+      DatabaseFile::create(Path, MaxFileSize, Logger, NewDBConstructor);
   if (!File)
     return File.takeError();
 
@@ -765,6 +806,7 @@ OnDiskTrieRawHashMap::create(const Twine &PathTwine, const Twine &TrieNameTwine,
                            (size_t)Table->getHeader().Kind, Path, TrieName))
     return std::move(E);
   auto Trie = Table->cast<TrieRawHashMapHandle>();
+  Trie.setLogger(Logger);
   assert(Trie && "Already checked the kind");
 
   // Check the hash and data size.
@@ -1002,7 +1044,7 @@ Error TrieVisitor::visit() {
     std::string SubtriePrefix;
     appendIndexBits(SubtriePrefix, I, NumSlots);
     if (Slot.isSubtrie()) {
-      SubtrieHandle S(Trie.getRegion(), Slot);
+      SubtrieHandle S(Trie.getRegion(), Slot, Trie.getLogger());
       Subs.push_back(S);
       Prefixes.push_back(SubtriePrefix);
     }
@@ -1075,7 +1117,7 @@ Error TrieVisitor::traverseTrieNode(SubtrieHandle Node, StringRef Prefix) {
     std::string SubtriePrefix = Prefix.str();
     appendIndexBits(SubtriePrefix, I, NumSlots);
     if (Slot.isSubtrie()) {
-      SubtrieHandle S(Trie.getRegion(), Slot);
+      SubtrieHandle S(Trie.getRegion(), Slot, Trie.getLogger());
       Subs.push_back(S);
       Prefixes.push_back(SubtriePrefix);
     }
@@ -1101,8 +1143,6 @@ void TrieRawHashMapHandle::print(
 
   if (auto Err = Printer.printRecords())
     OS << "error: " << toString(std::move(Err)) << "\n";
-
-  return;
 }
 
 Error TrieRawHashMapHandle::validate(
@@ -1129,13 +1169,14 @@ OnDiskTrieRawHashMap::create(const Twine &PathTwine, const Twine &TrieNameTwine,
                              size_t NumHashBits, uint64_t DataSize,
                              uint64_t MaxFileSize,
                              std::optional<uint64_t> NewFileInitialSize,
+                             std::shared_ptr<OnDiskCASLogger> Logger,
                              std::optional<size_t> NewTableNumRootBits,
                              std::optional<size_t> NewTableNumSubtrieBits) {
   return createStringError(make_error_code(std::errc::not_supported),
                            "OnDiskTrieRawHashMap is not supported");
 }
 
-Expected<OnDiskTrieRawHashMap::pointer>
+Expected<OnDiskTrieRawHashMap::OnDiskPtr>
 OnDiskTrieRawHashMap::insertLazy(ArrayRef<uint8_t> Hash,
                                  LazyInsertOnConstructCB OnConstruct,
                                  LazyInsertOnLeakCB OnLeak) {
@@ -1143,15 +1184,15 @@ OnDiskTrieRawHashMap::insertLazy(ArrayRef<uint8_t> Hash,
                            "OnDiskTrieRawHashMap is not supported");
 }
 
-Expected<OnDiskTrieRawHashMap::const_pointer>
+Expected<OnDiskTrieRawHashMap::ConstOnDiskPtr>
 OnDiskTrieRawHashMap::recoverFromFileOffset(FileOffset Offset) const {
   return createStringError(make_error_code(std::errc::not_supported),
                            "OnDiskTrieRawHashMap is not supported");
 }
 
-OnDiskTrieRawHashMap::const_pointer
+OnDiskTrieRawHashMap::ConstOnDiskPtr
 OnDiskTrieRawHashMap::find(ArrayRef<uint8_t> Hash) const {
-  return const_pointer();
+  return ConstOnDiskPtr();
 }
 
 void OnDiskTrieRawHashMap::print(

@@ -41,7 +41,7 @@ static cl::opt<bool> ShowSpillMessageVec(
 void VEInstrInfo::anchor() {}
 
 VEInstrInfo::VEInstrInfo(const VESubtarget &ST)
-    : VEGenInstrInfo(ST, VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
+    : VEGenInstrInfo(ST, RI, VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
       Subtarget(ST) {}
 
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
@@ -502,7 +502,6 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                       MachineBasicBlock::iterator I,
                                       Register SrcReg, bool isKill, int FI,
                                       const TargetRegisterClass *RC,
-                                      const TargetRegisterInfo *TRI,
                                       Register VReg,
                                       MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
@@ -511,13 +510,13 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - V64\n";
     } if (RC == &VE::VPRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VP\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM512\n";
+      dbgs() << "spill " << printReg(SrcReg, &TRI) << " - VM512\n";
     }
   }
 
@@ -590,23 +589,25 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
     report_fatal_error("Can't store this register to stack slot");
 }
 
-void VEInstrInfo::loadRegFromStackSlot(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, Register DestReg,
-    int FI, const TargetRegisterClass *RC, const TargetRegisterInfo *TRI,
-    Register VReg, MachineInstr::MIFlag Flags) const {
+void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator I,
+                                       Register DestReg, int FI,
+                                       const TargetRegisterClass *RC,
+                                       Register VReg, unsigned SubReg,
+                                       MachineInstr::MIFlag Flags) const {
   DebugLoc DL;
   if (I != MBB.end())
     DL = I->getDebugLoc();
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - V64\n";
     } else if (RC == &VE::VPRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VP\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM512\n";
+      dbgs() << "restore " << printReg(DestReg, &TRI) << " - VM512\n";
     }
   }
 

@@ -17,6 +17,7 @@
 #include "VEInstrBuilder.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
+#include "VESelectionDAGInfo.h"
 #include "VETargetMachine.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/iterator_range.h"
@@ -258,7 +259,7 @@ void VETargetLowering::initSPUActions() {
   // VE doesn't have following floating point operations.
   for (MVT VT : MVT::fp_valuetypes()) {
     setOperationAction(ISD::FNEG, VT, Expand);
-    setOperationAction(ISD::FREM, VT, Expand);
+    setOperationAction(ISD::FREM, VT, LibCall);
   }
 
   // VE doesn't have fdiv of f128.
@@ -1267,7 +1268,7 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
 
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
-    : TargetLowering(TM), Subtarget(&STI) {
+    : TargetLowering(TM, STI), Subtarget(&STI) {
   // Instructions which use registers as conditionals examine all the
   // bits (as does the pseudo SELECT_CC expansion). I don't think it
   // matters much whether it's ZeroOrOneBooleanContent, or
@@ -1305,68 +1306,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }
 
-const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
-#define TARGET_NODE_CASE(NAME)                                                 \
-  case VEISD::NAME:                                                            \
-    return "VEISD::" #NAME;
-  switch ((VEISD::NodeType)Opcode) {
-  case VEISD::FIRST_NUMBER:
-    break;
-    TARGET_NODE_CASE(CMPI)
-    TARGET_NODE_CASE(CMPU)
-    TARGET_NODE_CASE(CMPF)
-    TARGET_NODE_CASE(CMPQ)
-    TARGET_NODE_CASE(CMOV)
-    TARGET_NODE_CASE(CALL)
-    TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
-    TARGET_NODE_CASE(EH_SJLJ_SETJMP)
-    TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
-    TARGET_NODE_CASE(GETFUNPLT)
-    TARGET_NODE_CASE(GETSTACKTOP)
-    TARGET_NODE_CASE(GETTLSADDR)
-    TARGET_NODE_CASE(GLOBAL_BASE_REG)
-    TARGET_NODE_CASE(Hi)
-    TARGET_NODE_CASE(Lo)
-    TARGET_NODE_CASE(RET_GLUE)
-    TARGET_NODE_CASE(TS1AM)
-    TARGET_NODE_CASE(EQV)
-    TARGET_NODE_CASE(XOR)
-    TARGET_NODE_CASE(FLUSHW)
-    TARGET_NODE_CASE(Wrapper)
-
-    TARGET_NODE_CASE(VEC_LVL)
-    TARGET_NODE_CASE(VEC_BROADCAST)
-    TARGET_NODE_CASE(VEC_GATHER)
-    TARGET_NODE_CASE(VEC_SCATTER)
-    TARGET_NODE_CASE(VEC_NARROW)
-    TARGET_NODE_CASE(VEC_SEQ)
-    TARGET_NODE_CASE(VEC_VMV)
-    TARGET_NODE_CASE(VEC_TOMASK)
-
-    TARGET_NODE_CASE(VEC_UNPACK_LO)
-    TARGET_NODE_CASE(VEC_UNPACK_HI)
-    TARGET_NODE_CASE(VEC_PACK)
-    TARGET_NODE_CASE(VEC_SWAP)
-
-    TARGET_NODE_CASE(VM_POPCOUNT)
-    TARGET_NODE_CASE(VM_INSERT)
-    TARGET_NODE_CASE(VM_EXTRACT)
-
-    TARGET_NODE_CASE(REPL_F32)
-    TARGET_NODE_CASE(REPL_I32)
-    TARGET_NODE_CASE(LEGALAVL)
-
-    // Register the VVP_* SDNodes.
-#define ADD_VVP_OP(VVP_NAME, ...) TARGET_NODE_CASE(VVP_NAME)
-#include "VVPNodes.def"
-  }
-  return nullptr;
-}
-
-EVT VETargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
-                                         EVT VT) const {
+EVT VETargetLowering::getSetCCResultType(const DataLayout &,
+                                         LLVMContext &Context, EVT VT) const {
   if (VT.isVector())
-    return VT.changeVectorElementType(MVT::i1);
+    return VT.changeVectorElementType(Context, MVT::i1);
   return MVT::i32;
 }
 
@@ -1568,7 +1511,7 @@ SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
 }
 
 TargetLowering::AtomicExpansionKind
-VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
+VETargetLowering::shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const {
   // We have TS1AM implementation for i8/i16/i32/i64, so use it.
   if (AI->getOperation() == AtomicRMWInst::Xchg) {
     return AtomicExpansionKind::None;
@@ -4001,9 +3944,10 @@ bool VETargetLowering::useLoadStackGuardNode(const Module &M) const {
 }
 
 // Override to disable global variable loading on Linux.
-void VETargetLowering::insertSSPDeclarations(Module &M) const {
+void VETargetLowering::insertSSPDeclarations(
+    Module &M, const LibcallLoweringInfo &Libcalls) const {
   if (!Subtarget->isTargetLinux())
-    return TargetLowering::insertSSPDeclarations(M);
+    return TargetLowering::insertSSPDeclarations(M, Libcalls);
 }
 
 void VETargetLowering::finalizeLowering(MachineFunction &MF) const {
@@ -4082,7 +4026,7 @@ getPromoteElementConversion(LLVMContext &Context, EVT ElemVT,
   MVT PromotedElemVT;
   if (ElemVT.isFloatingPoint()) {
     PromotedElemVT = MVT::f32;
-    LTA = LegalizeTypeAction::TypePromoteFloat;
+    LTA = LegalizeTypeAction::TypeSoftPromoteHalf;
   } else {
     assert(ElemVT.isInteger());
     PromotedElemVT = MVT::i32;
@@ -4205,7 +4149,7 @@ unsigned VETargetLowering::getVectorTypeBreakdownForCallingConv(
     default:
       return DefaultImpl();
 
-    case LegalizeTypeAction::TypePromoteFloat:
+    case LegalizeTypeAction::TypeSoftPromoteHalf:
     case LegalizeTypeAction::TypePromoteInteger:
       // Promote elements across call boundaries.
       IntermediateVT = NextVT;

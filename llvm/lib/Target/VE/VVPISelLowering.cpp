@@ -15,8 +15,8 @@
 #include "VEInstrBuilder.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
+#include "VESelectionDAGInfo.h"
 #include "VETargetMachine.h"
-// #include "VETargetObjectFile.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -1895,7 +1895,10 @@ SDValue VETargetLowering::lowerVVP_LOAD_STORE(SDValue Op, SelectionDAG &DAG,
 
   MemSDNode &MemN = *cast<MemSDNode>(Op.getNode());
   EVT OldDataVT = MemN.getMemoryVT();
-  EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
+  // For loads with extending (anyext/sext/zext), use the result type for
+  // legalization since MemoryVT may need both promotion and widening.
+  EVT DataVTForLegal = IsLoad ? Op.getNode()->getValueType(0) : OldDataVT;
+  EVT LegalDataVT = LegalizeVectorType(DataVTForLegal, Op, DAG, Mode);
 
   // Eagerly split over-packed vectors.
   if (isOverPackedType(OldDataVT))
@@ -2038,7 +2041,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
           AbsOffset / SXRegSize; // actual part when chunked into 64bit elements
       assert(ActualPart < getMaskBits(MaskVT) / SXRegSize &&
              "Mask bits out of range!");
-      AdjIndexV = CDAG.getConstant(ActualPart, MVT::i32);
+      AdjIndexV = CDAG.getConstant(ActualPart, MVT::i64);
 
       // Missing shift amount to isolate the wanted bit
       ShiftAmount = AbsOffset - (ActualPart * SXRegSize);

@@ -125,27 +125,20 @@ End-user Options
 
  Enable setting the FP exceptions build attribute not to use exceptions.
 
-.. option:: --enable-unsafe-fp-math
-
- Enable optimizations that make unsafe assumptions about IEEE math (e.g. that
- addition is associative) or may not work for all input ranges.  These
- optimizations allow the code generator to make use of some instructions which
- would otherwise not be usable (such as ``fsin`` on X86).
-
 .. option:: --stats
 
  Print statistics recorded by code-generation passes.
+
+.. option:: --save-stats, --save-stats=cwd, --save-stats=obj
+
+ Save LLVM statistics to a file in the current directory
+ (:option:`--save-stats`/"--save-stats=cwd") or the directory
+ of the output file ("--save-stats=obj") in JSON format.
 
 .. option:: --time-passes
 
  Record the amount of time needed for each pass and print a report to standard
  error.
-
-.. option:: --load=<dso_path>
-
- Dynamically load ``dso_path`` (a path to a dynamically shared object) that
- implements an LLVM target.  This will permit the target name to be used with
- the :option:`-march` option so that code can be generated for that target.
 
 .. option:: -meabi=[default|gnu|4|5]
 
