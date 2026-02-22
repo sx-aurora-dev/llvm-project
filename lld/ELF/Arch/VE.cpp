@@ -54,8 +54,8 @@ VE::VE(Ctx &ctx) : TargetInfo(ctx) {
   pltEntrySize = 64;
   pltHeaderSize = 64;
 
-  // The .got has no preserved entries.
-  // gotHeaderEntriesNum = 0;
+  // The .got has one preserved entry for _DYNAMIC.
+  gotHeaderEntriesNum = 1;
 
   // _GLOBAL_OFFSET_TABLE_ == .got.plt.
   gotBaseSymInGotPlt = true;
