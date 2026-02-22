@@ -1,4 +1,8 @@
 // XFAIL: target={{.*}}-aix{{.*}}
+// VE linker (nld) writes incorrect GOT entry for __stop___llvm_prf_names
+// (resolves to .dynamic address instead of section end), causing
+// __llvm_profile_get_size_for_buffer() to return ~67MB.
+// XFAIL: target={{ve-.*}}
 // RUN: %clang_profgen -DCHECK_SYMBOLS -O3 -o %t.symbols %s
 // RUN: llvm-nm %t.symbols | FileCheck %s --check-prefix=CHECK-SYMBOLS
 // RUN: %clang_profgen -O3 -o %t %s
