@@ -66,6 +66,10 @@ set(RUNTIMES_ve-unknown-linux-gnu_LIBCXXABI_USE_COMPILER_RT TRUE CACHE BOOL "")
 # VE uses Compiler-RT from libcxx.
 set(RUNTIMES_ve-unknown-linux-gnu_LIBCXX_USE_COMPILER_RT TRUE CACHE BOOL "")
 
+# Disable benchmarks for VE since Google Benchmark's try_run cannot execute
+# VE binaries on the host.
+set(RUNTIMES_ve-unknown-linux-gnu_LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
+
 # Specify LIBDIR_SUFFIX for OpenMP to install them at following directories.
 #   install/lib/clang/${VERSION}/lib/x86_64-unknown-linux-gnu
 #   install/lib/clang/${VERSION}/lib/ve-unknown-linux-gnu

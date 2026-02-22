@@ -10,6 +10,9 @@
 // Ensure that unw_resume() resumes execution at the stack frame identified by
 // cursor.
 
+// VE does not yet support the zero-cost unwinding APIs.
+// XFAIL: target=ve-{{.*}}
+
 // TODO: Figure out why this fails with Memory Sanitizer.
 // XFAIL: msan
 

@@ -267,9 +267,8 @@
 // VE:#define __UINT_LEAST8_TYPE__ unsigned char
 // VE:#define __USER_LABEL_PREFIX__
 // VE-NOT:#define __VECTOR__
-// VE:#define __WCHAR_MAX__ 4294967295U
-// VE:#define __WCHAR_TYPE__ unsigned int
-// VE:#define __WCHAR_UNSIGNED__ 1
+// VE:#define __WCHAR_MAX__ 2147483647
+// VE:#define __WCHAR_TYPE__ int
 // VE:#define __WCHAR_WIDTH__ 32
 // VE:#define __WINT_MAX__ 4294967295U
 // VE:#define __WINT_TYPE__ unsigned int

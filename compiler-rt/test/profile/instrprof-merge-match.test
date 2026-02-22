@@ -5,3 +5,7 @@
 
 rpath isn't supported on Windows.
 UNSUPPORTED: target={{.*windows.*}}
+VE linker (nld) writes incorrect GOT entry for __stop___llvm_prf_names
+(resolves to .dynamic address instead of section end), causing profile
+merge to fail with incorrect buffer size.
+XFAIL: target={{ve-.*}}

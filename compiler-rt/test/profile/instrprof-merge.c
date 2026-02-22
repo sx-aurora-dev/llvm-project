@@ -4,6 +4,10 @@
 
 // FIXME: llvm-profdata exits with "Malformed instrumentation profile data"
 // XFAIL: target={{.*windows.*}}
+// VE linker (nld) writes incorrect GOT entry for __stop___llvm_prf_names
+// (resolves to .dynamic address instead of section end), causing
+// __llvm_profile_get_size_for_buffer() to return ~67MB.
+// XFAIL: target={{ve-.*}}
 
 #include <stdint.h>
 #include <stdio.h>

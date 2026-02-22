@@ -9,6 +9,8 @@
 // UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: no-exceptions
+// VE supports a maximum of 64 threads per process, which is not enough for this test.
+// UNSUPPORTED: target=ve-{{.*}}
 
 #define TESTING_CXA_GUARD
 #include "../src/cxa_guard_impl.h"

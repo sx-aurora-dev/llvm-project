@@ -10,6 +10,9 @@
 // TODO: Investigate this failure on x86_64 macOS back deployment
 // XFAIL: stdlib=system && target=x86_64-apple-macosx{{10.9|10.10|10.11|10.12|10.13|10.14|10.15|11.0|12.0}}
 
+// VE does not yet support the zero-cost unwinding APIs.
+// XFAIL: target=ve-{{.*}}
+
 // TODO: Figure out why this fails with Memory Sanitizer.
 // XFAIL: msan
 

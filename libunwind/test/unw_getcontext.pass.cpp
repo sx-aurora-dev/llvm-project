@@ -7,6 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+// VE does not yet support the zero-cost unwinding APIs.
+// XFAIL: target=ve-{{.*}}
+
 #undef NDEBUG
 #include <assert.h>
 #include <libunwind.h>

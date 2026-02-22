@@ -8,6 +8,7 @@
 
 #include "MCTargetDesc/VEFixupKinds.h"
 #include "MCTargetDesc/VEMCTargetDesc.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCExpr.h"
@@ -89,6 +90,20 @@ protected:
 public:
   VEAsmBackend(const Target &T)
       : MCAsmBackend(llvm::endianness::little), TheTarget(T) {}
+
+  std::optional<MCFixupKind> getFixupKind(StringRef Name) const override {
+    unsigned Type = llvm::StringSwitch<unsigned>(Name)
+#define ELF_RELOC(X, Y) .Case(#X, Y)
+#include "llvm/BinaryFormat/ELFRelocs/VE.def"
+#undef ELF_RELOC
+                      .Case("BFD_RELOC_NONE", ELF::R_VE_NONE)
+                      .Case("BFD_RELOC_32", ELF::R_VE_REFLONG)
+                      .Case("BFD_RELOC_64", ELF::R_VE_REFQUAD)
+                      .Default(-1u);
+    if (Type == -1u)
+      return std::nullopt;
+    return static_cast<MCFixupKind>(FirstLiteralRelocationKind + Type);
+  }
 
   MCFixupKindInfo getFixupKindInfo(MCFixupKind Kind) const override {
     const static MCFixupKindInfo Infos[VE::NumTargetFixupKinds] = {

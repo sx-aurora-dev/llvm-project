@@ -1,5 +1,9 @@
 /// Test that destructors and destructors whose priorities are greater than 100 are tracked.
 // XFAIL: target={{.*haiku.*}}
+// VE linker (nld) does not sort .fini_array by INIT_PRIORITY, so
+// destructor(99) runs before __llvm_gcov_writeout (priority 100)
+// instead of after it.
+// XFAIL: target={{ve-.*}}
 // RUN: mkdir -p %t.dir && cd %t.dir
 // RUN: %clang --coverage %s -o %t -dumpdir ./
 // RUN: rm -f gcov-destructor.gcda && %run %t

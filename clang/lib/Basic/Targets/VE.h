@@ -42,7 +42,7 @@ public:
     MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
     HasUnalignedAccess = true;
 
-    WCharType = UnsignedInt;
+    WCharType = SignedInt;
     WIntType = UnsignedInt;
     UseZeroLengthBitfieldAlignment = true;
     resetDataLayout();
