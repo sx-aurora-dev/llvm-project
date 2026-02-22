@@ -15,6 +15,9 @@
 // TODO: Figure out why this fails with Memory Sanitizer.
 // XFAIL: msan
 
+// VE does not yet support the zero-cost unwinding APIs.
+// XFAIL: target=ve-{{.*}}
+
 // UNSUPPORTED: libunwind-arm-ehabi
 
 // The AIX assembler does not support CFI directives, which
