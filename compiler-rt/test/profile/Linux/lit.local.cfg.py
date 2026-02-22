@@ -24,8 +24,9 @@ def is_gold_linker_available():
         return False
 
     # config.clang is not guaranteed to be just the executable!
+    target_cflags = getattr(config, "target_cflags", "")
     clang_cmd = subprocess.Popen(
-        " ".join([config.clang, "-fuse-ld=gold", "-xc", "-"]),
+        " ".join([config.clang, target_cflags, "-fuse-ld=gold", "-xc", "-"]),
         shell=True,
         universal_newlines=True,
         stdin=subprocess.PIPE,
@@ -34,10 +35,13 @@ def is_gold_linker_available():
     )
     clang_err = clang_cmd.communicate("int main() { return 0; }")[1]
 
-    if not "invalid linker" in clang_err:
-        return True
+    if "invalid linker" in clang_err:
+        return False
 
-    return False
+    if "unsupported ELF machine number" in clang_err:
+        return False
+
+    return True
 
 
 root = getRoot(config)
