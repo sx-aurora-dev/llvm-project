@@ -311,8 +311,10 @@ COMPILER_RT_VISIBILITY int lprofWriteDataImpl(
   Header.Version = Version;
 
   /* On WIN64, label differences are truncated 32-bit values. Truncate
-   * CountersDelta to match. */
-#ifdef _WIN64
+   * CountersDelta to match.
+   * On VE, 8-byte pc-relative relocations are downgraded to R_VE_SREL32
+   * because R_VE_PC64 does not exist, so truncate here as well. */
+#if defined(_WIN64) || defined(__ve__)
   Header.CountersDelta = (uint32_t)Header.CountersDelta;
   Header.BitmapDelta = (uint32_t)Header.BitmapDelta;
 #endif
