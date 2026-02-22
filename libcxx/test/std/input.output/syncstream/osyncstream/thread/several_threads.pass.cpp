@@ -136,8 +136,17 @@ void test() {
 }
 
 int main(int, char**) {
-  // The more we test, the more likely we catch an error
-  for (size_t i = 0; i < 1024; ++i)
+  // The more we test, the more likely we catch an error.
+  // VE has only 8 cores, so ~70 threads per iteration is heavily
+  // oversubscribed.  Reduce iteration count to avoid timeout.
+  // A better long-term fix would be to scale based on
+  // std::thread::hardware_concurrency().
+#ifdef __ve__
+  constexpr size_t iterations = 64;
+#else
+  constexpr size_t iterations = 1024;
+#endif
+  for (size_t i = 0; i < iterations; ++i)
     test();
 
   return 0;
