@@ -990,27 +990,6 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::GETSTACKTOP: {
     return expandGetStackTopPseudo(MI);
   }
-#if 0
-  case VE::VE_SELECT: {
-    // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
-    //   -> (CMOVrr $dst, condCode, $trueVal, $condVal)
-    // cmov.$df.$cf $dst, $trueval, $cond
-
-    assert(MI.getOperand(0).getReg() == MI.getOperand(4).getReg());
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::CMOVWrr))
-      .addReg(MI.getOperand(0).getReg())
-      .addImm(MI.getOperand(1).getImm())
-      .addReg(MI.getOperand(3).getReg())
-      .addReg(MI.getOperand(2).getReg());
-
-    MI.eraseFromParent();
-    return true;
-  }
-#endif
-
   case VE::ANDMyy:
     expandPseudoLogM(MI, get(VE::ANDMmm));
     return true;
