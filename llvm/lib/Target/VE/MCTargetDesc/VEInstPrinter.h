@@ -33,10 +33,6 @@ public:
   getMnemonic(const MCInst &MI) const override;
   bool printAliasInstr(const MCInst *, uint64_t Address,
                        const MCSubtargetInfo &, raw_ostream &);
-  void printCustomAliasOperand(const MCInst *MI, unsigned OpIdx,
-                               unsigned PrintMethodIdx,
-                               const MCSubtargetInfo &STI, raw_ostream &O);
-
   void printInstruction(const MCInst *, uint64_t, const MCSubtargetInfo &,
                         raw_ostream &);
   static const char *getRegisterName(MCRegister Reg,
