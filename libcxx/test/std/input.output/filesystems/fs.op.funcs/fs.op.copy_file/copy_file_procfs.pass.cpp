@@ -10,6 +10,9 @@
 // REQUIRES: linux
 // UNSUPPORTED: no-filesystem
 // XFAIL: no-localization
+// XFAIL: target=ve-{{.*}}
+// VE programs run via ve_exec, so /proc/self/comm contains "ve_exec"
+// instead of the actual binary name.
 
 // <filesystem>
 

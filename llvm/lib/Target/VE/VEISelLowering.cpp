@@ -1246,10 +1246,27 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
                                                       Align A,
                                                       MachineMemOperand::Flags,
                                                       unsigned *Fast) const {
-  if (Fast) {
-    // It's fast anytime on VE
-    *Fast = 1;
+  if (VT.isVector()) {
+    unsigned ElemSize = VT.getVectorElementType().getStoreSize();
+    // VE has no vector load/store for sub-4-byte elements.  VLDL/VSTL access
+    // 4 bytes and VLD/VST access 8 bytes per element, so the minimum usable
+    // stride is 4.  Reject i8/i16 element vectors here so that callers
+    // (lowerLOAD/lowerSTORE) fall back to scalarization.
+    if (ElemSize < 4)
+      return false;
+    unsigned NumElems = VT.getVectorNumElements();
+    // Packed vectors (>256 elements with 4-byte elements) or 8-byte elements
+    // use VLD/VST which require 8-byte alignment.
+    // Non-packed 4-byte element vectors use VLDL/VSTL which require 4-byte
+    // alignment.
+    unsigned RequiredAlign = (ElemSize >= 8 || NumElems > 256) ? 8 : 4;
+    if (Fast)
+      *Fast = (A >= Align(RequiredAlign));
+    return A >= Align(RequiredAlign);
   }
+  // Scalar access is always allowed on VE.
+  if (Fast)
+    *Fast = 1;
   return true;
 }
 
@@ -1799,9 +1816,22 @@ SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
   EVT MemVT = LdNode->getMemoryVT();
 
-  // If VPU is enabled, always expand non-mask vector loads to VVP
-  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT))
+  // If VPU is enabled, expand non-mask vector loads to VVP.
+  // allowsMisalignedMemoryAccesses checks both element stride (must be >= 4
+  // for VLDL/VSTL) and alignment requirements.  When it returns false,
+  // scalarize instead of using vector instructions that would SIGBUS.
+  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT)) {
+    unsigned AS = LdNode->getAddressSpace();
+    Align Alignment = LdNode->getAlign();
+    if (!allowsMisalignedMemoryAccesses(MemVT, AS, Alignment,
+                                        LdNode->getMemOperand()->getFlags(),
+                                        nullptr)) {
+      SDValue Value, Chain;
+      std::tie(Value, Chain) = scalarizeVectorLoad(LdNode, DAG);
+      return DAG.getMergeValues({Value, Chain}, SDLoc(Op));
+    }
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+  }
 
   SDValue BasePtr = LdNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
@@ -1912,9 +1942,19 @@ SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
   EVT MemVT = StNode->getMemoryVT();
 
-  // If VPU is enabled, always expand non-mask vector stores to VVP
-  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT))
+  // If VPU is enabled, expand non-mask vector stores to VVP.
+  // allowsMisalignedMemoryAccesses checks both element stride (must be >= 4
+  // for VLDL/VSTL) and alignment requirements.  When it returns false,
+  // scalarize instead of using vector instructions that would SIGBUS.
+  if (Subtarget->enableVPU() && MemVT.isVector() && !isMaskType(MemVT)) {
+    unsigned AS = StNode->getAddressSpace();
+    Align Alignment = StNode->getAlign();
+    if (!allowsMisalignedMemoryAccesses(MemVT, AS, Alignment,
+                                        StNode->getMemOperand()->getFlags(),
+                                        nullptr))
+      return scalarizeVectorStore(StNode, DAG);
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+  }
 
   SDValue BasePtr = StNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {

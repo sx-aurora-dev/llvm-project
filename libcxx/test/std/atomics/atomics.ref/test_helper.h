@@ -44,7 +44,15 @@ T make_value(int i) {
 template <class T, class StoreOp, class LoadOp>
 void test_seq_cst(StoreOp store_op, LoadOp load_op) {
 #ifndef TEST_HAS_NO_THREADS
-  for (int i = 0; i < 100; ++i) {
+  // VE's current atomic synchronization routes every operation through the
+  // host, because the communication-register-based hardware sync is not yet
+  // implemented.  With 100 iterations this test takes ~10 minutes on VE.
+#ifdef __ve__
+  constexpr int iterations = 20;
+#else
+  constexpr int iterations = 100;
+#endif
+  for (int i = 0; i < iterations; ++i) {
     T old_value(make_value<T>(0));
     T new_value(make_value<T>(1));
 
@@ -97,7 +105,15 @@ void test_seq_cst(StoreOp store_op, LoadOp load_op) {
 template <class T, class StoreOp, class LoadOp>
 void test_acquire_release(StoreOp store_op, LoadOp load_op) {
 #ifndef TEST_HAS_NO_THREADS
-  for (auto i = 0; i < 100; ++i) {
+  // VE's current atomic synchronization routes every operation through the
+  // host, because the communication-register-based hardware sync is not yet
+  // implemented.  With 100 iterations this test takes ~10 minutes on VE.
+#ifdef __ve__
+  constexpr auto iterations = 20;
+#else
+  constexpr auto iterations = 100;
+#endif
+  for (auto i = 0; i < iterations; ++i) {
     T old_value(make_value<T>(0));
     T new_value(make_value<T>(1));
 
@@ -105,7 +121,14 @@ void test_acquire_release(StoreOp store_op, LoadOp load_op) {
     std::atomic_ref<T> const at(copy);
     int non_atomic = 5;
 
+    // VE has 8 cores, so spawning 8+ threads causes severe oversubscription.
+    // A better long-term fix would be to use std::thread::hardware_concurrency()
+    // to determine the thread count at runtime.
+#ifdef __ve__
+    constexpr auto number_of_threads = 4;
+#else
     constexpr auto number_of_threads = 8;
+#endif
     std::vector<std::thread> threads;
     threads.reserve(number_of_threads);
 

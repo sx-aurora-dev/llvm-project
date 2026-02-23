@@ -115,6 +115,19 @@ static bool shouldLowerToVVP(SDNode &N) {
     return false;
   }
 
+  // Do not VVP expand vector loads/stores when the memory element size or
+  // alignment is insufficient for VE vector instructions.
+  // - VLDL/VSTL access 4 bytes per element: need stride >= 4, align >= 4
+  // - VLD/VST access 8 bytes per element: need stride >= 8, align >= 8
+  // When these constraints are not met, the hardware raises SIGBUS.
+  // Let LLVM's generic legalization scalarize these instead.
+  if (MemN && MemN->getMemoryVT().isVector()) {
+    unsigned ElemSize =
+        MemN->getMemoryVT().getVectorElementType().getStoreSize();
+    if (ElemSize < 4)
+      return false;
+  }
+
   std::optional<EVT> IdiomVT = getIdiomaticType(&N);
   if (!IdiomVT.has_value() || !isLegalVectorVT(*IdiomVT))
     return false;

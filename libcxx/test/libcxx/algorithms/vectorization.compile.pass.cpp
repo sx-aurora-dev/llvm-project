@@ -15,6 +15,9 @@
 // We don't vectorize algorithms on AIX right now.
 // XFAIL: target={{.+}}-aix{{.*}}
 
+// VE's __builtin_convertvector is broken for bool vectors, so vectorization is disabled.
+// XFAIL: target=ve-{{.*}}
+
 // This test ensures that we enable the vectorization of algorithms on the expected
 // platforms.
 

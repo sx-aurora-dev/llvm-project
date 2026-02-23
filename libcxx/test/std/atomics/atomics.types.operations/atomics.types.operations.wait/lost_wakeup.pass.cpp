@@ -20,7 +20,14 @@
 
 #include "make_test_thread.h"
 
+// VE has 8 cores, so spawning 8+ threads causes severe oversubscription.
+// A better long-term fix would be to use std::thread::hardware_concurrency()
+// to determine the thread count at runtime.
+#ifdef __ve__
+constexpr int num_waiters    = 4;
+#else
 constexpr int num_waiters    = 8;
+#endif
 constexpr int num_iterations = 10'000;
 
 int main(int, char**) {

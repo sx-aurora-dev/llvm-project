@@ -26,7 +26,9 @@ _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
 
 // TODO: Find out how altivec changes things and allow vectorizations there too.
-#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_COMPILER_CLANG_BASED) && !defined(__ALTIVEC__)
+// TODO: VE's backend does not correctly lower __builtin_convertvector to/from
+// bool vectors (e.g. v32i1), producing wrong results.  Disable until fixed.
+#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_COMPILER_CLANG_BASED) && !defined(__ALTIVEC__) && !defined(__ve__)
 #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
 #else
 #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
