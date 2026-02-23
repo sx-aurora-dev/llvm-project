@@ -104,18 +104,20 @@ void perror(const char* s);
 #  include_next <stdio.h>
 #endif
 
+// Some C libraries define getc, putc, etc. as macros. The undef's are placed
+// outside the include guard so that they work correctly even when the system
+// header re-includes this header (which sets the guard) before defining the
+// macros itself.
+#ifdef __cplusplus
+#  undef getc
+#  undef putc
+#  undef clearerr
+#  undef feof
+#  undef ferror
+#  undef putchar
+#  undef getchar
+#endif
+
 #ifndef _LIBCPP_STDIO_H
 #  define _LIBCPP_STDIO_H
-
-#  ifdef __cplusplus
-
-#    undef getc
-#    undef putc
-#    undef clearerr
-#    undef feof
-#    undef ferror
-#    undef putchar
-#    undef getchar
-
-#  endif // __cplusplus
-#endif   // _LIBCPP_STDIO_H
+#endif // _LIBCPP_STDIO_H
