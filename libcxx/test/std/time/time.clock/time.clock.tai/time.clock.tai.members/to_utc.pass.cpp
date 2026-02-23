@@ -12,6 +12,10 @@
 // XFAIL: libcpp-has-no-experimental-tzdb
 // XFAIL: availability-tzdb-missing
 
+// VE runs on CentOS 7 whose tzdata package does not include leap-seconds.list,
+// which libc++ requires for leap second data.
+// XFAIL: target=ve-{{.*}}
+
 // <chrono>
 //
 // class tai_clock;

@@ -14,6 +14,10 @@
 
 // XFAIL: libcpp-has-no-experimental-tzdb
 
+// VE runs on CentOS 7 whose tzdata package does not include leap-seconds.list,
+// which libc++ requires for leap second data.
+// XFAIL: target=ve-{{.*}}
+
 // REQUIRES: locale.fr_FR.UTF-8
 // REQUIRES: locale.ja_JP.UTF-8
 
