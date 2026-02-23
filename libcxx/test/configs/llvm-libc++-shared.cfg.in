@@ -3,6 +3,11 @@
 
 lit_config.load_config(config, '@CMAKE_CURRENT_BINARY_DIR@/cmake-bridge.cfg')
 
+# VE has only 8 cores and thread-heavy tests cause oversubscription.
+# Define a parallelism group to serialize them (see lit.local.cfg in test dirs).
+if 've-unknown-linux-gnu' in '@LIBCXX_TARGET_TRIPLE@':
+    lit_config.parallelism_groups['ve_serial'] = 1
+
 config.substitutions.append(('%{flags}',
     '-pthread' + (' -isysroot {}'.format('@CMAKE_OSX_SYSROOT@') if '@CMAKE_OSX_SYSROOT@' else '')
 ))
