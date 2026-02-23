@@ -13,6 +13,9 @@
 
 // XFAIL: availability-fp_to_chars-missing
 
+// VE is an accelerator with different I/O buffering behavior.
+// XFAIL: target=ve-{{.*}}
+
 // fmemopen is available starting in Android M (API 23)
 // XFAIL: target={{.+}}-android{{(eabi)?(21|22)}}
 
