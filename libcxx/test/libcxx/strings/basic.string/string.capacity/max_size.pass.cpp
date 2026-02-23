@@ -87,6 +87,8 @@ TEST_CONSTEXPR_CXX20 bool test() {
   half_size();
 #  elif defined(__riscv)
   full_size();
+#  elif defined(__ve__)
+  full_size();
 #  elif defined(_WIN32)
   full_size();
 #  else
