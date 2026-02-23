@@ -18,6 +18,10 @@
 // versions of the dylib on macOS.
 // XFAIL: availability-fp_to_chars-missing
 
+// VE hardware flushes subnormal floats to zero, causing precision test cases
+// with subnormal values to produce incorrect to_chars output.
+// XFAIL: target=ve-{{.*}}
+
 // steady_clock requires threads.
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: no-random-device
