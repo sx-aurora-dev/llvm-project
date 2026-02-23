@@ -41,8 +41,7 @@ static cl::opt<bool> ShowSpillMessageVec(
 void VEInstrInfo::anchor() {}
 
 VEInstrInfo::VEInstrInfo(const VESubtarget &ST)
-    : VEGenInstrInfo(ST, RI, VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
-      Subtarget(ST) {}
+    : VEGenInstrInfo(ST, RI, VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI() {}
 
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
@@ -979,43 +978,18 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
   }
   case TargetOpcode::LOAD_STACK_GUARD: {
-    assert(Subtarget.isTargetLinux() &&
-           "Only Linux target is expected to contain LOAD_STACK_GUARD");
-    report_fatal_error("expandPostRAPseudo for LOAD_STACK_GUARD is not implemented yet");
-#if 0
-    // offsetof(tcbhead_t, stack_guard) from sysdeps/sparc/nptl/tls.h in glibc.
-    const int64_t Offset = Subtarget.is64Bit() ? 0x28 : 0x14;
-    MI.setDesc(get(Subtarget.is64Bit() ? SP::LDXri : SP::LDri));
+    // offsetof(tcbhead_t, stack_guard) from sysdeps/ve/nptl/tls.h in glibc.
+    const int64_t Offset = 0x10;
+    MI.setDesc(get(VE::LDrii));
     MachineInstrBuilder(*MI.getParent()->getParent(), MI)
-        .addReg(SP::G7)
+        .addReg(VE::SX14) // %tp
+        .addImm(0)
         .addImm(Offset);
     return true;
-#endif
   }
   case VE::GETSTACKTOP: {
     return expandGetStackTopPseudo(MI);
   }
-#if 0
-  case VE::VE_SELECT: {
-    // (VESelect $dst, $CC, $condVal, $trueVal, $dst)
-    //   -> (CMOVrr $dst, condCode, $trueVal, $condVal)
-    // cmov.$df.$cf $dst, $trueval, $cond
-
-    assert(MI.getOperand(0).getReg() == MI.getOperand(4).getReg());
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::CMOVWrr))
-      .addReg(MI.getOperand(0).getReg())
-      .addImm(MI.getOperand(1).getImm())
-      .addReg(MI.getOperand(3).getReg())
-      .addReg(MI.getOperand(2).getReg());
-
-    MI.eraseFromParent();
-    return true;
-  }
-#endif
-
   case VE::ANDMyy:
     expandPseudoLogM(MI, get(VE::ANDMmm));
     return true;
