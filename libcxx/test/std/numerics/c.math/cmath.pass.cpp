@@ -8,6 +8,10 @@
 
 // <cmath>
 
+// XFAIL: target=ve-{{.*}}
+// VE's f128 sqrtl has ~1.78e-34 relative error, which causes the
+// hypot3 underflow test to fail fptest_close's absolute tolerance check.
+
 #include <cmath>
 #include <array>
 #include <cassert>
