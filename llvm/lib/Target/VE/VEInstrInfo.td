@@ -1600,10 +1600,48 @@ def : Pat<(f64 (fpextend f32:$src)),
                !add(1, 64) /* = (1)0 */,
                (COPY_TO_REGCLASS (CVTDSr $src), I64))>;
 
-// Section 8.7.17 - CVQ (Convert to Single-format)
-defm CVTQD : CVTm<"cvt.q.d", 0x2D, F128, f128, I64, f64, fpextend>;
+// Section 8.7.17 - CVQ (Convert to Quad-format)
+defm CVTQD : CVTm<"cvt.q.d", 0x2D, F128, f128, I64, f64>;
 let cx = 1 in
-defm CVTQS : CVTm<"cvt.q.s", 0x2D, F128, f128, F32, f32, fpextend>;
+defm CVTQS : CVTm<"cvt.q.s", 0x2D, F128, f128, F32, f32>;
+
+// CVTQD doesn't work correctly if its input is +NaN.  It returns -NaN.
+// We fix it through DAG lowering.
+//   FIXME: need to add predicate if this HW problem is fixed.
+def : Pat<(f128 (fpextend f64:$src)),
+          (INSERT_SUBREG
+            (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
+              (CMOVLrm CC_IG,
+                   (CMPSLrr (COPY_TO_REGCLASS $src, I64),
+                            (SRLmi 11, 1)),
+                   !add(0, 64) /* = (0)0 */,
+                   (EXTRACT_SUBREG (CVTQDr $src), sub_odd)),
+              sub_odd),
+            (CMOVLrm CC_IG,
+                 (CMPSLrr (COPY_TO_REGCLASS $src, I64),
+                          (SRLmi 11, 1)),
+                 !add(1, 64) /* = (1)0 */,
+                 (EXTRACT_SUBREG (CVTQDr $src), sub_even)),
+            sub_even)>;
+
+// CVTQS doesn't work correctly if its input is +NaN.  It returns -NaN.
+// We fix it through DAG lowering.
+//   FIXME: need to add predicate if this HW problem is fixed.
+def : Pat<(f128 (fpextend f32:$src)),
+          (INSERT_SUBREG
+            (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
+              (CMOVLrm CC_IG,
+                   (CMPSLrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $src, sub_f32),
+                            (SRLmi 8, 1)),
+                   !add(0, 64) /* = (0)0 */,
+                   (EXTRACT_SUBREG (CVTQSr $src), sub_odd)),
+              sub_odd),
+            (CMOVLrm CC_IG,
+                 (CMPSLrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $src, sub_f32),
+                          (SRLmi 8, 1)),
+                 !add(1, 64) /* = (1)0 */,
+                 (EXTRACT_SUBREG (CVTQSr $src), sub_even)),
+            sub_even)>;
 
 //-----------------------------------------------------------------------------
 // Section 8.8 - Branch instructions
