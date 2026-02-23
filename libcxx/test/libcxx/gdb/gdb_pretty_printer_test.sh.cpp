@@ -15,6 +15,9 @@
 // TODO: Investigate why this fails on the arm bots
 // UNSUPPORTED: target=arm{{.*}}
 
+// The host gdb cannot run VE binaries.
+// UNSUPPORTED: target=ve{{.*}}
+
 // The Android libc++ tests are run on a non-Android host, connected to an
 // Android device over adb. gdb needs special support to make this work (e.g.
 // gdbclient.py, ndk-gdb.py, gdbserver), and the Android organization doesn't
