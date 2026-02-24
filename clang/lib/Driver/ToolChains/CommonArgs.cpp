@@ -2149,6 +2149,12 @@ tools::ParsePICArgs(const ToolChain &ToolChain, const ArgList &Args) {
   if ((ROPI || RWPI) && (PIC || PIE))
     ToolChain.getDriver().Diag(diag::err_drv_ropi_rwpi_incompatible_with_pic);
 
+  // VE does not default to PIC, but shared libraries require it.
+  if (Triple.isVE() && !PIC && Args.hasArg(options::OPT_shared)) {
+    PIC = true;
+    IsPICLevelTwo = true;
+  }
+
   if (Triple.isMIPS()) {
     StringRef CPUName;
     StringRef ABIName;
