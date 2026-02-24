@@ -9,6 +9,9 @@
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: c++03
 
+// VE SjLj exception handling crashes in child threads.
+// XFAIL: target=ve-{{.*}}
+
 // ALLOW_RETRIES: 3
 
 // <future>
