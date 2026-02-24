@@ -8,11 +8,11 @@
 ## In PIC mode, it creates a relative relocation if the symbol is
 ## non-preemptable.
 
-# NM: 0000000000200318 d b
+# NM: 0000000000400318 d b
 
 # RELOC:      .rela.dyn {
-# RELOC-NEXT:   0x200318 R_VE_RELATIVE - 0x200318
-# RELOC-NEXT:   0x200310 R_VE_REFQUAD a 0x0
+# RELOC-NEXT:   0x400318 R_VE_RELATIVE - 0x400318
+# RELOC-NEXT:   0x400310 R_VE_REFQUAD a 0x0
 # RELOC-NEXT: }
 
 .globl a, b

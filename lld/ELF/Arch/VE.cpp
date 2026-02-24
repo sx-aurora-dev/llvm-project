@@ -69,8 +69,8 @@ VE::VE(Ctx &ctx) : TargetInfo(ctx) {
   // link_map in _GLOBAL_OFFSET_TABLE_[2].
   gotPltHeaderEntriesNum = 3;
 
-  defaultCommonPageSize = 8192;
-  defaultMaxPageSize = 0x100000;
+  defaultCommonPageSize = 0x200000;
+  defaultMaxPageSize = 0x200000;
   defaultImageBase = 0x600000000000;
 }
 

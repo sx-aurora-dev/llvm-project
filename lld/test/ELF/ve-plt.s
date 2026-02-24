@@ -25,13 +25,13 @@
 ## The .got.plt slots relocated by .rela.plt point to .plt
 ## This is required by glibc.
 # RELOC:      .rela.plt {
-# RELOC-NEXT:   0x6000002000E8 R_VE_JUMP_SLOT bar 0x0
-# RELOC-NEXT:   0x6000002000F0 R_VE_JUMP_SLOT weak 0x0
+# RELOC-NEXT:   0x6000004000E8 R_VE_JUMP_SLOT bar 0x0
+# RELOC-NEXT:   0x6000004000F0 R_VE_JUMP_SLOT weak 0x0
 # RELOC-NEXT: }
 # GOTPLT:      section '.got.plt'
-# GOTPLT-NEXT: 0x6000002000d0 00001000 00600000 00000000 00000000
-# GOTPLT-NEXT: 0x6000002000e0 00000000 00000000 98030000 00600000
-# GOTPLT-NEXT: 0x6000002000f0 d8030000 00600000
+# GOTPLT-NEXT: 0x6000004000d0 00002000 00600000 00000000 00000000
+# GOTPLT-NEXT: 0x6000004000e0 00000000 00000000 98030000 00600000
+# GOTPLT-NEXT: 0x6000004000f0 d8030000 00600000
 
 # DIS:      <_start>:
 ## Direct call
@@ -64,15 +64,15 @@
 
 # DIS:      Disassembly of section .plt:
 # DIS:      <.plt>:
-## .got.plt - .plt = 0x2000d0 - 0x330 = 2097360
-# DIS-NEXT:   600000000330: lea %s62, 2097360
+## &.got.plt = 0x6000004000d0 = (24576 << 32) | 4194512
+# DIS-NEXT:   600000000330: lea %s62, 4194512
 # DIS-NEXT:                 and %s62, %s62, (32)0
 # DIS-NEXT:                 lea.sl %s62, 24576(, %s62)
 # DIS-NEXT:                 ld %s63, 8(, %s62)
 # DIS-NEXT:                 b.l.t (, %s63)
 
-## &.got.plt[bar] = 0x6000002000e8 = (24576 << 32) | 2097384
-# DIS:        600000000370: lea %s13, 2097384
+## &.got.plt[bar] = 0x6000004000e8 = (24576 << 32) | 4194536
+# DIS:        600000000370: lea %s13, 4194536
 # DIS-NEXT:                 and %s13, %s13, (32)0
 # DIS-NEXT:                 lea.sl %s13, 24576(, %s13)
 # DIS-NEXT:                 ld %s12, (, %s13)
@@ -80,8 +80,8 @@
 # DIS-NEXT:                 lea %s13, 0
 # DIS-NEXT:                 br.l.t -112
 
-## &.got.plt[weak] = 0x6000002000f0 = (24576 << 32) | 2097392
-# DIS:        6000000003b0: lea %s13, 2097392
+## &.got.plt[weak] = 0x6000004000f0 = (24576 << 32) | 4194544
+# DIS:        6000000003b0: lea %s13, 4194544
 # DIS-NEXT:                 and %s13, %s13, (32)0
 # DIS-NEXT:                 lea.sl %s13, 24576(, %s13)
 # DIS-NEXT:                 ld %s12, (, %s13)
