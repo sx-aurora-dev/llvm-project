@@ -3418,6 +3418,17 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   // values such as a default image base address.
   setTarget(ctx);
 
+  // VE dynamic linker does not support separate RO and RX segments.
+  if (ctx.arg.emachine == EM_VE &&
+      !args.hasArg(OPT_rosegment) && !args.hasArg(OPT_no_rosegment))
+    ctx.arg.singleRoRx = true;
+
+  // VE does not need RELRO.  The extra LOAD segment and .relro_padding
+  // waste real memory on VE, where virtual address space is committed at
+  // map time rather than on access.
+  if (ctx.arg.emachine == EM_VE && !hasZOption(args, "relro"))
+    ctx.arg.zRelro = false;
+
   ctx.arg.eflags = ctx.target->calcEFlags();
   // maxPageSize (sometimes called abi page size) is the maximum page size that
   // the output can be run on. For example if the OS can use 4k or 64k page

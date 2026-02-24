@@ -20,8 +20,8 @@ set(LLVM_ENABLE_ZSTD OFF CACHE BOOL "")
 # Enable per-target runtimes directory
 set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR On CACHE BOOL "")
 
-# The lld is not supported for VE yet.
-set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra" CACHE STRING "")
+# Enable lld for VE.
+set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi;libunwind;openmp" CACHE STRING "")
 
 # Compile for X86 and VE
@@ -119,6 +119,7 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   clang
   clang-format
   clang-resource-headers
+  lld
   builtins
   runtimes
   ${LLVM_TOOLCHAIN_TOOLS}

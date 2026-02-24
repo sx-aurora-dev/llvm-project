@@ -60,42 +60,40 @@
 /// Checking -fintegrated-as
 
 // RUN: %clang -### --target=ve \
-// RUN:    -x assembler -fuse-ld=ld %s 2>&1 | \
+// RUN:    -x assembler %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=AS %s
 // RUN: %clang -### --target=ve \
-// RUN:    -fno-integrated-as -fuse-ld=ld -x assembler %s 2>&1 | \
+// RUN:    -fno-integrated-as -x assembler %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=NAS %s
 
 // AS: "-cc1as"
-// AS: nld{{.*}}
+// AS: ld.lld{{.*}}
 
 // NAS: nas{{.*}}
-// NAS: nld{{.*}}
+// NAS: ld.lld{{.*}}
 
 ///-----------------------------------------------------------------------------
 /// Checking default behavior:
 ///  - dynamic linker
 ///  - library paths
-///  - nld VE specific options
+///  - lld as default linker
 ///  - sjlj exception
 
 // RUN: %clang -### -no-canonical-prefixes --target=ve-unknown-linux-gnu \
 // RUN:     --sysroot %S/Inputs/basic_ve_tree \
 // RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     --unwindlib=none \
-// RUN:     -fuse-ld=ld \
 // RUN:     %s 2>&1 | FileCheck -check-prefix=DEF %s
 
 // DEF:      clang{{.*}}" "-cc1"
 // DEF-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // DEF-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
 // DEF-SAME: "-exception-model=sjlj"
-// DEF:      nld"
+// DEF:      ld.lld"
 // DEF-SAME: "--sysroot=[[SYSROOT]]"
 // DEF-SAME: "-dynamic-linker" "/opt/nec/ve/lib/ld-linux-ve.so.1"
 // DEF-SAME: "[[SYSROOT]]/opt/nec/ve/lib/crt1.o"
 // DEF-SAME: "[[SYSROOT]]/opt/nec/ve/lib/crti.o"
-// DEF-SAME: "-z" "max-page-size=0x4000000"
 // DEF-SAME: "[[RESOURCE_DIR]]/lib/ve-unknown-linux-gnu/clang_rt.crtbegin.o"
 // DEF-SAME: "[[RESOURCE_DIR]]/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a" "-lc"
 // DEF-SAME: "[[RESOURCE_DIR]]/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a"

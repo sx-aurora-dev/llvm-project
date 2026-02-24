@@ -9,6 +9,9 @@
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: c++03
 
+// VE SjLj exception handling crashes in child threads.
+// XFAIL: target=ve-{{.*}}
+
 // <future>
 
 // class packaged_task<R(ArgTypes...)>

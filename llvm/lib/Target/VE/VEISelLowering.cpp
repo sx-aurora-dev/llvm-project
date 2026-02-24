@@ -2442,9 +2442,19 @@ SDValue VETargetLowering::getPICJumpTableRelocBase(SDValue Table,
   // In order to do so, we need to genarate correctly marked DAG node using
   // makeHiLoPair.
   SDValue Op = DAG.getGlobalAddress(Function, DL, PtrTy);
-  SDValue HiLo = makeHiLoPair(Op, VE::S_GOTOFF_HI32, VE::S_GOTOFF_LO32, DAG);
+  if (Function->hasLocalLinkage()) {
+    // Use GOTOFF for local linkage functions.
+    SDValue HiLo =
+        makeHiLoPair(Op, VE::S_GOTOFF_HI32, VE::S_GOTOFF_LO32, DAG);
+    SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrTy);
+    return DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
+  }
+  // Use GOT indirection for non-local linkage functions.
+  SDValue HiLo = makeHiLoPair(Op, VE::S_GOT_HI32, VE::S_GOT_LO32, DAG);
   SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrTy);
-  return DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
+  SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
+  return DAG.getLoad(PtrTy, DL, DAG.getEntryNode(), AbsAddr,
+                     MachinePointerInfo::getGOT(DAG.getMachineFunction()));
 }
 
 Register VETargetLowering::prepareMBB(MachineBasicBlock &MBB,
@@ -3027,9 +3037,10 @@ VETargetLowering::emitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(BReg, getKillRegState(true))
         .addReg(Tmp1, getKillRegState(true))
         .addImm(0);
+    bool FuncIsLocal = MF->getFunction().hasLocalLinkage();
     Register BReg2 =
         prepareSymbol(*DispContBB, DispContBB->end(),
-                      DispContBB->getParent()->getName(), DL, /* Local */ true);
+                      DispContBB->getParent()->getName(), DL, FuncIsLocal);
     BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg, getKillRegState(true))
         .addReg(BReg2, getKillRegState(true));

@@ -56,7 +56,7 @@ public:
     return ToolChain::RLT_CompilerRT;
   }
 
-  const char *getDefaultLinker() const override { return "nld"; }
+  const char *getDefaultLinker() const override { return "ld.lld"; }
 };
 
 } // end namespace toolchains

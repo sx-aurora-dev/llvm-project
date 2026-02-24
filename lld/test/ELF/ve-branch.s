@@ -13,8 +13,8 @@
 # LIMITS-NEXT: brne.l.t %s0, %s0, -2147483648
 
 # RUN: not ld.lld %t.o --defsym foo=_start+0x80000000 --defsym bar=_start+8-0x80000008 -o /dev/null 2>&1 | FileCheck --check-prefix=ERROR-RANGE %s
-# ERROR-RANGE: relocation R_VE_SREL32 out of range: 2147483648 is not in [-2147483648, 2147483647]; references foo
-# ERROR-RANGE: relocation R_VE_SREL32 out of range: -2147483656 is not in [-2147483648, 2147483647]; references bar
+# ERROR-RANGE: relocation R_VE_SREL32 out of range: 2147483648 is not in [-2147483648, 2147483647]; references 'foo'
+# ERROR-RANGE: relocation R_VE_SREL32 out of range: -2147483656 is not in [-2147483648, 2147483647]; references 'bar'
 
 .global _start
 _start:

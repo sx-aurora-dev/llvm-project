@@ -11,79 +11,80 @@
 # RUN: llvm-readelf -x .got.plt %t.exe | FileCheck --check-prefix=GOTPLT %s
 # RUN: llvm-objdump -d --no-show-raw-insn %t.exe | FileCheck --check-prefixes=DIS %s
 
-# SEC: .plt PROGBITS 00006000001000a0
+# SEC: .plt PROGBITS 0000600000000330
 
 ## A canonical PLT has a non-zero st_value.
 # NM: Symbol table '.dynsym' contains
 # NM: 0000000000000000 0 FUNC WEAK   DEFAULT UND weak
-# NM: 00006000001000e0 0 FUNC GLOBAL DEFAULT UND bar
+# NM: 0000600000000370 0 FUNC GLOBAL DEFAULT UND bar
 # NM: Symbol table '.symtab' contains
-# NM: 0000600000100090     0 NOTYPE  GLOBAL DEFAULT     6 foo
-# NM: 00006000001000e0     0 FUNC    GLOBAL DEFAULT   UND bar
+# NM: 0000600000000320     0 NOTYPE  GLOBAL DEFAULT     6 foo
+# NM: 0000600000000370     0 FUNC    GLOBAL DEFAULT   UND bar
 # NM: 0000000000000000     0 FUNC    WEAK   DEFAULT   UND weak
 
 ## The .got.plt slots relocated by .rela.plt point to .plt
 ## This is required by glibc.
 # RELOC:      .rela.plt {
-# RELOC-NEXT:   0x6000003000E0 R_VE_JUMP_SLOT bar 0x0
-# RELOC-NEXT:   0x6000003000E8 R_VE_JUMP_SLOT weak 0x0
+# RELOC-NEXT:   0x6000004000E8 R_VE_JUMP_SLOT bar 0x0
+# RELOC-NEXT:   0x6000004000F0 R_VE_JUMP_SLOT weak 0x0
 # RELOC-NEXT: }
 # GOTPLT:      section '.got.plt'
-# GOTPLT-NEXT: 0x6000003000d0 00002000 00600000 00000000 00000000
-# GOTPLT-NEXT: 0x6000003000e0 08011000 00600000 48011000 00600000
+# GOTPLT-NEXT: 0x6000004000d0 00002000 00600000 00000000 00000000
+# GOTPLT-NEXT: 0x6000004000e0 00000000 00000000 98030000 00600000
+# GOTPLT-NEXT: 0x6000004000f0 d8030000 00600000
 
 # DIS:      <_start>:
 ## Direct call
-## foo = 0x0000600000100090 = (24576 << 32) | 1048720
-# DIS-NEXT:   600000100000: lea %s12, 1048720
+## foo = 0x0000600000000320 = (24576 << 32) | 800
+# DIS-NEXT:   600000000290: lea %s12, 800
 # DIS-NEXT:                 and %s12, %s12, (32)0
 # DIS-NEXT:                 lea.sl %s12, 24576(, %s12)
 # DIS-NEXT:                 bsic %s10, (%s12)
-## bar = 0x00006000001000e0 = (24576 << 32) | 1048784
-# DIS-NEXT:   600000100020: lea %s12, 1048800
+## bar = 0x0000600000000370 = (24576 << 32) | 880
+# DIS-NEXT:   6000000002b0: lea %s12, 880
 # DIS-NEXT:                 and %s12, %s12, (32)0
 # DIS-NEXT:                 lea.sl %s12, 24576(, %s12)
 # DIS-NEXT:                 bsic %s10, (%s12)
-## bar@plt - . = 0x00006000001000e0 - 0x0000600000100040
+## bar@plt - . = 0x0000600000000370 - 0x00006000000002d0
 ##             = 0x00000000000000a0 = 160
-# DIS-NEXT:   600000100040: lea %s12, 160(-24)
+# DIS-NEXT:   6000000002d0: lea %s12, 160(-24)
 # DIS-NEXT:                 and %s12, %s12, (32)0
 # DIS-NEXT:                 sic %s60
 # DIS-NEXT:                 lea.sl %s12, (%s12, %s60)
 # DIS-NEXT:                 bsic %s10, (%s12)
-## weak@plt - . = 0x0000600000100120 - 0x0000600000100068
+## weak@plt - . = 0x00006000000003b0 - 0x00006000000002f8
 ##              = 0x00000000000000b8 = 184
-# DIS-NEXT:   600000100068: lea %s12, 184(-24)
+# DIS-NEXT:   6000000002f8: lea %s12, 184(-24)
 # DIS-NEXT:                 and %s12, %s12, (32)0
 # DIS-NEXT:                 sic %s60
 # DIS-NEXT:                 lea.sl %s12, (%s12, %s60)
 # DIS-NEXT:                 bsic %s10, (%s12)
 # DIS:      <foo>:
-# DIS-NEXT:   600000100090: b.l (, %s10)
+# DIS-NEXT:   600000000320: b.l (, %s10)
 
 # DIS:      Disassembly of section .plt:
 # DIS:      <.plt>:
-## .got.plt - .plt = 0x13068 - 0x11030 = 4096*2+56
-# DIS-NEXT:   6000001000a0: lea %s62, 3145936
+## &.got.plt = 0x6000004000d0 = (24576 << 32) | 4194512
+# DIS-NEXT:   600000000330: lea %s62, 4194512
 # DIS-NEXT:                 and %s62, %s62, (32)0
 # DIS-NEXT:                 lea.sl %s62, 24576(, %s62)
 # DIS-NEXT:                 ld %s63, 8(, %s62)
 # DIS-NEXT:                 b.l.t (, %s63)
 
-## &.got.plt[bar] = 0x6000003000e0 = (24576 << 32) | 3145952
-# DIS:        6000001000e0: lea %s13, 3145952
+## &.got.plt[bar] = 0x6000004000e8 = (24576 << 32) | 4194536
+# DIS:        600000000370: lea %s13, 4194536
 # DIS-NEXT:                 and %s13, %s13, (32)0
 # DIS-NEXT:                 lea.sl %s13, 24576(, %s13)
-# DIS-NEXT:                 ld %s12, 8(, %s13)
+# DIS-NEXT:                 ld %s12, (, %s13)
 # DIS-NEXT:                 b.l.t (, %s12)
 # DIS-NEXT:                 lea %s13, 0
 # DIS-NEXT:                 br.l.t -112
 
-## &.got.plt[weak] = 0x6000003000e8 = (24576 << 32) | 3145960
-# DIS:        600000100120: lea %s13, 3145960
+## &.got.plt[weak] = 0x6000004000f0 = (24576 << 32) | 4194544
+# DIS:        6000000003b0: lea %s13, 4194544
 # DIS-NEXT:                 and %s13, %s13, (32)0
 # DIS-NEXT:                 lea.sl %s13, 24576(, %s13)
-# DIS-NEXT:                 ld %s12, 8(, %s13)
+# DIS-NEXT:                 ld %s12, (, %s13)
 # DIS-NEXT:                 b.l.t (, %s12)
 # DIS-NEXT:                 lea %s13, 1
 # DIS-NEXT:                 br.l.t -176

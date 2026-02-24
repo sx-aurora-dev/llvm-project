@@ -11,6 +11,9 @@
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: libcpp-has-no-experimental-syncstream
 
+// VE supports a maximum of 63 threads per process; this test creates ~70.
+// XFAIL: target=ve-{{.*}}
+
 // <syncstream>
 
 // template <class charT, class traits, class Allocator>

@@ -12,7 +12,7 @@
 /// Checking include-path
 
 // RUN: %clangxx -### --target=ve-unknown-linux-gnu \
-// RUN:     --sysroot %S/Inputs/basic_ve_tree %s -fuse-ld=ld \
+// RUN:     --sysroot %S/Inputs/basic_ve_tree %s \
 // RUN:     -ccc-install-dir %S/Inputs/basic_ve_tree/bin \
 // RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     2>&1 | FileCheck -check-prefix=DEFINC %s
@@ -24,7 +24,7 @@
 // DEFINC-SAME: "-internal-isystem" "{{.*}}/bin/../include/c++/v1"
 // DEFINC-SAME: "-internal-isystem" "[[RESOURCE_DIR]]/include"
 // DEFINC-SAME: "-internal-isystem" "[[SYSROOT]]/opt/nec/ve/include"
-// DEFINC: nld"
+// DEFINC: ld.lld"
 // DEFINC-SAME: "-rpath" "[[SYSROOT]]/bin/../lib/ve-unknown-linux-gnu"
 
 // RUN: %clangxx -### --target=ve-unknown-linux-gnu \
@@ -111,28 +111,27 @@
 /// Checking -fintegrated-as
 
 // RUN: %clangxx -### --target=ve-unknown-linux-gnu \
-// RUN:     -x assembler -fuse-ld=ld %s 2>&1 | \
+// RUN:     -x assembler %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=AS %s
 // RUN: %clangxx -### --target=ve-unknown-linux-gnu \
-// RUN:     -fno-integrated-as -x assembler -fuse-ld=ld %s 2>&1 | \
+// RUN:     -fno-integrated-as -x assembler %s 2>&1 | \
 // RUN:    FileCheck -check-prefix=NAS %s
 
 // AS: "-cc1as"
-// AS: nld{{.*}}
+// AS: ld.lld{{.*}}
 
 // NAS: nas{{.*}}
-// NAS: nld{{.*}}
+// NAS: ld.lld{{.*}}
 
 ///-----------------------------------------------------------------------------
 /// Checking default behavior:
 ///  - dynamic linker
 ///  - library paths
-///  - nld VE specific options
+///  - lld as default linker
 ///  - sjlj exception
 
 // RUN: %clangxx -### --target=ve-unknown-linux-gnu \
 // RUN:     --sysroot %S/Inputs/basic_ve_tree \
-// RUN:     -fuse-ld=ld \
 // RUN:     -resource-dir=%S/Inputs/basic_ve_tree/resource_dir \
 // RUN:     --unwindlib=none \
 // RUN:     --stdlib=libc++ %s 2>&1 | FileCheck -check-prefix=DEF %s
@@ -141,12 +140,11 @@
 // DEF-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // DEF-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
 // DEF-SAME: "-exception-model=sjlj"
-// DEF:      nld"
+// DEF:      ld.lld"
 // DEF-SAME: "--sysroot=[[SYSROOT]]"
 // DEF-SAME: "-dynamic-linker" "/opt/nec/ve/lib/ld-linux-ve.so.1"
 // DEF-SAME: "[[SYSROOT]]/opt/nec/ve/lib/crt1.o"
 // DEF-SAME: "[[SYSROOT]]/opt/nec/ve/lib/crti.o"
-// DEF-SAME: "-z" "max-page-size=0x4000000"
 // DEF-SAME: "[[RESOURCE_DIR]]/lib/ve-unknown-linux-gnu/clang_rt.crtbegin.o"
 // DEF-SAME: "-lc++" "-lc++abi" "-lunwind" "-lpthread" "-ldl"
 // DEF-SAME: "[[RESOURCE_DIR]]/lib/ve-unknown-linux-gnu/libclang_rt.builtins.a" "-lc"

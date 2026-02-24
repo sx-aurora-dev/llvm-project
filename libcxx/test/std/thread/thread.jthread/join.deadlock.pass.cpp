@@ -17,6 +17,9 @@
 // UNSUPPORTED: no-exceptions
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 
+// VE SjLj exception handling crashes in child threads.
+// XFAIL: target=ve-{{.*}}
+
 // void join();
 
 #include <atomic>
