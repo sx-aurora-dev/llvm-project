@@ -9,6 +9,9 @@
 // UNSUPPORTED: no-threads
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 
+// VE supports a maximum of 63 threads per process; this test creates 101.
+// XFAIL: target=ve-{{.*}}
+
 // <semaphore>
 
 // Test that counting_semaphore::try_acquire_for does not suffer from lost wakeup
