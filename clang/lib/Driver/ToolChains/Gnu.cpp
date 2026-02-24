@@ -395,11 +395,6 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
     }
 
-    if (IsVE) {
-      CmdArgs.push_back("-z");
-      CmdArgs.push_back("max-page-size=0x4000000");
-    }
-
     if (IsIAMCU)
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt0.o")));
     else if (HasCRTBeginEndFiles) {
