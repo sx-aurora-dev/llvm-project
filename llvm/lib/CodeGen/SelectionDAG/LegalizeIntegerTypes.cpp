@@ -2009,9 +2009,6 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
     return false;
   }
 
-  if (N->isVP()) {
-    Res = PromoteIntOp_VP(N, OpNo);
-  } else {
   switch (N->getOpcode()) {
     default:
   #ifndef NDEBUG
@@ -2169,7 +2166,6 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
   case ISD::PARTIAL_REDUCE_SUMLA:
     Res = PromoteIntOp_PARTIAL_REDUCE_MLA(N);
     break;
-  }
   }
 
   // If the result is null, the sub-method took care of registering results etc.
@@ -2588,25 +2584,6 @@ SDValue DAGTypeLegalizer::PromoteIntOp_MSTORE(MaskedStoreSDNode *N,
                             N->getOffset(), Mask, N->getMemoryVT(),
                             N->getMemOperand(), N->getAddressingMode(),
                             /*IsTruncating*/ true, N->isCompressingStore());
-}
-
-SDValue DAGTypeLegalizer::PromoteIntOp_VP(SDNode *N, unsigned OpNo) {
-  EVT DataVT;
-  switch (N->getOpcode()) {
-    default:
-      DataVT = N->getValueType(0);
-    break;
-
-    case ISD::VP_STORE:
-    case ISD::VP_SCATTER:
-      llvm_unreachable("TODO implement VP memory nodes");
-  }
-
-  // TODO assert that \p OpNo is the mask
-  SDValue Mask = PromoteTargetBoolean(N->getOperand(OpNo), DataVT);
-  SmallVector<SDValue, 4> NewOps(N->op_begin(), N->op_end());
-  NewOps[OpNo] = Mask;
-  return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntOp_MLOAD(MaskedLoadSDNode *N,
