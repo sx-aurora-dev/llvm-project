@@ -5,11 +5,11 @@
 # RUN: llvm-readelf -S %t.so | FileCheck %s -check-prefix=SECTION
 # RUN: llvm-objdump -d %t.so | FileCheck %s
 
-# SECTION: .got.plt PROGBITS 00000000003002f0 0002f0 000010
+# SECTION: .got.plt PROGBITS 00000000002002b8 0002b8 000018
 
-# 0x3300 (.got.plt) - 0x100274 = 2097276
+# 0x2002b8 (.got.plt) - 0x23c = 0x20007c = 2097276
 # CHECK: <gotpc64>:
-# CHECK-NEXT: 100274: 7c 00 20 00 00 00 00 06       lea %s0, 2097276
+# CHECK-NEXT: 23c: 7c 00 20 00 00 00 00 06       lea %s0, 2097276
 
 .global gotpc64
 gotpc64:

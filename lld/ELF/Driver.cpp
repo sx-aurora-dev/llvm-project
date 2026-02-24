@@ -3418,6 +3418,11 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   // values such as a default image base address.
   setTarget(ctx);
 
+  // VE dynamic linker does not support separate RO and RX segments.
+  if (ctx.arg.emachine == EM_VE &&
+      !args.hasArg(OPT_rosegment) && !args.hasArg(OPT_no_rosegment))
+    ctx.arg.singleRoRx = true;
+
   ctx.arg.eflags = ctx.target->calcEFlags();
   // maxPageSize (sometimes called abi page size) is the maximum page size that
   // the output can be run on. For example if the OS can use 4k or 64k page
