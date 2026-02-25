@@ -10,6 +10,8 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    st %s15, 24(, %s11)
+; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
 ; CHECK-NEXT:    lea %s11, -352(, %s11)
 ; CHECK-NEXT:    brge.l %s11, %s8, .LBB0_8
@@ -60,12 +62,12 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    st %s0, -96(, %s9)
-; CHECK-NEXT:  .Ltmp0:
+; CHECK-NEXT:  .Ltmp0: # EH_LABEL
 ; CHECK-NEXT:    lea %s0, errorbar@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, errorbar@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:  .Ltmp1:
+; CHECK-NEXT:  .Ltmp1: # EH_LABEL
 ; CHECK-NEXT:  # %bb.1: # %exit
 ; CHECK-NEXT:    lea %s0, _Unwind_SjLj_Unregister@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -91,6 +93,8 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; CHECK-NEXT:    ld %s19, 56(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -110,7 +114,7 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; CHECK-NEXT:    ld %s0, (%s0, %s1)
 ; CHECK-NEXT:    b.l.t (, %s0)
 ; CHECK-NEXT:  .LBB0_6: # %handle
-; CHECK-NEXT:  .Ltmp2:
+; CHECK-NEXT:  .Ltmp2: # EH_LABEL
 ; CHECK-NEXT:    ld %s0, -88(, %s9)
 ; CHECK-NEXT:    ld %s0, -80(, %s9)
 ; CHECK-NEXT:    lea %s0, _Unwind_SjLj_Unregister@lo
@@ -183,13 +187,13 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; PIC-NEXT:    bsic %s10, (, %s12)
 ; PIC-NEXT:    or %s0, 1, (0)1
 ; PIC-NEXT:    st %s0, -96(, %s9)
-; PIC-NEXT:  .Ltmp0:
+; PIC-NEXT:  .Ltmp0: # EH_LABEL
 ; PIC-NEXT:    lea %s12, errorbar@plt_lo(-24)
 ; PIC-NEXT:    and %s12, %s12, (32)0
 ; PIC-NEXT:    sic %s16
 ; PIC-NEXT:    lea.sl %s12, errorbar@plt_hi(%s16, %s12)
 ; PIC-NEXT:    bsic %s10, (, %s12)
-; PIC-NEXT:  .Ltmp1:
+; PIC-NEXT:  .Ltmp1: # EH_LABEL
 ; PIC-NEXT:  # %bb.1: # %exit
 ; PIC-NEXT:    lea %s12, _Unwind_SjLj_Unregister@plt_lo(-24)
 ; PIC-NEXT:    and %s12, %s12, (32)0
@@ -247,7 +251,7 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; PIC-NEXT:    adds.l %s0, %s0, %s1
 ; PIC-NEXT:    b.l.t (, %s0)
 ; PIC-NEXT:  .LBB0_6: # %handle
-; PIC-NEXT:  .Ltmp2:
+; PIC-NEXT:  .Ltmp2: # EH_LABEL
 ; PIC-NEXT:    ld %s0, -88(, %s9)
 ; PIC-NEXT:    ld %s0, -80(, %s9)
 ; PIC-NEXT:    lea %s12, _Unwind_SjLj_Unregister@plt_lo(-24)

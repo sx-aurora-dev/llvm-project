@@ -163,7 +163,7 @@ void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
         .addImm(8)
         .addReg(VE::SX10);
   }
-  if (hasGOT(MF)) {
+  if (hasGOT(MF) || MF.getFrameInfo().hasFunctionContextIndex()) {
     BuildMI(MBB, MBBI, DL, TII.get(VE::STrii))
         .addReg(VE::SX11)
         .addImm(0)
@@ -204,7 +204,7 @@ void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
         .addReg(VE::SX11)
         .addImm(0)
         .addImm(40);
-  if (hasGOT(MF)) {
+  if (hasGOT(MF) || MF.getFrameInfo().hasFunctionContextIndex()) {
     BuildMI(MBB, MBBI, DL, TII.get(VE::LDrii), VE::SX16)
         .addReg(VE::SX11)
         .addImm(0)

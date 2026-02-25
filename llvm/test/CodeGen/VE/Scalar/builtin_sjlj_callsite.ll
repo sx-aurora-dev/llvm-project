@@ -9,6 +9,8 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
+; CHECK-NEXT:    st %s15, 24(, %s11)
+; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
 ; CHECK-NEXT:    lea %s11, -432(, %s11)
 ; CHECK-NEXT:    brge.l %s11, %s8, .LBB0_7
@@ -59,12 +61,12 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    st %s0, -96(, %s9)
-; CHECK-NEXT:  .Ltmp0:
+; CHECK-NEXT:  .Ltmp0: # EH_LABEL
 ; CHECK-NEXT:    lea %s0, f@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, f@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:  .Ltmp1:
+; CHECK-NEXT:  .Ltmp1: # EH_LABEL
 ; CHECK-NEXT:  .LBB0_2: # %try.cont
 ; CHECK-NEXT:    or %s0, -1, (0)1
 ; CHECK-NEXT:    st %s0, -96(, %s9)
@@ -94,6 +96,8 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; CHECK-NEXT:    ld %s19, 56(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -113,7 +117,7 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; CHECK-NEXT:    ld %s0, (%s0, %s1)
 ; CHECK-NEXT:    b.l.t (, %s0)
 ; CHECK-NEXT:  .LBB0_1: # %lpad
-; CHECK-NEXT:  .Ltmp2:
+; CHECK-NEXT:  .Ltmp2: # EH_LABEL
 ; CHECK-NEXT:    ld %s0, -88(, %s9)
 ; CHECK-NEXT:    ld %s0, -80(, %s9)
 ; CHECK-NEXT:    br.l.t .LBB0_2
@@ -180,13 +184,13 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; PIC-NEXT:    bsic %s10, (, %s12)
 ; PIC-NEXT:    or %s0, 1, (0)1
 ; PIC-NEXT:    st %s0, -96(, %s9)
-; PIC-NEXT:  .Ltmp0:
+; PIC-NEXT:  .Ltmp0: # EH_LABEL
 ; PIC-NEXT:    lea %s12, f@plt_lo(-24)
 ; PIC-NEXT:    and %s12, %s12, (32)0
 ; PIC-NEXT:    sic %s16
 ; PIC-NEXT:    lea.sl %s12, f@plt_hi(%s16, %s12)
 ; PIC-NEXT:    bsic %s10, (, %s12)
-; PIC-NEXT:  .Ltmp1:
+; PIC-NEXT:  .Ltmp1: # EH_LABEL
 ; PIC-NEXT:  .LBB0_2: # %try.cont
 ; PIC-NEXT:    or %s0, -1, (0)1
 ; PIC-NEXT:    st %s0, -96(, %s9)
@@ -248,7 +252,7 @@ define void @test_callsite() personality ptr @__gxx_personality_sj0 {
 ; PIC-NEXT:    adds.l %s0, %s0, %s1
 ; PIC-NEXT:    b.l.t (, %s0)
 ; PIC-NEXT:  .LBB0_1: # %lpad
-; PIC-NEXT:  .Ltmp2:
+; PIC-NEXT:  .Ltmp2: # EH_LABEL
 ; PIC-NEXT:    ld %s0, -88(, %s9)
 ; PIC-NEXT:    ld %s0, -80(, %s9)
 ; PIC-NEXT:    br.l.t .LBB0_2
