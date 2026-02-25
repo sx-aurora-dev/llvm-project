@@ -1734,6 +1734,9 @@ let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
   let cx = 1, isTrap = 1 in def MONCHDB : RR<0x3F, (outs), (ins), "monc.hdb">;
 }
 
+def : Pat<(trap), (MONCHDB)>;
+def : Pat<(debugtrap), (MONCHDB)>;
+
 // Section 8.19.9 - LCR (Load Communication Register)
 defm LCR : LOADCRm<"lcr", 0x40, I64>;
 
