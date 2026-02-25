@@ -800,6 +800,14 @@ unsigned elf::getSectionRank(Ctx &ctx, OutputSection &osec) {
       rank |= 1;
   }
 
+  if (ctx.arg.emachine == EM_VE) {
+    // VE's dynamic linker requires TLS sections to be within a PT_LOAD
+    // segment. Place .tbss in the RW area (after .data) instead of before
+    // the page boundary.
+    if ((osec.flags & SHF_TLS) && osec.type == SHT_NOBITS)
+      rank |= RF_NOT_TLS;
+  }
+
   return rank;
 }
 
