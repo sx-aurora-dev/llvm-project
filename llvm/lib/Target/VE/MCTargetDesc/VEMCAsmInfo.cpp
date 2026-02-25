@@ -93,6 +93,7 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   UsesELFSectionDirectiveForBSS = true;
 
   SupportsDebugInformation = true;
+  UsesCFIWithoutEH = true;
 
   initializeAtSpecifiers(atSpecifiers);
 }
