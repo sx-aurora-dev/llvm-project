@@ -15,8 +15,7 @@
 // debug mode).
 // XFAIL: libcpp-hardening-mode=debug && availability-verbose_abort-missing
 // HWASAN replaces TRAP with abort or error exit code.
-// VE lacks a hardware trap instruction; __builtin_trap lowers to abort.
-// XFAIL: hwasan || target=ve{{.*}}
+// XFAIL: hwasan
 // ADDITIONAL_COMPILE_FLAGS: -U_LIBCPP_HARDENING_MODE -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE
 
 #include <cassert>

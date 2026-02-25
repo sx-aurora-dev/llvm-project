@@ -347,12 +347,9 @@ void VETargetLowering::initSPUActions() {
   // Other configurations related to f128.
   setOperationAction(ISD::BR_CC, MVT::f128, Legal);
 
-  // TRAP to expand (which turns it into abort).
-  setOperationAction(ISD::TRAP, MVT::Other, Expand);
-
-  // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
-  // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
-  setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
+  // Use monc.hdb as a trap instruction, which generates SIGTRAP.
+  setOperationAction(ISD::TRAP, MVT::Other, Legal);
+  setOperationAction(ISD::DEBUGTRAP, MVT::Other, Legal);
 }
 
 static bool isLegalVectorVT(EVT VT) {
