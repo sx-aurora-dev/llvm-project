@@ -1291,6 +1291,90 @@ DEFINE_LIBUNWIND_FUNCTION(_ZN9libunwind19Registers_loongarch6jumptoEv)
 
   jr      $ra
 
+#elif defined(__ve__)
+
+#
+# void libunwind::Registers_ve::jumpto()
+#
+# On entry:
+#  thread_state pointer is in %s0
+#
+DEFINE_LIBUNWIND_FUNCTION(_ZN9libunwind12Registers_ve6jumptoEv)
+        # Restore VL
+        ld  %s1, 528(,%s0)
+        lvl %s1
+        # Restore s1-s9
+        ld  %s1, 8(,%s0)
+        ld  %s2, 16(,%s0)
+        ld  %s3, 24(,%s0)
+        ld  %s4, 32(,%s0)
+        ld  %s5, 40(,%s0)
+        ld  %s6, 48(,%s0)
+        ld  %s7, 56(,%s0)
+        ld  %s8, 64(,%s0)
+        ld  %s9, 72(,%s0)
+        # Skip s10 — will be loaded with PC below
+        # Restore s11-s63
+        ld  %s11, 88(,%s0)
+        ld  %s12, 96(,%s0)
+        ld  %s13, 104(,%s0)
+        ld  %s14, 112(,%s0)
+        ld  %s15, 120(,%s0)
+        ld  %s16, 128(,%s0)
+        ld  %s17, 136(,%s0)
+        ld  %s18, 144(,%s0)
+        ld  %s19, 152(,%s0)
+        ld  %s20, 160(,%s0)
+        ld  %s21, 168(,%s0)
+        ld  %s22, 176(,%s0)
+        ld  %s23, 184(,%s0)
+        ld  %s24, 192(,%s0)
+        ld  %s25, 200(,%s0)
+        ld  %s26, 208(,%s0)
+        ld  %s27, 216(,%s0)
+        ld  %s28, 224(,%s0)
+        ld  %s29, 232(,%s0)
+        ld  %s30, 240(,%s0)
+        ld  %s31, 248(,%s0)
+        ld  %s32, 256(,%s0)
+        ld  %s33, 264(,%s0)
+        ld  %s34, 272(,%s0)
+        ld  %s35, 280(,%s0)
+        ld  %s36, 288(,%s0)
+        ld  %s37, 296(,%s0)
+        ld  %s38, 304(,%s0)
+        ld  %s39, 312(,%s0)
+        ld  %s40, 320(,%s0)
+        ld  %s41, 328(,%s0)
+        ld  %s42, 336(,%s0)
+        ld  %s43, 344(,%s0)
+        ld  %s44, 352(,%s0)
+        ld  %s45, 360(,%s0)
+        ld  %s46, 368(,%s0)
+        ld  %s47, 376(,%s0)
+        ld  %s48, 384(,%s0)
+        ld  %s49, 392(,%s0)
+        ld  %s50, 400(,%s0)
+        ld  %s51, 408(,%s0)
+        ld  %s52, 416(,%s0)
+        ld  %s53, 424(,%s0)
+        ld  %s54, 432(,%s0)
+        ld  %s55, 440(,%s0)
+        ld  %s56, 448(,%s0)
+        ld  %s57, 456(,%s0)
+        ld  %s58, 464(,%s0)
+        ld  %s59, 472(,%s0)
+        ld  %s60, 480(,%s0)
+        ld  %s61, 488(,%s0)
+        ld  %s62, 496(,%s0)
+        ld  %s63, 504(,%s0)
+        # Load PC into link register
+        ld  %s10, 512(,%s0)
+        # Restore s0 last
+        ld  %s0, 0(,%s0)
+        # Jump to PC
+        b.l (,%s10)
+
 #endif
 
 #endif /* !defined(__USING_SJLJ_EXCEPTIONS__) */
