@@ -1338,6 +1338,12 @@ private:
   }
 #endif
 
+#if defined(_LIBUNWIND_TARGET_VE)
+  compact_unwind_encoding_t dwarfEncoding(Registers_ve &) const {
+    return 0;
+  }
+#endif
+
 #endif // defined(_LIBUNWIND_SUPPORT_DWARF_UNWIND)
 
 #if defined(_LIBUNWIND_SUPPORT_SEH_UNWIND)
