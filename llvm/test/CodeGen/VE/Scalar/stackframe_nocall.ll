@@ -12,7 +12,7 @@
 @data = external global i8, align 1
 
 ; Function Attrs: norecurse nounwind readnone
-define ptr @test_frame0(ptr nocapture readnone %0, ptr readnone returned %1) {
+define ptr @test_frame0(ptr nocapture readnone %0, ptr readnone returned %1) nounwind {
 ; CHECK-LABEL: test_frame0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -26,7 +26,7 @@ define ptr @test_frame0(ptr nocapture readnone %0, ptr readnone returned %1) {
 }
 
 ; Function Attrs: nofree nounwind
-define nonnull ptr @test_frame32(ptr nocapture readonly %0) {
+define nonnull ptr @test_frame32(ptr nocapture readonly %0) nounwind {
 ; CHECK-LABEL: test_frame32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -32, %s11
@@ -81,7 +81,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: nofree nounwind
-define noalias nonnull ptr @test_align32(i32 signext %0, ptr nocapture readonly %1) {
+define noalias nonnull ptr @test_align32(i32 signext %0, ptr nocapture readonly %1) nounwind {
 ; CHECK-LABEL: test_align32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -181,7 +181,7 @@ define noalias nonnull ptr @test_align32(i32 signext %0, ptr nocapture readonly 
 }
 
 ; Function Attrs: nofree norecurse nounwind
-define ptr @test_frame0_var(ptr returned %0, ptr nocapture readnone %1) {
+define ptr @test_frame0_var(ptr returned %0, ptr nocapture readnone %1) nounwind {
 ; CHECK-LABEL: test_frame0_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, data@lo
@@ -214,7 +214,7 @@ define ptr @test_frame0_var(ptr returned %0, ptr nocapture readnone %1) {
 }
 
 ; Function Attrs: nofree nounwind
-define nonnull ptr @test_frame32_var(ptr nocapture readnone %0) {
+define nonnull ptr @test_frame32_var(ptr nocapture readnone %0) nounwind {
 ; CHECK-LABEL: test_frame32_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -32, %s11
@@ -278,7 +278,7 @@ define nonnull ptr @test_frame32_var(ptr nocapture readnone %0) {
 }
 
 ; Function Attrs: nofree nounwind
-define noalias nonnull ptr @test_align32_var(i32 signext %0, ptr nocapture readonly %1) {
+define noalias nonnull ptr @test_align32_var(i32 signext %0, ptr nocapture readonly %1) nounwind {
 ; CHECK-LABEL: test_align32_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

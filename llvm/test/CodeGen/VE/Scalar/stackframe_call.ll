@@ -12,7 +12,7 @@
 @data = external global i8, align 1
 
 ; Function Attrs: nounwind
-define ptr @test_frame0(ptr %0, ptr %1) {
+define ptr @test_frame0(ptr %0, ptr %1) nounwind {
 ; CHECK-LABEL: test_frame0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -80,7 +80,7 @@ define ptr @test_frame0(ptr %0, ptr %1) {
 declare ptr @fun(ptr, ptr)
 
 ; Function Attrs: nounwind
-define ptr @test_frame32(ptr %0) {
+define ptr @test_frame32(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -159,7 +159,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: nounwind
-define ptr @test_align32(i32 signext %0, ptr nocapture readnone %1) {
+define ptr @test_align32(i32 signext %0, ptr nocapture readnone %1) nounwind {
 ; CHECK-LABEL: test_align32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -261,7 +261,7 @@ define ptr @test_align32(i32 signext %0, ptr nocapture readnone %1) {
 }
 
 ; Function Attrs: nounwind
-define ptr @test_frame0_var(ptr %0, ptr %1) {
+define ptr @test_frame0_var(ptr %0, ptr %1) nounwind {
 ; CHECK-LABEL: test_frame0_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -340,7 +340,7 @@ define ptr @test_frame0_var(ptr %0, ptr %1) {
 }
 
 ; Function Attrs: nounwind
-define ptr @test_frame32_var(ptr %0) {
+define ptr @test_frame32_var(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame32_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -426,7 +426,7 @@ define ptr @test_frame32_var(ptr %0) {
 }
 
 ; Function Attrs: nounwind
-define ptr @test_align32_var(i32 signext %0, ptr nocapture readnone %1) {
+define ptr @test_align32_var(i32 signext %0, ptr nocapture readnone %1) nounwind {
 ; CHECK-LABEL: test_align32_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

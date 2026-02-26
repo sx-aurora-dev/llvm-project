@@ -9,7 +9,7 @@
 @y = internal thread_local global i32 0, align 4
 
 ; Function Attrs: norecurse nounwind readnone
-define nonnull ptr @get_global() {
+define nonnull ptr @get_global() nounwind {
 ; GENDYN-LABEL: get_global:
 ; GENDYN:       .LBB{{[0-9]+}}_2:
 ; GENDYN-NEXT:    lea %s0, x@tls_gd_lo(-24)
@@ -50,7 +50,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define nonnull ptr @get_local() {
+define nonnull ptr @get_local() nounwind {
 ; GENDYN-LABEL: get_local:
 ; GENDYN:       .LBB{{[0-9]+}}_2:
 ; GENDYN-NEXT:    lea %s0, y@tls_gd_lo(-24)
@@ -91,7 +91,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define void @set_global(i32 %v) {
+define void @set_global(i32 %v) nounwind {
 ; GENDYN-LABEL: set_global:
 ; GENDYN:       .LBB{{[0-9]+}}_2:
 ; GENDYN-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
@@ -142,7 +142,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
-define void @set_local(i32 %v) {
+define void @set_local(i32 %v) nounwind {
 ; GENDYN-LABEL: set_local:
 ; GENDYN:       .LBB{{[0-9]+}}_2:
 ; GENDYN-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill

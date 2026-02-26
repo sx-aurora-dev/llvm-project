@@ -10,7 +10,7 @@ declare void @test(i64)
 
 ; Scalar argument passing must not change (same tests as in VE/Scalar/call.ll below - this time with +vpu)
 
-define fastcc i32 @sample_call() {
+define fastcc i32 @sample_call() nounwind {
 ; CHECK-LABEL: sample_call:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -42,7 +42,7 @@ define fastcc i32 @sample_call() {
   ret i32 %r
 }
 
-define fastcc i32 @stack_call_int() {
+define fastcc i32 @stack_call_int() nounwind {
 ; CHECK-LABEL: stack_call_int:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -84,7 +84,7 @@ define fastcc i32 @stack_call_int() {
   ret i32 %r
 }
 
-define fastcc i32 @stack_call_int_szext() {
+define fastcc i32 @stack_call_int_szext() nounwind {
 ; CHECK-LABEL: stack_call_int_szext:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -126,7 +126,7 @@ define fastcc i32 @stack_call_int_szext() {
   ret i32 %r
 }
 
-define fastcc float @stack_call_float() {
+define fastcc float @stack_call_float() nounwind {
 ; CHECK-LABEL: stack_call_float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -168,7 +168,7 @@ define fastcc float @stack_call_float() {
   ret float %r
 }
 
-define fastcc float @stack_call_float2(float %p0) {
+define fastcc float @stack_call_float2(float %p0) nounwind {
 ; CHECK-LABEL: stack_call_float2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -213,7 +213,7 @@ declare fastcc <256 x i32> @get_v256i32()
 declare fastcc void @vsample_v(<256 x i32>)
 declare fastcc void @vsample_iv(i32, <256 x i32>)
 
-define void @caller_vret() {
+define void @caller_vret() nounwind {
 ; CHECK-LABEL: caller_vret:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -243,7 +243,7 @@ define void @caller_vret() {
   ret void
 }
 
-define void @caller_vret_pass_p0() {
+define void @caller_vret_pass_p0() nounwind {
 ; CHECK-LABEL: caller_vret_pass_p0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -278,7 +278,7 @@ define void @caller_vret_pass_p0() {
   ret void
 }
 
-define void @caller_vret_pass_p1(i32 %s) {
+define void @caller_vret_pass_p1(i32 %s) nounwind {
 ; CHECK-LABEL: caller_vret_pass_p1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -320,7 +320,7 @@ define void @caller_vret_pass_p1(i32 %s) {
 declare fastcc void @vsample_vv(<256 x i32>, <256 x i32>)
 declare fastcc void @vsample_vvv(<256 x i32>, <256 x i32>, <256 x i32>)
 
-define void @caller_vret_pass_p01() {
+define void @caller_vret_pass_p01() nounwind {
 ; CHECK-LABEL: caller_vret_pass_p01:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -358,7 +358,7 @@ define void @caller_vret_pass_p01() {
   ret void
 }
 
-define void @caller_vret_pass_p012() {
+define void @caller_vret_pass_p012() nounwind {
 ; CHECK-LABEL: caller_vret_pass_p012:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -403,7 +403,7 @@ define void @caller_vret_pass_p012() {
 declare fastcc void @vsample_vvvvvvv(<256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>)
 
 ; TODO improve vreg copy (redundant lea+lvl emitted)
-define fastcc void @roundtrip_caller_callee(<256 x i32> %p0, <256 x i32> %p1, <256 x i32> %p2, <256 x i32> %p3, <256 x i32> %p4, <256 x i32> %p5, <256 x i32> %p6) {
+define fastcc void @roundtrip_caller_callee(<256 x i32> %p0, <256 x i32> %p1, <256 x i32> %p2, <256 x i32> %p3, <256 x i32> %p4, <256 x i32> %p5, <256 x i32> %p6) nounwind {
 ; CHECK-LABEL: roundtrip_caller_callee:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -463,7 +463,7 @@ define fastcc void @roundtrip_caller_callee(<256 x i32> %p0, <256 x i32> %p1, <2
 declare fastcc void @vsample_v17i64(<17 x i64>)
 
 ;; Expect non-power-of-two vector that fit inside one vector register to be widened.
-define fastcc void @vreg_arg_v17i64_r1(<256 x i64> %p0, <17 x i64> %p1) {
+define fastcc void @vreg_arg_v17i64_r1(<256 x i64> %p0, <17 x i64> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i64_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -499,7 +499,7 @@ define fastcc void @vreg_arg_v17i64_r1(<256 x i64> %p0, <17 x i64> %p1) {
 declare fastcc void @vsample_v17i32(<17 x i32>)
 
 ;; Expect non-power-of-two vector that fit inside one vector register to be widened.
-define fastcc void @vreg_arg_v17i32_r1(<256 x i32> %p0, <17 x i32> %p1) {
+define fastcc void @vreg_arg_v17i32_r1(<256 x i32> %p0, <17 x i32> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i32_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -535,7 +535,7 @@ define fastcc void @vreg_arg_v17i32_r1(<256 x i32> %p0, <17 x i32> %p1) {
 declare fastcc void @vsample_v17i1(<17 x i1>)
 
 ;; Expect non-power-of-two vector that fit inside one vector register to be widened.
-define fastcc void @vreg_arg_v17i1_r1(<256 x i1> %p0, <17 x i1> %p1) {
+define fastcc void @vreg_arg_v17i1_r1(<256 x i1> %p0, <17 x i1> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i1_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -569,7 +569,7 @@ define fastcc void @vreg_arg_v17i1_r1(<256 x i1> %p0, <17 x i1> %p1) {
 ;; Expect over-sized non-power-of-two vectors to be split(64bit elements) and widened.
 declare fastcc void @vsample_v334i64(<334 x i64>)
 
-define fastcc void @vreg_arg_v334i64_r1(<256 x i64> %p0, <334 x i64> %p1) {
+define fastcc void @vreg_arg_v334i64_r1(<256 x i64> %p0, <334 x i64> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v334i64_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -605,7 +605,7 @@ define fastcc void @vreg_arg_v334i64_r1(<256 x i64> %p0, <334 x i64> %p1) {
 
 declare fastcc void @vsample_v334i32(<334 x i32>)
 
-define fastcc void @vreg_arg_v334i32_r1(<256 x i32> %p0, <334 x i32> %p1) {
+define fastcc void @vreg_arg_v334i32_r1(<256 x i32> %p0, <334 x i32> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v334i32_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -642,7 +642,7 @@ declare fastcc void @vsample_v334i1(<334 x i1>)
 
 ; FIXME: This test documents a bug in cc lowering:
 ;        %p1 should live in 'VMP3' and there should be a copy from that to 'VMP1' here.
-define fastcc void @vreg_arg_v334i1_r1(<256 x i1> %p0, <334 x i1> %p1) {
+define fastcc void @vreg_arg_v334i1_r1(<256 x i1> %p0, <334 x i1> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v334i1_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -677,7 +677,7 @@ define fastcc void @vreg_arg_v334i1_r1(<256 x i1> %p0, <334 x i1> %p1) {
 ; TODO: Implement custom element splitting to get this into vregs.
 declare fastcc void @vsample_v17i128(<17 x i128>)
 
-define fastcc void @vreg_arg_v17i128_r1(<256 x i64> %p0, <17 x i128> %p1) {
+define fastcc void @vreg_arg_v17i128_r1(<256 x i64> %p0, <17 x i128> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i128_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -761,7 +761,7 @@ define fastcc void @vreg_arg_v17i128_r1(<256 x i64> %p0, <17 x i128> %p1) {
 
 declare fastcc void @vsample_v17i65(<17 x i65>)
 
-define fastcc void @vreg_arg_v17i65_r1(<256 x i64> %p0, <17 x i65> %p1) {
+define fastcc void @vreg_arg_v17i65_r1(<256 x i64> %p0, <17 x i65> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i65_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -846,7 +846,7 @@ define fastcc void @vreg_arg_v17i65_r1(<256 x i64> %p0, <17 x i65> %p1) {
 ;; Vectors with under-sized elements.
 declare fastcc void @vsample_v17i16(<17 x i16>)
 
-define fastcc void @vreg_arg_v17i16_r1(<256 x i16> %p0, <17 x i16> %p1) {
+define fastcc void @vreg_arg_v17i16_r1(<256 x i16> %p0, <17 x i16> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i16_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -881,7 +881,7 @@ define fastcc void @vreg_arg_v17i16_r1(<256 x i16> %p0, <17 x i16> %p1) {
 
 declare fastcc void @vsample_v17i13(<17 x i13>)
 
-define fastcc void @vreg_arg_v17i13_r1(<256 x i13> %p0, <17 x i13> %p1) {
+define fastcc void @vreg_arg_v17i13_r1(<256 x i13> %p0, <17 x i13> %p1) nounwind {
 ; CHECK-LABEL: vreg_arg_v17i13_r1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

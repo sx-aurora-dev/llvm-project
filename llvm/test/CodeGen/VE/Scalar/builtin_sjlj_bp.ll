@@ -5,7 +5,7 @@ declare void @whatever(i64, ptr, ptr, ptr, ptr, i32)  #0
 declare i32 @llvm.eh.sjlj.setjmp(ptr) nounwind
 
 ; Function Attrs: noinline nounwind optnone
-define i32 @t_setjmp(i64 %n, ptr byval(%Foo) nocapture readnone align 8 %f) {
+define i32 @t_setjmp(i64 %n, ptr byval(%Foo) nocapture readnone align 8 %f) nounwind {
 ; CHECK-LABEL: t_setjmp:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill

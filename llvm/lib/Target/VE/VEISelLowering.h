@@ -519,6 +519,12 @@ public:
                                     unsigned BROpcode) const;
   void finalizeLowering(MachineFunction &MF) const override;
 
+  /// Exception handling registers.
+  Register
+  getExceptionPointerRegister(const Constant *PersonalityFn) const override;
+  Register
+  getExceptionSelectorRegister(const Constant *PersonalityFn) const override;
+
 #if 0
   // TODO map *ALL* vector types, including EVTs to vregs
   /// Certain combinations of ABIs, Targets and features require that types

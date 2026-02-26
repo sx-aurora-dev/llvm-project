@@ -2163,6 +2163,16 @@ static SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
                      MachinePointerInfo());
 }
 
+Register
+VETargetLowering::getExceptionPointerRegister(const Constant *) const {
+  return VE::SX0;
+}
+
+Register
+VETargetLowering::getExceptionSelectorRegister(const Constant *) const {
+  return VE::SX1;
+}
+
 SDValue VETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SDLoc DL(Op);

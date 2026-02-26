@@ -9,7 +9,7 @@
 ;; Allocated buffer places from 9 to 15 bytes in 16 bytes local vars area.
 
 ; Function Attrs: nounwind
-define ptr @test_frame7(ptr %0) {
+define ptr @test_frame7(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame7:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -64,7 +64,7 @@ define ptr @test_frame7(ptr %0) {
 ;; bytes local vars area.
 
 ; Function Attrs: nounwind
-define ptr @test_frame7_align8(ptr %0) {
+define ptr @test_frame7_align8(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame7_align8:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -119,7 +119,7 @@ define ptr @test_frame7_align8(ptr %0) {
 ;; bytes local vars area.
 
 ; Function Attrs: nounwind
-define ptr @test_frame16_align16(ptr %0) {
+define ptr @test_frame16_align16(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame16_align16:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -175,7 +175,7 @@ define ptr @test_frame16_align16(ptr %0) {
 ;; 207 bytes in 224 + alpha allocated local vars area.
 
 ; Function Attrs: nounwind
-define ptr @test_frame16_align32(ptr %0) {
+define ptr @test_frame16_align32(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame16_align32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -238,7 +238,7 @@ define ptr @test_frame16_align32(ptr %0) {
 ;; to 223 in 224 + alpha bytes local vars area..
 
 ; Function Attrs: nounwind
-define ptr @test_frame32_align32(ptr %0) {
+define ptr @test_frame32_align32(ptr %0) nounwind {
 ; CHECK-LABEL: test_frame32_align32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -305,7 +305,7 @@ define ptr @test_frame32_align32(ptr %0) {
 ;; FIXME: (size+15)/16*16 is not enough.
 
 ; Function Attrs: nounwind
-define ptr @test_frame_dynalign16(ptr %0, i64 %1) {
+define ptr @test_frame_dynalign16(ptr %0, i64 %1) nounwind {
 ; CHECK-LABEL: test_frame_dynalign16:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -386,7 +386,7 @@ define ptr @test_frame_dynalign16(ptr %0, i64 %1) {
 ;; address between 240 and 271 from SP.
 
 ; Function Attrs: nounwind
-define ptr @test_frame16_align16_dynalign32(ptr %0, i64 %n) {
+define ptr @test_frame16_align16_dynalign32(ptr %0, i64 %n) nounwind {
 ; CHECK-LABEL: test_frame16_align16_dynalign32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

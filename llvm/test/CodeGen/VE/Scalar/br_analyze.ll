@@ -6,7 +6,7 @@ declare void @foo() noreturn
 ;;; Check a case where a separate branch is needed and where the original
 ;;; order should be reversed.  Copied from SystemZ/branch-08.ll
 
-define i32 @f1(i32 %a, ptr %bptr) {
+define i32 @f1(i32 %a, ptr %bptr) nounwind {
 ; CHECK-LABEL: f1:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -53,7 +53,7 @@ return:
 
 ;;; Same again with a fused compare and branch.
 
-define i32 @f2(i32 %a) {
+define i32 @f2(i32 %a) nounwind {
 ; CHECK-LABEL: f2:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)

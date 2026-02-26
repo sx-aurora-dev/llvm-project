@@ -2,7 +2,7 @@
 
 declare i32 @func(i32, ...)
 
-define i32 @caller() {
+define i32 @caller() nounwind {
 ; CHECK-LABEL: caller:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, (0)1

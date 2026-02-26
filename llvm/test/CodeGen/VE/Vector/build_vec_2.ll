@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: nounwind
-define fastcc i32 @bv_v2i32() {
+define fastcc i32 @bv_v2i32() nounwind {
 ; CHECK-LABEL: bv_v2i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -42,7 +42,7 @@ entry:
 declare fastcc <2 x i32> @calc_v2i32(<2 x i32>)
 
 ; Function Attrs: nounwind
-define fastcc i32 @brd_v4i32() {
+define fastcc i32 @brd_v4i32() nounwind {
 ; CHECK-LABEL: brd_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -81,7 +81,7 @@ entry:
 declare fastcc <4 x i32> @calc_v4i32(<4 x i32>)
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseq_v4i32() {
+define fastcc i32 @vseq_v4i32() nounwind {
 ; CHECK-LABEL: vseq_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -118,7 +118,7 @@ entry:
 }
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseq_bad_v4i32() {
+define fastcc i32 @vseq_bad_v4i32() nounwind {
 ; CHECK-LABEL: vseq_bad_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -160,7 +160,7 @@ entry:
 }
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseqmul_v4i32() {
+define fastcc i32 @vseqmul_v4i32() nounwind {
 ; CHECK-LABEL: vseqmul_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -199,7 +199,7 @@ entry:
 }
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseqsrl_v4i32() {
+define fastcc i32 @vseqsrl_v4i32() nounwind {
 ; CHECK-LABEL: vseqsrl_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -238,7 +238,7 @@ entry:
 }
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseqsrl_v8i32() {
+define fastcc i32 @vseqsrl_v8i32() nounwind {
 ; CHECK-LABEL: vseqsrl_v8i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -279,7 +279,7 @@ entry:
 declare fastcc <8 x i32> @calc_v8i32(<8 x i32>)
 
 ; Function Attrs: nounwind
-define fastcc i32 @vseqand_v4i32() {
+define fastcc i32 @vseqand_v4i32() nounwind {
 ; CHECK-LABEL: vseqand_v4i32:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)

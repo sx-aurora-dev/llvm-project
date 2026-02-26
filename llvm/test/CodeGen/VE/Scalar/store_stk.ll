@@ -93,7 +93,7 @@
 ;;;
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk(i64 noundef %0) {
+define x86_fastcallcc void @storei64_stk(i64 noundef %0) nounwind {
 ; CHECK-LABEL: storei64_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -125,7 +125,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk_big(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_big(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s11, -2147483648(, %s11)
@@ -174,7 +174,7 @@ define x86_fastcallcc void @storei64_stk_big(i64 noundef %0, i64 noundef %1) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk_big2(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_big2(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -229,7 +229,7 @@ define x86_fastcallcc void @storei64_stk_big2(i64 noundef %0, i64 noundef %1) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk_dyn(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_dyn(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -271,7 +271,7 @@ define x86_fastcallcc void @storei64_stk_dyn(i64 noundef %0, i64 noundef %1) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk_dyn_align(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_dyn_align(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -317,7 +317,7 @@ define x86_fastcallcc void @storei64_stk_dyn_align(i64 noundef %0, i64 noundef %
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storei64_stk_dyn_align2(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_dyn_align2(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -368,7 +368,7 @@ define x86_fastcallcc void @storei64_stk_dyn_align2(i64 noundef %0, i64 noundef 
 }
 
 ; Function Attrs: nounwind
-define x86_fastcallcc void @storei64_stk_dyn_align_spill(i64 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storei64_stk_dyn_align_spill(i64 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storei64_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -436,7 +436,7 @@ declare void @dummy(...)
 declare void @pass(i64 noundef)
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk(fp128 noundef %0) {
+define x86_fastcallcc void @storequad_stk(fp128 noundef %0) nounwind {
 ; CHECK-LABEL: storequad_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -463,7 +463,7 @@ define x86_fastcallcc void @storequad_stk(fp128 noundef %0) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk_big(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_big(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -518,7 +518,7 @@ define x86_fastcallcc void @storequad_stk_big(fp128 noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk_big2(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_big2(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -574,7 +574,7 @@ define x86_fastcallcc void @storequad_stk_big2(fp128 noundef %0, i64 noundef %1)
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk_dyn(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_dyn(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -619,7 +619,7 @@ define x86_fastcallcc void @storequad_stk_dyn(fp128 noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk_dyn_align(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_dyn_align(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -668,7 +668,7 @@ define x86_fastcallcc void @storequad_stk_dyn_align(fp128 noundef %0, i64 nounde
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc void @storequad_stk_dyn_align2(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_dyn_align2(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -723,7 +723,7 @@ define x86_fastcallcc void @storequad_stk_dyn_align2(fp128 noundef %0, i64 nound
 }
 
 ; Function Attrs: nounwind
-define x86_fastcallcc void @storequad_stk_dyn_align_spill(fp128 noundef %0, i64 noundef %1) {
+define x86_fastcallcc void @storequad_stk_dyn_align_spill(fp128 noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: storequad_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

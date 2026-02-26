@@ -3,7 +3,7 @@
 
 declare dso_local void @main()
 
-define dso_local void @naked() naked "frame-pointer"="all" {
+define dso_local void @naked() naked nounwind "frame-pointer"="all" {
 ; CHECK-LABEL: naked:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, main@lo
@@ -14,7 +14,7 @@ define dso_local void @naked() naked "frame-pointer"="all" {
   unreachable
 }
 
-define dso_local void @normal() "frame-pointer"="all" {
+define dso_local void @normal() nounwind "frame-pointer"="all" {
 ; CHECK-LABEL: normal:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
