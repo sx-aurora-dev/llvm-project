@@ -1311,10 +1311,9 @@ DEFINE_LIBUNWIND_FUNCTION(__unw_getcontext)
 #  thread_state pointer is in %s0
 #
 DEFINE_LIBUNWIND_FUNCTION(__unw_getcontext)
-        st  %s1, 8(,%s0)
-        sic %s1
-        st  %s1, 512(,%s0)
+        st  %s10, 512(,%s0)        # store link register as pc
         st  %s0, 0(,%s0)
+        st  %s1, 8(,%s0)
         st  %s2, 16(,%s0)
         st  %s3, 24(,%s0)
         st  %s4, 32(,%s0)
@@ -1328,7 +1327,6 @@ DEFINE_LIBUNWIND_FUNCTION(__unw_getcontext)
         st  %s12, 96(,%s0)
         st  %s13, 104(,%s0)
         st  %s14, 112(,%s0)
-        st  %s15, 120(,%s0)
         st  %s15, 120(,%s0)
         st  %s16, 128(,%s0)
         st  %s17, 136(,%s0)
@@ -1379,9 +1377,8 @@ DEFINE_LIBUNWIND_FUNCTION(__unw_getcontext)
         st  %s62, 496(,%s0)
         st  %s63, 504(,%s0)
         svl %s1
-        st  %s1, 520(,%s0)
-        ld  %s1, 8(%s0)
-        or  %s0, 0, 0(1)
+        st  %s1, 528(,%s0)         # store VL
+        or  %s0, 0, (0)1           # return UNW_ESUCCESS
         b.l (,%lr)
 
 #endif
