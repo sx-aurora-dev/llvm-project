@@ -656,10 +656,6 @@ define signext i32 @br_jt8_m(i32 signext %0, i32 signext %1) {
 ; PIC-NEXT:    and %s3, %s3, (32)0
 ; PIC-NEXT:    lea.sl %s3, .LJTI7_0@gotoff_hi(%s3, %s15)
 ; PIC-NEXT:    ldl.sx %s0, (%s0, %s3)
-; PIC-NEXT:    lea %s3, br_jt8_m@got_lo
-; PIC-NEXT:    and %s3, %s3, (32)0
-; PIC-NEXT:    lea.sl %s3, br_jt8_m@got_hi(, %s3)
-; PIC-NEXT:    ld %s3, (%s3, %s15)
 ; PIC-NEXT:    and %s1, %s1, (32)0
 ; PIC-NEXT:    adds.l %s3, %s3, %s0
 ; PIC-NEXT:    or %s0, 3, (0)1
