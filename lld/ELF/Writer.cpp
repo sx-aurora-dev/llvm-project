@@ -801,11 +801,10 @@ unsigned elf::getSectionRank(Ctx &ctx, OutputSection &osec) {
   }
 
   if (ctx.arg.emachine == EM_VE) {
-    // VEOS calculates AT_PHDR from the entry point's page base address,
-    // so the entry point must reside in the first page.  Place executable
-    // sections (.text) before read-only data (.rodata) to keep .text near
-    // the start of the R E segment and prevent a large .rodata from
-    // pushing the entry point past the 2 MB page boundary.
+    // VEOS calculates AT_PHDR as (e_entry & ~(page_size - 1)) + sizeof(Ehdr),
+    // assuming the ELF header is at the page base of the entry point.
+    // Place .text before .rodata so that a large .rodata does not push
+    // the entry point past the first page boundary.
     if (rank & RF_EXEC)
       rank = (rank & ~RF_EXEC) | RF_RODATA;
     else if (rank & RF_RODATA)

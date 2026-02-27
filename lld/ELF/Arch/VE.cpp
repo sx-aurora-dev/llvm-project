@@ -108,13 +108,6 @@ RelExpr VE::getRelExpr(RelType type, const Symbol &s,
   case R_VE_PLT_HI32:
   case R_VE_PLT_LO32:
     return R_PLT_PC;
-#if 0
-  case R_VE_RELATIVE:
-  case R_VE_GLOB_DAT:
-  case R_VE_JUMP_SLOT:
-  case R_VE_COPY:
-  case R_VE_DTPMOD64:
-#endif
   case R_VE_DTPOFF64:
     return R_DTPREL;
   case R_VE_TLS_GD_HI32:
@@ -150,32 +143,22 @@ void VE::relocate(uint8_t *loc, const Relocation &rel,
     write32le(loc, val);
     break;
   case R_VE_HI32:
-  case R_VE_PC_HI32:    // OK
-  case R_VE_GOT_HI32:   // OK
-  case R_VE_GOTOFF_HI32:// OK
-  case R_VE_PLT_HI32:   // OK
+  case R_VE_PC_HI32:
+  case R_VE_GOT_HI32:
+  case R_VE_GOTOFF_HI32:
+  case R_VE_PLT_HI32:
     write32le(loc, val >> 32);
     break;
   case R_VE_LO32:
-  case R_VE_PC_LO32:    // OK
+  case R_VE_PC_LO32:
   case R_VE_GOT32:
-  case R_VE_GOT_LO32:   // OK
+  case R_VE_GOT_LO32:
   case R_VE_GOTOFF32:
-  case R_VE_GOTOFF_LO32:// OK
+  case R_VE_GOTOFF_LO32:
   case R_VE_PLT32:
-  case R_VE_PLT_LO32:   // OK
+  case R_VE_PLT_LO32:
     write32le(loc, val);
     break;
-#if 0
-  case R_VE_RELATIVE:
-  case R_VE_GLOB_DAT:
-  case R_VE_JUMP_SLOT:
-    checkInt(loc, val, 64, rel);
-    write64le(loc, val);
-    break;
-  case R_VE_COPY:
-  case R_VE_DTPMOD64:
-#endif
   case R_VE_DTPOFF64:
     write64le(loc, val);
     break;
@@ -242,8 +225,9 @@ int64_t VE::getImplicitAddend(const uint8_t *buf, RelType type) const {
 }
 
 RelExpr VE::adjustTlsExpr(RelType type, RelExpr expr) const {
+  // GD to LE relaxation is defined in the VE TLS ABI but not yet implemented.
+  // Returning R_NONE disables TLS optimization.
   return R_NONE;
-  // return expr;
 }
 
 void VE::writeGotPltHeader(uint8_t *buf) const {
