@@ -2682,6 +2682,19 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.setMemRefs(MMOs);
   }
 
+  // Store GOT pointer (s15) in buf[4].  After SjLj longjmp, s15 may hold the
+  // GOT pointer of the unwinding library instead of the catching function's.
+  // Restoring s15 in RestoreMBB ensures PIC code in shared libraries works
+  // correctly after exception handling.
+  {
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STrii));
+    MIB.addReg(BufReg);
+    MIB.addImm(0);
+    MIB.addImm(32);
+    MIB.addReg(VE::SX15);
+    MIB.setMemRefs(MMOs);
+  }
+
   // Store IP in buf[1].
   MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STrii));
   MIB.add(MI.getOperand(1)); // we can preserve the kill flags here.
@@ -2725,6 +2738,15 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.addReg(VE::SX10);
     MIB.addImm(0);
     MIB.addImm(24);
+    MIB.setMemRefs(MMOs);
+  }
+  // Restore GOT pointer (s15) from buf[4].
+  {
+    MachineInstrBuilder MIB =
+        BuildMI(RestoreMBB, DL, TII->get(VE::LDrii), VE::SX15);
+    MIB.addReg(VE::SX10);
+    MIB.addImm(0);
+    MIB.addImm(32);
     MIB.setMemRefs(MMOs);
   }
   BuildMI(RestoreMBB, DL, TII->get(VE::LEAzii), RestoreDestReg)
@@ -2923,8 +2945,11 @@ VETargetLowering::emitSjLjDispatchBlock(MachineInstr &MI,
       .addRegMask(RI.getNoPreservedMask());
 
   if (isPositionIndependent()) {
-    // Force to generate GETGOT, since current implementation doesn't store GOT
-    // register.
+    // Restore GOT pointer in the dispatch block.  After SjLj longjmp from the
+    // unwinding library, s15 may hold the library's GOT pointer instead of the
+    // catching function's.  Unlike emitEHSjLjSetJmp's RestoreMBB path (which
+    // restores s15 from jbuf[4]), the C++ SjLj exception path lands directly
+    // in the dispatch block, so GETGOT is needed here.
     BuildMI(DispatchBB, DL, TII->get(VE::GETGOT), VE::SX15);
   }
 

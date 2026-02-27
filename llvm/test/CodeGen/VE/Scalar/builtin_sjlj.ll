@@ -34,12 +34,14 @@ define signext i32 @t_setjmp() {
 ; CHECK-NEXT:    lea %s1, .LBB{{[0-9]+}}_3@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, .LBB{{[0-9]+}}_3@hi(, %s1)
+; CHECK-NEXT:    st %s15, 32(, %s0)
 ; CHECK-NEXT:    st %s1, 8(, %s0)
 ; CHECK-NEXT:    # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    lea %s0, 0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # Block address taken
+; CHECK-NEXT:    ld %s15, 32(, %s10)
 ; CHECK-NEXT:    lea %s0, 1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
@@ -109,12 +111,14 @@ define signext i32 @t_setjmp() {
 ; PIC-NEXT:    lea %s1, .LBB0_3@gotoff_lo
 ; PIC-NEXT:    and %s1, %s1, (32)0
 ; PIC-NEXT:    lea.sl %s1, .LBB0_3@gotoff_hi(%s1, %s15)
+; PIC-NEXT:    st %s15, 32(, %s0)
 ; PIC-NEXT:    st %s1, 8(, %s0)
 ; PIC-NEXT:    # EH_SJlJ_SETUP .LBB0_3
 ; PIC-NEXT:  # %bb.1:
 ; PIC-NEXT:    lea %s0, 0
 ; PIC-NEXT:    br.l.t .LBB0_2
 ; PIC-NEXT:  .LBB0_3: # Block address taken
+; PIC-NEXT:    ld %s15, 32(, %s10)
 ; PIC-NEXT:    lea %s0, 1
 ; PIC-NEXT:  .LBB0_2:
 ; PIC-NEXT:    adds.w.sx %s0, %s0, (0)1
