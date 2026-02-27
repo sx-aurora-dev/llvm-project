@@ -10,7 +10,7 @@ declare void @llvm.ve.vl.vst.vssl(<256 x double>, i64, ptr, i32)
 ; sources.
 
 ; Function Attrs: nounwind
-define void @switching_vl(i32 %evl, i32 %evl2, ptr %P, ptr %Q) {
+define void @switching_vl(i32 %evl, i32 %evl2, ptr %P, ptr %Q) nounwind {
 ; CHECK-LABEL: switching_vl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s4, 256
@@ -43,7 +43,7 @@ define void @switching_vl(i32 %evl, i32 %evl2, ptr %P, ptr %Q) {
 ; in a basic block.
 
 ; Function Attrs: nounwind
-define void @stable_vl(i32 %evl, ptr %P, ptr %Q) {
+define void @stable_vl(i32 %evl, ptr %P, ptr %Q) nounwind {
 ; CHECK-LABEL: stable_vl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -67,7 +67,7 @@ define void @stable_vl(i32 %evl, ptr %P, ptr %Q) {
 ;;; Check the case we have a call in the middle of vector instructions.
 
 ; Function Attrs: nounwind
-define void @call_invl(i32 %evl, ptr %P, ptr %Q) {
+define void @call_invl(i32 %evl, ptr %P, ptr %Q) nounwind {
 ; CHECK-LABEL: call_invl:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill

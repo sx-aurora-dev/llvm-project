@@ -93,6 +93,7 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   UsesELFSectionDirectiveForBSS = true;
 
   SupportsDebugInformation = true;
+  ExceptionsType = ExceptionHandling::DwarfCFI;
 
   initializeAtSpecifiers(atSpecifiers);
 }

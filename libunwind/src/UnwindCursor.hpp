@@ -33,7 +33,8 @@
 #if defined(_LIBUNWIND_TARGET_LINUX) &&                                        \
     (defined(_LIBUNWIND_TARGET_AARCH64) ||                                     \
      defined(_LIBUNWIND_TARGET_LOONGARCH) ||                                   \
-     defined(_LIBUNWIND_TARGET_RISCV) || defined(_LIBUNWIND_TARGET_S390X))
+     defined(_LIBUNWIND_TARGET_RISCV) || defined(_LIBUNWIND_TARGET_S390X) ||   \
+     defined(_LIBUNWIND_TARGET_VE))
 #include <errno.h>
 #include <signal.h>
 #include <sys/syscall.h>
@@ -1049,6 +1050,10 @@ private:
   bool setInfoForSigReturn(Registers_s390x &);
   int stepThroughSigReturn(Registers_s390x &);
 #endif
+#if defined(_LIBUNWIND_TARGET_VE)
+  bool setInfoForSigReturn(Registers_ve &);
+  int stepThroughSigReturn(Registers_ve &);
+#endif
   template <typename Registers> bool setInfoForSigReturn(Registers &) {
     return false;
   }
@@ -1334,6 +1339,12 @@ private:
 
 #if defined (_LIBUNWIND_TARGET_S390X)
   compact_unwind_encoding_t dwarfEncoding(Registers_s390x &) const {
+    return 0;
+  }
+#endif
+
+#if defined(_LIBUNWIND_TARGET_VE)
+  compact_unwind_encoding_t dwarfEncoding(Registers_ve &) const {
     return 0;
   }
 #endif
@@ -3163,6 +3174,64 @@ int UnwindCursor<A, R>::stepThroughSigReturn(Registers_s390x &) {
 }
 #endif // defined(_LIBUNWIND_CHECK_LINUX_SIGRETURN) &&
        // defined(_LIBUNWIND_TARGET_S390X)
+
+#if defined(_LIBUNWIND_CHECK_LINUX_SIGRETURN) &&                               \
+    defined(_LIBUNWIND_TARGET_VE)
+template <typename A, typename R>
+bool UnwindCursor<A, R>::setInfoForSigReturn(Registers_ve &) {
+  // Look for the VEOS signal trampoline. VEOS maps a fixed trampoline
+  // at process load time (reserve_signal_trampoline). The trampoline is
+  // 5 VE instructions (8 bytes each, 40 bytes total) that perform the
+  // rt_sigreturn syscall via shared memory + monc.
+  const pint_t pc = static_cast<pint_t>(this->getReg(UNW_REG_IP));
+  if (!isReadableAddr(pc))
+    return false;
+  const auto *instructions = reinterpret_cast<const uint64_t *>(pc);
+  if (instructions[0] != 0x462eaeae00000000 ||
+      instructions[1] != 0x012e008e00000018 ||
+      instructions[2] != 0x45000f0000000000 ||
+      instructions[3] != 0x310003ae00000000 ||
+      instructions[4] != 0x3f00000000000000)
+    return false;
+
+  _info = {};
+  _info.start_ip = pc;
+  _info.end_ip = pc + 40;
+  _isSigReturn = true;
+  return true;
+}
+
+template <typename A, typename R>
+int UnwindCursor<A, R>::stepThroughSigReturn(Registers_ve &) {
+  // In the signal trampoline frame, sp points 512 bytes (HANDLER_STACK_FRAME)
+  // below the ve_sigframe. The ve_sigframe layout is:
+  //   - 40-byte trampoline code area (unused)
+  //   - 256-byte padding
+  //   - 128-byte siginfo_t
+  //   - ucontext:
+  //     - 8-byte uc_flags
+  //     - 8-byte uc_link
+  //     - 24-byte stack_t
+  //     - mcontext_t (= sigcontext, with registers at known offsets)
+  const pint_t kOffsetSpToMcontext = 512 + 464; // 976
+  const pint_t kOffsetMcontextIC = 0x1010;
+  const pint_t kOffsetMcontextSR = 0x1400;
+
+  const pint_t mctx = _registers.getSP() + kOffsetSpToMcontext;
+
+  for (int i = 0; i <= 63; ++i) {
+    uint64_t value = _addressSpace.get64(
+        mctx + kOffsetMcontextSR + static_cast<pint_t>(i * 8));
+    _registers.setRegister(UNW_VE_S0 + i, value);
+  }
+  _registers.setIP(_addressSpace.get64(mctx + kOffsetMcontextIC));
+  _registers.setRegister(UNW_VE_VL, _addressSpace.get64(mctx + 0x1028));
+
+  _isSignalFrame = true;
+  return UNW_STEP_SUCCESS;
+}
+#endif // defined(_LIBUNWIND_CHECK_LINUX_SIGRETURN) &&
+       // defined(_LIBUNWIND_TARGET_VE)
 
 #if defined(_LIBUNWIND_CHECK_HAIKU_SIGRETURN)
 template <typename A, typename R>

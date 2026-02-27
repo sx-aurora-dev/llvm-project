@@ -113,6 +113,7 @@
 #include "VEInstrInfo.h"
 #include "VEMachineFunctionInfo.h"
 #include "VESubtarget.h"
+#include "llvm/CodeGen/CFIInstBuilder.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -317,6 +318,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   const VERegisterInfo &RegInfo = *STI.getRegisterInfo();
   MachineBasicBlock::iterator MBBI = MBB.begin();
   bool NeedsStackRealignment = RegInfo.shouldRealignStack(MF);
+  bool NeedsCFI = MF.needsFrameMoves();
 
   // Debug location must be unknown since the first debug location is used
   // to determine the end of the prologue.
@@ -350,6 +352,19 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Emit Prologue instructions to save multiple registers.
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
+  // Emit CFI for registers saved in prologue.
+  if (NeedsCFI && !FuncInfo->isLeafProc()) {
+    CFIInstBuilder CFIBuilder(MBB, MBBI, MachineInstr::FrameSetup);
+    CFIBuilder.buildOffset(VE::SX9, 0);   // FP at CFA+0
+    CFIBuilder.buildOffset(VE::SX10, 8);  // LR at CFA+8
+    if (hasGOT(MF) || MFI.hasFunctionContextIndex()) {
+      CFIBuilder.buildOffset(VE::SX15, 24); // GOT at CFA+24
+      CFIBuilder.buildOffset(VE::SX16, 32); // PLT at CFA+32
+    }
+    if (hasBP(MF))
+      CFIBuilder.buildOffset(VE::SX17, 40); // BP at CFA+40
+  }
+
   // Emit instructions to save SP in FP as follows if this is not a leaf
   // function:
   //    or %fp, 0, %sp
@@ -357,6 +372,11 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
     BuildMI(MBB, MBBI, DL, TII.get(VE::ORri), VE::SX9)
         .addReg(VE::SX11)
         .addImm(0);
+
+  // Emit CFI to switch CFA to FP.
+  if (NeedsCFI && !FuncInfo->isLeafProc())
+    CFIInstBuilder(MBB, MBBI, MachineInstr::FrameSetup)
+        .buildDefCFARegister(VE::SX9);
 
   // Emit stack adjust instructions
   MaybeAlign RuntimeAlign =
@@ -375,6 +395,25 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Emit stack extend instructions
   if (NumBytes != 0)
     emitSPExtend(MF, MBB, MBBI);
+
+  // Emit CFI for CSR spills (inserted by PEI before emitPrologue).
+  // At this point, MBBI points to the first CSR spill instruction.
+  // Advance past all CSR spills, then emit .cfi_offset for each.
+  if (NeedsCFI) {
+    const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
+    if (!CSI.empty()) {
+      for (unsigned I = 0, E = CSI.size(); I != E; ++I)
+        ++MBBI;
+      CFIInstBuilder CFIBuilder(MBB, MBBI, MachineInstr::FrameSetup);
+      for (const auto &CS : CSI) {
+        MCRegister Reg = CS.getReg();
+        // Skip SX17 (BP) if already handled by explicit save above.
+        if (Reg == VE::SX17 && hasBP(MF))
+          continue;
+        CFIBuilder.buildOffset(Reg, MFI.getObjectOffset(CS.getFrameIdx()));
+      }
+    }
+  }
 }
 
 MachineBasicBlock::iterator VEFrameLowering::eliminateCallFramePseudoInstr(
@@ -399,8 +438,23 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const VEInstrInfo &TII = *STI.getInstrInfo();
+  bool NeedsCFI = MF.needsFrameMoves();
 
   uint64_t NumBytes = MFI.getStackSize();
+
+  // Emit CFI restore for CSRs (PEI-inserted restores are already in MBB).
+  if (NeedsCFI) {
+    const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
+    if (!CSI.empty()) {
+      CFIInstBuilder CFIBuilder(MBB, MBBI, MachineInstr::FrameDestroy);
+      for (const auto &CS : CSI) {
+        MCRegister Reg = CS.getReg();
+        if (Reg == VE::SX17 && hasBP(MF))
+          continue;
+        CFIBuilder.buildRestore(Reg);
+      }
+    }
+  }
 
   // Emit instructions to retrieve original SP.
   if (!FuncInfo->isLeafProc()) {
@@ -414,8 +468,26 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
     emitSPAdjustment(MF, MBB, MBBI, NumBytes, std::nullopt);
   }
 
+  // Emit CFI to switch CFA back to SP.
+  if (NeedsCFI && !FuncInfo->isLeafProc())
+    CFIInstBuilder(MBB, MBBI, MachineInstr::FrameDestroy)
+        .buildDefCFA(VE::SX11, 0);
+
   // Emit Epilogue instructions to restore multiple registers.
   emitEpilogueInsns(MF, MBB, MBBI, NumBytes, true);
+
+  // Emit CFI restore for registers restored in epilogue.
+  if (NeedsCFI && !FuncInfo->isLeafProc()) {
+    CFIInstBuilder CFIBuilder(MBB, MBBI, MachineInstr::FrameDestroy);
+    if (hasBP(MF))
+      CFIBuilder.buildRestore(VE::SX17);
+    if (hasGOT(MF) || MFI.hasFunctionContextIndex()) {
+      CFIBuilder.buildRestore(VE::SX16);
+      CFIBuilder.buildRestore(VE::SX15);
+    }
+    CFIBuilder.buildRestore(VE::SX10);
+    CFIBuilder.buildRestore(VE::SX9);
+  }
 }
 
 // hasFPImpl - Return true if the specified function should have a dedicated

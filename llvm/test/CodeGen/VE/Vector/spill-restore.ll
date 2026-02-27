@@ -4,7 +4,7 @@
 @str = private unnamed_addr constant [13 x i8] c"Hello World!\00", align 1
 
 ; Function Attrs: nounwind
-define void @check_spill_restore() {
+define void @check_spill_restore() nounwind {
 ; CHECK-LABEL: check_spill_restore:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill

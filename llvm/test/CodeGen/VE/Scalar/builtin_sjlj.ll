@@ -7,7 +7,7 @@
 @buf = common global [1 x %struct.__jmp_buf_tag] zeroinitializer, align 8
 
 ; Function Attrs: noinline nounwind optnone
-define signext i32 @t_setjmp() {
+define signext i32 @t_setjmp() nounwind {
 ; CHECK-LABEL: t_setjmp:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
@@ -162,7 +162,7 @@ declare ptr @llvm.stacksave()
 declare i32 @llvm.eh.sjlj.setjmp(ptr)
 
 ; Function Attrs: noinline nounwind optnone
-define void @t_longjmp() {
+define void @t_longjmp() nounwind {
 ; CHECK-LABEL: t_longjmp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, buf@lo

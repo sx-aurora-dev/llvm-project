@@ -93,7 +93,7 @@
 ;;;
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <256 x i1> @load__vm256_stk() {
+define fastcc <256 x i1> @load__vm256_stk() nounwind {
 ; CHECK-LABEL: load__vm256_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -138,7 +138,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <256 x i1> @load__vm256_stk_big_fit() {
+define fastcc <256 x i1> @load__vm256_stk_big_fit() nounwind {
 ; CHECK-LABEL: load__vm256_stk_big_fit:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -198,7 +198,7 @@ define fastcc <256 x i1> @load__vm256_stk_big_fit() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <256 x i1> @load__vm256_stk_big() {
+define fastcc <256 x i1> @load__vm256_stk_big() nounwind {
 ; CHECK-LABEL: load__vm256_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -263,7 +263,7 @@ define fastcc <256 x i1> @load__vm256_stk_big() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <256 x i1> @load__vm256_stk_big2() {
+define fastcc <256 x i1> @load__vm256_stk_big2() nounwind {
 ; CHECK-LABEL: load__vm256_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -329,7 +329,7 @@ define fastcc <256 x i1> @load__vm256_stk_big2() {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <256 x i1> @load__vm256_stk_dyn(i64 noundef %0) {
+define fastcc <256 x i1> @load__vm256_stk_dyn(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm256_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -379,7 +379,7 @@ define fastcc <256 x i1> @load__vm256_stk_dyn(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <256 x i1> @load__vm256_stk_dyn_align(i64 noundef %0) {
+define fastcc <256 x i1> @load__vm256_stk_dyn_align(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm256_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -433,7 +433,7 @@ define fastcc <256 x i1> @load__vm256_stk_dyn_align(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <256 x i1> @load__vm256_stk_dyn_align2(i64 noundef %0) {
+define fastcc <256 x i1> @load__vm256_stk_dyn_align2(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm256_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -499,7 +499,7 @@ define fastcc <256 x i1> @load__vm256_stk_dyn_align2(i64 noundef %0) {
 }
 
 ; Function Attrs: nounwind
-define fastcc <256 x i1> @load__vm256_stk_dyn_align_spill(i64 noundef %0) {
+define fastcc <256 x i1> @load__vm256_stk_dyn_align_spill(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm256_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -589,7 +589,7 @@ declare fastcc void @dummy()
 declare fastcc void @pass(i64 noundef)
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <512 x i1> @load__vm512_stk() {
+define fastcc <512 x i1> @load__vm512_stk() nounwind {
 ; CHECK-LABEL: load__vm512_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -637,7 +637,7 @@ define fastcc <512 x i1> @load__vm512_stk() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <512 x i1> @load__vm512_stk_big_fit() {
+define fastcc <512 x i1> @load__vm512_stk_big_fit() nounwind {
 ; CHECK-LABEL: load__vm512_stk_big_fit:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -706,7 +706,7 @@ define fastcc <512 x i1> @load__vm512_stk_big_fit() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <512 x i1> @load__vm512_stk_big() {
+define fastcc <512 x i1> @load__vm512_stk_big() nounwind {
 ; CHECK-LABEL: load__vm512_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -780,7 +780,7 @@ define fastcc <512 x i1> @load__vm512_stk_big() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc <512 x i1> @load__vm512_stk_big2() {
+define fastcc <512 x i1> @load__vm512_stk_big2() nounwind {
 ; CHECK-LABEL: load__vm512_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -855,7 +855,7 @@ define fastcc <512 x i1> @load__vm512_stk_big2() {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <512 x i1> @load__vm512_stk_dyn(i64 noundef %0) {
+define fastcc <512 x i1> @load__vm512_stk_dyn(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm512_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -922,7 +922,7 @@ define fastcc <512 x i1> @load__vm512_stk_dyn(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <512 x i1> @load__vm512_stk_dyn_align(i64 noundef %0) {
+define fastcc <512 x i1> @load__vm512_stk_dyn_align(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm512_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -989,7 +989,7 @@ define fastcc <512 x i1> @load__vm512_stk_dyn_align(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define fastcc <512 x i1> @load__vm512_stk_dyn_align2(i64 noundef %0) {
+define fastcc <512 x i1> @load__vm512_stk_dyn_align2(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm512_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -1077,7 +1077,7 @@ define fastcc <512 x i1> @load__vm512_stk_dyn_align2(i64 noundef %0) {
 }
 
 ; Function Attrs: nounwind
-define fastcc <512 x i1> @load__vm512_stk_dyn_align_spill(i64 noundef %0) {
+define fastcc <512 x i1> @load__vm512_stk_dyn_align_spill(i64 noundef %0) nounwind {
 ; CHECK-LABEL: load__vm512_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

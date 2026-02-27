@@ -93,7 +93,7 @@
 ;;;
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk(<256 x i1> noundef %0) {
+define fastcc void @store__vm256_stk(<256 x i1> noundef %0) nounwind {
 ; CHECK-LABEL: store__vm256_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -138,7 +138,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk_big(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_big(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -203,7 +203,7 @@ define fastcc void @store__vm256_stk_big(<256 x i1> noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk_big2(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_big2(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -269,7 +269,7 @@ define fastcc void @store__vm256_stk_big2(<256 x i1> noundef %0, i64 noundef %1)
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk_dyn(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_dyn(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -327,7 +327,7 @@ define fastcc void @store__vm256_stk_dyn(<256 x i1> noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk_dyn_align(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_dyn_align(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -385,7 +385,7 @@ define fastcc void @store__vm256_stk_dyn_align(<256 x i1> noundef %0, i64 nounde
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm256_stk_dyn_align2(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_dyn_align2(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -455,7 +455,7 @@ define fastcc void @store__vm256_stk_dyn_align2(<256 x i1> noundef %0, i64 nound
 }
 
 ; Function Attrs: nounwind
-define fastcc void @store__vm256_stk_dyn_align_spill(<256 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm256_stk_dyn_align_spill(<256 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm256_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -550,7 +550,7 @@ declare fastcc void @dummy()
 declare fastcc void @pass(i64 noundef)
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk(<512 x i1> noundef %0) {
+define fastcc void @store__vm512_stk(<512 x i1> noundef %0) nounwind {
 ; CHECK-LABEL: store__vm512_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -599,7 +599,7 @@ define fastcc void @store__vm512_stk(<512 x i1> noundef %0) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_bc(<512 x i1> noundef %0) {
+define fastcc void @store__vm512_stk_bc(<512 x i1> noundef %0) nounwind {
 ; CHECK-LABEL: store__vm512_stk_bc:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -665,7 +665,7 @@ define fastcc void @store__vm512_stk_bc(<512 x i1> noundef %0) {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_big(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_big(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -740,7 +740,7 @@ define fastcc void @store__vm512_stk_big(<512 x i1> noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_big2(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_big2(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -816,7 +816,7 @@ define fastcc void @store__vm512_stk_big2(<512 x i1> noundef %0, i64 noundef %1)
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_dyn(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_dyn(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -892,7 +892,7 @@ define fastcc void @store__vm512_stk_dyn(<512 x i1> noundef %0, i64 noundef %1) 
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_dyn_align(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_dyn_align(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -968,7 +968,7 @@ define fastcc void @store__vm512_stk_dyn_align(<512 x i1> noundef %0, i64 nounde
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define fastcc void @store__vm512_stk_dyn_align2(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_dyn_align2(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -1065,7 +1065,7 @@ define fastcc void @store__vm512_stk_dyn_align2(<512 x i1> noundef %0, i64 nound
 }
 
 ; Function Attrs: nounwind
-define fastcc void @store__vm512_stk_dyn_align_spill(<512 x i1> noundef %0, i64 noundef %1) {
+define fastcc void @store__vm512_stk_dyn_align_spill(<512 x i1> noundef %0, i64 noundef %1) nounwind {
 ; CHECK-LABEL: store__vm512_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

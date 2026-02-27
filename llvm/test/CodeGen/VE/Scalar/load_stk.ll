@@ -93,7 +93,7 @@
 ;;;
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc i64 @loadi64_stk() {
+define x86_fastcallcc i64 @loadi64_stk() nounwind {
 ; CHECK-LABEL: loadi64_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -125,7 +125,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc i64 @loadi64_stk_big() {
+define x86_fastcallcc i64 @loadi64_stk_big() nounwind {
 ; CHECK-LABEL: loadi64_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s11, -2147483648(, %s11)
@@ -174,7 +174,7 @@ define x86_fastcallcc i64 @loadi64_stk_big() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc i64 @loadi64_stk_big2() {
+define x86_fastcallcc i64 @loadi64_stk_big2() nounwind {
 ; CHECK-LABEL: loadi64_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -229,7 +229,7 @@ define x86_fastcallcc i64 @loadi64_stk_big2() {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc i64 @loadi64_stk_dyn(i64 noundef %0) {
+define x86_fastcallcc i64 @loadi64_stk_dyn(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadi64_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -270,7 +270,7 @@ define x86_fastcallcc i64 @loadi64_stk_dyn(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc i64 @loadi64_stk_dyn_align(i64 noundef %0) {
+define x86_fastcallcc i64 @loadi64_stk_dyn_align(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadi64_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -315,7 +315,7 @@ define x86_fastcallcc i64 @loadi64_stk_dyn_align(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc i64 @loadi64_stk_dyn_align2(i64 noundef %0) {
+define x86_fastcallcc i64 @loadi64_stk_dyn_align2(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadi64_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -365,7 +365,7 @@ define x86_fastcallcc i64 @loadi64_stk_dyn_align2(i64 noundef %0) {
 }
 
 ; Function Attrs: nounwind
-define x86_fastcallcc i64 @loadi64_stk_dyn_align_spill(i64 noundef %0) {
+define x86_fastcallcc i64 @loadi64_stk_dyn_align_spill(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadi64_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -431,7 +431,7 @@ declare void @dummy(...)
 declare void @pass(i64 noundef)
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc fp128 @loadquad_stk() {
+define x86_fastcallcc fp128 @loadquad_stk() nounwind {
 ; CHECK-LABEL: loadquad_stk:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.l %s11, -16, %s11
@@ -458,7 +458,7 @@ define x86_fastcallcc fp128 @loadquad_stk() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc fp128 @loadquad_stk_big() {
+define x86_fastcallcc fp128 @loadquad_stk_big() nounwind {
 ; CHECK-LABEL: loadquad_stk_big:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -513,7 +513,7 @@ define x86_fastcallcc fp128 @loadquad_stk_big() {
 }
 
 ; Function Attrs: argmemonly nofree nounwind
-define x86_fastcallcc fp128 @loadquad_stk_big2() {
+define x86_fastcallcc fp128 @loadquad_stk_big2() nounwind {
 ; CHECK-LABEL: loadquad_stk_big2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s13, 2147483632
@@ -569,7 +569,7 @@ define x86_fastcallcc fp128 @loadquad_stk_big2() {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc fp128 @loadquad_stk_dyn(i64 noundef %0) {
+define x86_fastcallcc fp128 @loadquad_stk_dyn(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadquad_stk_dyn:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -612,7 +612,7 @@ define x86_fastcallcc fp128 @loadquad_stk_dyn(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc fp128 @loadquad_stk_dyn_align(i64 noundef %0) {
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadquad_stk_dyn_align:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -659,7 +659,7 @@ define x86_fastcallcc fp128 @loadquad_stk_dyn_align(i64 noundef %0) {
 }
 
 ; Function Attrs: argmemonly mustprogress nofree nounwind willreturn
-define x86_fastcallcc fp128 @loadquad_stk_dyn_align2(i64 noundef %0) {
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align2(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadquad_stk_dyn_align2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
@@ -712,7 +712,7 @@ define x86_fastcallcc fp128 @loadquad_stk_dyn_align2(i64 noundef %0) {
 }
 
 ; Function Attrs: nounwind
-define x86_fastcallcc fp128 @loadquad_stk_dyn_align_spill(i64 noundef %0) {
+define x86_fastcallcc fp128 @loadquad_stk_dyn_align_spill(i64 noundef %0) nounwind {
 ; CHECK-LABEL: loadquad_stk_dyn_align_spill:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)

@@ -2379,6 +2379,7 @@ ExceptionHandling Triple::getDefaultExceptionHandling() const {
   case Triple::m68k:
   case Triple::msp430:
   case Triple::systemz:
+  case Triple::ve:
   case Triple::xcore:
   case Triple::xtensa:
     return ExceptionHandling::DwarfCFI;
