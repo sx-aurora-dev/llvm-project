@@ -243,11 +243,7 @@ define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality ptr @__gxx_pe
 ; PIC-NEXT:    and %s1, %s1, (32)0
 ; PIC-NEXT:    lea.sl %s1, .LJTI0_0@gotoff_hi(%s1, %s15)
 ; PIC-NEXT:    sll %s0, %s0, 2
-; PIC-NEXT:    ldl.zx %s0, (%s0, %s1)
-; PIC-NEXT:    lea %s1, foo@got_lo
-; PIC-NEXT:    and %s1, %s1, (32)0
-; PIC-NEXT:    lea.sl %s1, foo@got_hi(%s1, %s15)
-; PIC-NEXT:    ld %s1, (, %s1)
+; PIC-NEXT:    ldl.sx %s0, (%s0, %s1)
 ; PIC-NEXT:    adds.l %s0, %s0, %s1
 ; PIC-NEXT:    b.l.t (, %s0)
 ; PIC-NEXT:  .LBB0_6: # %handle

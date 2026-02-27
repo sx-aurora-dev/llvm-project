@@ -2390,68 +2390,21 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
 
 /// JumpTable for VE.
 ///
-///   VE cannot generate relocatable symbol in jump table.  VE cannot
-///   generate expressions using symbols in both text segment and data
-///   segment like below.
+///   In PIC mode, use EK_LabelDifference32 to generate jump table entries
+///   as offsets from the jump table label:
 ///             .4byte  .LBB0_2-.LJTI0_0
-///   So, we generate offset from the top of function like below as
-///   a custom label.
-///             .4byte  .LBB0_2-<function name>
+///   The jump table address is computed at runtime via GOTOFF (always valid
+///   since jump table labels are section-local).  This avoids using the
+///   function address as a base, which is problematic for exported functions
+///   in shared libraries due to ELF symbol interposition (GOT entries resolve
+///   to PLT stub canonical addresses, not the actual function body).
 
 unsigned VETargetLowering::getJumpTableEncoding() const {
-  // Use custom label for PIC.
   if (isPositionIndependent())
-    return MachineJumpTableInfo::EK_Custom32;
+    return MachineJumpTableInfo::EK_LabelDifference32;
 
   // Otherwise, use the normal jump table encoding heuristics.
   return TargetLowering::getJumpTableEncoding();
-}
-
-const MCExpr *VETargetLowering::LowerCustomJumpTableEntry(
-    const MachineJumpTableInfo *MJTI, const MachineBasicBlock *MBB,
-    unsigned Uid, MCContext &Ctx) const {
-  assert(isPositionIndependent());
-
-  // Generate custom label for PIC like below.
-  //    .4bytes  .LBB0_2-<function name>
-  const auto *Value = MCSymbolRefExpr::create(MBB->getSymbol(), Ctx);
-  MCSymbol *Sym = Ctx.getOrCreateSymbol(MBB->getParent()->getName().data());
-  const auto *Base = MCSymbolRefExpr::create(Sym, Ctx);
-  return MCBinaryExpr::createSub(Value, Base, Ctx);
-}
-
-SDValue VETargetLowering::getPICJumpTableRelocBase(SDValue Table,
-                                                   SelectionDAG &DAG) const {
-  assert(isPositionIndependent());
-  SDLoc DL(Table);
-  Function *Function = &DAG.getMachineFunction().getFunction();
-  assert(Function != nullptr);
-  auto PtrTy = getPointerTy(DAG.getDataLayout(), Function->getAddressSpace());
-
-  // In the jump table, we have following values in PIC mode.
-  //    .4bytes  .LBB0_2-<function name>
-  // We need to add this value and the address of this function to generate
-  // .LBB0_2 label correctly under PIC mode.  So, we want to generate following
-  // instructions:
-  //     lea %reg, fun@gotoff_lo
-  //     and %reg, %reg, (32)0
-  //     lea.sl %reg, fun@gotoff_hi(%reg, %got)
-  // In order to do so, we need to genarate correctly marked DAG node using
-  // makeHiLoPair.
-  SDValue Op = DAG.getGlobalAddress(Function, DL, PtrTy);
-  if (Function->hasLocalLinkage()) {
-    // Use GOTOFF for local linkage functions.
-    SDValue HiLo =
-        makeHiLoPair(Op, VE::S_GOTOFF_HI32, VE::S_GOTOFF_LO32, DAG);
-    SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrTy);
-    return DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
-  }
-  // Use GOT indirection for non-local linkage functions.
-  SDValue HiLo = makeHiLoPair(Op, VE::S_GOT_HI32, VE::S_GOT_LO32, DAG);
-  SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrTy);
-  SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
-  return DAG.getLoad(PtrTy, DL, DAG.getEntryNode(), AbsAddr,
-                     MachinePointerInfo::getGOT(DAG.getMachineFunction()));
 }
 
 Register VETargetLowering::prepareMBB(MachineBasicBlock &MBB,
@@ -2682,6 +2635,19 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.setMemRefs(MMOs);
   }
 
+  // Store GOT pointer (s15) in buf[4].  After SjLj longjmp, s15 may hold the
+  // GOT pointer of the unwinding library instead of the catching function's.
+  // Restoring s15 in RestoreMBB ensures PIC code in shared libraries works
+  // correctly after exception handling.
+  {
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STrii));
+    MIB.addReg(BufReg);
+    MIB.addImm(0);
+    MIB.addImm(32);
+    MIB.addReg(VE::SX15);
+    MIB.setMemRefs(MMOs);
+  }
+
   // Store IP in buf[1].
   MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STrii));
   MIB.add(MI.getOperand(1)); // we can preserve the kill flags here.
@@ -2725,6 +2691,15 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.addReg(VE::SX10);
     MIB.addImm(0);
     MIB.addImm(24);
+    MIB.setMemRefs(MMOs);
+  }
+  // Restore GOT pointer (s15) from buf[4].
+  {
+    MachineInstrBuilder MIB =
+        BuildMI(RestoreMBB, DL, TII->get(VE::LDrii), VE::SX15);
+    MIB.addReg(VE::SX10);
+    MIB.addImm(0);
+    MIB.addImm(32);
     MIB.setMemRefs(MMOs);
   }
   BuildMI(RestoreMBB, DL, TII->get(VE::LEAzii), RestoreDestReg)
@@ -2923,8 +2898,11 @@ VETargetLowering::emitSjLjDispatchBlock(MachineInstr &MI,
       .addRegMask(RI.getNoPreservedMask());
 
   if (isPositionIndependent()) {
-    // Force to generate GETGOT, since current implementation doesn't store GOT
-    // register.
+    // Restore GOT pointer in the dispatch block.  After SjLj longjmp from the
+    // unwinding library, s15 may hold the library's GOT pointer instead of the
+    // catching function's.  Unlike emitEHSjLjSetJmp's RestoreMBB path (which
+    // restores s15 from jbuf[4]), the C++ SjLj exception path lands directly
+    // in the dispatch block, so GETGOT is needed here.
     BuildMI(DispatchBB, DL, TII->get(VE::GETGOT), VE::SX15);
   }
 
@@ -3013,13 +2991,12 @@ VETargetLowering::emitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
     break;
   }
-  case MachineJumpTableInfo::EK_Custom32: {
-    // Generate block address code using differences from the function pointer
-    // for PIC model.
+  case MachineJumpTableInfo::EK_LabelDifference32: {
+    // Generate block address code using signed offsets from the jump table
+    // label for PIC model.
     //     sll %Tmp1, %IReg, 2
-    //     ldl.zx %OReg, 0(%Tmp1, %BReg)
-    //     Prepare function address in BReg2.
-    //     adds.l %TReg, %BReg2, %OReg
+    //     ldl.sx %OReg, 0(%Tmp1, %BReg)   ; sign-extended load
+    //     adds.l %TReg, %BReg, %OReg
     //     bcfla %TReg
 
     assert(isPositionIndependent());
@@ -3030,17 +3007,13 @@ VETargetLowering::emitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
         .addReg(IReg, getKillRegState(true))
         .addImm(2);
-    BuildMI(DispContBB, DL, TII->get(VE::LDLZXrri), OReg)
-        .addReg(BReg, getKillRegState(true))
+    BuildMI(DispContBB, DL, TII->get(VE::LDLSXrri), OReg)
+        .addReg(BReg)
         .addReg(Tmp1, getKillRegState(true))
         .addImm(0);
-    bool FuncIsLocal = MF->getFunction().hasLocalLinkage();
-    Register BReg2 =
-        prepareSymbol(*DispContBB, DispContBB->end(),
-                      DispContBB->getParent()->getName(), DL, FuncIsLocal);
     BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg, getKillRegState(true))
-        .addReg(BReg2, getKillRegState(true));
+        .addReg(BReg, getKillRegState(true));
     BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
         .addReg(TReg, getKillRegState(true))
         .addImm(0);

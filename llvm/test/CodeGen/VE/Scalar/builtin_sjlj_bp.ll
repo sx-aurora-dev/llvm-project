@@ -38,6 +38,7 @@ define i32 @t_setjmp(i64 %n, ptr byval(%Foo) nocapture readnone align 8 %f) {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, .LBB{{[0-9]+}}_3@hi(, %s0)
 ; CHECK-NEXT:    st %s17, 24(, %s1)
+; CHECK-NEXT:    st %s15, 32(, %s1)
 ; CHECK-NEXT:    st %s1, 296(, %s17) # 8-byte Folded Spill
 ; CHECK-NEXT:    st %s0, 8(, %s1)
 ; CHECK-NEXT:    # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
@@ -46,6 +47,7 @@ define i32 @t_setjmp(i64 %n, ptr byval(%Foo) nocapture readnone align 8 %f) {
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # Block address taken
 ; CHECK-NEXT:    ld %s17, 24(, %s10)
+; CHECK-NEXT:    ld %s15, 32(, %s10)
 ; CHECK-NEXT:    lea %s5, 1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, whatever@lo

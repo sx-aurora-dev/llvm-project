@@ -234,10 +234,6 @@ public:
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   unsigned getJumpTableEncoding() const override;
-  const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
-                                          const MachineBasicBlock *MBB,
-                                          unsigned Uid,
-                                          MCContext &Ctx) const override;
 
   // Lowering hooks.
   // Only used by VVP layer to intercept EVT-typed nodes before MVT widening
@@ -504,11 +500,6 @@ public:
   bool useLoadStackGuardNode(const Module &M) const override;
   void insertSSPDeclarations(Module &M,
                              const LibcallLoweringInfo &Libcalls) const override;
-
-  SDValue getPICJumpTableRelocBase(SDValue Table,
-                                   SelectionDAG &DAG) const override;
-  // VE doesn't need getPICJumpTableRelocBaseExpr since it is used for only
-  // EK_LabelDifference32.
 
   unsigned getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const;
 
