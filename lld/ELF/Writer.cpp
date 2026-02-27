@@ -801,6 +801,16 @@ unsigned elf::getSectionRank(Ctx &ctx, OutputSection &osec) {
   }
 
   if (ctx.arg.emachine == EM_VE) {
+    // VEOS calculates AT_PHDR from the entry point's page base address,
+    // so the entry point must reside in the first page.  Place executable
+    // sections (.text) before read-only data (.rodata) to keep .text near
+    // the start of the R E segment and prevent a large .rodata from
+    // pushing the entry point past the 2 MB page boundary.
+    if (rank & RF_EXEC)
+      rank = (rank & ~RF_EXEC) | RF_RODATA;
+    else if (rank & RF_RODATA)
+      rank = (rank & ~RF_RODATA) | RF_EXEC;
+
     // VE's dynamic linker requires TLS sections to be within a PT_LOAD
     // segment. Place .tbss in the RW area (after .data) instead of before
     // the page boundary.
