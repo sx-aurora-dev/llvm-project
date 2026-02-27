@@ -27,14 +27,14 @@
 # RUN: llvm-objdump -d --no-show-raw-insn %t | FileCheck --check-prefix=IE %s
 
 # GD-REL:      .rela.dyn {
-# GD-REL-NEXT:   0x200578 R_VE_DTPMOD64 a 0x0
-# GD-REL-NEXT:   0x200580 R_VE_DTPOFF64 a 0x0
-# GD-REL-NEXT:   0x200588 R_VE_DTPMOD64 b 0x0
-# GD-REL-NEXT:   0x200590 R_VE_DTPOFF64 b 0x0
+# GD-REL-NEXT:   0x200508 R_VE_DTPMOD64 a 0x0
+# GD-REL-NEXT:   0x200510 R_VE_DTPOFF64 a 0x0
+# GD-REL-NEXT:   0x200518 R_VE_DTPMOD64 b 0x0
+# GD-REL-NEXT:   0x200520 R_VE_DTPOFF64 b 0x0
 # GD-REL-NEXT: }
 
-## &DTPMOD(a) - . = 0x200578 - 0x3a0 = 0 : 0x2001d8 = 0 : 2097640
-# GD:      390: lea %s0, 2097640(-24)
+## &DTPMOD(a) - . = 0x200508 - 0x330 = 0 : 0x2001d8 = 0 : 2097640
+# GD:      320: lea %s0, 2097640(-24)
 # GD-NEXT:         and %s0, %s0, (32)0
 # GD-NEXT:         sic %s10
 # GD-NEXT:         lea.sl %s0, (%s0, %s10)
@@ -43,8 +43,8 @@
 # GD-NEXT:         lea.sl %s12, (%s12, %s10)
 # GD-NEXT:         bsic %s10, (, %s12)
 
-## &DTPMOD(b) - . = 0x200588 - 0x3e0 = 0: 0x2001a8 = 0 : 2097592
-# GD:      3d0: lea %s0, 2097592(-24)
+## &DTPMOD(b) - . = 0x200518 - 0x370 = 0: 0x2001a8 = 0 : 2097592
+# GD:      360: lea %s0, 2097592(-24)
 # GD-NEXT:         and %s0, %s0, (32)0
 # GD-NEXT:         sic %s10
 # GD-NEXT:         lea.sl %s0, (%s0, %s10)
@@ -66,16 +66,16 @@
 ## a is local - relaxed to LE - its DTPMOD/DTPREL slots are link-time constants.
 ## b is external - DTPMOD/DTPREL dynamic relocations are required.
 # IE-REL:      .rela.dyn {
-# IE-REL-NEXT:   0x6000002003C0 R_VE_DTPMOD64 b 0x0
-# IE-REL-NEXT:   0x6000002003C8 R_VE_DTPOFF64 b 0x0
+# IE-REL-NEXT:   0x600000200388 R_VE_DTPMOD64 b 0x0
+# IE-REL-NEXT:   0x600000200390 R_VE_DTPOFF64 b 0x0
 # IE-REL-NEXT: }
 # IE-GOT:      section '.got':
-# IE-GOT-NEXT: 0x6000002003a8 e8022000 00600000 01000000 00000000
-# IE-GOT-NEXT: 0x6000002003b8 08000000 00000000 00000000 00000000
-# IE-GOT-NEXT: 0x6000002003c8 00000000 00000000
+# IE-GOT-NEXT: 0x600000200370 b0022000 00600000 01000000 00000000
+# IE-GOT-NEXT: 0x600000200380 08000000 00000000 00000000 00000000
+# IE-GOT-NEXT: 0x600000200390 00000000 00000000
 
-## &DTPMOD(a) - . = 0x6000002003b0 - 0x600000000278 = 0 : 0x200138 = 0 : 2097480
-# IE:      600000000268: lea %s0, 2097480(-24)
+## &DTPMOD(a) - . = 0x600000200378 - 0x600000000240 = 0 : 0x200138 = 0 : 2097480
+# IE:      600000000230: lea %s0, 2097480(-24)
 # IE-NEXT:               and %s0, %s0, (32)0
 # IE-NEXT:               sic %s10
 # IE-NEXT:               lea.sl %s0, (%s0, %s10)
@@ -84,8 +84,8 @@
 # IE-NEXT:               lea.sl %s12, (%s12, %s10)
 # IE-NEXT:               bsic %s10, (, %s12)
 
-## &DTPMOD(b) - . = 0x6000002003c0 - 0x6000000002b8 = 0 : 0x200108 = 0 : 2097432
-# IE:      6000000002a8: lea %s0, 2097432(-24)
+## &DTPMOD(b) - . = 0x600000200388 - 0x600000000280 = 0 : 0x200108 = 0 : 2097432
+# IE:      600000000270: lea %s0, 2097432(-24)
 # IE-NEXT:               and %s0, %s0, (32)0
 # IE-NEXT:               sic %s10
 # IE-NEXT:               lea.sl %s0, (%s0, %s10)

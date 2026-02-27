@@ -22,7 +22,7 @@
 # CHECK-NEXT:   Version: 1
 # CHECK-NEXT:   Entry:
 # CHECK-NEXT:   ProgramHeaderOffset: 0x40
-# CHECK-NEXT:   SectionHeaderOffset: 0x190
+# CHECK-NEXT:   SectionHeaderOffset: 0x158
 # CHECK-NEXT:   Flags [ (0x0)
 # CHECK-NEXT:   ]
 

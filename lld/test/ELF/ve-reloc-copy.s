@@ -8,9 +8,9 @@
 # RUN: llvm-nm -S %t | FileCheck --check-prefix=NM %s
 
 # REL:        .rela.dyn {
-# REL-NEXT:   0x600000400320 R_VE_COPY x 0x0
+# REL-NEXT:   0x6000002002B0 R_VE_COPY x 0x0
 # REL-NEXT:   }
 
-# NM: 0000600000400320 0000000000000004 B x
+# NM: 00006000002002b0 0000000000000004 B x
 
 lea %s0, x
