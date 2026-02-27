@@ -3418,14 +3418,16 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   // values such as a default image base address.
   setTarget(ctx);
 
-  // VE dynamic linker does not support separate RO and RX segments.
+  // The VE dynamic linker (VEOS) does not distinguish RO and RX segments;
+  // it maps all non-writable PT_LOAD segments as PROT_READ|PROT_EXEC.
+  // Merging them avoids an unnecessary LOAD segment.
   if (ctx.arg.emachine == EM_VE &&
       !args.hasArg(OPT_rosegment) && !args.hasArg(OPT_no_rosegment))
     ctx.arg.singleRoRx = true;
 
-  // VE does not need RELRO.  The extra LOAD segment and .relro_padding
-  // waste real memory on VE, where virtual address space is committed at
-  // map time rather than on access.
+  // The VE dynamic linker (VEOS) does not process PT_GNU_RELRO.
+  // The extra LOAD segment and .relro_padding waste real memory on VE,
+  // where virtual address space is committed at map time rather than on access.
   if (ctx.arg.emachine == EM_VE && !hasZOption(args, "relro"))
     ctx.arg.zRelro = false;
 
