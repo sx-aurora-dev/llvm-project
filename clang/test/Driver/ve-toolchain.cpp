@@ -139,7 +139,7 @@
 // DEF:      "-cc1"
 // DEF-SAME: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
 // DEF-SAME: "-isysroot" "[[SYSROOT:[^"]+]]"
-// DEF-SAME: "-exception-model=sjlj"
+// DEF-SAME: "-exception-model=dwarf"
 // DEF:      ld.lld"
 // DEF-SAME: "--sysroot=[[SYSROOT]]"
 // DEF-SAME: "-dynamic-linker" "/opt/nec/ve/lib/ld-linux-ve.so.1"
