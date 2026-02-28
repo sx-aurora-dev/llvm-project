@@ -161,6 +161,7 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 
 llvm::ExceptionHandling
 VEToolChain::GetExceptionModel(const ArgList &Args) const {
-  // VE uses SjLj exceptions.
-  return llvm::ExceptionHandling::SjLj;
+  // VE defaults to DWARF CFI-based zero-cost exception handling.
+  // SjLj can be selected with -fsjlj-exceptions.
+  return llvm::ExceptionHandling::DwarfCFI;
 }

@@ -187,6 +187,12 @@ public:
     return false;
   }
 
+  // Exception pointer is stored in s0, and exception selector in s1.
+  // Their DWARF register numbers are 0 and 1 respectively.
+  int getEHDataRegisterNumber(unsigned RegNo) const override {
+    return RegNo < 2 ? RegNo : -1;
+  }
+
   bool allowsLargerPreferedTypeAlignment() const override { return false; }
 };
 } // namespace targets
