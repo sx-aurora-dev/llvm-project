@@ -21,3 +21,16 @@ void v(char *ptr, char *ptr2) {
   // CHECK: %1 = call <256 x double> asm "vld $0, 8, $1", "=v,r"(ptr %0)
   // CHECK: call void asm sideeffect "vst $0, 8, $1", "v,r"(<256 x double> %2, ptr %3)
 }
+
+void vm(long val) {
+  typedef _Bool __vm __attribute__((ext_vector_type(256)));
+  __vm m;
+  asm("lvm %0, 0, %1"
+      : "=v"(m)
+      : "r"(val));
+  asm("svm %0, %1, 0"
+      : "=r"(val)
+      : "v"(m));
+  // CHECK: %1 = call <256 x i1> asm "lvm $0, 0, $1", "=v,r"(i64 %0)
+  // CHECK: %4 = call i64 asm "svm $0, $1, 0", "=r,v"(<256 x i1> %3)
+}
