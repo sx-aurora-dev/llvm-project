@@ -87,6 +87,11 @@ set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_ENABLE_LIBOMPTARGET FALSE CACHE BOOL ""
 # VE requires -lrt flag for shm_open.
 set(RUNTIMES_ve-unknown-linux-gnu_LIBOMP_HAVE_SHM_OPEN_WITH_LRT TRUE CACHE BOOL "")
 
+# Use ve_exec as emulator so that lit can manage VE process tree for
+# timeout support. Without this, binfmt_misc launches ve_exec transparently
+# and lit cannot kill timed-out processes.
+set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_EMULATOR "ve_exec" CACHE STRING "")
+
 # Compiler flags for testing
 set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")
 set(RUNTIMES_ve-unknown-linux-gnu_LIBCXXABI_TEST_COMPILER_CFLAGS "--target=ve-unknown-linux-gnu" CACHE BOOL "")

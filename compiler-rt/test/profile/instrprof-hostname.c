@@ -3,7 +3,8 @@
 // RUN: %run uname -n | tr -d '\n' > %t.n
 // RUN: llvm-profdata merge -o %t.profdata %{readfile:%t.n}.%t-%{readfile:%t.n}.profraw_%{readfile:%t.n}
 // RUN: %clang_profuse=%t.profdata -o - -S -emit-llvm %s | FileCheck %s
-// Requires uname
+// Requires uname which is a host command unavailable via emulator.
+// REQUIRES: native-run
 // UNSUPPORTED: system-windows
 
 int main(int argc, const char *argv[]) {

@@ -186,3 +186,6 @@ if config.have_curl:
 
 if config.target_os in ("AIX", "Darwin", "Linux"):
     config.available_features.add("continuous-mode")
+
+if not config.emulator:
+    config.available_features.add("native-run")
