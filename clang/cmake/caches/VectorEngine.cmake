@@ -13,6 +13,9 @@
 #   ninja
 #
 
+# Use gold linker for faster host-side linking.
+set(LLVM_USE_LINKER "gold" CACHE STRING "")
+
 # Disable ZLIB, and ZSTD for VE since there is no pre-compiled libraries.
 set(LLVM_ENABLE_ZLIB OFF CACHE BOOL "")
 set(LLVM_ENABLE_ZSTD OFF CACHE BOOL "")
@@ -56,6 +59,9 @@ set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
 set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_BUILD_ORC OFF CACHE BOOL "")
 set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_BUILD_GWP_ASAN OFF CACHE BOOL "")
 
+# VE runtimes must use lld since gold is not available for VE.
+set(RUNTIMES_ve-unknown-linux-gnu_LLVM_USE_LINKER "lld" CACHE STRING "")
+
 # VE uses builtins from Compiler-RT.
 set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_USE_BUILTINS_LIBRARY TRUE CACHE BOOL "")
 
@@ -87,9 +93,8 @@ set(RUNTIMES_ve-unknown-linux-gnu_OPENMP_ENABLE_LIBOMPTARGET FALSE CACHE BOOL ""
 # VE requires -lrt flag for shm_open.
 set(RUNTIMES_ve-unknown-linux-gnu_LIBOMP_HAVE_SHM_OPEN_WITH_LRT TRUE CACHE BOOL "")
 
-# Use ve_exec as emulator so that lit can manage VE process tree for
-# timeout support. Without this, binfmt_misc launches ve_exec transparently
-# and lit cannot kill timed-out processes.
+# Use ve_exec as emulator for compiler-rt tests so that lit can apply
+# timeout to VE test processes.
 set(RUNTIMES_ve-unknown-linux-gnu_COMPILER_RT_EMULATOR "ve_exec" CACHE STRING "")
 
 # Compiler flags for testing
