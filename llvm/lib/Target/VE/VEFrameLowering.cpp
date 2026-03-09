@@ -410,6 +410,18 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
         // Skip SX17 (BP) if already handled by explicit save above.
         if (Reg == VE::SX17 && hasBP(MF))
           continue;
+        // Skip vector registers (V0-V63) and vector mask registers (VM0-VM15).
+        // These appear as callee-saved registers under the fastcc calling
+        // convention (CSR_RegCall), and PEI correctly spills/restores them.
+        // However, emitting .cfi_offset for them is problematic because
+        // libunwind's Registers_ve does not store vector register values
+        // (each VE vector register is 2048 bytes — storing them would make
+        // the unwind context prohibitively large).  The unwinder cannot
+        // meaningfully restore these registers, so omitting the CFI avoids
+        // unnecessary work during unwinding.  Vector register values are
+        // not needed in catch blocks, so this is safe.
+        if (VE::V64RegClass.contains(Reg) || VE::VMRegClass.contains(Reg))
+          continue;
         CFIBuilder.buildOffset(Reg, MFI.getObjectOffset(CS.getFrameIdx()));
       }
     }
@@ -450,6 +462,10 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
       for (const auto &CS : CSI) {
         MCRegister Reg = CS.getReg();
         if (Reg == VE::SX17 && hasBP(MF))
+          continue;
+        // Skip vector/VM registers — no .cfi_offset was emitted for them
+        // (see emitPrologue), so no .cfi_restore is needed either.
+        if (VE::V64RegClass.contains(Reg) || VE::VMRegClass.contains(Reg))
           continue;
         CFIBuilder.buildRestore(Reg);
       }

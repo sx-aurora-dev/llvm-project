@@ -8,8 +8,6 @@
 
 // UNSUPPORTED: no-threads
 
-// VE SjLj exception handling crashes in child threads.
-// XFAIL: target=ve-{{.*}}
 
 // <mutex>
 
