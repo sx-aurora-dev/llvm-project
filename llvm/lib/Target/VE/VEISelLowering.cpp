@@ -3921,7 +3921,12 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
       RC = &VE::I64RegClass;
       break;
     case 'v':
-      RC = &VE::V64RegClass;
+      if (VT == MVT::v256i1)
+        RC = &VE::VMRegClass;
+      else if (VT == MVT::v512i1)
+        RC = &VE::VM512RegClass;
+      else
+        RC = &VE::V64RegClass;
       break;
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)

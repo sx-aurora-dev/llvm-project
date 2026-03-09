@@ -8,9 +8,29 @@
 
 #include "ABIInfoImpl.h"
 #include "TargetInfo.h"
+#include "llvm/IR/DerivedTypes.h"
 
 using namespace clang;
 using namespace clang::CodeGen;
+
+// Rewrite the type of inline asm operands for vector mask registers.
+// ConvertTypeForMem converts ext_vector_type(256) bool to i256 for memory
+// representation, but inline asm with "v" constraint needs <256 x i1> to
+// select VMRegClass instead of V64RegClass.
+static llvm::Type *VEAdjustInlineAsmType(CodeGen::CodeGenFunction &CGF,
+                                         StringRef Constraint,
+                                         llvm::Type *Ty) {
+  if (Constraint == "v") {
+    if (auto *IntTy = dyn_cast<llvm::IntegerType>(Ty)) {
+      unsigned BitWidth = IntTy->getBitWidth();
+      if (BitWidth == 256 || BitWidth == 512) {
+        llvm::Type *Int1Ty = llvm::Type::getInt1Ty(CGF.getLLVMContext());
+        return llvm::FixedVectorType::get(Int1Ty, BitWidth);
+      }
+    }
+  }
+  return Ty;
+}
 
 //===----------------------------------------------------------------------===//
 // VE ABI Implementation.
@@ -61,6 +81,12 @@ public:
   bool isNoProtoCallVariadic(const CallArgList &args,
                              const FunctionNoProtoType *fnType) const override {
     return true;
+  }
+
+  llvm::Type *adjustInlineAsmType(CodeGen::CodeGenFunction &CGF,
+                                  StringRef Constraint,
+                                  llvm::Type *Ty) const override {
+    return VEAdjustInlineAsmType(CGF, Constraint, Ty);
   }
 };
 } // end anonymous namespace
