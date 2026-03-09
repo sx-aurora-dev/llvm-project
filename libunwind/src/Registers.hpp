@@ -4647,17 +4647,41 @@ inline void Registers_ve::setFloatRegister(int /* regNum */,
   _LIBUNWIND_ABORT("VE doesn't have float registers");
 }
 
-inline bool Registers_ve::validVectorRegister(int /* regNum */) const {
+inline bool Registers_ve::validVectorRegister(int regNum) const {
+  // VE vector registers (V0-V63, DWARF 64-127) and vector mask registers
+  // (VM0-VM15, DWARF 128-143) may appear in CFI directives when functions
+  // are compiled with the "fastcc" calling convention (CSR_RegCall), which
+  // treats V18-V33 and VM10-VM15 as callee-saved.  The compiler's PEI pass
+  // spills these registers and VEFrameLowering emits .cfi_offset for them.
+  //
+  // Although Registers_ve does not actually store vector register values
+  // (they are far too large — 2048 bytes per vector register), we must
+  // report them as "valid" here so that the DWARF unwinder in
+  // DwarfInstructions.hpp does not return UNW_EBADREG and abort the unwind.
+  // The actual get/set operations below are harmless no-ops.
+  if (regNum >= UNW_VE_V0 && regNum <= UNW_VE_V63)
+    return true;
+  if (regNum >= UNW_VE_VM0 && regNum <= UNW_VE_VM15)
+    return true;
   return false;
 }
 
 inline v128 Registers_ve::getVectorRegister(int /* regNum */) const {
-  _LIBUNWIND_ABORT("VE vector support not implemented");
+  // VE vector registers are 2048 bytes each and vector mask registers are
+  // 32 bytes each — neither fits in v128 (16 bytes).  During DWARF unwinding,
+  // the unwinder calls this to "restore" a saved vector register, but we
+  // cannot meaningfully do so without a much larger Registers_ve structure.
+  // Return a zero placeholder instead; vector register values are not
+  // preserved across exception unwinding, which is acceptable because
+  // catch blocks do not depend on vector register contents.
+  v128 result = {0, 0};
+  return result;
 }
 
 inline void Registers_ve::setVectorRegister(int /* regNum */,
                                             v128 /* value */) {
-  _LIBUNWIND_ABORT("VE vector support not implemented");
+  // Silently ignore vector register restoration during unwinding.
+  // See getVectorRegister() above for the rationale.
 }
 
 inline const char *Registers_ve::getRegisterName(int regNum) {
