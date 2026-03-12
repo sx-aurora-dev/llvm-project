@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "InputFiles.h"
+#include "RelocScan.h"
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
@@ -35,6 +36,11 @@ public:
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override;
   RelExpr adjustTlsExpr(RelType type, RelExpr expr) const override;
+  template <class ELFT, class RelTy>
+  void scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels);
+  void scanSection(InputSectionBase &sec) override {
+    elf::scanSection1<VE, ELF64LE>(*this, sec);
+  }
 };
 } // namespace
 
@@ -334,6 +340,89 @@ void VE::writePlt(uint8_t *buf, const Symbol & sym,
   relocateNoSym(buf + 5 * 8, R_VE_REFLONG, pltEntryIdx);
   // Set relative jump offset to _PROCEDURE_LINKAGE
   relocateNoSym(buf + 6 * 8, R_VE_PC_LO32, -(pltEntryOff + 6 * 8));
+}
+
+template <class ELFT, class RelTy>
+void VE::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
+  RelocScan rs(ctx, &sec);
+  sec.relocations.reserve(rels.size());
+  for (auto it = rels.begin(); it != rels.end(); ++it) {
+    const RelTy &rel = *it;
+    uint32_t symIdx = rel.getSymbol(false);
+    Symbol &sym = sec.getFile<ELFT>()->getSymbol(symIdx);
+    uint64_t offset = rel.r_offset;
+    RelType type = rel.getType(false);
+    if (type == R_VE_NONE)
+      continue;
+    if (sym.isUndefined() && symIdx != 0 &&
+        rs.maybeReportUndefined(cast<Undefined>(sym), offset))
+      continue;
+    int64_t addend = rs.getAddend<ELFT>(rel, type);
+    RelExpr expr;
+    switch (type) {
+    // Absolute relocations:
+    case R_VE_REFLONG:
+    case R_VE_REFQUAD:
+    case R_VE_HI32:
+    case R_VE_LO32:
+    case R_VE_CALL_HI32:
+    case R_VE_CALL_LO32:
+      expr = R_ABS;
+      break;
+
+    // PC-relative relocations:
+    case R_VE_SREL32:
+    case R_VE_PC_HI32:
+    case R_VE_PC_LO32:
+      rs.processR_PC(type, offset, addend, sym);
+      continue;
+
+    // PLT relocations:
+    case R_VE_PLT32:
+    case R_VE_PLT_HI32:
+    case R_VE_PLT_LO32:
+      rs.processR_PLT_PC(type, offset, addend, sym);
+      continue;
+
+    // GOT relocations:
+    case R_VE_GOT32:
+    case R_VE_GOT_HI32:
+    case R_VE_GOT_LO32:
+      ctx.in.gotPlt->hasGotPltOffRel.store(true, std::memory_order_relaxed);
+      expr = R_GOTPLT;
+      break;
+
+    // GOT-offset relocations:
+    case R_VE_GOTOFF32:
+    case R_VE_GOTOFF_HI32:
+    case R_VE_GOTOFF_LO32:
+      ctx.in.gotPlt->hasGotPltOffRel.store(true, std::memory_order_relaxed);
+      expr = R_GOTPLTREL;
+      break;
+
+    // TLS relocations (no optimization):
+    case R_VE_TPOFF_HI32:
+    case R_VE_TPOFF_LO32:
+      if (rs.checkTlsLe(offset, sym, type))
+        continue;
+      expr = R_TPREL;
+      break;
+    case R_VE_TLS_GD_HI32:
+    case R_VE_TLS_GD_LO32:
+      rs.handleTlsGd(R_TLSGD_PC, R_NONE, R_NONE, type, offset, addend, sym);
+      continue;
+    case R_VE_DTPOFF64:
+      expr = R_DTPREL;
+      break;
+
+    default:
+      Err(ctx) << getErrorLoc(ctx, sec.content().data() + offset)
+               << "unknown relocation (" << type.v << ") against symbol "
+               << &sym;
+      continue;
+    }
+    rs.process(expr, type, offset, sym, addend);
+  }
 }
 
 void elf::setVETargetInfo(Ctx &ctx) { ctx.target.reset(new VE(ctx)); }
