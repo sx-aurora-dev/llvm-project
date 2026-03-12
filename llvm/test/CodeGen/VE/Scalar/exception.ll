@@ -31,6 +31,7 @@ define void @cleanup(ptr %p) personality ptr @__gxx_personality_v0 {
 ; CHECK-NEXT:    st %s19, 56(, %s9) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset %s18, 48
 ; CHECK-NEXT:    .cfi_offset %s19, 56
+; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    or %s18, 0, %s0
 ; CHECK-NEXT:  .Ltmp0: # EH_LABEL
 ; CHECK-NEXT:    lea %s0, foo@lo
@@ -52,6 +53,7 @@ define void @cleanup(ptr %p) personality ptr @__gxx_personality_v0 {
 ; CHECK-NEXT:    .cfi_restore %s9
 ; CHECK-NEXT:    b.l.t (, %s10)
 ; CHECK-NEXT:  .LBB0_2: # %lpad
+; CHECK-NEXT:    .cfi_restore_state
 ; CHECK-NEXT:  .Ltmp2: # EH_LABEL
 ; CHECK-NEXT:    or %s19, 0, %s0
 ; CHECK-NEXT:    lea %s0, bar@lo
@@ -86,6 +88,7 @@ define void @catch(ptr %p) personality ptr @__gxx_personality_v0 {
 ; CHECK-NEXT:    .cfi_offset %s10, 8
 ; CHECK-NEXT:    or %s9, 0, %s11
 ; CHECK-NEXT:    .cfi_def_cfa_register %s9
+; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l %s11, %s8, .LBB1_4
 ; CHECK-NEXT:  # %bb.3: # %entry
@@ -113,6 +116,7 @@ define void @catch(ptr %p) personality ptr @__gxx_personality_v0 {
 ; CHECK-NEXT:    .cfi_restore %s9
 ; CHECK-NEXT:    b.l.t (, %s10)
 ; CHECK-NEXT:  .LBB1_1: # %lpad
+; CHECK-NEXT:    .cfi_restore_state
 ; CHECK-NEXT:  .Ltmp5: # EH_LABEL
 ; CHECK-NEXT:    lea %s1, bar@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0

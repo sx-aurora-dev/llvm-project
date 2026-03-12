@@ -66,6 +66,8 @@ VETargetMachine::VETargetMachine(const Target &T, const Triple &TT,
       Subtarget(TT, std::string(CPU), std::string(FS), *this) {
   // FIXME: Issue FastISel in packed mode. Disabling it for now.
   setFastISel(false);
+  // VE supports fixing up the DWARF unwind information.
+  setCFIFixup(true);
   initAsmInfo();
 }
 
