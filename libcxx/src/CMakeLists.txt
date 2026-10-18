@@ -71,6 +71,7 @@ if (LIBCXX_ENABLE_THREADS)
     mutex_destructor.cpp
     mutex.cpp
     shared_mutex.cpp
+    support/ve/cr_runtime.cpp
     thread.cpp
     )
 endif()

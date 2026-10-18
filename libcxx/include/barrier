@@ -148,6 +148,125 @@ public:
   }
 };
 
+#    ifdef __ve__
+// VE Communication Register (CR) hardware barrier specialization.
+//
+// Uses FIDCR mode 4 for hardware-accelerated barrier when available.
+// Falls back to atomic counter + futex when CR is unavailable or
+// after arrive_and_drop() changes the expected count.
+
+_LIBCPP_EXPORTED_FROM_ABI bool __ve_cr_init();
+_LIBCPP_EXPORTED_FROM_ABI int __ve_cr_alloc_reg();
+_LIBCPP_EXPORTED_FROM_ABI void __ve_cr_free_reg(int);
+_LIBCPP_EXPORTED_FROM_ABI int __ve_cr_get_crd();
+_LIBCPP_EXPORTED_FROM_ABI void __ve_cr_barrier_init(int, int);
+
+template <>
+class __barrier_base<__empty_completion> {
+  atomic<__barrier_phase_t> __phase_;
+  atomic<ptrdiff_t> __expected_adjustment_;
+  atomic<ptrdiff_t> __arrived_; // software fallback counter
+  ptrdiff_t __expected_;
+  atomic<bool> __cr_active_;
+  int __cr_reg_;
+
+public:
+  using arrival_token = __barrier_phase_t;
+
+  static _LIBCPP_HIDE_FROM_ABI constexpr ptrdiff_t max() noexcept { return numeric_limits<ptrdiff_t>::max(); }
+
+  _LIBCPP_HIDE_FROM_ABI
+  __barrier_base(ptrdiff_t __expected, __empty_completion = __empty_completion())
+      : __phase_(0),
+        __expected_adjustment_(0),
+        __arrived_(__expected),
+        __expected_(__expected),
+        __cr_active_(false),
+        __cr_reg_(-1) {
+    if (__expected > 0 && __expected <= 0xFFFFFF && __ve_cr_init()) {
+      __cr_reg_ = __ve_cr_alloc_reg();
+      if (__cr_reg_ >= 0) {
+        __ve_cr_barrier_init(__cr_reg_, static_cast<int>(__expected));
+        __cr_active_.store(true, memory_order_relaxed);
+      }
+    }
+  }
+
+  _LIBCPP_HIDE_FROM_ABI ~__barrier_base() {
+    if (__cr_reg_ >= 0)
+      __ve_cr_free_reg(__cr_reg_);
+  }
+
+  [[nodiscard]] _LIBCPP_HIDE_FROM_ABI arrival_token arrive(ptrdiff_t __update) {
+    _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(
+        __update <= __expected_, "update is greater than the expected count for the current barrier phase");
+
+    auto const __old_phase = __phase_.load(memory_order_relaxed);
+
+    if (__update == 1 && __cr_active_.load(memory_order_acquire)) {
+      // CR fast path: FIDCR mode 4 (hardware barrier decrement)
+      uint64_t __addr   = (static_cast<uint64_t>(__ve_cr_get_crd()) << 5) | static_cast<uint64_t>(__cr_reg_);
+      uint64_t __old_cr = __builtin_ve_vl_fidcr_sss(__addr, 4);
+
+      if ((__old_cr & 0xFFFFFF) == 1) {
+        // Last arriver: hardware toggled phase bit and reset counter
+        ptrdiff_t __adj = __expected_adjustment_.load(memory_order_relaxed);
+        if (__adj != 0) {
+          // Transition to software path permanently
+          __expected_ += __adj;
+          __expected_adjustment_.store(0, memory_order_relaxed);
+          __arrived_.store(__expected_, memory_order_release);
+          __cr_active_.store(false, memory_order_release);
+        }
+        __phase_.store(__old_phase + 2, memory_order_release);
+        __phase_.notify_all();
+      }
+      return __old_phase;
+    }
+
+    // Software fallback path (atomic counter + futex)
+    for (; __update; --__update) {
+      if (__arrived_.fetch_sub(1, memory_order_acq_rel) == 1) {
+        __expected_ += __expected_adjustment_.load(memory_order_relaxed);
+        __expected_adjustment_.store(0, memory_order_relaxed);
+        __arrived_.store(__expected_, memory_order_release);
+        __phase_.store(__old_phase + 2, memory_order_release);
+        __phase_.notify_all();
+      }
+    }
+    return __old_phase;
+  }
+
+  _LIBCPP_HIDE_FROM_ABI void wait(arrival_token&& __old_phase) const {
+    if (__cr_active_.load(memory_order_acquire)) {
+      // CR fast path: spin on hardware phase bit
+      uint64_t __addr = (static_cast<uint64_t>(__ve_cr_get_crd()) << 5) | static_cast<uint64_t>(__cr_reg_);
+      // Derive expected CR phase from barrier phase:
+      //   phase 0 -> CR bit 0, phase 2 -> CR bit 1, phase 4 -> CR bit 0, ...
+      uint64_t __expected_cr =
+          ((__old_phase >> 1) & 1) ? static_cast<uint64_t>(0x8000000000000000ULL) : static_cast<uint64_t>(0);
+      // Spin on CR phase bit via FIDCR mode 6 (read through cache)
+      // Also check __phase_ to handle arrive(update > 1) which uses software path
+      while ((__builtin_ve_vl_fidcr_sss(__addr, 6) & 0x8000000000000000ULL) == __expected_cr) {
+        if (__phase_.load(memory_order_acquire) != __old_phase)
+          return;
+      }
+      // Acquire ordering: spin on __phase_ to synchronize with last arriver's release store
+      while (__phase_.load(memory_order_acquire) == __old_phase)
+        ;
+      return;
+    }
+    // Software fallback: futex-based wait
+    __phase_.wait(__old_phase, memory_order_acquire);
+  }
+
+  _LIBCPP_HIDE_FROM_ABI void arrive_and_drop() {
+    __expected_adjustment_.fetch_sub(1, memory_order_relaxed);
+    (void)arrive(1);
+  }
+};
+#    endif // __ve__
+
 template <class _CompletionF = __empty_completion>
 class barrier {
   __barrier_base<_CompletionF> __b_;
